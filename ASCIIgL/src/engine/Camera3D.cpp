@@ -5,8 +5,12 @@
 Camera3D::Camera3D(glm::vec3 Pposition, float Pfov, float Paspect, glm::vec2 yawPitch, float PzNear, float PzFar)
 	: pos(Pposition), fov(Pfov), pitch(yawPitch.y), yaw(yawPitch.x), aspect(Paspect), zNear(PzNear), zFar(PzFar)
 {
+	// Calculate initial screen dimensions from aspect ratio (assuming height = 1080 for default)
+	screenHeight = 1080;
+	screenWidth = (unsigned int)(screenHeight * aspect);
+	
 	recalculateViewMat(); // this function uses all all class attributes
-	proj = glm::perspective(glm::radians(Pfov), aspect, zNear, zFar); // calculating the perspective projection
+	recalculateProjMat(); // calculating the perspective projection
 }
 
 Camera3D::~Camera3D()
@@ -74,4 +78,17 @@ void Camera3D::setCamDir(glm::vec3 dir)
 void Camera3D::recalculateViewMat()
 {
 	view = glm::lookAt(pos, pos + getCamFront(), glm::vec3(0.0, 1.0, 0.0));
+}
+
+void Camera3D::setScreenDimensions(unsigned int width, unsigned int height)
+{
+	screenWidth = width;
+	screenHeight = height;
+	aspect = (float)width / (float)height; // update aspect ratio
+	recalculateProjMat(); // recalculate projection matrix with new aspect ratio
+}
+
+void Camera3D::recalculateProjMat()
+{
+	proj = glm::perspective(glm::radians(fov), aspect, zNear, zFar);
 }

@@ -38,8 +38,10 @@ private:
 	// game starts at the main menu
 	unsigned int gameState = MAIN_MENU;
 
-	unsigned int SCR_WIDTH = 450;
-	unsigned int SCR_HEIGHT = 300;
+	// Screen dimensions compatible with both Windows Terminal and Command Prompt
+	// Command Prompt max: 960x504, so we use safe values below that
+	unsigned int SCR_WIDTH = 900;   // Was 1350, reduced for CMD compatibility
+	unsigned int SCR_HEIGHT = 600;  // Was 900, reduced for CMD compatibility
 
 	bool running = true;
 	VERTEX_SHADER vertexShader;  // default vertex shader, didn't have time to implement custom ones

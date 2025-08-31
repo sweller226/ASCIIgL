@@ -64,14 +64,17 @@ Game* Game::GetInstance()
 void Game::Run()
 {
     Logger::Info("Game loop starting.");
-    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 2, 2, 1000, 1.0f, BG_BLACK);
+    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 1, 1000, 1.0f, BG_BLACK);
+	SCR_WIDTH = Screen::GetInstance().GetWidth();
+	SCR_HEIGHT = Screen::GetInstance().GetHeight();
+	guiCamera.setScreenDimensions(SCR_WIDTH, SCR_HEIGHT);
 
     Logger::Debug("Screen::InitializeScreen returned: " + std::to_string(screenInitResult));
     Renderer::GetInstance().SetWireframe(false);
     Renderer::GetInstance().SetBackfaceCulling(true);
     Renderer::GetInstance().SetCCW(true);
-	Renderer::GetInstance().SetAntialiasing(true);
 	Renderer::GetInstance().SetAntialiasingsamples(4);
+	Renderer::GetInstance().SetAntialiasing(true);
 
     // Logger::Info("Playing background music.");
 	// BOOL soundResult = PlaySound(TEXT(".\\res\\audio\\Man.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
@@ -132,8 +135,10 @@ void Game::LoadLevel()
 
 void Game::RunMainMenu()
 {
-	Renderer::Draw2DQuad(vertexShader, *Textures["Title"], glm::vec2(220, 80), glm::vec2(0, 0), glm::vec2(130, 50), guiCamera, 0);
-	Renderer::Draw2DQuad(vertexShader, *Textures["Select_Btn"], glm::vec2(105, 270), glm::vec2(0, 0), glm::vec2(100, 15), guiCamera, 0);
+	// Title: position (220, 80) -> (220/450, 80/300) = (0.489, 0.267), size (130, 50) -> (130/450, 50/300) = (0.289, 0.167)
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Title"], glm::vec2(0.489f, 0.267f), glm::vec2(0, 0), glm::vec2(0.289f, 0.167f), guiCamera, 0);
+	// Select button: position (105, 270) -> (105/450, 270/300) = (0.233, 0.9), size (100, 15) -> (100/450, 15/300) = (0.222, 0.05)
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Select_Btn"], glm::vec2(0.233f, 0.9f), glm::vec2(0, 0), glm::vec2(0.222f, 0.05f), guiCamera, 0);
 
 	if (GetKeyState(VK_UP) & 0x8000)
 	{
@@ -160,13 +165,17 @@ void Game::RunMainMenu()
 
 	if (BtnSelected != 0)
 	{
-		Renderer::Draw2DQuad(vertexShader, *Textures["How_To_Play_Sel"], glm::vec2(215, 150), glm::vec2(0, 0), glm::vec2(75, 30), guiCamera, 0);
-		Renderer::Draw2DQuad(vertexShader, *Textures["Start_Unsel"], glm::vec2(217, 200), glm::vec2(0, 0), glm::vec2(60, 30), guiCamera, 0);
+		// How to Play Selected: position (215, 150) -> (215/450, 150/300) = (0.478, 0.5), size (75, 30) -> (75/450, 30/300) = (0.167, 0.1)
+		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["How_To_Play_Sel"], glm::vec2(0.478f, 0.5f), glm::vec2(0, 0), glm::vec2(0.167f, 0.1f), guiCamera, 0);
+		// Start Unselected: position (217, 200) -> (217/450, 200/300) = (0.482, 0.667), size (60, 30) -> (60/450, 30/300) = (0.133, 0.1)
+		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Start_Unsel"], glm::vec2(0.482f, 0.667f), glm::vec2(0, 0), glm::vec2(0.133f, 0.1f), guiCamera, 0);
 	}
 	else
 	{
-		Renderer::Draw2DQuad(vertexShader, *Textures["How_To_Play_Unsel"], glm::vec2(215, 150), glm::vec2(0, 0), glm::vec2(75, 30), guiCamera, 0);
-		Renderer::Draw2DQuad(vertexShader, *Textures["Start_Sel"], glm::vec2(217, 200), glm::vec2(0, 0), glm::vec2(60, 30), guiCamera, 0);
+		// How to Play Unselected: position (215, 150) -> (215/450, 150/300) = (0.478, 0.5), size (75, 30) -> (75/450, 30/300) = (0.167, 0.1)
+		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["How_To_Play_Unsel"], glm::vec2(0.478f, 0.5f), glm::vec2(0, 0), glm::vec2(0.167f, 0.1f), guiCamera, 0);
+		// Start Selected: position (217, 200) -> (217/450, 200/300) = (0.482, 0.667), size (60, 30) -> (60/450, 30/300) = (0.133, 0.1)
+		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Start_Sel"], glm::vec2(0.482f, 0.667f), glm::vec2(0, 0), glm::vec2(0.133f, 0.1f), guiCamera, 0);
 	}
 	
 }
@@ -181,14 +190,17 @@ void Game::RunHowToPlay()
 		
 	}
 
-	Renderer::Draw2DQuad(vertexShader, *Textures["GameInfo2"], glm::vec2(215, 120), glm::vec2(0, 0), glm::vec2(175, 100), guiCamera, 0);
-	Renderer::Draw2DQuad(vertexShader, *Textures["BackInfo"], glm::vec2(217, 250), glm::vec2(0, 0), glm::vec2(100, 15), guiCamera, 0);
+	// Game Info 2: position (215, 120) -> (215/450, 120/300) = (0.478, 0.4), size (175, 100) -> (175/450, 100/300) = (0.389, 0.333)
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["GameInfo2"], glm::vec2(0.478f, 0.4f), glm::vec2(0, 0), glm::vec2(0.389f, 0.333f), guiCamera, 0);
+	// Back Info: position (217, 250) -> (217/450, 250/300) = (0.482, 0.833), size (100, 15) -> (100/450, 15/300) = (0.222, 0.05)
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["BackInfo"], glm::vec2(0.482f, 0.833f), glm::vec2(0, 0), glm::vec2(0.222f, 0.05f), guiCamera, 0);
 
 }
 
 void Game::RunLore()
 {
-	Renderer::Draw2DQuad(vertexShader, *Textures["GameInfo1"], glm::vec2(225, 150), glm::vec2(0, 0), glm::vec2(200, 125), guiCamera, 0);
+	// Game Info 1: position (225, 150) -> (225/450, 150/300) = (0.5, 0.5), size (200, 125) -> (200/450, 125/300) = (0.444, 0.417)
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["GameInfo1"], glm::vec2(0.5f, 0.5f), glm::vec2(0, 0), glm::vec2(0.444f, 0.417f), guiCamera, 0);
 	Screen::GetInstance().OutputBuffer();
 	Sleep(7500);
 	Screen::GetInstance().StartFPSClock();
@@ -236,31 +248,32 @@ void Game::RunMaze()
 		}
 	}
 	
-	glm::vec2 barSize = glm::vec2(50, 20);
-	glm::vec2 barPos = glm::vec2(380, 270);
+	// Stamina bar: position (380, 270) -> (380/450, 270/300) = (0.844, 0.9), size (50, 20) -> (50/450, 20/300) = (0.111, 0.067)
+	glm::vec2 barSize = glm::vec2(0.111f, 0.067f);
+	glm::vec2 barPos = glm::vec2(0.844f, 0.9f);
 
 	unsigned int chunk = player->GetStaminaChunk(6, 0.05);
 	switch (chunk) {
 		case 6:
-			Renderer::Draw2DQuad(vertexShader, *Textures["Stamina6"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina6"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
 			break;
 		case 5:
-			Renderer::Draw2DQuad(vertexShader, *Textures["Stamina5"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina5"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
 			break;
 		case 4:
-			Renderer::Draw2DQuad(vertexShader, *Textures["Stamina4"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina4"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
 			break;
 		case 3:
-			Renderer::Draw2DQuad(vertexShader, *Textures["Stamina3"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina3"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
 			break;
 		case 2:
-			Renderer::Draw2DQuad(vertexShader, *Textures["Stamina2"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina2"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
 			break;
 		case 1:
-			Renderer::Draw2DQuad(vertexShader, *Textures["Stamina1"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina1"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
 			break;
 		default:
-			Renderer::Draw2DQuad(vertexShader, *Textures["Tired"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Tired"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
 			break;
 	}
 
@@ -274,7 +287,7 @@ void Game::RunMaze()
 
 void Game::RunLost()
 {
-	Renderer::Draw2DQuad(vertexShader, *Textures["Lost"], glm::vec2(225, 150), glm::vec2(0, 0), glm::vec2(200, 125), guiCamera, 0);
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Lost"], glm::vec2(0.5, 0.5), glm::vec2(0, 0), glm::vec2(0.444, 0.417), guiCamera, 0);
 
 	if (GetKeyState('R') & 0x8000)
 	{
@@ -348,7 +361,7 @@ int Game::GetPresentsCollected()
 
 void Game::RunWin()
 {
-	Renderer::Draw2DQuad(vertexShader, *Textures["Win"], glm::vec2(225, 150), glm::vec2(0, 0), glm::vec2(200, 125), guiCamera, 0);
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Win"], glm::vec2(0.5, 0.5), glm::vec2(0, 0), glm::vec2(0.444, 0.417), guiCamera, 0);
 }
 
 void Game::initLevel()

@@ -23,6 +23,10 @@ public:
 	float zNear;
 	float zFar;
 
+	// screen dimensions for aspect ratio calculation
+	unsigned int screenWidth;
+	unsigned int screenHeight;
+
 	// constructor and destructor
 	Camera3D(glm::vec3 Pposition, float Pfov, float Paspect, glm::vec2 yawPitch, float PzNear, float PzFar);
 	~Camera3D();
@@ -36,5 +40,7 @@ public:
 	void setCamPos(glm::vec3 Pposition);
 	void setCamDir(float yaw, float pitch); // this sets the camera dir using angles (not vectors)
 	void setCamDir(glm::vec3 dir);
+	void setScreenDimensions(unsigned int width, unsigned int height); // this updates screen dimensions and recalculates projection matrix
 	void recalculateViewMat(); // recalculates the view matrix using the cameras euler angles and position
+	void recalculateProjMat(); // recalculates the projection matrix using current screen dimensions and aspect ratio
 };

@@ -6,6 +6,8 @@
 class Camera2D // this is an inbuilt 2d camera that uses orthographic projection instead of perspective projection
 {
 private:
+	unsigned int screenWidth;
+	unsigned int screenHeight;
 
 public:
 	glm::vec2 position;
@@ -16,5 +18,7 @@ public:
 	~Camera2D();
 
 	void setCamPos(glm::vec2 Pposition); // this sets the camera position
+	void setScreenDimensions(unsigned int width, unsigned int height); // this updates screen dimensions and recalculates projection matrix
 	void recalculateViewMat(); // this resets the view matrix with the
+	void recalculateProjMat(); // this recalculates the projection matrix with current screen dimensions
 };

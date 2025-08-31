@@ -4,7 +4,14 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-// Windows API
+// STL
+#include <string>
+#include <memory>
+#include <chrono>
+#include <deque>
+
+// Platform-specific includes
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -12,14 +19,24 @@
 #define NOMINMAX
 #endif
 #include <Windows.h>
-
-// STL
-#include <deque>
-#include <chrono>
+#endif
 
 // Engine includes
-#include <ASCIIgL/engine/Logger.hpp>
 #include <ASCIIgL/renderer/RenderEnums.hpp>
+
+// Platform-specific type definitions
+#ifdef _WIN32
+    // Windows types are already included above
+#else
+    // Define minimal types for non-Windows platforms
+    struct CHAR_INFO {
+        union {
+            wchar_t UnicodeChar;
+            char AsciiChar;
+        } Char;
+        unsigned short Attributes;
+    };
+#endif
 
 // Error codes
 enum ScreenError {
@@ -31,92 +48,104 @@ enum ScreenError {
 
 class Screen {
 private:
-    static inline unsigned int TILE_COUNT_X = 0;
-    static inline unsigned int TILE_COUNT_Y = 0;
+    // Platform-specific implementation classes
+#ifdef _WIN32
+    class WindowsImpl;  // Unified Windows implementation for both CMD and Windows Terminal
+    static std::unique_ptr<WindowsImpl> _impl;
+#else
+    // static std::unique_ptr<GenericImpl> genericImpl;
+#endif
 
-    // Console handles and buffers
-    static inline HANDLE _hOutput = nullptr;
-    static inline COORD dwBufferSize = {0, 0};
-    static inline COORD dwBufferCoord = {0, 0};
-    static inline SMALL_RECT rcRegion = {0, 0, 0, 0};
+    // Platform-agnostic member variables (inline static)
+    inline static unsigned int SCR_WIDTH = 0;
+    inline static unsigned int SCR_HEIGHT = 0;
+    inline static std::wstring SCR_TITLE = L"";
+    inline static unsigned int _fontSize = 0;
+    inline static unsigned short _backgroundCol = BG_BLACK;
+
+    // Buffers
+    inline static float* depthBuffer = nullptr;
+    
+    // Tile properties
+    inline static unsigned int TILE_COUNT_X = 0;
+    inline static unsigned int TILE_COUNT_Y = 0;
+    inline static unsigned int TILE_SIZE_X = 16;
+    inline static unsigned int TILE_SIZE_Y = 16;
+    
+    // FPS and timing (platform-agnostic)
+    inline static std::chrono::system_clock::time_point startTimeFps = std::chrono::system_clock::now();
+    inline static std::chrono::system_clock::time_point endTimeFps = std::chrono::system_clock::now();
+    inline static double _fpsWindowSec = 1.0f;
+    inline static double _fps = 0.0f;
+    inline static double _currDeltaSum = 0.0f;
+    inline static double _deltaTime = 0.0f;
+    inline static std::deque<double> _frameTimes = {};
+    inline static unsigned int _fpsCap = 60;
 
     // Singleton instance
-	Screen() = default;
-	Screen(const Screen&) = delete;
-	Screen& operator=(const Screen&) = delete;
-
-    // Timing and FPS
-    static inline std::chrono::system_clock::time_point startTimeFps = std::chrono::system_clock::now();
-    static inline std::chrono::system_clock::time_point endTimeFps = std::chrono::system_clock::now();
-    static inline double _fpsWindowSec = 1.0f;
-    static inline double _fps = 0.0f;
-	static inline double _currDeltaSum = 0.0f;
-    static inline double _deltaTime = 0.0f;
-    static inline std::deque<double> _frameTimes = {};
-    static inline unsigned int _fpsCap = 60;
-
-    // Screen properties
-    static inline int SCR_WIDTH = 0;
-    static inline int SCR_HEIGHT = 0;
-    static inline unsigned int _fontW = 0;
-    static inline unsigned int _fontH = 0;
-    static inline std::wstring SCR_TITLE = L"";
-    static inline unsigned short _backgroundCol = BG_BLACK;
-
-    // Internal FPS helpers
-    static void StartFPSSample();
-    static void EndFPSSample();
-    static void CapFPS();
-    static void FPSSampleCalculate(const double currentDeltaTime);
+    Screen() = default;
+    Screen(const Screen&) = delete;
+    Screen& operator=(const Screen&) = delete;
 
 public:
     static Screen& GetInstance() {
-		static Screen instance;
-		return instance;
-	}
+        static Screen instance;
+        return instance;
+    }
 
     // Construction
     static int InitializeScreen(
         const unsigned int width, 
         const unsigned int height, 
         const std::wstring title, 
-        const unsigned int fontX, 
-        const unsigned int fontY, 
-        const unsigned int _fpsCap, 
-        const float _fpsWindowSec, 
-        const unsigned short _backgroundCol
+        const unsigned int fontSize, 
+        const unsigned int fpsCap, 
+        const float fpsWindowSec, 
+        const unsigned short backgroundCol
     );
 
-    // Rendering and buffer management
+    // Fps management
     static void StartFPSClock();
     static void EndFPSClock();
+    static float GetDeltaTime();
+
+    // Rendering and buffer management
     static void RenderTitle(bool showFps);
     static void ClearBuffer();
     static void OutputBuffer();
-    static void PlotPixel(glm::vec2 p, CHAR character, short Colour);
+    static void PlotPixel(glm::vec2 p, char character, short Colour);
     static void PlotPixel(glm::vec2 p, CHAR_INFO charCol);
-    static void PlotPixel(int x, int y, CHAR character, short Colour);
+    static void PlotPixel(int x, int y, char character, short Colour);
     static void PlotPixel(int x, int y, CHAR_INFO charCol);
-
-    // Getters and Setters
-    static float GetDeltaTime();
 
     static std::wstring GetTitle();
     static void SetTitle(const std::wstring& title);
-
-    static unsigned int GetFontWidth();
-    static unsigned int GetFontHeight();
+    static unsigned int GetFontSize();
     static unsigned int GetWidth();
     static unsigned int GetHeight();
+
+    // tile properties
     static unsigned int GetTileCountX();
     static unsigned int GetTileCountY();
+    static unsigned int GetTileSizeX();
+    static unsigned int GetTileSizeY();
+    static void SetTileSize(const unsigned int x, const unsigned int y);
+    static void CalculateTileCounts();
 
     static unsigned short GetBackgroundColor();
     static void SetBackgroundColor(const unsigned short color);
 
-    static inline CHAR_INFO* pixelBuffer = nullptr;
-    static inline float* depthBuffer = nullptr;
+    // Public buffer access (needed for renderer)
+    static CHAR_INFO* GetPixelBuffer();
+    static float* GetDepthBuffer();
 
-    static inline const unsigned int TILE_SIZE_X = 16;
-    static inline const unsigned int TILE_SIZE_Y = 16;
+    // Cleanup
+    static void Cleanup();
+
+private:
+    // FPS management methods (platform-agnostic)
+    void StartFPSSample();
+    void EndFPSSample();
+    void CapFPS();
+    void FPSSampleCalculate(const double currentDeltaTime);
 };

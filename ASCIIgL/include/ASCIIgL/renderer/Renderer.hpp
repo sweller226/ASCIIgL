@@ -31,7 +31,14 @@ private:
     static inline bool _wireframe = false;
     static inline bool _backface_culling = true;
     static inline bool _ccw = false;
-    static inline bool _antialiasing = false;
+    static inline bool _antialiasing = true;
+
+    // Pre-allocated buffers for performance (avoid per-frame allocations)
+    static inline std::vector<VERTEX> _vertexBuffer;
+    static inline std::vector<VERTEX> _clippedBuffer;
+    static inline std::vector<VERTEX> _rasterBuffer;
+    static inline std::vector<Tile> _tileBuffer;
+    static inline bool _tilesInitialized = false;
 
     static VERTEX HomogenousPlaneIntersect(const VERTEX& vert2, const VERTEX& vert1, const int component, const bool Near);
     static std::vector<VERTEX> Clipping(const std::vector<VERTEX>& vertices, const int component, const bool Near);
@@ -42,7 +49,9 @@ private:
     static void BackFaceCullHelper(const std::vector<VERTEX>& vertices, std::vector<VERTEX>& raster_triangles);
 
     static void InitializeTiles(std::vector<Tile>& tiles);
-    static void BinTrianglesToTiles(std::vector<Tile>& tiles, const std::vector<VERTEX>& raster_triangles);
+    static void InitializeTilesOnce(); // One-time tile setup
+    static void ClearTileTriangleLists(); // Clear triangle lists but keep tile structure
+    static void BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles); // Optimized version
     static bool DoesTileEncapsulate(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3);
     
     static void DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
@@ -65,7 +74,8 @@ private:
     static void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec3 position, const glm::vec2 rotation, const glm::vec3 size, const Camera3D& camera);
     static void DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::vec3 position, const glm::vec2 rotation, const glm::vec3 size, const Camera3D& camera);
     static void DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::mat4 model, const Camera3D& camera);
-    static void Draw2DQuad(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 position, const glm::vec2 rotation, const glm::vec2 size, const Camera2D& camera, int layer);
+    static void Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 position, const glm::vec2 rotation, const glm::vec2 size, const Camera2D& camera, int layer);
+    static void Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 positionPerc, const glm::vec2 rotation, const glm::vec2 sizePerc, const Camera2D& camera, int layer);
     static void DrawScreenBorder(short col);
     
     static void RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex);
@@ -77,7 +87,6 @@ private:
 
     static glm::mat4 CalcModelMatrix(const glm::vec3 position, const glm::vec2 rotation, const glm::vec3 size);
     static float GrayScaleRGB(const glm::vec3 rgb);
-    static float CalculateTriangleCoverage(float x, float y, const VERTEX& v1, const VERTEX& v2, const VERTEX& v3);
     static CHAR_INFO GetColGlyph(const float GreyScale);
 
     // Antialiasing configuration
@@ -96,4 +105,7 @@ private:
     
     static void SetAntialiasing(bool antialiasing);
     static bool GetAntialiasing();
+
+    // Performance optimization - call when screen dimensions change
+    static void InvalidateTiles(); // Forces tile re-initialization on next render
 };

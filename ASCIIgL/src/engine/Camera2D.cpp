@@ -1,9 +1,9 @@
 #include <ASCIIgL/engine/Camera2D.hpp>
 
 Camera2D::Camera2D(glm::vec2 Pposition, unsigned int SCR_WIDTH, unsigned int SCR_HEIGHT)
-	: position(Pposition)
+	: position(Pposition), screenWidth(SCR_WIDTH), screenHeight(SCR_HEIGHT)
 {
-	proj = glm::ortho(0.0f, (float)SCR_WIDTH, 0.0f, (float)SCR_HEIGHT, -100.0f, 100.0f); // making the projection matrix
+	recalculateProjMat(); // making the projection matrix
 	recalculateViewMat(); // calculating the view mat using the class variables
 }
 
@@ -21,4 +21,16 @@ void Camera2D::setCamPos(glm::vec2 Pposition)
 void Camera2D::recalculateViewMat()
 {
 	view = glm::translate(glm::mat4(1.0f), glm::vec3(-position, 0.0f)); // creating a new 
+}
+
+void Camera2D::setScreenDimensions(unsigned int width, unsigned int height)
+{
+	screenWidth = width;
+	screenHeight = height;
+	recalculateProjMat(); // recalculate projection matrix with new dimensions
+}
+
+void Camera2D::recalculateProjMat()
+{
+	proj = glm::ortho(0.0f, (float)screenWidth, 0.0f, (float)screenHeight, -100.0f, 100.0f);
 }
