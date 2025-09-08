@@ -11,25 +11,6 @@ Game::Game()
 
 	// don't mind me just loading in 100030423 textures for my simple gui
 	Textures["Title"] = new Texture("res/textures/GUI/Title.png");
-	
-	// Log Title texture loading details
-	if (Textures["Title"]) {
-		Logger::Info("Title texture loaded successfully");
-		Logger::Info("Title texture width: " + std::to_string(Textures["Title"]->GetWidth()));
-		Logger::Info("Title texture height: " + std::to_string(Textures["Title"]->GetHeight()));
-		Logger::Info("Title texture file path: " + Textures["Title"]->GetFilePath());
-		
-		// Additional validation checks
-		if (Textures["Title"]->GetWidth() <= 0 || Textures["Title"]->GetHeight() <= 0) {
-			Logger::Error("Title texture has invalid dimensions!");
-		} else {
-			Logger::Info("Title texture dimensions are valid");
-		}
-	} else {
-		Logger::Error("Failed to load Title texture from res/textures/GUI/Title.png");
-	}
-
-	
 	Textures["Start_Sel"] = new Texture("res/textures/GUI/StartSelected.png");
 	Textures["Start_Unsel"] = new Texture("res/textures/GUI/StartUnselected.png");
 	Textures["How_To_Play_Sel"] = new Texture("res/textures/GUI/HowToPlaySelected.png");

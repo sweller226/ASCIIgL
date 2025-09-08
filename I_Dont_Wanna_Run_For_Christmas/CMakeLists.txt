@@ -99,3 +99,16 @@ set_target_properties(ChristmasGame PROPERTIES
 # ============================================================================
 # Post-Build Steps
 # ============================================================================
+
+# Copy resources to build directories
+add_custom_command(TARGET ChristmasGame POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E echo "Copying resources to build directories"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/res"
+        "$<TARGET_FILE_DIR:ChristmasGame>/res"
+    COMMAND ${CMAKE_COMMAND} -E echo "Copying ASCIIgL library resources"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${ASCIIgL_ROOT}/res"
+        "$<TARGET_FILE_DIR:ChristmasGame>/res/ASCIIgL"
+    COMMENT "Copying game and library resources"
+)

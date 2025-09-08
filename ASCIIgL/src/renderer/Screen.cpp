@@ -616,7 +616,7 @@ bool Screen::WindowsImpl::ModifyWindowsTerminalFont(const std::wstring& settings
         
         if (!IsFontInstalled(L"Perfect DOS VGA 437")) {
             // Attempt to install font from bundled resources
-            std::wstring fontPath = L"res\\fonts\\perfect_dos_vga_437\\Perfect DOS VGA 437.ttf";
+            std::wstring fontPath = L"res\\ASCIIgL\\fonts\\perfect_dos_vga_437\\Perfect DOS VGA 437.ttf";
             if (InstallFontFromFile(fontPath)) {
                 Logger::Info(L"Successfully installed 'Perfect DOS VGA 437' font.");
             } else {
@@ -694,17 +694,40 @@ bool Screen::WindowsImpl::InstallFontFromFile(const std::wstring& fontPath) {
         return false;
     }
     
-    // Install font temporarily for current session
-    int result = AddFontResourceExW(fontPath.c_str(), FR_PRIVATE, 0);
-    if (result == 0) {
-        Logger::Error(L"Failed to install font temporarily: " + fontPath);
+    Logger::Info(L"Attempting to install font: " + fontPath);
+    
+    // Try system-wide installation first (requires admin privileges)
+    int systemResult = AddFontResourceExW(fontPath.c_str(), FR_NOT_ENUM, 0);
+    if (systemResult > 0) {
+        Logger::Info(L"Font installed system-wide: " + fontPath);
+        SendMessage(HWND_BROADCAST, WM_FONTCHANGE, 0, 0);
+        Sleep(200); // Allow more time for system-wide registration
+        return true;
+    }
+    
+    // Fall back to session-only installation
+    int sessionResult = AddFontResourceExW(fontPath.c_str(), FR_PRIVATE, 0);
+    if (sessionResult == 0) {
+        DWORD error = GetLastError();
+        Logger::Error(L"Failed to install font (Error " + std::to_wstring(error) + L"): " + fontPath);
         return false;
     }
     
-    Logger::Info(L"Font installed temporarily: " + fontPath);
+    Logger::Info(L"Font installed temporarily for current session: " + fontPath);
+    Logger::Warning(L"Font may not be available to Windows Terminal. Try running as administrator for system-wide installation.");
     
     // Notify system of font change
     SendMessage(HWND_BROADCAST, WM_FONTCHANGE, 0, 0);
+    Sleep(150); // Give system time to process font registration
+    
+    // Verify font installation by checking if it's now available
+    bool isInstalled = IsFontInstalled(L"Perfect DOS VGA 437");
+    if (isInstalled) {
+        Logger::Info(L"Font verification successful: Perfect DOS VGA 437 is now available");
+    } else {
+        Logger::Warning(L"Font verification failed: Perfect DOS VGA 437 may not be properly registered");
+        Logger::Info(L"Suggestion: Restart the application or Windows Terminal, or install the font manually");
+    }
     
     return true;
 }

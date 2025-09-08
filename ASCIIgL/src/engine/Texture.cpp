@@ -24,26 +24,6 @@ Texture::Impl::Impl(const std::string& path)
     
     stbi_set_flip_vertically_on_load(0);
     m_LocalBuffer = stbi_load(path.c_str(), &m_Width, &m_Height, &m_BPP, 1); // m_BPP being set to 4 even for grayscale for some reason
-    
-    if (m_LocalBuffer) {
-        Logger::Info("TEXTURE: Successfully loaded " + path);
-        Logger::Info("TEXTURE: Width: " + std::to_string(m_Width));
-        Logger::Info("TEXTURE: Height: " + std::to_string(m_Height));
-        Logger::Info("TEXTURE: Original BPP: " + std::to_string(m_BPP));
-        Logger::Info("TEXTURE: Forced to 1 channel (grayscale)");
-        
-        if (m_Width <= 0 || m_Height <= 0) {
-            Logger::Error("TEXTURE: Invalid dimensions for " + path);
-        }
-    } else {
-        Logger::Error("TEXTURE: Failed to load " + path);
-        const char* stbi_error = stbi_failure_reason();
-        if (stbi_error) {
-            Logger::Error("TEXTURE: stbi_load error: " + std::string(stbi_error));
-        } else {
-            Logger::Error("TEXTURE: stbi_load failed with unknown error");
-        }
-    }
 }
 
 Texture::Impl::~Impl()

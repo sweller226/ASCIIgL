@@ -26,4 +26,4 @@ I_Dont_Wanna_Run_For_Christmas
     ./scripts/build_debug.ps1
 
     Rebuild Library
-    
+    ./scripts/build_ASCIIgL_christmas_game.ps1

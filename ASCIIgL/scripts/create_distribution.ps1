@@ -81,8 +81,10 @@ function New-Distribution {
     # Copy entire vendor folder (includes GLM, stb_image headers needed by public API)
     # Exclude .cpp files since this is a static library distribution
     robocopy "vendor" "$OutputDir/vendor" /E /XF *.cpp | Out-Null
-    if ($LASTEXITCODE -le 1) { # robocopy success codes are 0 or 1
+    # Robocopy exit codes: 0-3 are success, 4+ are errors
+    if ($LASTEXITCODE -le 3) {
         Write-Success "Copied vendor dependencies (headers only)"
+        $global:LASTEXITCODE = 0  # Reset exit code to 0 for success
     } else {
         Write-Warning "Issue copying vendor folder, exit code: $LASTEXITCODE"
     }
@@ -128,3 +130,6 @@ New-Item -Path $distDir -ItemType Directory -Force | Out-Null
 $outputDir = "$distDir/ASCIIgL-v$Version"
 New-Distribution $outputDir
 Write-Success "Distribution created: $outputDir"
+
+# Ensure we exit with success code
+exit 0
