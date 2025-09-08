@@ -49,6 +49,8 @@ LogLevel Logger::GetLevel() {
 
 void Logger::Error(const std::string& message) { LogInternal(LogLevel::Error, message); }
 void Logger::Error(const std::wstring& message) { LogInternal(LogLevel::Error, message); }
+void Logger::Warning(const std::string& message) { LogInternal(LogLevel::Warning, message); }
+void Logger::Warning(const std::wstring& message) { LogInternal(LogLevel::Warning, message); }
 void Logger::Info(const std::string& message) { LogInternal(LogLevel::Info, message); }
 void Logger::Info(const std::wstring& message) { LogInternal(LogLevel::Info, message); }
 void Logger::Debug(const std::string& message) { LogInternal(LogLevel::Debug, message); }
@@ -66,6 +68,7 @@ void Logger::LogInternal(LogLevel level, const std::string& message) {
             case LogLevel::Error: logFile << "[ERROR] "; break;
             case LogLevel::Info:  logFile << "[INFO] "; break;
             case LogLevel::Debug: logFile << "[DEBUG] "; break;
+            case LogLevel::Warning: logFile << "[WARNING] "; break;
         }
         logFile << message << std::endl;
     }
@@ -83,6 +86,7 @@ void Logger::LogInternal(LogLevel level, const std::wstring& message) {
             case LogLevel::Error: logFile << "[ERROR] "; break;
             case LogLevel::Info:  logFile << "[INFO] "; break;
             case LogLevel::Debug: logFile << "[DEBUG] "; break;
+            case LogLevel::Warning: logFile << "[WARNING] "; break;
         }
         std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
         logFile << conv.to_bytes(message) << std::endl;

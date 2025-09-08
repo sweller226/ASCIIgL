@@ -5,6 +5,13 @@
 #include <algorithm>
 #include <deque>
 #include <string>
+#include <cstdlib>
+#include <fstream>
+#include <filesystem>
+#include <sstream>
+#include <regex>
+#include <locale>
+#include <codecvt>
 
 #include <ASCIIgL/engine/Logger.hpp>
 
@@ -54,6 +61,12 @@
         void PlotPixel(int x, int y, char character, short Colour);
         void PlotPixel(int x, int y, CHAR_INFO charCol);
         CHAR_INFO* GetPixelBuffer();
+        bool IsWindowsTerminal();
+        std::wstring GetWindowsTerminalSettingsPath();
+        bool ModifyWindowsTerminalFont(const std::wstring& settingsPath, float fontSize);
+        float ConvertPixelSizeToTerminalPoints(unsigned int pixelSize);
+        bool IsFontInstalled(const std::wstring& fontName);
+        bool InstallFontFromFile(const std::wstring& fontFilePath);
     };
 
 #else
@@ -75,17 +88,11 @@ int Screen::WindowsImpl::Initialize(const unsigned int width, const unsigned int
 
     // Set the font FIRST to get accurate maximum window size calculations
     Logger::Debug(L"Setting font for accurate size calculations.");
-    CONSOLE_FONT_INFOEX fontForSizing;
-    fontForSizing.cbSize = sizeof(fontForSizing);
-    fontForSizing.nFont = 0;
-    fontForSizing.dwFontSize.X = fontSize;
-    fontForSizing.dwFontSize.Y = fontSize;
-    fontForSizing.FontFamily = FF_DONTCARE;
-    fontForSizing.FontWeight = FW_NORMAL;
-    wcscpy_s(fontForSizing.FaceName, LF_FACESIZE, L"Lucida Console");
-    
-    if (!SetCurrentConsoleFontEx(currentHandle, FALSE, &fontForSizing)) {
-        Logger::Error(L"Failed to set font for size calculations.");
+    if (IsWindowsTerminal()) {
+        SetFontModernTerminal(currentHandle, fontSize);
+    }
+    else {
+        SetFontConsole(currentHandle, fontSize);
     }
 
     // Small delay to ensure font change takes effect
@@ -143,16 +150,12 @@ int Screen::WindowsImpl::Initialize(const unsigned int width, const unsigned int
     SetConsoleWindowInfo(_hOutput, TRUE, &m_rectWindow);
 
 	Logger::Debug(L"Creating console font.");
-    CONSOLE_FONT_INFOEX cfi;
-    cfi.cbSize = sizeof(cfi);
-    cfi.nFont = 0;
-    cfi.dwFontSize.X = fontSize;
-    cfi.dwFontSize.Y = fontSize;
-    cfi.FontFamily = FF_DONTCARE;
-    cfi.FontWeight = FW_NORMAL;
-	wcscpy_s(cfi.FaceName, LF_FACESIZE, L"Lucida Console");
-    if (!SetCurrentConsoleFontEx(_hOutput, false, &cfi))
-        Logger::Error(L"Failed to set font for _hOutput.");
+    if (IsWindowsTerminal()) {
+        SetFontModernTerminal(_hOutput, fontSize);
+    }
+    else {
+        SetFontConsole(_hOutput, fontSize);
+    }
 
     Logger::Debug(L"Setting physical size of console window.");
     SetConsoleWindowInfo(_hOutput, TRUE, &rcRegion);
@@ -185,7 +188,7 @@ int Screen::WindowsImpl::Initialize(const unsigned int width, const unsigned int
 }
 
 void Screen::WindowsImpl::ClearBuffer() {
-    std::fill(pixelBuffer, pixelBuffer + Screen::SCR_WIDTH * Screen::SCR_HEIGHT, CHAR_INFO{' ', Screen::_backgroundCol});
+    std::fill(pixelBuffer, pixelBuffer + Screen::SCR_WIDTH * Screen::SCR_HEIGHT, CHAR_INFO{'\0', Screen::_backgroundCol});
 }
 
 void Screen::WindowsImpl::OutputBuffer() {
@@ -244,6 +247,30 @@ void Screen::WindowsImpl::PlotPixel(int x, int y, CHAR_INFO charCol) {
 
 CHAR_INFO* Screen::WindowsImpl::GetPixelBuffer() {
     return pixelBuffer;
+}
+
+bool Screen::WindowsImpl::IsWindowsTerminal() {
+    // Method 1: Check for Windows Terminal specific environment variables
+    const char* wtSession = std::getenv("WT_SESSION");
+    if (wtSession != nullptr) {
+        return true;
+    }
+    
+    // Method 2: Check for TERM_PROGRAM environment variable (modern terminals set this)
+    const char* termProgram = std::getenv("TERM_PROGRAM");
+    if (termProgram != nullptr && std::string(termProgram) == "vscode") {
+        // VSCode integrated terminal (which uses Windows Terminal backend)
+        return true;
+    }
+
+    // Method 3: Check if ConEmu environment variable exists (ConEmu is another modern terminal)
+    const char* conEmuANSI = std::getenv("ConEmuANSI");
+    if (conEmuANSI != nullptr) {
+        return true; // ConEmu supports modern terminal features
+    }
+    
+    // If none of the above conditions are met, assume it's traditional Command Prompt
+    return false;
 }
 
 #else
@@ -384,8 +411,9 @@ void Screen::SetTileSize(const unsigned int x, const unsigned int y) {
 }
 
 void Screen::CalculateTileCounts() {
-    TILE_COUNT_X = SCR_WIDTH / TILE_SIZE_X;
-    TILE_COUNT_Y = SCR_HEIGHT / TILE_SIZE_Y;
+    // Use ceiling division to ensure all pixels are covered by tiles
+    TILE_COUNT_X = (SCR_WIDTH + TILE_SIZE_X - 1) / TILE_SIZE_X;
+    TILE_COUNT_Y = (SCR_HEIGHT + TILE_SIZE_Y - 1) / TILE_SIZE_Y;
 }
 
 unsigned short Screen::GetBackgroundColor() {
@@ -397,11 +425,7 @@ void Screen::SetBackgroundColor(unsigned short color) {
 }
 
 CHAR_INFO* Screen::GetPixelBuffer() {
-#ifdef _WIN32
     return _impl->GetPixelBuffer();
-#else
-    return nullptr;
-#endif
 }
 
 float* Screen::GetDepthBuffer() {
@@ -460,4 +484,227 @@ void Screen::FPSSampleCalculate(const double currentDeltaTime) {
 
 void Screen::Cleanup() {
     _impl.reset();
+}
+
+void Screen::SetFontConsole(HANDLE currentHandle, unsigned int fontSize) {
+    CONSOLE_FONT_INFOEX fontForSizing;
+    fontForSizing.cbSize = sizeof(fontForSizing);
+    fontForSizing.nFont = 0;
+    fontForSizing.dwFontSize.X = fontSize;
+    fontForSizing.dwFontSize.Y = fontSize;
+    fontForSizing.FontFamily = FF_DONTCARE;
+    fontForSizing.FontWeight = FW_NORMAL;
+    wcscpy_s(fontForSizing.FaceName, LF_FACESIZE, L"Lucida Console");
+    if (!SetCurrentConsoleFontEx(currentHandle, FALSE, &fontForSizing)) {
+        Logger::Error(L"Failed to set font.");
+    }
+}
+
+void Screen::SetFontModernTerminal(HANDLE currentHandle, unsigned int fontSize) {
+    Logger::Info(L"Attempting to modify Windows Terminal settings.json file directly.");
+    
+    // Convert pixel-based font size to Windows Terminal point size
+    float terminalFontSize = _impl->ConvertPixelSizeToTerminalPoints(fontSize);
+    Logger::Debug(L"Converting pixel size " + std::to_wstring(fontSize) + 
+                  L" to terminal point size " + std::to_wstring(terminalFontSize));
+    
+    std::wstring settingsPath = _impl->GetWindowsTerminalSettingsPath();
+    if (!settingsPath.empty() && _impl->ModifyWindowsTerminalFont(settingsPath, terminalFontSize)) {
+        Logger::Info(L"Successfully modified Windows Terminal settings.json");
+    }
+}
+
+float Screen::WindowsImpl::ConvertPixelSizeToTerminalPoints(unsigned int pixelSize) {
+    // Precise conversion from pixel-based font size to typographic points
+    // 
+    // Method: Get system DPI and calculate the actual point size that would 
+    // produce the same pixel height at the current DPI setting
+    
+    // Get the DPI of the primary display
+    HDC hdc = GetDC(NULL);
+    if (hdc == NULL) {
+        Logger::Warning(L"Could not get device context for DPI calculation, using default conversion");
+        return static_cast<float>(pixelSize) * 0.75f;  // Fallback to empirical conversion
+    }
+    
+    int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);  // Vertical DPI (typically 96 or 120)
+    ReleaseDC(NULL, hdc);
+    
+    // Typographic conversion: 1 point = 1/72 inch
+    // At 96 DPI: 1 point = 96/72 = 1.333... pixels
+    // At 120 DPI: 1 point = 120/72 = 1.666... pixels
+    // 
+    // To convert pixels to points: points = pixels * 72 / DPI
+    float pointSize = static_cast<float>(pixelSize) * 72.0f / static_cast<float>(dpiY);
+    
+    // Apply a small adjustment factor because Windows Terminal tends to render
+    // fonts slightly differently than the legacy console due to different 
+    // rendering engines (DirectWrite vs GDI)
+    const float renderingAdjustment = 0.9f;  // Fine-tune based on visual testing
+    pointSize *= renderingAdjustment;
+    
+    Logger::Debug(L"DPI: " + std::to_wstring(dpiY) + 
+                  L", Pixel size: " + std::to_wstring(pixelSize) + 
+                  L", Calculated point size: " + std::to_wstring(pointSize));
+    
+    return pointSize;
+}
+
+std::wstring Screen::WindowsImpl::GetWindowsTerminalSettingsPath() {
+    // Windows Terminal settings are stored in:
+    // %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+    
+    wchar_t* localAppData = nullptr;
+    size_t len = 0;
+    errno_t err = _wdupenv_s(&localAppData, &len, L"LOCALAPPDATA");
+    
+    if (err != 0 || localAppData == nullptr) {
+        Logger::Error(L"Could not get LOCALAPPDATA environment variable.");
+        return L"";
+    }
+    
+    std::wstring settingsPath = localAppData;
+    free(localAppData);
+    
+    // Try different possible Windows Terminal package names
+    std::vector<std::wstring> possiblePaths = {
+        settingsPath + L"\\Packages\\Microsoft.WindowsTerminal_8wekyb3d8bbwe\\LocalState\\settings.json",
+        settingsPath + L"\\Packages\\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\\LocalState\\settings.json",
+        settingsPath + L"\\Microsoft\\Windows Terminal\\settings.json"
+    };
+    
+    for (const auto& path : possiblePaths) {
+        if (std::filesystem::exists(path)) {
+            Logger::Info(L"Found Windows Terminal settings at: " + path);
+            return path;
+        }
+    }
+    
+    Logger::Info(L"Windows Terminal settings.json not found in standard locations.");
+    return L"";
+}
+
+bool Screen::WindowsImpl::ModifyWindowsTerminalFont(const std::wstring& settingsPath, float fontSize) {             
+    try {   
+        std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+        std::string settingsPathStr = converter.to_bytes(settingsPath);
+        
+        // Read file
+        std::wifstream file(settingsPathStr);
+        if (!file.is_open()) {
+            Logger::Error(L"Could not open Windows Terminal settings file.");
+            return false;
+        }
+        
+        std::wstringstream buffer;
+        buffer << file.rdbuf();
+        file.close();
+        std::wstring content = buffer.str();
+        
+        // Create backup
+        std::filesystem::copy_file(settingsPath, settingsPath + L".backup", 
+                                 std::filesystem::copy_options::overwrite_existing);
+        
+        // Simple regex replacements - just update existing values or add minimal font object
+        std::wregex sizeRegex(LR"("size"\s*:\s*[\d.]+)");  // Support both integers and floats
+        std::wregex faceRegex(LR"("face"\s*:\s*"[^"]*")");
+        
+        // Update size if it exists
+        if (std::regex_search(content, sizeRegex)) {
+            content = std::regex_replace(content, sizeRegex, L"\"size\": " + std::to_wstring(fontSize));
+        }
+        
+        if (!IsFontInstalled(L"Perfect DOS VGA 437")) {
+            // Attempt to install font from bundled resources
+            std::wstring fontPath = L"res\\fonts\\perfect_dos_vga_437\\Perfect DOS VGA 437.ttf";
+            if (InstallFontFromFile(fontPath)) {
+                Logger::Info(L"Successfully installed 'Perfect DOS VGA 437' font.");
+            } else {
+                Logger::Warning(L"Failed to install 'Perfect DOS VGA 437' font. Font face setting may not apply correctly.");
+            }
+        }
+
+        // Update face if it exists  
+        if (std::regex_search(content, faceRegex)) {
+            content = std::regex_replace(content, faceRegex, L"\"face\": \"Perfect DOS VGA 437\"");  // True square font at all sizes
+        }
+        
+        // If no font settings exist, add simple font object to defaults
+        if (!std::regex_search(content, sizeRegex) && !std::regex_search(content, faceRegex)) {
+            std::wregex defaultsRegex(LR"("defaults"\s*:\s*\{)");
+            if (std::regex_search(content, defaultsRegex)) {
+                std::wstring fontAdd = L"\"defaults\": {\n        \"font\": {\"size\": " + 
+                                      std::to_wstring(fontSize) + L", \"face\": \"Perfect DOS VGA 437\"},";  // Perfect square font
+                content = std::regex_replace(content, defaultsRegex, fontAdd);
+            }
+        }
+        
+        // Write back
+        std::wofstream outFile(settingsPathStr);
+        if (!outFile.is_open()) return false;
+        outFile << content;
+        outFile.close();
+        
+        Logger::Debug(L"Modified Windows Terminal settings");
+        return true;
+        
+    } catch (const std::exception& e) {
+        Logger::Error(L"Failed to modify Windows Terminal settings");
+        return false;
+    }
+}
+
+bool Screen::WindowsImpl::IsFontInstalled(const std::wstring& fontName) {
+    // Check if font is installed by enumerating fonts
+    HDC hdc = GetDC(NULL);
+    if (hdc == NULL) return false;
+    
+    bool found = false;
+    
+    // Static callback function for font enumeration
+    struct FontCheckData {
+        std::wstring targetFont;
+        bool* foundPtr;
+    };
+    
+    FontCheckData checkData = { fontName, &found };
+    
+    // Static callback function (required for Windows API)
+    static auto enumCallback = [](const LOGFONTW* lf, const TEXTMETRICW* tm, DWORD fontType, LPARAM lParam) -> int {
+        FontCheckData* data = reinterpret_cast<FontCheckData*>(lParam);
+        std::wstring currentFont(lf->lfFaceName);
+        
+        if (currentFont == data->targetFont) {
+            *(data->foundPtr) = true;
+            return 0; // Stop enumeration
+        }
+        return 1; // Continue enumeration
+    };
+    
+    EnumFontFamiliesW(hdc, fontName.c_str(), (FONTENUMPROCW)enumCallback, (LPARAM)&checkData);
+    
+    ReleaseDC(NULL, hdc);
+    return found;
+}
+
+bool Screen::WindowsImpl::InstallFontFromFile(const std::wstring& fontPath) {
+    // Check if font file exists
+    if (!std::filesystem::exists(fontPath)) {
+        Logger::Error(L"Font file not found: " + fontPath);
+        return false;
+    }
+    
+    // Install font temporarily for current session
+    int result = AddFontResourceExW(fontPath.c_str(), FR_PRIVATE, 0);
+    if (result == 0) {
+        Logger::Error(L"Failed to install font temporarily: " + fontPath);
+        return false;
+    }
+    
+    Logger::Info(L"Font installed temporarily: " + fontPath);
+    
+    // Notify system of font change
+    SendMessage(HWND_BROADCAST, WM_FONTCHANGE, 0, 0);
+    
+    return true;
 }

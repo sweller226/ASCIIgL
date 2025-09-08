@@ -15,7 +15,6 @@ public:
     Impl(const std::string& path);
     ~Impl();
     float GetPixelCol(int x, int y) const;
-    float GetPixelColFiltered(float u, float v) const;
 };
 
 Texture::Impl::Impl(const std::string& path)
@@ -42,42 +41,6 @@ float Texture::Impl::GetPixelCol(int x, int y) const
 
     constexpr float inv255 = 1.0f / 255.0f;
     return shade * inv255;
-}
-
-// Add bilinear filtered texture sampling method
-float Texture::Impl::GetPixelColFiltered(float u, float v) const
-{
-    // Convert UV coordinates to pixel coordinates
-    float x = u * (m_Width - 1);
-    float y = v * (m_Height - 1);
-    
-    // Get integer and fractional parts
-    int x0 = static_cast<int>(x);
-    int y0 = static_cast<int>(y);
-    int x1 = std::min(x0 + 1, m_Width - 1);
-    int y1 = std::min(y0 + 1, m_Height - 1);
-    
-    float fx = x - x0;
-    float fy = y - y0;
-    
-    // Clamp coordinates to texture bounds
-    x0 = std::max(0, std::min(x0, m_Width - 1));
-    y0 = std::max(0, std::min(y0, m_Height - 1));
-    
-    // Sample the four surrounding pixels
-    const unsigned char* buffer = reinterpret_cast<unsigned char*>(m_LocalBuffer);
-    constexpr float inv255 = 1.0f / 255.0f;
-    
-    float c00 = buffer[y0 * m_Width + x0] * inv255;
-    float c10 = buffer[y0 * m_Width + x1] * inv255;
-    float c01 = buffer[y1 * m_Width + x0] * inv255;
-    float c11 = buffer[y1 * m_Width + x1] * inv255;
-    
-    // Bilinear interpolation
-    float c0 = c00 * (1.0f - fx) + c10 * fx;
-    float c1 = c01 * (1.0f - fx) + c11 * fx;
-    
-    return c0 * (1.0f - fy) + c1 * fy;
 }
 
 // Texture public interface implementation
@@ -121,9 +84,4 @@ std::string Texture::GetFilePath() const
 float Texture::GetPixelCol(int x, int y) const
 {
     return pImpl->GetPixelCol(x, y);
-}
-
-float Texture::GetPixelColFiltered(float u, float v) const
-{
-    return pImpl->GetPixelColFiltered(u, v);
 }

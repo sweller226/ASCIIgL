@@ -129,9 +129,8 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
     _vertexBuffer.reserve(vertices.size()); // Reserve to avoid reallocations
     _vertexBuffer = vertices; // Still need a copy for transformations, but reuse buffer
 
-    // Optimize: Parallel vertex shader execution for better CPU utilization
-    std::for_each(std::execution::par_unseq, _vertexBuffer.begin(), _vertexBuffer.end(), 
-        [&VSHADER](VERTEX& v) { VSHADER.GLUse(v); });
+    // SIMD-optimized batch vertex shader execution with GLM's AVX2 support
+    const_cast<VERTEX_SHADER&>(VSHADER).GLUseBatch(_vertexBuffer);
 
     _clippedBuffer.clear();
     ClippingHelper(_vertexBuffer, _clippedBuffer);
@@ -153,7 +152,7 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
 
     // Optimize: Initialize tiles only once, then reuse the structure
     if (!_tilesInitialized) {
-        InitializeTilesOnce();
+        InitializeTiles();
         _tilesInitialized = true;
     } else {
         ClearTileTriangleLists();
@@ -217,7 +216,7 @@ void Renderer::BackFaceCullHelper(const std::vector<VERTEX>& vertices, std::vect
 // TILE-BASED RENDERING FUNCTIONS
 // =============================================================================
 
-void Renderer::InitializeTilesOnce() {
+void Renderer::InitializeTiles() {
     // One-time initialization of tile structure - much faster than recreating every frame
     int tileCount = Screen::GetTileCountX() * Screen::GetTileCountY();
     _tileBuffer.clear();
@@ -251,23 +250,6 @@ void Renderer::ClearTileTriangleLists() {
     }
 }
 
-void Renderer::InitializeTiles(std::vector<Tile>& tiles) {
-    for (int ty = 0; ty < Screen::GetTileCountY(); ++ty) {
-        for (int tx = 0; tx < Screen::GetTileCountX(); ++tx) {
-            int tileIndex = ty * Screen::GetTileCountX() + tx;
-            int posX = tx * Screen::GetTileSizeX();
-            int posY = ty * Screen::GetTileSizeY();
-
-            // Clamp tile size if it would overflow the screen
-            int sizeX = std::min(Screen::GetTileSizeX(), Screen::GetWidth() - posX);
-            int sizeY = std::min(Screen::GetTileSizeY(), Screen::GetHeight() - posY);
-
-            tiles[tileIndex].position = glm::ivec2(posX, posY);
-            tiles[tileIndex].size = glm::ivec2(sizeX, sizeY);
-        }
-    }
-}
-
 void Renderer::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles) {
     // Optimized version that works directly with pre-allocated tile buffer
     const int tileSizeX = Screen::GetTileSizeX();
@@ -286,9 +268,9 @@ void Renderer::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles) 
 
         // Optimized tile range calculation using pre-computed inverse
         int minTileX = std::max(0, static_cast<int>(minTriPt.x * invTileSizeX));
-        int maxTileX = std::min(tileCountX - 1, static_cast<int>(maxTriPt.x * invTileSizeX));
+        int maxTileX = std::min(tileCountX - 1, static_cast<int>(std::ceil(maxTriPt.x * invTileSizeX)));
         int minTileY = std::max(0, static_cast<int>(minTriPt.y * invTileSizeY));
-        int maxTileY = std::min(tileCountY - 1, static_cast<int>(maxTriPt.y * invTileSizeY));
+        int maxTileY = std::min(tileCountY - 1, static_cast<int>(std::ceil(maxTriPt.y * invTileSizeY)));
 
         // Cache triangle vertices for encapsulation test
         const VERTEX& v1 = raster_triangles[i];
@@ -430,15 +412,17 @@ void Renderer::DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, co
                     const int bufferIndex = bufferRowOffset + j;
                     
                     if (tex_w > depthBuffer[bufferIndex]) {
-                        float tex_uw = ((1.0f - t) * tex_su + t * tex_eu) / tex_w;
-                        float tex_vw = ((1.0f - t) * tex_sv + t * tex_ev) / tex_w;
+                        // Use reciprocal multiplication instead of division (much faster)
+                        float inv_tex_w = 1.0f / tex_w;
+                        float tex_uw = ((1.0f - t) * tex_su + t * tex_eu) * inv_tex_w;
+                        float tex_vw = ((1.0f - t) * tex_sv + t * tex_ev) * inv_tex_w;
                         
-                        if (tex_uw < 1.0f && tex_vw < 1.0f) {
+                        if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
                             // Use integer texture coordinates for better cache performance
                             float texWidthProd = tex_uw * texWidth;
                             float texHeightProd = tex_vw * texHeight;
                             float blendedGrayScale = tex->GetPixelCol(texWidthProd, texHeightProd);
-                            Screen::PlotPixel(glm::vec2(j, i), GetColGlyph(blendedGrayScale));
+                            Screen::PlotPixel(glm::vec2(j, i), GetColGlyphGreyScale(blendedGrayScale));
                             depthBuffer[bufferIndex] = tex_w;
                         }
                     }
@@ -532,14 +516,16 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
                     const int bufferIndex = bufferRowOffset + j;
                     
                     if (tex_w > depthBuffer[bufferIndex]) {
-                        float tex_uw = ((1.0f - t) * tex_su + t * tex_eu) / tex_w;
-                        float tex_vw = ((1.0f - t) * tex_sv + t * tex_ev) / tex_w;
+                        // Use reciprocal multiplication instead of division (much faster)
+                        float inv_tex_w = 1.0f / tex_w;
+                        float tex_uw = ((1.0f - t) * tex_su + t * tex_eu) * inv_tex_w;
+                        float tex_vw = ((1.0f - t) * tex_sv + t * tex_ev) * inv_tex_w;
                         
-                        if (tex_uw < 1.0f && tex_vw < 1.0f) {
+                        if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
                             float texWidthProd = tex_uw * texWidth;
                             float texHeightProd = tex_vw * texHeight;
                             float blendedGrayScale = tex->GetPixelCol(texWidthProd, texHeightProd);
-                            Screen::PlotPixel(glm::vec2(j, i), GetColGlyph(blendedGrayScale));
+                            Screen::PlotPixel(glm::vec2(j, i), GetColGlyphGreyScale(blendedGrayScale));
                             depthBuffer[bufferIndex] = tex_w;
                         }
                     }
@@ -644,7 +630,9 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
                     
                     if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
                         // Use bilinear filtered sampling for smoother edges
-                        const float sampleGrayScale = tex->GetPixelColFiltered(tex_uw, tex_vw);
+                        float texWidthProd = tex_uw * texWidth;
+                        float texHeightProd = tex_vw * texHeight;
+                        const float sampleGrayScale = tex->GetPixelCol(texWidthProd, texHeightProd);
                         
                         triangleTotalGrayScale += sampleGrayScale;
                         totalDepth += tex_w;
@@ -655,12 +643,14 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
             
             // Calculate final pixel color
             if (triangleValidSamples > 0) {
-                const float averageTriangleGrayScale = triangleTotalGrayScale / triangleValidSamples;
-                const float averageDepth = totalDepth / triangleValidSamples;
+                // Use reciprocal multiplication instead of division for better performance
+                const float invValidSamples = 1.0f / triangleValidSamples;
+                const float averageTriangleGrayScale = triangleTotalGrayScale * invValidSamples;
+                const float averageDepth = totalDepth * invValidSamples;
                 
                 const int bufferIndex = bufferRowOffset + x;
                 if (averageDepth > depthBuffer[bufferIndex]) {
-                    const CHAR_INFO finalGlyph = GetColGlyph(averageTriangleGrayScale);
+                    const CHAR_INFO finalGlyph = GetColGlyphGreyScale(averageTriangleGrayScale);
                     Screen::GetInstance().PlotPixel(glm::vec2(x, y), finalGlyph);
                     depthBuffer[bufferIndex] = averageDepth;
                 }
@@ -753,8 +743,10 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& vert1, const VERTEX
                     
                     if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
                         // Use bilinear filtered sampling for smoother edges
-                        const float sampleGrayScale = tex->GetPixelColFiltered(tex_uw, tex_vw);
-                        
+                        float texWidthProd = tex_uw * texWidth;
+                        float texHeightProd = tex_vw * texHeight;
+                        const float sampleGrayScale = tex->GetPixelCol(texWidthProd, texHeightProd);
+
                         triangleTotalGrayScale += sampleGrayScale;
                         totalDepth += tex_w;
                         triangleValidSamples++;
@@ -764,12 +756,14 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& vert1, const VERTEX
             
             // Calculate final pixel color
             if (triangleValidSamples > 0) {
-                const float averageTriangleGrayScale = triangleTotalGrayScale / triangleValidSamples;
-                const float averageDepth = totalDepth / triangleValidSamples;
+                // Use reciprocal multiplication instead of division for better performance
+                const float invValidSamples = 1.0f / triangleValidSamples;
+                const float averageTriangleGrayScale = triangleTotalGrayScale * invValidSamples;
+                const float averageDepth = totalDepth * invValidSamples;
                 
                 const int bufferIndex = bufferRowOffset + x;
                 if (averageDepth > depthBuffer[bufferIndex]) {
-                    const CHAR_INFO finalGlyph = GetColGlyph(averageTriangleGrayScale);
+                    const CHAR_INFO finalGlyph = GetColGlyphGreyScale(averageTriangleGrayScale);
                     Screen::GetInstance().PlotPixel(glm::vec2(x, y), finalGlyph);
                     depthBuffer[bufferIndex] = averageDepth;
                 }
@@ -980,16 +974,16 @@ glm::mat4 Renderer::CalcModelMatrix(const glm::vec3 position, const glm::vec2 ro
 	return model;
 }
 
-CHAR_INFO Renderer::GetColGlyph(const float GreyScale) {
+CHAR_INFO Renderer::GetColGlyphGreyScale(const float GreyScale) {
     static const unsigned int numShades = 16;
     static const CHAR_INFO vals[numShades] = {
-        CHAR_INFO{ PIXEL_QUARTER, FG_BLACK}, CHAR_INFO{ PIXEL_QUARTER, FG_DARK_GREY},
+        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ PIXEL_QUARTER, FG_DARK_GREY},
         CHAR_INFO{ PIXEL_QUARTER, FG_GREY}, CHAR_INFO{ PIXEL_QUARTER, FG_WHITE},
-        CHAR_INFO{ PIXEL_HALF, FG_BLACK}, CHAR_INFO{ PIXEL_HALF, FG_DARK_GREY},
+        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ PIXEL_HALF, FG_DARK_GREY},
         CHAR_INFO{ PIXEL_HALF, FG_GREY}, CHAR_INFO{ PIXEL_HALF, FG_WHITE},
-        CHAR_INFO{ PIXEL_THREEQUARTERS, FG_BLACK}, CHAR_INFO{ PIXEL_THREEQUARTERS, FG_DARK_GREY},
+        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ PIXEL_THREEQUARTERS, FG_DARK_GREY},
         CHAR_INFO{ PIXEL_THREEQUARTERS, FG_GREY}, CHAR_INFO{ PIXEL_THREEQUARTERS, FG_WHITE},
-        CHAR_INFO{ PIXEL_FULL, FG_BLACK}, CHAR_INFO{ PIXEL_FULL, FG_DARK_GREY},
+        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ PIXEL_FULL, FG_DARK_GREY},
         CHAR_INFO{ PIXEL_FULL, FG_GREY}, CHAR_INFO{ PIXEL_FULL, FG_WHITE},
     };
 

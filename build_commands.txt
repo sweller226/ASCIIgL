@@ -5,6 +5,11 @@ ASCIIgL
     Build Debug
     ./scripts/build_debug.ps1
 
+    Create Distribution (Examples)
+    .\scripts\create_distribution.ps1
+    .\scripts\create_distribution.ps1 -Version 2.0.0
+    .\scripts\create_distribution.ps1 -Clean -Version 1.5.0
+
 I_Dont_Wanna_Run_For_Christmas
     Run Debug Command
     cd "C:\Users\Skwig\Desktop\Development\dev\ASCIIgL\I_Dont_Wanna_Run_For_Christmas\build\bin\Debug"

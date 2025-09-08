@@ -64,7 +64,7 @@ Game* Game::GetInstance()
 void Game::Run()
 {
     Logger::Info("Game loop starting.");
-    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 1, 1000, 1.0f, BG_BLACK);
+    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 2, 1000, 1.0f, FG_BLACK);
 	SCR_WIDTH = Screen::GetInstance().GetWidth();
 	SCR_HEIGHT = Screen::GetInstance().GetHeight();
 	guiCamera.setScreenDimensions(SCR_WIDTH, SCR_HEIGHT);
@@ -74,7 +74,7 @@ void Game::Run()
     Renderer::GetInstance().SetBackfaceCulling(true);
     Renderer::GetInstance().SetCCW(true);
 	Renderer::GetInstance().SetAntialiasingsamples(4);
-	Renderer::GetInstance().SetAntialiasing(true);
+	Renderer::GetInstance().SetAntialiasing(false);
 
     // Logger::Info("Playing background music.");
 	// BOOL soundResult = PlaySound(TEXT(".\\res\\audio\\Man.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);

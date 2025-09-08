@@ -1,8 +1,5 @@
 # Build folders
 build/
 
-#libraries
-libs/assimp/
-
 # OS/Editor files
 .vscode/
