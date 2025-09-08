@@ -4,6 +4,7 @@
 #include <tinyobjloader/tiny_obj_loader.h>
 #include <iostream>
 #include <string>
+#include <set>
 
 // PIMPL Implementation class that contains all tinyobjloader-related code
 class Model::Impl
@@ -24,7 +25,14 @@ void Model::Impl::loadModel(std::string path, std::vector<Mesh*>& meshes)
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
-    bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, path.c_str());
+    // Extract directory for material file and texture paths
+    directory = path.substr(0, path.find_last_of('/'));
+    if (directory.empty()) {
+        directory = "."; // Current directory if no path separator found
+    }
+
+    // Load OBJ with material file directory specified
+    bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, path.c_str(), directory.c_str());
 
     if (!warn.empty()) {
         Logger::Warning("TINYOBJ: " + warn);
@@ -39,7 +47,8 @@ void Model::Impl::loadModel(std::string path, std::vector<Mesh*>& meshes)
         return;
     }
 
-    directory = path.substr(0, path.find_last_of('/'));
+    Logger::Info("TINYOBJ: Loaded " + std::to_string(shapes.size()) + " shapes and " + 
+                 std::to_string(materials.size()) + " materials");
     
     // Process each shape (mesh) in the model
     for (const auto& shape : shapes) {
@@ -51,6 +60,23 @@ Mesh* Model::Impl::processMesh(const tinyobj::attrib_t& attrib, const tinyobj::s
 {
     std::vector<VERTEX> vertices;
     std::vector<Texture*> textures;
+
+    // Collect unique material IDs for this shape
+    std::set<int> uniqueMaterialIds;
+    for (size_t f = 0; f < shape.mesh.material_ids.size(); f++) {
+        if (shape.mesh.material_ids[f] >= 0) {
+            uniqueMaterialIds.insert(shape.mesh.material_ids[f]);
+        }
+    }
+
+    // Load textures for all materials used by this shape
+    for (int materialId : uniqueMaterialIds) {
+        if (materialId < materials.size()) {
+            const auto& material = materials[materialId];
+            std::vector<Texture*> materialTextures = loadMaterialTextures(material);
+            textures.insert(textures.end(), materialTextures.begin(), materialTextures.end());
+        }
+    }
 
     // Loop over faces (polygons)
     size_t index_offset = 0;
@@ -96,13 +122,6 @@ Mesh* Model::Impl::processMesh(const tinyobj::attrib_t& attrib, const tinyobj::s
             vertices.push_back(vertex);
         }
         index_offset += fv;
-
-        // Load material textures for this face
-        if (!materials.empty() && shape.mesh.material_ids[f] >= 0) {
-            const auto& material = materials[shape.mesh.material_ids[f]];
-            std::vector<Texture*> materialTextures = loadMaterialTextures(material);
-            textures.insert(textures.end(), materialTextures.begin(), materialTextures.end());
-        }
     }
 
     return new Mesh(vertices, textures);
@@ -112,9 +131,12 @@ std::vector<Texture*> Model::Impl::loadMaterialTextures(const tinyobj::material_
 {
     std::vector<Texture*> textures;
     
+    Logger::Debug("Loading textures for material: " + material.name);
+    
     // Load diffuse texture
     if (!material.diffuse_texname.empty()) {
         std::string texturePath = directory + "/" + material.diffuse_texname;
+        Logger::Debug("Loading diffuse texture: " + texturePath);
         
         // Check if texture was loaded before
         bool skip = false;
@@ -122,20 +144,27 @@ std::vector<Texture*> Model::Impl::loadMaterialTextures(const tinyobj::material_
             if (textures_loaded[j]->GetFilePath() == texturePath) {
                 textures.push_back(textures_loaded[j]);
                 skip = true;
+                Logger::Debug("Reusing previously loaded texture: " + texturePath);
                 break;
             }
         }
         
         if (!skip) {
-            Texture* texture = new Texture(texturePath, "texture_diffuse");
-            textures.push_back(texture);
-            textures_loaded.push_back(texture);
+            try {
+                Texture* texture = new Texture(texturePath, "texture_diffuse");
+                textures.push_back(texture);
+                textures_loaded.push_back(texture);
+                Logger::Info("Successfully loaded diffuse texture: " + texturePath);
+            } catch (const std::exception& e) {
+                Logger::Error("Failed to load diffuse texture: " + texturePath + " - " + e.what());
+            }
         }
     }
     
     // Load specular texture
     if (!material.specular_texname.empty()) {
         std::string texturePath = directory + "/" + material.specular_texname;
+        Logger::Debug("Loading specular texture: " + texturePath);
         
         // Check if texture was loaded before
         bool skip = false;
@@ -143,17 +172,35 @@ std::vector<Texture*> Model::Impl::loadMaterialTextures(const tinyobj::material_
             if (textures_loaded[j]->GetFilePath() == texturePath) {
                 textures.push_back(textures_loaded[j]);
                 skip = true;
+                Logger::Debug("Reusing previously loaded texture: " + texturePath);
                 break;
             }
         }
         
         if (!skip) {
-            Texture* texture = new Texture(texturePath, "texture_specular");
-            textures.push_back(texture);
-            textures_loaded.push_back(texture);
+            try {
+                Texture* texture = new Texture(texturePath, "texture_specular");
+                textures.push_back(texture);
+                textures_loaded.push_back(texture);
+                Logger::Info("Successfully loaded specular texture: " + texturePath);
+            } catch (const std::exception& e) {
+                Logger::Error("Failed to load specular texture: " + texturePath + " - " + e.what());
+            }
         }
     }
 
+    // Also check for other common texture types in tinyobj
+    if (!material.ambient_texname.empty()) {
+        std::string texturePath = directory + "/" + material.ambient_texname;
+        Logger::Debug("Found ambient texture: " + texturePath);
+    }
+    
+    if (!material.normal_texname.empty()) {
+        std::string texturePath = directory + "/" + material.normal_texname;
+        Logger::Debug("Found normal texture: " + texturePath);
+    }
+
+    Logger::Debug("Loaded " + std::to_string(textures.size()) + " textures for material: " + material.name);
     return textures;
 }
 

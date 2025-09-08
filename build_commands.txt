@@ -24,3 +24,6 @@ I_Dont_Wanna_Run_For_Christmas
 
     Build Debug
     ./scripts/build_debug.ps1
+
+    Rebuild Library
+    
