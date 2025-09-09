@@ -23,7 +23,20 @@ Texture::Impl::Impl(const std::string& path)
     Logger::Info("TEXTURE: Attempting to load texture: " + path);
     
     stbi_set_flip_vertically_on_load(0);
-    m_LocalBuffer = stbi_load(path.c_str(), &m_Width, &m_Height, &m_BPP, 1); // m_BPP being set to 4 even for grayscale for some reason
+    m_LocalBuffer = stbi_load(path.c_str(), &m_Width, &m_Height, &m_BPP, 1);
+    
+    // Verify if texture loaded successfully
+    if (m_LocalBuffer) {
+        Logger::Info("TEXTURE: Successfully loaded '" + path + "'");
+        Logger::Debug("TEXTURE: Dimensions: " + std::to_string(m_Width) + "x" + std::to_string(m_Height));
+        Logger::Debug("TEXTURE: Channels: " + std::to_string(m_BPP) + " (forced to 1 for grayscale)");
+        Logger::Debug("TEXTURE: Buffer size: " + std::to_string(m_Width * m_Height) + " bytes");
+    } else {
+        const char* stbi_error = stbi_failure_reason();
+        Logger::Error("TEXTURE: Failed to load '" + path + "'");
+        Logger::Error("TEXTURE: STB Error: " + std::string(stbi_error ? stbi_error : "Unknown error"));
+        Logger::Error("TEXTURE: Check if file exists and is a valid image format");
+    }
 }
 
 Texture::Impl::~Impl()

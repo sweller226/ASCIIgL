@@ -135,7 +135,14 @@ std::vector<Texture*> Model::Impl::loadMaterialTextures(const tinyobj::material_
     
     // Load diffuse texture
     if (!material.diffuse_texname.empty()) {
-        std::string texturePath = directory + "/" + material.diffuse_texname;
+        std::string texturePath;
+        if (material.diffuse_texname.find("res/") == 0 || material.diffuse_texname[0] == '/') {
+            // Already absolute path
+            texturePath = material.diffuse_texname;
+        } else {
+            // Relative path, prepend directory
+            texturePath = directory + "/" + material.diffuse_texname;
+        }
         Logger::Debug("Loading diffuse texture: " + texturePath);
         
         // Check if texture was loaded before
@@ -163,7 +170,14 @@ std::vector<Texture*> Model::Impl::loadMaterialTextures(const tinyobj::material_
     
     // Load specular texture
     if (!material.specular_texname.empty()) {
-        std::string texturePath = directory + "/" + material.specular_texname;
+        std::string texturePath;
+        if (material.specular_texname.find("res/") == 0 || material.specular_texname[0] == '/') {
+            // Already absolute path
+            texturePath = material.specular_texname;
+        } else {
+            // Relative path, prepend directory
+            texturePath = directory + "/" + material.specular_texname;
+        }
         Logger::Debug("Loading specular texture: " + texturePath);
         
         // Check if texture was loaded before
@@ -191,12 +205,12 @@ std::vector<Texture*> Model::Impl::loadMaterialTextures(const tinyobj::material_
 
     // Also check for other common texture types in tinyobj
     if (!material.ambient_texname.empty()) {
-        std::string texturePath = directory + "/" + material.ambient_texname;
+        std::string texturePath = material.ambient_texname;
         Logger::Debug("Found ambient texture: " + texturePath);
     }
     
     if (!material.normal_texname.empty()) {
-        std::string texturePath = directory + "/" + material.normal_texname;
+        std::string texturePath = material.normal_texname;
         Logger::Debug("Found normal texture: " + texturePath);
     }
 

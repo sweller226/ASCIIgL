@@ -43,18 +43,8 @@ enum COLOUR
 // Using hashtag (#) character which is universally available in all fonts
 enum PIXEL_TYPE
 {
-    PIXEL_FULL = 35,          // # (Hashtag - ASCII 35)
-    PIXEL_THREEQUARTERS = 35, // # (Hashtag - ASCII 35)
-    PIXEL_HALF = 35,          // # (Hashtag - ASCII 35) 
-    PIXEL_QUARTER = 35,       // # (Hashtag - ASCII 35)
-};
-
-/* Original DOS Code Page 437 block characters (commented out for compatibility):
-enum PIXEL_TYPE
-{
     PIXEL_FULL = 219,         // █ (Full block - DOS char 219)
     PIXEL_THREEQUARTERS = 178, // ▓ (Dark shade - DOS char 178)
     PIXEL_HALF = 177,          // ▒ (Medium shade - DOS char 177) 
     PIXEL_QUARTER = 176,       // ░ (Light shade - DOS char 176)
 };
-*/

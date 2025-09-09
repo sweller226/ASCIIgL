@@ -38,8 +38,8 @@ private:
 	// game starts at the main menu
 	unsigned int gameState = MAIN_MENU;
 
-	unsigned int SCR_WIDTH = 640; 
-	unsigned int SCR_HEIGHT = 480;
+	unsigned int SCR_WIDTH = 600; 
+	unsigned int SCR_HEIGHT = 300;
 
 	bool running = true;
 	VERTEX_SHADER vertexShader;  // default vertex shader, didn't have time to implement custom ones

@@ -299,15 +299,25 @@ int Screen::InitializeScreen(
 
     CalculateTileCounts();
 
-    Logger::Debug(L"Setting font size to " + std::to_wstring(fontSize));
-    _fontSize = fontSize;
+    // Enforce minimum font size
+    const unsigned int MIN_FONT_SIZE = 2;
+    unsigned int adjustedFontSize = fontSize;
+    
+    if (fontSize < MIN_FONT_SIZE) {
+        adjustedFontSize = MIN_FONT_SIZE;
+        Logger::Warning(L"Font size " + std::to_wstring(fontSize) + L" is below minimum of " + 
+                       std::to_wstring(MIN_FONT_SIZE) + L". Adjusting to minimum.");
+    }
+    
+    Logger::Debug(L"Setting font size to " + std::to_wstring(adjustedFontSize));
+    _fontSize = adjustedFontSize;
 
 #ifdef _WIN32
     // Use unified Windows implementation for both CMD and Windows Terminal
     _impl = std::make_unique<WindowsImpl>();
     
     // Windows-specific initialization through delegation
-    int initResult = _impl->Initialize(width, height, fontSize);
+    int initResult = _impl->Initialize(width, height, adjustedFontSize);
     if (initResult != SCREEN_NOERROR) {
         return initResult;
     }
@@ -546,8 +556,8 @@ float Screen::WindowsImpl::ConvertPixelSizeToTerminalPoints(unsigned int pixelSi
     Logger::Debug(L"DPI: " + std::to_wstring(dpiY) + 
                   L", Pixel size: " + std::to_wstring(pixelSize) + 
                   L", Calculated point size: " + std::to_wstring(pointSize));
-    
-    return pointSize;
+
+    return std::max(1.0f, pointSize);
 }
 
 std::wstring Screen::WindowsImpl::GetWindowsTerminalSettingsPath() {
@@ -608,10 +618,16 @@ bool Screen::WindowsImpl::ModifyWindowsTerminalFont(const std::wstring& settings
         // Simple regex replacements - just update existing values or add minimal font object
         std::wregex sizeRegex(LR"("size"\s*:\s*[\d.]+)");  // Support both integers and floats
         std::wregex faceRegex(LR"("face"\s*:\s*"[^"]*")");
+        std::wregex lineHeightRegex(LR"("lineHeight"\s*:\s*[\d.]+)");  // Line height regex
         
         // Update size if it exists
         if (std::regex_search(content, sizeRegex)) {
             content = std::regex_replace(content, sizeRegex, L"\"size\": " + std::to_wstring(fontSize));
+        }
+        
+        // Update line height to minimum (1.0) if it exists
+        if (std::regex_search(content, lineHeightRegex)) {
+            content = std::regex_replace(content, lineHeightRegex, L"\"lineHeight\": 1.0");
         }
         
         if (!IsFontInstalled(L"Perfect DOS VGA 437")) {
@@ -629,12 +645,27 @@ bool Screen::WindowsImpl::ModifyWindowsTerminalFont(const std::wstring& settings
             content = std::regex_replace(content, faceRegex, L"\"face\": \"Perfect DOS VGA 437\"");  // True square font at all sizes
         }
         
+        // If line height doesn't exist but other font settings do, add it
+        if ((std::regex_search(content, sizeRegex) || std::regex_search(content, faceRegex)) && 
+            !std::regex_search(content, lineHeightRegex)) {
+            // Find font object and add line height
+            std::wregex fontObjectRegex(LR"("font"\s*:\s*\{([^}]*)\})");
+            std::wsmatch match;
+            if (std::regex_search(content, match, fontObjectRegex)) {
+                std::wstring fontContent = match[1].str();
+                // Add line height to the font object
+                std::wstring newFontContent = fontContent + L", \"lineHeight\": 1.0";
+                std::wstring replacement = L"\"font\": {" + newFontContent + L"}";
+                content = std::regex_replace(content, fontObjectRegex, replacement);
+            }
+        }
+        
         // If no font settings exist, add simple font object to defaults
         if (!std::regex_search(content, sizeRegex) && !std::regex_search(content, faceRegex)) {
             std::wregex defaultsRegex(LR"("defaults"\s*:\s*\{)");
             if (std::regex_search(content, defaultsRegex)) {
                 std::wstring fontAdd = L"\"defaults\": {\n        \"font\": {\"size\": " + 
-                                      std::to_wstring(fontSize) + L", \"face\": \"Perfect DOS VGA 437\"},";  // Perfect square font
+                                      std::to_wstring(fontSize) + L", \"face\": \"Perfect DOS VGA 437\", \"lineHeight\": 1.0},";  // Perfect square font with minimum line height
                 content = std::regex_replace(content, defaultsRegex, fontAdd);
             }
         }
@@ -705,20 +736,11 @@ bool Screen::WindowsImpl::InstallFontFromFile(const std::wstring& fontPath) {
         return true;
     }
     
-    // Fall back to session-only installation
-    int sessionResult = AddFontResourceExW(fontPath.c_str(), FR_PRIVATE, 0);
-    if (sessionResult == 0) {
-        DWORD error = GetLastError();
-        Logger::Error(L"Failed to install font (Error " + std::to_wstring(error) + L"): " + fontPath);
-        return false;
-    }
-    
-    Logger::Info(L"Font installed temporarily for current session: " + fontPath);
     Logger::Warning(L"Font may not be available to Windows Terminal. Try running as administrator for system-wide installation.");
     
     // Notify system of font change
     SendMessage(HWND_BROADCAST, WM_FONTCHANGE, 0, 0);
-    Sleep(150); // Give system time to process font registration
+    Sleep(200); // Give system time to process font registration
     
     // Verify font installation by checking if it's now available
     bool isInstalled = IsFontInstalled(L"Perfect DOS VGA 437");
