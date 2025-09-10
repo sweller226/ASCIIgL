@@ -2,5 +2,9 @@
 build/
 dist/
 
+
 # OS/Editor files
 .vscode/
+
+# Distribution in different projects
+libs/ASCIIgL-*
