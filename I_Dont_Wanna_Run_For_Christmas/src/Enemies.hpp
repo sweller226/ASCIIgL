@@ -1,8 +1,7 @@
 #pragma once
 
-// Game Engine Code Includes
-#include <engine/GameObj.hpp>
-#include <engine/Model.hpp>
+#include <ASCIIgL/engine/GameObj.hpp>
+#include <ASCIIgL/engine/Model.hpp>
 
 class Enemy: public GameObj // this class represents enemies and inherits 
 {

@@ -1,10 +1,9 @@
 #pragma once
 
-// includes from downloaded libraries
-#include "vendor/glm/glm.hpp"
-#include "vendor/glm/gtc/matrix_transform.hpp"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
-#include <engine/GameObj.hpp>
+#include <ASCIIgL/engine/GameObj.hpp>
 
 class Present : public GameObj
 {

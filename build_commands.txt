@@ -1,9 +1,14 @@
-ASCIIgLEngine
+ASCIIgL
     Build Release
-    ./scripts/buildRelease.ps1
+    ./scripts/build_release.ps1
 
     Build Debug
-    ./scripts/buildDebug.ps1
+    ./scripts/build_debug.ps1
+
+    Create Distribution (Examples)
+    .\scripts\create_distribution.ps1
+    .\scripts\create_distribution.ps1 -Version 2.0.0
+    .\scripts\create_distribution.ps1 -Clean -Version 1.5.0
 
 I_Dont_Wanna_Run_For_Christmas
     Run Debug Command
@@ -15,22 +20,10 @@ I_Dont_Wanna_Run_For_Christmas
     .\ChristmasGame.exe
 
     Build Release
-    ./scripts/buildRelease.ps1
+    ./scripts/build_release.ps1
 
     Build Debug
-    ./scripts/buildDebug.ps1
+    ./scripts/build_debug.ps1
 
-Stress_Test
-    Run Debug Command
-    cd "C:\Users\Skwig\Desktop\Development\dev\ASCIIgL\I_Dont_Wanna_Run_For_Christmas\build\bin\Debug"
-    .\Stress_Test.exe
-
-    Run Release Command
-    cd "C:\Users\Skwig\Desktop\Development\dev\ASCIIgL\I_Dont_Wanna_Run_For_Christmas\build\bin\Release"
-    .\Stress_Test.exe
-
-    Build Release
-    ./scripts/buildRelease.ps1
-
-    Build Debug
-    ./scripts/buildDebug.ps1
+    Rebuild Library
+    ./scripts/build_ASCIIgL_christmas_game.ps1

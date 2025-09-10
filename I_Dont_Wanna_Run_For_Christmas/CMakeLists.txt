@@ -1,79 +1,114 @@
-cmake_minimum_required(VERSION 3.16)
-project(I_Dont_Wanna_Run_For_Christmas)
+# ============================================================================
+# I Don't Wanna Run For Christmas - Demo Game
+# ============================================================================
 
-# Enable verbose linker output for MSVC builds
+cmake_minimum_required(VERSION 3.16)
+project(I_Dont_Wanna_Run_For_Christmas VERSION 1.0.0 LANGUAGES CXX)
+
+# ============================================================================
+# Project Configuration
+# ============================================================================
+
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+set(CMAKE_CXX_EXTENSIONS NO)
+
+# Debug configuration for MSVC
 if(MSVC)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /VERBOSE")
 endif()
 
-# Set ASCIIgLEngine paths
-set(ENGINE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgLEngine")
-set(ENGINE_INCLUDE_DIR "${ENGINE_ROOT}/src")
+# ============================================================================
+# Engine Integration
+# ============================================================================
 
-# Multi-config generator support (Visual Studio, etc.)
-set(ENGINE_LIB_DIR_DEBUG "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgLEngine/build/lib/Debug")
-set(ENGINE_LIB_DIR_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgLEngine/build/lib/Release")
+# ASCIIgL Engine paths (using distributed library)
+set(ASCIIgL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/libs/ASCIIgL-v1.0.0")
+set(ASCIIgL_LIB_DIR "${ASCIIgL_ROOT}/lib")
+set(ASCIIgL_INCLUDE_DIR "${ASCIIgL_ROOT}/include")
+set(ASCIIgL_VENDOR_DIR "${ASCIIgL_ROOT}/vendor")
 
-# Add executable
+# Set up GLM as interface library (header-only, needed for engine API)
+add_library(glm INTERFACE)
+target_include_directories(glm INTERFACE "${ASCIIgL_VENDOR_DIR}")
+
+# Find the ASCIIgL library (try both release and debug versions)
+find_library(ASCIIgL_LIBRARY_RELEASE
+    NAMES ASCIIgL
+    PATHS "${ASCIIgL_LIB_DIR}"
+    NO_DEFAULT_PATH
+    REQUIRED
+)
+
+find_library(ASCIIgL_LIBRARY_DEBUG
+    NAMES ASCIIgL_Debug
+    PATHS "${ASCIIgL_LIB_DIR}"
+    NO_DEFAULT_PATH
+)
+
+# Use release library as fallback if debug not found
+if(NOT ASCIIgL_LIBRARY_DEBUG)
+    set(ASCIIgL_LIBRARY_DEBUG ${ASCIIgL_LIBRARY_RELEASE})
+endif()
+
+# Create imported target for ASCIIgL
+add_library(ASCIIgL STATIC IMPORTED)
+
+# Set configuration-specific library locations
+set_target_properties(ASCIIgL PROPERTIES
+    IMPORTED_LOCATION_RELEASE "${ASCIIgL_LIBRARY_RELEASE}"
+    IMPORTED_LOCATION_DEBUG "${ASCIIgL_LIBRARY_DEBUG}"
+    INTERFACE_INCLUDE_DIRECTORIES "${ASCIIgL_INCLUDE_DIR}"
+    INTERFACE_LINK_LIBRARIES "glm"
+)
+
+# ============================================================================
+# Game Executable
+# ============================================================================
+
+# Create the game executable
 add_executable(ChristmasGame
     src/main.cpp
     src/Game.cpp
     src/Player.cpp
 )
 
-# Include directories
-include_directories(
-    ${ENGINE_ROOT}/src
-    ${ENGINE_ROOT}/src/vendor
-    ${ENGINE_ROOT}/src/vendor/glm
-    ${ENGINE_ROOT}/src/libs/assimp/include
-)
+# ============================================================================
+# Linking
+# ============================================================================
 
-# Link ASCIIgLEngine library
-message(STATUS "Assimp lib search path: ${ENGINE_ROOT}/src/libs/assimp")
+# Link to ASCIIgL engine (automatically provides all dependencies)
+target_link_libraries(ChristmasGame PRIVATE ASCIIgL)
 
-# Print linker search directories after link_directories
-get_property(LINK_DIRS DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} PROPERTY LINK_DIRECTORIES)
-message(STATUS "Linker search directories: ${LINK_DIRS}")
+# Platform-specific libraries (required by ASCIIgL)
+if(WIN32)
+    target_link_libraries(ChristmasGame PRIVATE winmm)
+endif()
 
-# Find and link correct engine library for each config
-find_library(ASCIIGLENGINE_LIB_DEBUG NAMES ASCIIgLEngine.lib PATHS "${ENGINE_LIB_DIR_DEBUG}" REQUIRED)
-find_library(ASCIIGLENGINE_LIB_RELEASE NAMES ASCIIgLEngine.lib PATHS "${ENGINE_LIB_DIR_RELEASE}" REQUIRED)
+# ============================================================================
+# Output Configuration
+# ============================================================================
 
-set(ASSIMP_LIB_PATH "${ENGINE_ROOT}/src/libs/assimp/assimp-vc143-mt.lib")
-message(STATUS "Assimp full library path: ${ASSIMP_LIB_PATH}")
-
-target_link_libraries(ChristmasGame PRIVATE
-    "$<$<CONFIG:Debug>:${ASCIIGLENGINE_LIB_DEBUG}>"
-    "$<$<CONFIG:Release>:${ASCIIGLENGINE_LIB_RELEASE}>"
-    "${ASSIMP_LIB_PATH}" winmm
-)
-
-# Set C++ standard
+# Set output directories for different build configurations
 set_target_properties(ChristmasGame PROPERTIES
-    CXX_STANDARD 17
-    CXX_STANDARD_REQUIRED YES
-    CXX_EXTENSIONS NO
-)
-
-# Set output directories for Debug and Release
-set_target_properties(ChristmasGame PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin/Debug"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_BINARY_DIR}/bin/Debug"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release"
 )
 
-# Copy Assimp DLL after build (Windows only)
-if(WIN32)
-    add_custom_command(TARGET ChristmasGame POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${ENGINE_ROOT}/src/libs/assimp/assimp-vc143-mt.dll"
-            $<TARGET_FILE_DIR:ChristmasGame>
-    )
-endif()
+# ============================================================================
+# Post-Build Steps
+# ============================================================================
 
-# Copy resources (e.g., res folder) to output directory after build
+# Copy resources to build directories
 add_custom_command(TARGET ChristmasGame POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E echo "Copying resources to build directories"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/res"
         "$<TARGET_FILE_DIR:ChristmasGame>/res"
+    COMMAND ${CMAKE_COMMAND} -E echo "Copying ASCIIgL library resources"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${ASCIIgL_ROOT}/res"
+        "$<TARGET_FILE_DIR:ChristmasGame>/res/ASCIIgL"
+    COMMENT "Copying game and library resources"
 )

@@ -1,12 +1,10 @@
 #pragma once
 
-// Rendering Engine Code Includes
-#include <renderer/Screen.hpp>
+#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/Renderer.hpp>
 
-// Game Engine Code Includes
-#include <renderer/Renderer.hpp>
-#include <engine/Camera2D.hpp>
-#include <engine/GameObj.hpp>
+#include <ASCIIgL/engine/Camera2D.hpp>
+#include <ASCIIgL/engine/GameObj.hpp>
 
 // Game Code Includes
 #include "Player.hpp"
@@ -40,9 +38,8 @@ private:
 	// game starts at the main menu
 	unsigned int gameState = MAIN_MENU;
 
-	// dimensions over 900x500 are prone to crash, don't use them
-	unsigned int SCR_WIDTH = 450;
-	unsigned int SCR_HEIGHT = 300;
+	unsigned int SCR_WIDTH = 600; 
+	unsigned int SCR_HEIGHT = 400;
 
 	bool running = true;
 	VERTEX_SHADER vertexShader;  // default vertex shader, didn't have time to implement custom ones

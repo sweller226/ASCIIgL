@@ -1,15 +1,15 @@
 #include "Player.hpp"
 
-#include <engine/Camera3D.hpp>
-#include <engine/Mesh.hpp>
-#include <engine/GameObj.hpp>
-#include <engine/CollisionUtil.hpp>
+#include <ASCIIgL/engine/Camera3D.hpp>
+#include <ASCIIgL/engine/Mesh.hpp>
+#include <ASCIIgL/engine/GameObj.hpp>
+#include <ASCIIgL/engine/Collision.hpp>
 
-#include <renderer/Screen.hpp>
+#include <ASCIIgL/renderer/Screen.hpp>
 
 
 Player::Player(glm::vec2 xz, glm::vec2 yawPitch)
-	: camera(glm::vec3(xz.x, -playerHeight, xz.y), fov, (float)Screen::GetInstance().GetWidth() / (float)Screen::GetInstance().GetHeight(), yawPitch, nearClip, farClip)
+	: camera(glm::vec3(xz.x, -playerHeight, xz.y), fov, (float)Screen::GetInstance().GetVisibleWidth() / (float)Screen::GetInstance().GetHeight(), yawPitch, nearClip, farClip)
 {
 
 }
@@ -124,20 +124,20 @@ bool Player::CollideLevel(glm::vec3 move, GameObj* Level) {
 	// all of these points are different corners on the level
 
 	// these methods check if the player circles
-	glm::vec3 col1 = CollisionUtil::LineCircleCol2D(newMove, playerHitBoxRad, p1, p2);
-	if (col1.x == 1)
+	bool col1 = Collision::DoesLineCircleCol(newMove, playerHitBoxRad, p1, p2);
+	if (col1)
 		return true;
 
-	glm::vec3 col2 = CollisionUtil::LineCircleCol2D(newMove, playerHitBoxRad, p2, p3);
-	if (col2.x == 1)
+	bool col2 = Collision::DoesLineCircleCol(newMove, playerHitBoxRad, p2, p3);
+	if (col2)
 		return true;
 
-	glm::vec3 col3 = CollisionUtil::LineCircleCol2D(newMove, playerHitBoxRad, p3, p4);
-	if (col3.x == 1)
+	bool col3 = Collision::DoesLineCircleCol(newMove, playerHitBoxRad, p3, p4);
+	if (col3)
 		return true;
 
-	glm::vec3 col4 = CollisionUtil::LineCircleCol2D(newMove, playerHitBoxRad, p4, p1);
-	if (col4.x == 1)
+	bool col4 = Collision::DoesLineCircleCol(newMove, playerHitBoxRad, p4, p1);
+	if (col4)
 		return true;
 
 	return false;
