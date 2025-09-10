@@ -83,7 +83,7 @@ void Renderer::Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, 
 void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 positionPerc, const glm::vec2 rotation, const glm::vec2 sizePerc, const Camera2D& camera, int layer)
 {
     // Convert percentage coordinates to pixel coordinates
-    float screenWidth = static_cast<float>(Screen::GetWidth());
+    float screenWidth = static_cast<float>(Screen::GetVisibleWidth());
     float screenHeight = static_cast<float>(Screen::GetHeight());
     
     glm::vec2 pixelPosition = glm::vec2(positionPerc.x * screenWidth, positionPerc.y * screenHeight);
@@ -109,9 +109,9 @@ void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, c
 
 void Renderer::DrawScreenBorder(const short col) {
 	// DRAWING BORDERS
-	DrawLine(1, 1, Screen::GetInstance().GetWidth() - 1, 1, PIXEL_FULL, col);
-	DrawLine(Screen::GetInstance().GetWidth() - 1, 1, Screen::GetInstance().GetWidth() - 1, Screen::GetInstance().GetHeight() - 1, PIXEL_FULL, col);
-	DrawLine(Screen::GetInstance().GetWidth() - 1, Screen::GetInstance().GetHeight() - 1, 1, Screen::GetInstance().GetHeight() - 1, PIXEL_FULL, col);
+	DrawLine(1, 1, Screen::GetInstance().GetVisibleWidth() - 1, 1, PIXEL_FULL, col);
+	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, 1, Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, PIXEL_FULL, col);
+	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, 1, Screen::GetInstance().GetHeight() - 1, PIXEL_FULL, col);
 	DrawLine(1, 1, 1, Screen::GetInstance().GetHeight() - 1, PIXEL_FULL, col);
 }
 
@@ -229,7 +229,7 @@ void Renderer::InitializeTiles() {
             int posY = ty * Screen::GetTileSizeY();
 
             // Clamp tile size if it would overflow the screen
-            int sizeX = std::min(Screen::GetTileSizeX(), Screen::GetWidth() - posX);
+            int sizeX = std::min(Screen::GetTileSizeX(), Screen::GetVisibleWidth() - posX);
             int sizeY = std::min(Screen::GetTileSizeY(), Screen::GetHeight() - posY);
 
             _tileBuffer[tileIndex].position = glm::ivec2(posX, posY);
@@ -354,7 +354,7 @@ void Renderer::DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, co
     }
 
     // Cache frequently used values to avoid repeated function calls
-    const int screenWidth = Screen::GetWidth();
+    const int screenWidth = Screen::GetVisibleWidth();
     const int screenHeight = Screen::GetHeight();
     float* const depthBuffer = Screen::GetDepthBuffer();
 
@@ -448,7 +448,7 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
     }
 
     // Cache frequently used values
-    const int screenWidth = Screen::GetWidth();
+    const int screenWidth = Screen::GetVisibleWidth();
     const int screenHeight = Screen::GetHeight();
     float* const depthBuffer = Screen::GetDepthBuffer();
 
@@ -557,7 +557,7 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
 
     // Clamp to screen bounds as well
     minX = std::max(0, minX);
-    maxX = std::min((int)Screen::GetInstance().GetWidth() - 1, maxX);
+    maxX = std::min((int)Screen::GetInstance().GetVisibleWidth() - 1, maxX);
     minY = std::max(0, minY);
     maxY = std::min((int)Screen::GetInstance().GetHeight() - 1, maxY);
 
@@ -582,7 +582,7 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
     const float vert1_v = vert1.V(), vert2_v = vert2.V(), vert3_v = vert3.V();
     
     // Cache screen dimensions and depth buffer reference
-    const int screenWidth = Screen::GetWidth();
+    const int screenWidth = Screen::GetVisibleWidth();
     float* depthBuffer = Screen::GetDepthBuffer();
     
     // Get dynamic sub-pixel sampling pattern for anti-aliasing
@@ -670,7 +670,7 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& vert1, const VERTEX
 
     // Get triangle bounding box
     int minX = std::max(0, (int)std::min({vert1.X(), vert2.X(), vert3.X()}));
-    int maxX = std::min((int)Screen::GetInstance().GetWidth() - 1, (int)std::max({vert1.X(), vert2.X(), vert3.X()}));
+    int maxX = std::min((int)Screen::GetInstance().GetVisibleWidth() - 1, (int)std::max({vert1.X(), vert2.X(), vert3.X()}));
     int minY = std::max(0, (int)std::min({vert1.Y(), vert2.Y(), vert3.Y()}));
     int maxY = std::min((int)Screen::GetInstance().GetHeight() - 1, (int)std::max({vert1.Y(), vert2.Y(), vert3.Y()}));
 
@@ -695,7 +695,7 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& vert1, const VERTEX
     const float vert1_v = vert1.V(), vert2_v = vert2.V(), vert3_v = vert3.V();
     
     // Cache screen dimensions and depth buffer reference
-    const int screenWidth = Screen::GetWidth();
+    const int screenWidth = Screen::GetVisibleWidth();
     float* depthBuffer = Screen::GetDepthBuffer();
 
     // Get dynamic sub-pixel sampling pattern for anti-aliasing
@@ -821,7 +821,7 @@ void Renderer::DrawTriangleWireFrame(const VERTEX& vert1, const VERTEX& vert2, c
 
 void Renderer::ViewPortTransform(VERTEX& vertice) {
 	// transforms vertice from [-1 to 1] to [0 to scr_dim]
-	glm::vec4 newPos = glm::vec4(((vertice.X() + 1.0f) / 2.0f) * Screen::GetInstance().GetWidth(), ((vertice.Y() + 1.0f) / 2.0f) * Screen::GetInstance().GetHeight(), vertice.Z(), vertice.W());
+	glm::vec4 newPos = glm::vec4(((vertice.X() + 1.0f) / 2.0f) * Screen::GetInstance().GetVisibleWidth(), ((vertice.Y() + 1.0f) / 2.0f) * Screen::GetInstance().GetHeight(), vertice.Z(), vertice.W());
 	vertice.SetXYZW(newPos);
 }
 

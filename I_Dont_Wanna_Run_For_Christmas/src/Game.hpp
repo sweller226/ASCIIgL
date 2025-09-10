@@ -39,7 +39,7 @@ private:
 	unsigned int gameState = MAIN_MENU;
 
 	unsigned int SCR_WIDTH = 600; 
-	unsigned int SCR_HEIGHT = 300;
+	unsigned int SCR_HEIGHT = 400;
 
 	bool running = true;
 	VERTEX_SHADER vertexShader;  // default vertex shader, didn't have time to implement custom ones

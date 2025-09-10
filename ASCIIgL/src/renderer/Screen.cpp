@@ -14,6 +14,7 @@
 #include <codecvt>
 
 #include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/util/MathUtil.hpp>
 
 // Platform-specific implementation
 #ifdef _WIN32
@@ -52,7 +53,7 @@
         }
 
         // Implementation methods
-        int Initialize(const unsigned int width, const unsigned int height, const unsigned int fontSize);
+        int Initialize(const unsigned int true_width, const unsigned int height, const unsigned int fontSize);
         void ClearBuffer();
         void OutputBuffer();
         void RenderTitle(bool showFps);
@@ -78,7 +79,7 @@
     std::unique_ptr<Screen::WindowsImpl> Screen::_impl = nullptr;
 
 // WindowsImpl method implementations (Unified Windows console implementation)
-int Screen::WindowsImpl::Initialize(const unsigned int width, const unsigned int height, const unsigned int fontSize) {
+int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigned int height, const unsigned int fontSize) {
     // First, get current console handle to check maximum window size with proper font
     HANDLE currentHandle = GetStdHandle(STD_OUTPUT_HANDLE);
     if (currentHandle == INVALID_HANDLE_VALUE) {
@@ -105,7 +106,7 @@ int Screen::WindowsImpl::Initialize(const unsigned int width, const unsigned int
     Logger::Debug(L"Max console window size: " + std::to_wstring(csbi.dwMaximumWindowSize.X) + L"x" + std::to_wstring(csbi.dwMaximumWindowSize.Y));
 
     // Adjust dimensions to fit within maximum window size
-    unsigned int adjustedWidth = width;
+    unsigned int adjustedWidth = true_width;
     unsigned int adjustedHeight = height;
     bool dimensionsAdjusted = false;
 
@@ -115,17 +116,18 @@ int Screen::WindowsImpl::Initialize(const unsigned int width, const unsigned int
         Logger::Info(L"Requested height " + std::to_wstring(height) + 
                        L" exceeds maximum, adjusting to " + std::to_wstring(adjustedHeight));
     }
-    if (width > csbi.dwMaximumWindowSize.X) {
+    if (true_width > csbi.dwMaximumWindowSize.X) {
         adjustedWidth = csbi.dwMaximumWindowSize.X;
         dimensionsAdjusted = true;
-        Logger::Info(L"Requested width " + std::to_wstring(width) +
+        Logger::Info(L"Requested true width " + std::to_wstring(true_width) +
                        L" exceeds maximum, adjusting to " + std::to_wstring(adjustedWidth));
     }
 
     if (dimensionsAdjusted) {
         // Update global screen dimensions
-        Screen::SCR_WIDTH = adjustedWidth;
-        Screen::SCR_HEIGHT = adjustedHeight;
+        Screen::_true_screen_width = MathUtil::FloorToEven(adjustedWidth);
+        Screen::_visible_screen_width = adjustedWidth / 2;
+        Screen::_screen_height = adjustedHeight;
         Logger::Info(L"Screen dimensions automatically adjusted to " + 
                     std::to_wstring(adjustedWidth) + L"x" + std::to_wstring(adjustedHeight));
     }
@@ -188,7 +190,7 @@ int Screen::WindowsImpl::Initialize(const unsigned int width, const unsigned int
 }
 
 void Screen::WindowsImpl::ClearBuffer() {
-    std::fill(pixelBuffer, pixelBuffer + Screen::SCR_WIDTH * Screen::SCR_HEIGHT, CHAR_INFO{'\0', Screen::_backgroundCol});
+    std::fill(pixelBuffer, pixelBuffer + Screen::_true_screen_width * Screen::_screen_height, CHAR_INFO{'\0', Screen::_backgroundCol});
 }
 
 void Screen::WindowsImpl::OutputBuffer() {
@@ -202,13 +204,13 @@ void Screen::WindowsImpl::RenderTitle(bool showFps) {
         sprintf_s(
             titleBuffer, sizeof(titleBuffer),
             "[WIN] ASCIIGL - Console Game Engine - %ls - FPS: %.2f",
-            Screen::SCR_TITLE.c_str(), std::min(Screen::_fps, static_cast<double>(Screen::_fpsCap))
+            Screen::_title.c_str(), std::min(Screen::_fps, static_cast<double>(Screen::_fpsCap))
         );
     } else {
         sprintf_s(
             titleBuffer, sizeof(titleBuffer),
             "[WIN] ASCIIGL - Console Game Engine - %ls",
-            Screen::SCR_TITLE.c_str()
+            Screen::_title.c_str()
         );
     }
 
@@ -216,32 +218,44 @@ void Screen::WindowsImpl::RenderTitle(bool showFps) {
 }
 
 void Screen::WindowsImpl::PlotPixel(glm::vec2 p, char character, short Colour) {
-    int x = static_cast<int>(p.x);
+    int x = static_cast<int>(p.x) * 2; // Double the x coordinate for wide buffer
     int y = static_cast<int>(p.y);
-    if (x >= 0 && x < static_cast<int>(Screen::SCR_WIDTH) && y >= 0 && y < static_cast<int>(Screen::SCR_HEIGHT)) {
-        pixelBuffer[y * Screen::SCR_WIDTH + x].Char.AsciiChar = character;
-        pixelBuffer[y * Screen::SCR_WIDTH + x].Attributes = Colour;
+    if (x >= 0 && x < static_cast<int>(Screen::_true_screen_width) - 1 && y >= 0 && y < static_cast<int>(Screen::_screen_height)) {
+        // Plot the pixel twice horizontally
+        pixelBuffer[y * Screen::_true_screen_width + x].Char.AsciiChar = character;
+        pixelBuffer[y * Screen::_true_screen_width + x].Attributes = Colour;
+        pixelBuffer[y * Screen::_true_screen_width + x + 1].Char.AsciiChar = character;
+        pixelBuffer[y * Screen::_true_screen_width + x + 1].Attributes = Colour;
     }
 }
 
 void Screen::WindowsImpl::PlotPixel(glm::vec2 p, CHAR_INFO charCol) {
-    int x = static_cast<int>(p.x);
+    int x = static_cast<int>(p.x) * 2; // Double the x coordinate for wide buffer
     int y = static_cast<int>(p.y);
-    if (x >= 0 && x < static_cast<int>(Screen::SCR_WIDTH) && y >= 0 && y < static_cast<int>(Screen::SCR_HEIGHT)) {
-        pixelBuffer[y * Screen::SCR_WIDTH + x] = charCol;
+    if (x >= 0 && x < static_cast<int>(Screen::_true_screen_width) - 1 && y >= 0 && y < static_cast<int>(Screen::_screen_height)) {
+        // Plot the pixel twice horizontally
+        pixelBuffer[y * Screen::_true_screen_width + x] = charCol;
+        pixelBuffer[y * Screen::_true_screen_width + x + 1] = charCol;
     }
 }
 
 void Screen::WindowsImpl::PlotPixel(int x, int y, char character, short Colour) {
-    if (x >= 0 && x < static_cast<int>(Screen::SCR_WIDTH) && y >= 0 && y < static_cast<int>(Screen::SCR_HEIGHT)) {
-        pixelBuffer[y * Screen::SCR_WIDTH + x].Char.AsciiChar = character;
-        pixelBuffer[y * Screen::SCR_WIDTH + x].Attributes = Colour;
+    x *= 2; // Double the x coordinate for wide buffer
+    if (x >= 0 && x < static_cast<int>(Screen::_true_screen_width) - 1 && y >= 0 && y < static_cast<int>(Screen::_screen_height)) {
+        // Plot the pixel twice horizontally
+        pixelBuffer[y * Screen::_true_screen_width + x].Char.AsciiChar = character;
+        pixelBuffer[y * Screen::_true_screen_width + x].Attributes = Colour;
+        pixelBuffer[y * Screen::_true_screen_width + x + 1].Char.AsciiChar = character;
+        pixelBuffer[y * Screen::_true_screen_width + x + 1].Attributes = Colour;
     }
 }
 
 void Screen::WindowsImpl::PlotPixel(int x, int y, CHAR_INFO charCol) {
-    if (x >= 0 && x < static_cast<int>(Screen::SCR_WIDTH) && y >= 0 && y < static_cast<int>(Screen::SCR_HEIGHT)) {
-        pixelBuffer[y * Screen::SCR_WIDTH + x] = charCol;
+    x *= 2; // Double the x coordinate for wide buffer
+    if (x >= 0 && x < static_cast<int>(Screen::_true_screen_width) - 1 && y >= 0 && y < static_cast<int>(Screen::_screen_height)) {
+        // Plot the pixel twice horizontally
+        pixelBuffer[y * Screen::_true_screen_width + x] = charCol;
+        pixelBuffer[y * Screen::_true_screen_width + x + 1] = charCol;
     }
 }
 
@@ -278,7 +292,7 @@ bool Screen::WindowsImpl::IsWindowsTerminal() {
 #endif
 
 int Screen::InitializeScreen(
-    const unsigned int width, 
+    const unsigned int visible_width, 
     const unsigned int height, 
     const std::wstring title, 
     const unsigned int fontSize, 
@@ -292,10 +306,12 @@ int Screen::InitializeScreen(
     _fpsCap = fpsCap;
     _fpsWindowSec = fpsWindowSec;
 
-    Logger::Debug(L"Initializing screen with width=" + std::to_wstring(width) + L", height=" + std::to_wstring(height) + L", title=" + title);
-    SCR_WIDTH = width;
-    SCR_HEIGHT = height;
-    SCR_TITLE = title;
+    Logger::Debug(L"Initializing screen with width=" + std::to_wstring(visible_width) + L", height=" + std::to_wstring(height) + L", title=" + title);
+    Logger::Debug(L"Requested true width is " + std::to_wstring(visible_width * 2));
+    _true_screen_width = visible_width * 2;
+    _visible_screen_width = visible_width;
+    _screen_height = height;
+    _title = title;
 
     CalculateTileCounts();
 
@@ -317,7 +333,7 @@ int Screen::InitializeScreen(
     _impl = std::make_unique<WindowsImpl>();
     
     // Windows-specific initialization through delegation
-    int initResult = _impl->Initialize(width, height, adjustedFontSize);
+    int initResult = _impl->Initialize(_true_screen_width, height, adjustedFontSize);
     if (initResult != SCREEN_NOERROR) {
         return initResult;
     }
@@ -331,7 +347,7 @@ int Screen::InitializeScreen(
     // Note: Windows pixel buffer is handled in WindowsImpl::Initialize
     
     if (depthBuffer) { delete[] depthBuffer; depthBuffer = nullptr; }
-    depthBuffer = new float[width * height];
+    depthBuffer = new float[_visible_screen_width * height];
 
     Logger::Debug(L"Clearing buffers for first draw.");
     _backgroundCol = backgroundCol;
@@ -351,7 +367,7 @@ void Screen::RenderTitle(bool showFps) {
 void Screen::ClearBuffer() {
 	// clears the buffer by setting the entire buffer to spaces (ascii code 32)
     _impl->ClearBuffer();
-	std::fill(depthBuffer, depthBuffer + SCR_WIDTH * SCR_HEIGHT, -1.0f);
+	std::fill(depthBuffer, depthBuffer + _visible_screen_width * _screen_height, -1.0f);
 }
 
 void Screen::OutputBuffer() {
@@ -379,23 +395,27 @@ float Screen::GetDeltaTime() {
 }
     
 std::wstring Screen::GetTitle() {
-    return SCR_TITLE;
+    return _title;
 }
 
 void Screen::SetTitle(const std::wstring& title) {
-    SCR_TITLE = title;
+    _title = title;
 }
 
 unsigned int Screen::GetFontSize() {
     return _fontSize;
 }
 
-unsigned int Screen::GetWidth() {
-    return SCR_WIDTH;
+unsigned int Screen::GetVisibleWidth() {
+    return _visible_screen_width;
+}
+
+unsigned int Screen::GetTrueWidth() {
+    return _true_screen_width;
 }
 
 unsigned int Screen::GetHeight() {
-    return SCR_HEIGHT;
+    return _screen_height;
 }
 
 unsigned int Screen::GetTileCountX() {
@@ -422,8 +442,8 @@ void Screen::SetTileSize(const unsigned int x, const unsigned int y) {
 
 void Screen::CalculateTileCounts() {
     // Use ceiling division to ensure all pixels are covered by tiles
-    TILE_COUNT_X = (SCR_WIDTH + TILE_SIZE_X - 1) / TILE_SIZE_X;
-    TILE_COUNT_Y = (SCR_HEIGHT + TILE_SIZE_Y - 1) / TILE_SIZE_Y;
+    TILE_COUNT_X = (_true_screen_width + TILE_SIZE_X - 1) / TILE_SIZE_X;
+    TILE_COUNT_Y = (_screen_height + TILE_SIZE_Y - 1) / TILE_SIZE_Y;
 }
 
 unsigned short Screen::GetBackgroundColor() {

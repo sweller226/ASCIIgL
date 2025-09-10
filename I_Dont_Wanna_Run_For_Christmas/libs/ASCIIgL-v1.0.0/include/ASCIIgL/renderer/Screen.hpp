@@ -51,15 +51,17 @@ private:
     // Platform-specific implementation classes
 #ifdef _WIN32
     class WindowsImpl;  // Unified Windows implementation for both CMD and Windows Terminal
+    friend class WindowsImpl;  // Allow WindowsImpl to access private members
     static std::unique_ptr<WindowsImpl> _impl;
 #else
     // static std::unique_ptr<GenericImpl> genericImpl;
 #endif
 
     // Platform-agnostic member variables (inline static)
-    inline static unsigned int SCR_WIDTH = 0;
-    inline static unsigned int SCR_HEIGHT = 0;
-    inline static std::wstring SCR_TITLE = L"";
+    inline static unsigned int _true_screen_width = 0;
+    inline static unsigned int _visible_screen_width = 0;
+    inline static unsigned int _screen_height = 0;
+    inline static std::wstring _title = L"";
     inline static unsigned int _fontSize = 0;
     inline static unsigned short _backgroundCol = BG_BLACK;
 
@@ -95,7 +97,7 @@ public:
 
     // Construction
     static int InitializeScreen(
-        const unsigned int width, 
+        const unsigned int visible_width, 
         const unsigned int height, 
         const std::wstring title, 
         const unsigned int fontSize, 
@@ -124,7 +126,8 @@ public:
     static std::wstring GetTitle();
     static void SetTitle(const std::wstring& title);
     static unsigned int GetFontSize();
-    static unsigned int GetWidth();
+    static unsigned int GetVisibleWidth();
+    static unsigned int GetTrueWidth();
     static unsigned int GetHeight();
 
     // tile properties

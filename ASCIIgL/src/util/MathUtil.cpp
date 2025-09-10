@@ -22,3 +22,10 @@ std::pair<glm::vec2, glm::vec2> MathUtil::ComputeBoundingBox(const glm::vec2& p0
     glm::vec2 maxPt = glm::max(glm::max(p0, p1), p2);
     return { minPt, maxPt };
 }
+
+unsigned int MathUtil::FloorToEven(unsigned int number) {
+	if (number % 2 == 1) {  // If the number is odd
+		return number - 1;   // Subtract 1 to make it even
+	}
+	return number;          // If already even, return as is
+}
