@@ -75,6 +75,7 @@ void Game::Run()
     Renderer::GetInstance().SetCCW(true);
 	Renderer::GetInstance().SetAntialiasingsamples(8);
 	Renderer::GetInstance().SetAntialiasing(true);
+	Renderer::GetInstance().SetGrayscale(true);
 
     // Logger::Info("Playing background music.");
 	// BOOL soundResult = PlaySound(TEXT(".\\res\\audio\\Man.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
@@ -316,8 +317,11 @@ void Game::RunLost()
 
 void Game::MariahAI()
 {
-	float chaseSpeed = 100.0f;
-	float patrolSpeed = 180.0f;
+	// float chaseSpeed = 70.0f;
+	// float patrolSpeed = 130.0f;
+
+	float chaseSpeed = 0.0f;
+	float patrolSpeed = 0.0f;
 	
 	for (int i = 0; i < enemies.size(); i++)
 	{

@@ -163,7 +163,7 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
     // Parallel tile rendering (already optimized)
     std::for_each(std::execution::par, _tileBuffer.begin(), _tileBuffer.end(), [&](Tile& tile) {
         if (_wireframe || tex == nullptr) {
-            // DrawTileWireframe(tile, _rasterBuffer);
+            DrawTileWireframe(tile, _rasterBuffer);
         } else {
             DrawTileTextured(tile, _rasterBuffer, tex);
         }
@@ -340,6 +340,16 @@ void Renderer::DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& ras
     }
 }
 
+void Renderer::DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles) {
+    // Draw wireframe for each triangle in the tile
+    for (int triIndex : tile.tri_indices_encapsulated) {
+        DrawTriangleWireframe(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], PIXEL_FULL, FG_WHITE);
+    }
+    for (int triIndex : tile.tri_indices_partial) {
+        DrawTriangleWireframePartial(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], PIXEL_FULL, FG_WHITE);
+    }
+}
+
 // =============================================================================
 // TRIANGLE RASTERIZATION FUNCTIONS
 // =============================================================================
@@ -421,8 +431,14 @@ void Renderer::DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, co
                             // Use integer texture coordinates for better cache performance
                             float texWidthProd = tex_uw * texWidth;
                             float texHeightProd = tex_vw * texHeight;
-                            float blendedGrayScale = tex->GetPixelCol(texWidthProd, texHeightProd);
-                            Screen::PlotPixel(glm::vec2(j, i), GetColGlyphGreyScale(blendedGrayScale));
+
+                            if (_grayscale) {
+                                float grayscaleCol = tex->GetPixelGrayscale(texWidthProd, texHeightProd);
+                                Screen::PlotPixel(glm::vec2(j, i), GetColGlyphGreyScale(grayscaleCol));
+                            } else {
+                                glm::vec3 rgbCol = tex->GetPixelRGB(texWidthProd, texHeightProd);
+                                Screen::PlotPixel(glm::vec2(j, i), GetColGlyph(rgbCol));
+                            }
                             depthBuffer[bufferIndex] = tex_w;
                         }
                     }
@@ -524,8 +540,13 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
                         if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
                             float texWidthProd = tex_uw * texWidth;
                             float texHeightProd = tex_vw * texHeight;
-                            float blendedGrayScale = tex->GetPixelCol(texWidthProd, texHeightProd);
-                            Screen::PlotPixel(glm::vec2(j, i), GetColGlyphGreyScale(blendedGrayScale));
+                            if (_grayscale) {
+                                float grayscaleCol = tex->GetPixelGrayscale(texWidthProd, texHeightProd);
+                                Screen::PlotPixel(glm::vec2(j, i), GetColGlyphGreyScale(grayscaleCol));
+                            } else {
+                                glm::vec3 rgbCol = tex->GetPixelRGB(texWidthProd, texHeightProd);
+                                Screen::PlotPixel(glm::vec2(j, i), GetColGlyph(rgbCol));
+                            }
                             depthBuffer[bufferIndex] = tex_w;
                         }
                     }
@@ -540,6 +561,69 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
     
     // Lower half: y2 to y3
     drawScanlines(y2, y3, x2, y2, x3, y3, u2, v2, w2, u3, v3, w3, x3, y3, u3, v3, w3);
+}
+
+void Renderer::DrawTriangleWireframePartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, CHAR pixel_type, short col) {
+    // Get tile bounds for clipping
+    const int minX = static_cast<int>(tile.position.x);
+    const int maxX = static_cast<int>(tile.position.x + tile.size.x);
+    const int minY = static_cast<int>(tile.position.y);
+    const int maxY = static_cast<int>(tile.position.y + tile.size.y);
+    
+    // Helper function to draw a line segment clipped to the tile bounds
+    auto drawClippedLine = [&](int x0, int y0, int x1, int y1) {
+        // Simple line clipping - only draw pixels within tile bounds
+        int dx = abs(x1 - x0);
+        int dy = abs(y1 - y0);
+        int incx = (x1 > x0) ? 1 : -1;
+        int incy = (y1 > y0) ? 1 : -1;
+        int x = x0, y = y0;
+
+        // Plot first pixel if within bounds
+        if (x >= minX && x < maxX && y >= minY && y < maxY) {
+            Screen::GetInstance().PlotPixel(x, y, pixel_type, col);
+        }
+
+        if (dx > dy) {
+            int e = 2 * dy - dx;
+            for (int i = 0; i < dx; ++i) {
+                x += incx;
+                if (e >= 0) {
+                    y += incy;
+                    e += 2 * (dy - dx);
+                } else {
+                    e += 2 * dy;
+                }
+                // Only plot if within tile bounds
+                if (x >= minX && x < maxX && y >= minY && y < maxY) {
+                    Screen::GetInstance().PlotPixel(x, y, pixel_type, col);
+                }
+            }
+        } else {
+            int e = 2 * dx - dy;
+            for (int i = 0; i < dy; ++i) {
+                y += incy;
+                if (e >= 0) {
+                    x += incx;
+                    e += 2 * (dx - dy);
+                } else {
+                    e += 2 * dx;
+                }
+                // Only plot if within tile bounds
+                if (x >= minX && x < maxX && y >= minY && y < maxY) {
+                    Screen::GetInstance().PlotPixel(x, y, pixel_type, col);
+                }
+            }
+        }
+    };
+    
+    // Draw the three edges of the triangle with tile clipping
+    drawClippedLine(static_cast<int>(vert1.X()), static_cast<int>(vert1.Y()), 
+                    static_cast<int>(vert2.X()), static_cast<int>(vert2.Y()));
+    drawClippedLine(static_cast<int>(vert2.X()), static_cast<int>(vert2.Y()), 
+                    static_cast<int>(vert3.X()), static_cast<int>(vert3.Y()));
+    drawClippedLine(static_cast<int>(vert3.X()), static_cast<int>(vert3.Y()), 
+                    static_cast<int>(vert1.X()), static_cast<int>(vert1.Y()));
 }
 
 void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex) {
@@ -596,6 +680,7 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
         
         for (int x = minX; x <= maxX; x++) {
             float triangleTotalGrayScale = 0.0f;
+            glm::vec3 triangleTotalRGB = glm::vec3(0.0f);
             int triangleValidSamples = 0;
             float totalDepth = 0.0f;
             
@@ -632,9 +717,14 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
                         // Use bilinear filtered sampling for smoother edges
                         float texWidthProd = tex_uw * texWidth;
                         float texHeightProd = tex_vw * texHeight;
-                        const float sampleGrayScale = tex->GetPixelCol(texWidthProd, texHeightProd);
                         
-                        triangleTotalGrayScale += sampleGrayScale;
+                        if (_grayscale) {
+                            const float sampleGrayScale = tex->GetPixelGrayscale(texWidthProd, texHeightProd);
+                            triangleTotalGrayScale += sampleGrayScale;
+                        } else {
+                            const glm::vec3 sampleRGB = tex->GetPixelRGB(texWidthProd, texHeightProd);
+                            triangleTotalRGB += sampleRGB;
+                        }
                         totalDepth += tex_w;
                         triangleValidSamples++;
                     }
@@ -645,13 +735,17 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
             if (triangleValidSamples > 0) {
                 // Use reciprocal multiplication instead of division for better performance
                 const float invValidSamples = 1.0f / triangleValidSamples;
-                const float averageTriangleGrayScale = triangleTotalGrayScale * invValidSamples;
                 const float averageDepth = totalDepth * invValidSamples;
                 
                 const int bufferIndex = bufferRowOffset + x;
                 if (averageDepth > depthBuffer[bufferIndex]) {
-                    const CHAR_INFO finalGlyph = GetColGlyphGreyScale(averageTriangleGrayScale);
-                    Screen::GetInstance().PlotPixel(glm::vec2(x, y), finalGlyph);
+                    if (_grayscale) {
+                        const float averageTriangleGrayScale = triangleTotalGrayScale * invValidSamples;
+                        Screen::GetInstance().PlotPixel(glm::vec2(x, y), GetColGlyphGreyScale(averageTriangleGrayScale));
+                    } else {
+                        const glm::vec3 averageTriangleRGB = triangleTotalRGB * invValidSamples;
+                        Screen::GetInstance().PlotPixel(glm::vec2(x, y), GetColGlyph(averageTriangleRGB));
+                    }
                     depthBuffer[bufferIndex] = averageDepth;
                 }
             }
@@ -709,6 +803,7 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& vert1, const VERTEX
         
         for (int x = minX; x <= maxX; x++) {
             float triangleTotalGrayScale = 0.0f;
+            glm::vec3 triangleTotalRGB = glm::vec3(0.0f);
             int triangleValidSamples = 0;
             float totalDepth = 0.0f;
             
@@ -745,9 +840,14 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& vert1, const VERTEX
                         // Use bilinear filtered sampling for smoother edges
                         float texWidthProd = tex_uw * texWidth;
                         float texHeightProd = tex_vw * texHeight;
-                        const float sampleGrayScale = tex->GetPixelCol(texWidthProd, texHeightProd);
-
-                        triangleTotalGrayScale += sampleGrayScale;
+                        
+                        if (_grayscale) {
+                            const float sampleGrayScale = tex->GetPixelGrayscale(texWidthProd, texHeightProd);
+                            triangleTotalGrayScale += sampleGrayScale;
+                        } else {
+                            const glm::vec3 sampleRGB = tex->GetPixelRGB(texWidthProd, texHeightProd);
+                            triangleTotalRGB += sampleRGB;
+                        }
                         totalDepth += tex_w;
                         triangleValidSamples++;
                     }
@@ -758,13 +858,19 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& vert1, const VERTEX
             if (triangleValidSamples > 0) {
                 // Use reciprocal multiplication instead of division for better performance
                 const float invValidSamples = 1.0f / triangleValidSamples;
-                const float averageTriangleGrayScale = triangleTotalGrayScale * invValidSamples;
                 const float averageDepth = totalDepth * invValidSamples;
                 
                 const int bufferIndex = bufferRowOffset + x;
                 if (averageDepth > depthBuffer[bufferIndex]) {
-                    const CHAR_INFO finalGlyph = GetColGlyphGreyScale(averageTriangleGrayScale);
-                    Screen::GetInstance().PlotPixel(glm::vec2(x, y), finalGlyph);
+                    if (_grayscale) {
+                        const float averageTriangleGrayScale = triangleTotalGrayScale * invValidSamples;
+                        const CHAR_INFO finalGlyph = GetColGlyphGreyScale(averageTriangleGrayScale);
+                        Screen::GetInstance().PlotPixel(glm::vec2(x, y), finalGlyph);
+                    } else {
+                        const glm::vec3 averageTriangleRGB = triangleTotalRGB * invValidSamples;
+                        const CHAR_INFO finalGlyph = GetColGlyph(averageTriangleRGB);
+                        Screen::GetInstance().PlotPixel(glm::vec2(x, y), finalGlyph);
+                    }
                     depthBuffer[bufferIndex] = averageDepth;
                 }
             }
@@ -808,7 +914,7 @@ void Renderer::DrawLine(const int x1, const int y1, const int x2, const int y2, 
     }
 }
 
-void Renderer::DrawTriangleWireFrame(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, CHAR pixel_type, short col) {
+void Renderer::DrawTriangleWireframe(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, CHAR pixel_type, short col) {
 	// RENDERING LINES BETWEEN VERTICES
 	DrawLine((int) vert1.X(), (int) vert1.Y(), (int) vert2.X(), (int) vert2.Y(), pixel_type, col);
 	DrawLine((int) vert2.X(), (int) vert2.Y(), (int) vert3.X(), (int) vert3.Y(), pixel_type, col);
@@ -974,9 +1080,9 @@ glm::mat4 Renderer::CalcModelMatrix(const glm::vec3 position, const glm::vec2 ro
 	return model;
 }
 
-CHAR_INFO Renderer::GetColGlyphGreyScale(const float GreyScale) {
+CHAR_INFO Renderer::GetColGlyphGreyScale(const float greyscale) {
     static const unsigned int numShades = 16;
-    static const CHAR_INFO vals[numShades] = {
+    static const CHAR_INFO greyScaleGlyphs[numShades] = {
         CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ PIXEL_QUARTER, FG_DARK_GREY},
         CHAR_INFO{ PIXEL_QUARTER, FG_GREY}, CHAR_INFO{ PIXEL_QUARTER, FG_WHITE},
         CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ PIXEL_HALF, FG_DARK_GREY},
@@ -987,15 +1093,100 @@ CHAR_INFO Renderer::GetColGlyphGreyScale(const float GreyScale) {
         CHAR_INFO{ PIXEL_FULL, FG_GREY}, CHAR_INFO{ PIXEL_FULL, FG_WHITE},
     };
 
-    int idx = static_cast<int>(GreyScale * numShades);
+    int idx = static_cast<int>(greyscale * numShades);
     if (idx > numShades - 1) idx = numShades - 1;
     if (idx < 0) idx = 0;
-    return vals[idx];
+    return greyScaleGlyphs[idx];
+}
+
+CHAR_INFO Renderer::GetColGlyph(const glm::vec3 rgb) {
+    // Pre-calculate intensity once using optimized luminance weights
+    const float intensity = 0.299f * rgb.r + 0.587f * rgb.g + 0.114f * rgb.b;
+    
+    // Early exit for very dark colors - use black background
+    if (intensity < 0.1f) {
+        return CHAR_INFO{' ', BG_BLACK};
+    }
+    
+    // Find closest color using unrolled loop and manual comparison for better cache performance
+    float minDistSq = FLT_MAX;
+    int bestColorIndex = 0;
+    
+    // Unroll the loop partially to reduce loop overhead and improve branch prediction
+    const float r = rgb.r, g = rgb.g, b = rgb.b;
+    
+    // Check colors 0-7 (dark colors)
+    for (int i = 0; i < 8; ++i) {
+        const float dr = r - consoleColors[i].x;
+        const float dg = g - consoleColors[i].y;
+        const float db = b - consoleColors[i].z;
+        const float distSq = dr * dr + dg * dg + db * db;
+        
+        if (distSq < minDistSq) {
+            minDistSq = distSq;
+            bestColorIndex = i;
+        }
+    }
+    
+    // Check colors 8-15 (bright colors)
+    for (int i = 8; i < 16; ++i) {
+        const float dr = r - consoleColors[i].x;
+        const float dg = g - consoleColors[i].y;
+        const float db = b - consoleColors[i].z;
+        const float distSq = dr * dr + dg * dg + db * db;
+        
+        if (distSq < minDistSq) {
+            minDistSq = distSq;
+            bestColorIndex = i;
+        }
+    }
+    
+    // Optimized glyph selection using bit manipulation instead of branches
+    const int glyphIndex = static_cast<int>(intensity * 4.0f); // Map [0,1] to [0,4)
+    static const wchar_t glyphs[4] = {PIXEL_QUARTER, PIXEL_HALF, PIXEL_THREEQUARTERS, PIXEL_FULL};
+    const wchar_t glyph = glyphs[glyphIndex > 3 ? 3 : glyphIndex]; // Clamp to valid range
+    
+    return CHAR_INFO{glyph, colorCodes[bestColorIndex]};
+}
+
+CHAR_INFO Renderer::GetColGlyph(const glm::vec3 rgb, const float greyscale) {
+    
+    // Find closest color using squared distance (avoid sqrt for speed)
+    float minDistSq = FLT_MAX;
+    int bestColorIndex = 0;
+    
+    for (int i = 0; i < 16; ++i) {
+        const glm::vec3 diff = rgb - consoleColors[i];
+        const float distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
+        if (distSq < minDistSq) {
+            minDistSq = distSq;
+            bestColorIndex = i;
+        }
+    }
+    
+    // Select glyph based on pre-calculated greyscale intensity (4 levels)
+    wchar_t glyph;
+    if (greyscale < 0.25f) {
+        glyph = PIXEL_QUARTER;
+    } else if (greyscale < 0.5f) {
+        glyph = PIXEL_HALF;
+    } else if (greyscale < 0.75f) {
+        glyph = PIXEL_THREEQUARTERS;
+    } else {
+        glyph = PIXEL_FULL;
+    }
+    
+    // For very dark colors, use background color instead of foreground with glyph
+    if (greyscale < 0.1f) {
+        return CHAR_INFO{' ', static_cast<unsigned short>(colorCodes[bestColorIndex] << 4)}; // Shift to background
+    }
+    
+    return CHAR_INFO{glyph, colorCodes[bestColorIndex]};
 }
 
 float Renderer::GrayScaleRGB(const glm::vec3 rgb)
 {
-	return (0.3f * rgb.x + 0.6f * rgb.y + 0.1f * rgb.z); // grayscales based on how much we see that wavelength of light instead of just averaging
+	return (0.299f * rgb.r + 0.587f * rgb.g + 0.114f * rgb.b); // grayscales based on how much we see that wavelength of light instead of just averaging
 }
 
 void Renderer::SetAntialiasingsamples(int samples) {
@@ -1039,6 +1230,14 @@ bool Renderer::GetAntialiasing() {
     return _antialiasing;
 }
 
+void Renderer::SetGrayscale(bool grayscale) {
+    _grayscale = grayscale;
+}
+
+bool Renderer::GetGrayscale() {
+    return _grayscale;
+}
+
 void Renderer::InvalidateTiles() {
     _tilesInitialized = false;
 }
@@ -1073,3 +1272,4 @@ std::vector<std::pair<float, float>> Renderer::GenerateSubPixelOffsets(int sampl
     
     return offsets;
 }
+

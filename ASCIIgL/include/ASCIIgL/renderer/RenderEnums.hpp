@@ -2,16 +2,11 @@
 
 // just a bunch of enums for different colours, taken from a series on OneLoneCoder.com
 enum COLOUR
-{
+{	
 	FG_WHITE = 0x000F,
 	FG_GREY = 0x0007,
 	FG_DARK_GREY = 0x0008,
 	FG_BLACK = 0x0000,
-	
-	BG_WHITE = 0x00F0,
-	BG_GREY = 0x0070,
-	BG_DARK_GREY = 0x0080,
-	BG_BLACK = 0x0000,
 
 	FG_DARK_BLUE = 0x0001,
 	FG_DARK_GREEN = 0x0002,
@@ -25,6 +20,12 @@ enum COLOUR
 	FG_RED = 0x000C,
 	FG_MAGENTA = 0x000D,
 	FG_YELLOW = 0x000E,
+
+	BG_WHITE = 0x00F0,
+	BG_GREY = 0x0070,
+	BG_DARK_GREY = 0x0080,
+	BG_BLACK = 0x0000,
+
 	BG_DARK_BLUE = 0x0010,
 	BG_DARK_GREEN = 0x0020,
 	BG_DARK_CYAN = 0x0030,
