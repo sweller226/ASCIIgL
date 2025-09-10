@@ -13,7 +13,7 @@ private:
     static inline float farClip = 2000.0f;  
     static inline float fov = 80.0f;
 
-    static inline float walkingSpeed = 50.0f;
+    static inline float walkingSpeed = 90.0f;
     static inline float sprintFactor = 2;
     static inline float cameraTurnRate = 200.0f;
 
