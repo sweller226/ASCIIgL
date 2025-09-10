@@ -1,10 +1,10 @@
 # Build folders
-build/
-dist/
+**/build/
+**/dist/
 
 
 # OS/Editor files
 .vscode/
 
 # Distribution in different projects
-libs/ASCIIgL-*
+**/libs/ASCIIgL-*
