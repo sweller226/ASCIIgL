@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Mesh.hpp"
+#include <ASCIIgL/engine/Mesh.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
 #include <ASCIIgL/renderer/Vertex.hpp>
 #include <memory>

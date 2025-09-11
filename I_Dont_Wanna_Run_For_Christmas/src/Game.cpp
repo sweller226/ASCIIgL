@@ -75,7 +75,7 @@ void Game::Run()
     Renderer::GetInstance().SetCCW(true);
 	Renderer::GetInstance().SetAntialiasingsamples(8);
 	Renderer::GetInstance().SetAntialiasing(true);
-	Renderer::GetInstance().SetGrayscale(true);
+	Renderer::GetInstance().SetGrayscale(false);
 
     // Logger::Info("Playing background music.");
 	// BOOL soundResult = PlaySound(TEXT(".\\res\\audio\\Man.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);

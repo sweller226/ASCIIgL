@@ -16,11 +16,7 @@
 // =============================================================================
 
 void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh) {
-    for (int i = 0; i < mesh->textures.size(); i++) {
-        if (mesh->textures[i]->texType == "texture_diffuse") {
-            RenderTriangles(VSHADER, mesh->vertices, mesh->textures[i]);
-        }
-    }
+    RenderTriangles(VSHADER, mesh->vertices, mesh->texture);
 }
 
 void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec3 position, const glm::vec2 rotation, const glm::vec3 size, const Camera3D& camera) {
@@ -30,11 +26,7 @@ void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec
     VSHADER.SetView(camera.view);
     VSHADER.SetProj(camera.proj);
 
-    for (int i = 0; i < mesh->textures.size(); i++) {
-        if (mesh->textures[i]->texType == "texture_diffuse") {
-            RenderTriangles(VSHADER, mesh->vertices, mesh->textures[i]);
-        }
-    }
+    RenderTriangles(VSHADER, mesh->vertices, mesh->texture);
 }
 
 void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::vec3 position, const glm::vec2 rotation, const glm::vec3 size, const Camera3D& camera) {
