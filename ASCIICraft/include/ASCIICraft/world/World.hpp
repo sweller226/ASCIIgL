@@ -10,15 +10,18 @@
 #include <vector>
 #include <glm/glm.hpp>
 
+#include <ASCIIgL/renderer/VertexShader.hpp>
+
 // Main World class
 class World {
 public:
-    World();
+    World(unsigned int renderDistance = 2, const WorldPos& spawnPoint = WorldPos(0, 10, 0));
     ~World();
     
     // Core world operations
     void Update(float deltaTime);
     void Render();
+    void GenerateWorld();
 
     // Block operations
     Block GetBlock(const WorldPos& pos);
@@ -59,6 +62,9 @@ private:
     int renderDistance;
     WorldPos spawnPoint;
     Player* player; // Reference to the current player for chunk streaming
+
+    // rendering
+    VERTEX_SHADER vertex_shader;
     
     // Internal methods
     void UpdateChunkNeighbors(const ChunkCoord& coord);

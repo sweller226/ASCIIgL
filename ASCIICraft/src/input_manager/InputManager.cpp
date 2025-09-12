@@ -203,17 +203,19 @@ void InputManager::SetDefaultBindings() {
     BindKey(Key::SHIFT, "sneak");
     BindKey(Key::CTRL, "sprint");
     
-    // Camera (temporary keyboard controls)
-    BindKey(Key::Q, "camera_left");
-    BindKey(Key::R, "camera_right");
+    // Block interaction (mouse replacement)
+    BindKey(Key::Q, "interact_left");        // Left click replacement
+    BindKey(Key::R, "interact_right");        // Right click replacement
+    
+    // Camera (arrow keys only)
+    BindKey(Key::LEFT, "camera_left");
+    BindKey(Key::RIGHT, "camera_right");
     BindKey(Key::UP, "camera_up");
     BindKey(Key::DOWN, "camera_down");
-    BindKey(Key::LEFT, "look_left");
-    BindKey(Key::RIGHT, "look_right");
     
     // Game actions
     BindKey(Key::E, "open_inventory");
-    BindKey(Key::ESCAPE, "open_menu");
+    BindKey(Key::ESCAPE, "quit");
     BindKey(Key::ENTER, "confirm");
     
     // Hotbar slots
@@ -236,5 +238,26 @@ void InputManager::UpdateActionStates() {
                 toggleState = !toggleState;  // Flip toggle state on key press
             }
         }
+    }
+}
+
+InputState InputManager::CalculateKeyState(Key key) const {
+    // Get current hardware state
+    bool isCurrentlyDown = pImpl->IsKeyDown(key);
+    
+    // Get previous frame state
+    auto prevIt = previousKeyStates.find(key);
+    bool wasPreviouslyDown = (prevIt != previousKeyStates.end() && 
+                             (prevIt->second == InputState::Pressed || prevIt->second == InputState::Held));
+    
+    // Calculate state based on transitions
+    if (isCurrentlyDown && !wasPreviouslyDown) {
+        return InputState::Pressed;  // Just pressed this frame
+    }
+    else if (isCurrentlyDown && wasPreviouslyDown) {
+        return InputState::Held;     // Held down from previous frame
+    }
+    else {
+        return InputState::Released; // Not pressed or just released
     }
 }

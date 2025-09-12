@@ -14,7 +14,9 @@ int main() {
     try {
         // Create and run the game
         Game game;
+        game.Initialize();
         game.Run();
+        game.Shutdown();
     }
     catch (const std::exception& e) {
         Logger::Error("Game crashed with exception: " + std::string(e.what()));

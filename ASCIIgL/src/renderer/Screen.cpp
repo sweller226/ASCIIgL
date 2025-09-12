@@ -31,6 +31,9 @@
     
     // Unified Windows implementation for both Command Prompt and Windows Terminal
     class Screen::WindowsImpl {
+    private:
+        Screen& screen;  // Reference to the Screen instance
+    
     public:
         // Console handles and coordinate structures
         HANDLE _hOutput = nullptr;
@@ -41,8 +44,8 @@
         // Buffers for Windows console output
         CHAR_INFO* pixelBuffer = nullptr;
 
-        // Constructor
-        WindowsImpl() = default;
+        // Constructor takes Screen reference
+        WindowsImpl(Screen& screenRef) : screen(screenRef) {}
 
         // Destructor
         ~WindowsImpl() {
@@ -76,7 +79,6 @@
 
 // Static member definitions for platform-specific implementations
 #ifdef _WIN32
-    std::unique_ptr<Screen::WindowsImpl> Screen::_impl = nullptr;
 
 // WindowsImpl method implementations (Unified Windows console implementation)
 int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigned int height, const unsigned int fontSize) {
@@ -90,10 +92,10 @@ int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigne
     // Set the font FIRST to get accurate maximum window size calculations
     Logger::Debug(L"Setting font for accurate size calculations.");
     if (IsWindowsTerminal()) {
-        SetFontModernTerminal(currentHandle, fontSize);
+        screen.SetFontModernTerminal(currentHandle, fontSize);
     }
     else {
-        SetFontConsole(currentHandle, fontSize);
+        screen.SetFontConsole(currentHandle, fontSize);
     }
 
     // Small delay to ensure font change takes effect
@@ -124,10 +126,10 @@ int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigne
     }
 
     if (dimensionsAdjusted) {
-        // Update global screen dimensions
-        Screen::_true_screen_width = MathUtil::FloorToEven(adjustedWidth);
-        Screen::_visible_screen_width = adjustedWidth / 2;
-        Screen::_screen_height = adjustedHeight;
+        // Update instance screen dimensions
+        screen._true_screen_width = MathUtil::FloorToEven(adjustedWidth);
+        screen._visible_screen_width = adjustedWidth / 2;
+        screen._screen_height = adjustedHeight;
         Logger::Info(L"Screen dimensions automatically adjusted to " + 
                     std::to_wstring(adjustedWidth) + L"x" + std::to_wstring(adjustedHeight));
     }
@@ -153,10 +155,10 @@ int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigne
 
 	Logger::Debug(L"Creating console font.");
     if (IsWindowsTerminal()) {
-        SetFontModernTerminal(_hOutput, fontSize);
+        screen.SetFontModernTerminal(_hOutput, fontSize);
     }
     else {
-        SetFontConsole(_hOutput, fontSize);
+        screen.SetFontConsole(_hOutput, fontSize);
     }
 
     Logger::Debug(L"Setting physical size of console window.");
@@ -190,7 +192,7 @@ int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigne
 }
 
 void Screen::WindowsImpl::ClearBuffer() {
-    std::fill(pixelBuffer, pixelBuffer + Screen::_true_screen_width * Screen::_screen_height, CHAR_INFO{'\0', Screen::_backgroundCol});
+    std::fill(pixelBuffer, pixelBuffer + screen._true_screen_width * screen._screen_height, CHAR_INFO{'\0', screen._backgroundCol});
 }
 
 void Screen::WindowsImpl::OutputBuffer() {
@@ -204,13 +206,13 @@ void Screen::WindowsImpl::RenderTitle(bool showFps) {
         sprintf_s(
             titleBuffer, sizeof(titleBuffer),
             "[WIN] ASCIIGL - Console Game Engine - %ls - FPS: %.2f",
-            Screen::_title.c_str(), std::min(Screen::_fps, static_cast<double>(Screen::_fpsCap))
+            screen._title.c_str(), std::min(screen._fps, static_cast<double>(screen._fpsCap))
         );
     } else {
         sprintf_s(
             titleBuffer, sizeof(titleBuffer),
             "[WIN] ASCIIGL - Console Game Engine - %ls",
-            Screen::_title.c_str()
+            screen._title.c_str()
         );
     }
 
@@ -220,42 +222,42 @@ void Screen::WindowsImpl::RenderTitle(bool showFps) {
 void Screen::WindowsImpl::PlotPixel(glm::vec2 p, char character, short Colour) {
     int x = static_cast<int>(p.x) * 2; // Double the x coordinate for wide buffer
     int y = static_cast<int>(p.y);
-    if (x >= 0 && x < static_cast<int>(Screen::_true_screen_width) - 1 && y >= 0 && y < static_cast<int>(Screen::_screen_height)) {
+    if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot the pixel twice horizontally
-        pixelBuffer[y * Screen::_true_screen_width + x].Char.AsciiChar = character;
-        pixelBuffer[y * Screen::_true_screen_width + x].Attributes = Colour;
-        pixelBuffer[y * Screen::_true_screen_width + x + 1].Char.AsciiChar = character;
-        pixelBuffer[y * Screen::_true_screen_width + x + 1].Attributes = Colour;
+        pixelBuffer[y * screen._true_screen_width + x].Char.AsciiChar = character;
+        pixelBuffer[y * screen._true_screen_width + x].Attributes = Colour;
+        pixelBuffer[y * screen._true_screen_width + x + 1].Char.AsciiChar = character;
+        pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = Colour;
     }
 }
 
 void Screen::WindowsImpl::PlotPixel(glm::vec2 p, CHAR_INFO charCol) {
     int x = static_cast<int>(p.x) * 2; // Double the x coordinate for wide buffer
     int y = static_cast<int>(p.y);
-    if (x >= 0 && x < static_cast<int>(Screen::_true_screen_width) - 1 && y >= 0 && y < static_cast<int>(Screen::_screen_height)) {
+    if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot the pixel twice horizontally
-        pixelBuffer[y * Screen::_true_screen_width + x] = charCol;
-        pixelBuffer[y * Screen::_true_screen_width + x + 1] = charCol;
+        pixelBuffer[y * screen._true_screen_width + x] = charCol;
+        pixelBuffer[y * screen._true_screen_width + x + 1] = charCol;
     }
 }
 
 void Screen::WindowsImpl::PlotPixel(int x, int y, char character, short Colour) {
     x *= 2; // Double the x coordinate for wide buffer
-    if (x >= 0 && x < static_cast<int>(Screen::_true_screen_width) - 1 && y >= 0 && y < static_cast<int>(Screen::_screen_height)) {
+    if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot the pixel twice horizontally
-        pixelBuffer[y * Screen::_true_screen_width + x].Char.AsciiChar = character;
-        pixelBuffer[y * Screen::_true_screen_width + x].Attributes = Colour;
-        pixelBuffer[y * Screen::_true_screen_width + x + 1].Char.AsciiChar = character;
-        pixelBuffer[y * Screen::_true_screen_width + x + 1].Attributes = Colour;
+        pixelBuffer[y * screen._true_screen_width + x].Char.AsciiChar = character;
+        pixelBuffer[y * screen._true_screen_width + x].Attributes = Colour;
+        pixelBuffer[y * screen._true_screen_width + x + 1].Char.AsciiChar = character;
+        pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = Colour;
     }
 }
 
 void Screen::WindowsImpl::PlotPixel(int x, int y, CHAR_INFO charCol) {
     x *= 2; // Double the x coordinate for wide buffer
-    if (x >= 0 && x < static_cast<int>(Screen::_true_screen_width) - 1 && y >= 0 && y < static_cast<int>(Screen::_screen_height)) {
+    if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot the pixel twice horizontally
-        pixelBuffer[y * Screen::_true_screen_width + x] = charCol;
-        pixelBuffer[y * Screen::_true_screen_width + x + 1] = charCol;
+        pixelBuffer[y * screen._true_screen_width + x] = charCol;
+        pixelBuffer[y * screen._true_screen_width + x + 1] = charCol;
     }
 }
 
@@ -290,6 +292,10 @@ bool Screen::WindowsImpl::IsWindowsTerminal() {
 #else
 // std::unique_ptr<Screen::GenericImpl> Screen::genericImpl = std::make_unique<Screen::GenericImpl>();
 #endif
+
+// Custom constructor and destructor for PIMPL pattern - must be defined where WindowsImpl is complete
+Screen::Screen() = default;
+Screen::~Screen() = default;
 
 int Screen::InitializeScreen(
     const unsigned int visible_width, 
@@ -330,7 +336,7 @@ int Screen::InitializeScreen(
 
 #ifdef _WIN32
     // Use unified Windows implementation for both CMD and Windows Terminal
-    _impl = std::make_unique<WindowsImpl>();
+    _impl = std::make_unique<WindowsImpl>(*this);
     
     // Windows-specific initialization through delegation
     int initResult = _impl->Initialize(_true_screen_width, height, adjustedFontSize);
@@ -463,13 +469,13 @@ float* Screen::GetDepthBuffer() {
 }
 
 void Screen::StartFPSClock() {
-    GetInstance().StartFPSSample();
+    StartFPSSample();
 }
 
 void Screen::EndFPSClock() {
-    GetInstance().EndFPSSample();
-    GetInstance().FPSSampleCalculate(Screen::GetInstance().GetDeltaTime());
-    GetInstance().CapFPS();
+    EndFPSSample();
+    FPSSampleCalculate(GetDeltaTime());
+    CapFPS();
 }
 
 void Screen::StartFPSSample() {

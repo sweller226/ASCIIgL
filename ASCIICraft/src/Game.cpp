@@ -1,11 +1,11 @@
 #include <ASCIICraft/game/Game.hpp>
 #include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/renderer/Screen.hpp>
 #include <ASCIICraft/world/Block.hpp>
 
 Game::Game() 
-    : gameState(GameState::MainMenu)
-    , isRunning(false)
-    , targetFPS(TARGET_FPS) {
+    : gameState(GameState::Playing)
+    , isRunning(false) {
 }
 
 Game::~Game() {
@@ -14,9 +14,11 @@ Game::~Game() {
 
 bool Game::Initialize() {
     Logger::Info("Initializing ASCIICraft...");
-    
+
+    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCREEN_WIDTH, SCREEN_HEIGHT, L"I Don't Wanna Run For Christmas", FONT_SIZE, static_cast<unsigned int>(TARGET_FPS), 1.0f, BG_BLUE);
+
     // Initialize screen
-    if (!InitializeScreen()) {
+    if (screenInitResult != SCREEN_NOERROR) {
         Logger::Error("Failed to initialize screen");
         return false;
     }
@@ -29,22 +31,11 @@ bool Game::Initialize() {
     
     // Initialize game systems
     world = std::make_unique<World>();
-    player = std::make_unique<Player>(glm::vec3(0.0f, 70.0f, 0.0f)); // Spawn at height 70
     inputManager = std::make_unique<InputManager>();
-    
-    // Connect player to world
-    world->SetPlayer(player.get());
-    world->SetRenderDistance(8); // 8 chunk render distance
-    
-    // Generate some initial chunks around spawn
-    for (int x = -2; x <= 2; x++) {
-        for (int y = 0; y <= 8; y++) { // Y: 0-127 (8 chunks high)
-            for (int z = -2; z <= 2; z++) {
-                world->GenerateEmptyChunk(ChunkCoord(x, y, z));
-            }
-        }
-    }
-    
+
+    world->SetRenderDistance(2); // 2 chunk render distance
+    world->GenerateWorld();
+
     gameState = GameState::Playing;
     isRunning = true;
     
@@ -62,15 +53,15 @@ void Game::Run() {
     
     // Main game loop
     while (isRunning) {
-        Screen::StartFPSClock();
+        Screen::GetInstance().StartFPSClock();
         
-        float deltaTime = Screen::GetDeltaTime();
+        float deltaTime = Screen::GetInstance().GetDeltaTime();
         
         HandleInput();
         Update(deltaTime);
         Render();
         
-        Screen::EndFPSClock();
+        Screen::GetInstance().EndFPSClock();
     }
     
     Shutdown();
@@ -79,7 +70,8 @@ void Game::Run() {
 void Game::Update(float deltaTime) {
     switch (gameState) {
         case GameState::Playing:
-            UpdateGame(deltaTime);
+            // Update world (chunk loading, physics, etc.)
+            world->Update(deltaTime);
             break;
         case GameState::Exiting:
             isRunning = false;
@@ -88,34 +80,23 @@ void Game::Update(float deltaTime) {
 }
 
 void Game::Render() {
-    Screen::ClearBuffer();
+    Screen::GetInstance().ClearBuffer();
     
     switch (gameState) {
         case GameState::Playing:
-            RenderGame();
+            RenderPlaying();
             break;
     }
     
-    Screen::OutputBuffer();
+    Screen::GetInstance().OutputBuffer();
 }
 
 void Game::HandleInput() {
     inputManager->Update();
     
-    // Global input (works in all states)
-    if (inputManager->IsKeyPressed(Key::ESCAPE)) {
-        if (gameState == GameState::Playing) {
-            gameState = GameState::Paused;
-        } else if (gameState == GameState::Paused) {
-            gameState = GameState::Playing;
-        } else if (gameState == GameState::MainMenu) {
-            isRunning = false;
-        }
-    }
-    
-    // State-specific input
-    if (gameState == GameState::Playing) {
-        player->HandleInput(*inputManager, Screen::GetDeltaTime());
+    // Handle exit input
+    if (inputManager->IsActionPressed("quit")) {
+        gameState = GameState::Exiting;
     }
 }
 
@@ -124,33 +105,17 @@ void Game::Shutdown() {
     
     // Clean up resources
     world.reset();
-    player.reset();
     inputManager.reset();
-    blockAtlas.reset();
     
-    Screen::Cleanup();
+    Screen::GetInstance().Cleanup();
     Logger::Info("ASCIICraft shutdown complete");
-}
-
-bool Game::InitializeScreen() {
-    int result = Screen::InitializeScreen(
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT, 
-        L"ASCIICraft - Minecraft in ASCII",
-        FONT_SIZE,
-        static_cast<unsigned int>(TARGET_FPS),
-        1.0f,
-        BG_BLACK
-    );
-    
-    return result == SCREEN_NOERROR;
 }
 
 bool Game::LoadResources() {
     Logger::Info("Loading game resources...");
     
     // Load block texture atlas
-    blockAtlas = std::make_unique<Texture>("res/textures/terrain.png");
+    std::unique_ptr<Texture> blockAtlas = std::make_unique<Texture>("res/textures/terrain.png");
     if (!blockAtlas) {
         Logger::Error("Failed to load block texture atlas");
         return false;
@@ -163,20 +128,6 @@ bool Game::LoadResources() {
     return true;
 }
 
-void Game::UpdateGame(float deltaTime) {
-    // Update world (chunk loading, physics, etc.)
-    world->Update(deltaTime);
-    
-    // Update player (movement, physics, input)
-    player->Update(deltaTime);
-    player->UpdatePhysics(deltaTime, *world);
-    player->UpdateCamera();
-}
-
-void Game::RenderGame() {
-    // Get visible chunks for rendering
-    glm::vec3 playerPos = player->GetPosition();
-    glm::vec3 viewDir = glm::vec3(0.0f, 0.0f, -1.0f); // TODO: Get from camera
-    
-    auto visibleChunks = world->GetVisibleChunks(playerPos, viewDir);
+void Game::RenderPlaying() {
+    world->Render();
 }

@@ -27,3 +27,13 @@ I_Dont_Wanna_Run_For_Christmas
 
     Rebuild Library
     ./scripts/build_ASCIIgL_christmas_game.ps1
+
+ASCIICraft
+    Build Release
+    ./scripts/build_release.ps1
+
+    Build Debug
+    ./scripts/build_debug.ps1
+
+    Rebuild Library
+    ./scripts/build_ASCIIgL_christmas_game.ps1

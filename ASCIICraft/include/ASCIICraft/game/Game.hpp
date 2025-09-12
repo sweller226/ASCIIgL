@@ -34,23 +34,15 @@ public:
 private:
     // Core systems
     std::unique_ptr<World> world;
-    std::unique_ptr<Player> player;
     std::unique_ptr<InputManager> inputManager;
-    
-    // Rendering
-    std::unique_ptr<Texture> blockAtlas;
     
     // Game state
     GameState gameState;
     bool isRunning;
-    float targetFPS;
     
     // Private methods
-    bool InitializeScreen();
     bool LoadResources();
-    void UpdateGame(float deltaTime);
-    void RenderGame();
-    void ProcessInput();
+    void RenderPlaying();
     
     // Constants
     static constexpr int SCREEN_WIDTH = 120;

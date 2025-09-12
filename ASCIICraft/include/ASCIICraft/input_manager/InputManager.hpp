@@ -20,8 +20,8 @@ enum class Key {
     CTRL = 0x11,            // Sprint (alternative)
 
     // temporary keys to replace camera controls
-    Q = 0x51,               // Camera left
-    R = 0x52,               // Camera right
+    Q = 0x51,               // mouse left
+    R = 0x52,               // Cmouse right
 
     // Arrow keys (Controls camera and gui elements)
     UP = 0x26, // GUI up or camera up

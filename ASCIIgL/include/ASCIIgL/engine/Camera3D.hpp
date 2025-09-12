@@ -32,13 +32,13 @@ public:
 	~Camera3D();
 
 	// each of these output 3d vectors in the front, back, right and left direction
-	glm::vec3 getCamFront();
-	glm::vec3 getCamBack();
-	glm::vec3 getCamRight();
-	glm::vec3 getCamLeft();
+	glm::vec3 getCamFront() const;
+	glm::vec3 getCamBack() const;
+	glm::vec3 getCamRight() const;
+	glm::vec3 getCamLeft() const;
 
 	void setCamPos(glm::vec3 Pposition);
-	void setCamDir(float yaw, float pitch); // this sets the camera dir using angles (not vectors)
+	void setCamDir(float Pyaw, float Ppitch, float Ppitch_clamp = 90.0f, bool Penable_pitch_clamping = true); // this sets the camera dir using angles (not vectors)
 	void setCamDir(glm::vec3 dir);
 	void setScreenDimensions(unsigned int width, unsigned int height); // this updates screen dimensions and recalculates projection matrix
 	void recalculateViewMat(); // recalculates the view matrix using the cameras euler angles and position

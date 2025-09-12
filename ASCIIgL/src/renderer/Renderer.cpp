@@ -16,7 +16,27 @@
 // =============================================================================
 
 void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh) {
-    RenderTriangles(VSHADER, mesh->vertices, mesh->texture);
+    // Find the first diffuse texture
+    for (int i = 0; i < mesh->textures.size(); i++) {
+        if (mesh->textures[i]->texType == "texture_diffuse") {
+            RenderTriangles(VSHADER, mesh->vertices, mesh->textures[i]);
+            break;
+        }
+    }
+}
+
+void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const Camera3D& camera) {
+    VSHADER.SetView(camera.view);
+    VSHADER.SetProj(camera.proj);
+    VSHADER.UpdateMVP();
+
+    // Find the first diffuse texture
+    for (int i = 0; i < mesh->textures.size(); i++) {
+        if (mesh->textures[i]->texType == "texture_diffuse") {
+            RenderTriangles(VSHADER, mesh->vertices, mesh->textures[i]);
+            break;
+        }
+    }
 }
 
 void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec3 position, const glm::vec2 rotation, const glm::vec3 size, const Camera3D& camera) {
@@ -25,9 +45,17 @@ void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec
     VSHADER.SetModel(model);
     VSHADER.SetView(camera.view);
     VSHADER.SetProj(camera.proj);
+    VSHADER.UpdateMVP();
 
-    RenderTriangles(VSHADER, mesh->vertices, mesh->texture);
+    for (int i = 0; i < mesh->textures.size(); i++) {
+        if (mesh->textures[i]->texType == "texture_diffuse") {
+            RenderTriangles(VSHADER, mesh->vertices, mesh->textures[i]);
+            break;
+        }
+    }
 }
+
+
 
 void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::vec3 position, const glm::vec2 rotation, const glm::vec3 size, const Camera3D& camera) {
     glm::mat4 model = CalcModelMatrix(position, rotation, size);
@@ -35,6 +63,7 @@ void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const gl
     VSHADER.SetModel(model);
     VSHADER.SetView(camera.view);
     VSHADER.SetProj(camera.proj);
+    VSHADER.UpdateMVP();
 
     for (size_t i = 0; i < ModelObj.meshes.size(); i++) {
         DrawMesh(VSHADER, ModelObj.meshes[i]);
@@ -46,6 +75,7 @@ void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const gl
     VSHADER.SetModel(model);
     VSHADER.SetView(camera.view);
     VSHADER.SetProj(camera.proj);
+    VSHADER.UpdateMVP();
 
     for (size_t i = 0; i < ModelObj.meshes.size(); i++) {
         DrawMesh(VSHADER, ModelObj.meshes[i]);
@@ -59,6 +89,7 @@ void Renderer::Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, 
     VSHADER.SetModel(model);
     VSHADER.SetView(camera.view);
     VSHADER.SetProj(camera.proj);
+    VSHADER.UpdateMVP();
 
     std::vector<VERTEX> vertices = {
         VERTEX({ -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f}), // bottom-left
@@ -75,8 +106,8 @@ void Renderer::Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, 
 void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 positionPerc, const glm::vec2 rotation, const glm::vec2 sizePerc, const Camera2D& camera, int layer)
 {
     // Convert percentage coordinates to pixel coordinates
-    float screenWidth = static_cast<float>(Screen::GetVisibleWidth());
-    float screenHeight = static_cast<float>(Screen::GetHeight());
+    float screenWidth = static_cast<float>(Screen::GetInstance().GetVisibleWidth());
+    float screenHeight = static_cast<float>(Screen::GetInstance().GetHeight());
     
     glm::vec2 pixelPosition = glm::vec2(positionPerc.x * screenWidth, positionPerc.y * screenHeight);
     glm::vec2 pixelSize = glm::vec2(sizePerc.x * screenWidth, sizePerc.y * screenHeight);
@@ -86,6 +117,7 @@ void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, c
     VSHADER.SetModel(model);
     VSHADER.SetView(camera.view);
     VSHADER.SetProj(camera.proj);
+    VSHADER.UpdateMVP();
 
     std::vector<VERTEX> vertices = {
         VERTEX({ -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f}), // bottom-left
@@ -210,19 +242,19 @@ void Renderer::BackFaceCullHelper(const std::vector<VERTEX>& vertices, std::vect
 
 void Renderer::InitializeTiles() {
     // One-time initialization of tile structure - much faster than recreating every frame
-    int tileCount = Screen::GetTileCountX() * Screen::GetTileCountY();
+    int tileCount = Screen::GetInstance().GetTileCountX() * Screen::GetInstance().GetTileCountY();
     _tileBuffer.clear();
     _tileBuffer.resize(tileCount);
     
-    for (int ty = 0; ty < Screen::GetTileCountY(); ++ty) {
-        for (int tx = 0; tx < Screen::GetTileCountX(); ++tx) {
-            int tileIndex = ty * Screen::GetTileCountX() + tx;
-            int posX = tx * Screen::GetTileSizeX();
-            int posY = ty * Screen::GetTileSizeY();
+    for (int ty = 0; ty < Screen::GetInstance().GetTileCountY(); ++ty) {
+        for (int tx = 0; tx < Screen::GetInstance().GetTileCountX(); ++tx) {
+            int tileIndex = ty * Screen::GetInstance().GetTileCountX() + tx;
+            int posX = tx * Screen::GetInstance().GetTileSizeX();
+            int posY = ty * Screen::GetInstance().GetTileSizeY();
 
             // Clamp tile size if it would overflow the screen
-            int sizeX = std::min(Screen::GetTileSizeX(), Screen::GetVisibleWidth() - posX);
-            int sizeY = std::min(Screen::GetTileSizeY(), Screen::GetHeight() - posY);
+            int sizeX = std::min(Screen::GetInstance().GetTileSizeX(), Screen::GetInstance().GetVisibleWidth() - posX);
+            int sizeY = std::min(Screen::GetInstance().GetTileSizeY(), Screen::GetInstance().GetHeight() - posY);
 
             _tileBuffer[tileIndex].position = glm::ivec2(posX, posY);
             _tileBuffer[tileIndex].size = glm::ivec2(sizeX, sizeY);
@@ -244,10 +276,11 @@ void Renderer::ClearTileTriangleLists() {
 
 void Renderer::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles) {
     // Optimized version that works directly with pre-allocated tile buffer
-    const int tileSizeX = Screen::GetTileSizeX();
-    const int tileSizeY = Screen::GetTileSizeY();
-    const int tileCountX = Screen::GetTileCountX();
-    const int tileCountY = Screen::GetTileCountY();
+    auto& screen = Screen::GetInstance();
+    const int tileSizeX = screen.GetTileSizeX();
+    const int tileSizeY = screen.GetTileSizeY();
+    const int tileCountX = screen.GetTileCountX();
+    const int tileCountY = screen.GetTileCountY();
     const float invTileSizeX = 1.0f / tileSizeX; // Avoid divisions in hot loop
     const float invTileSizeY = 1.0f / tileSizeY;
 
@@ -356,9 +389,10 @@ void Renderer::DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, co
     }
 
     // Cache frequently used values to avoid repeated function calls
-    const int screenWidth = Screen::GetVisibleWidth();
-    const int screenHeight = Screen::GetHeight();
-    float* const depthBuffer = Screen::GetDepthBuffer();
+    auto& screen = Screen::GetInstance();
+    const int screenWidth = screen.GetVisibleWidth();
+    const int screenHeight = screen.GetHeight();
+    float* const depthBuffer = screen.GetDepthBuffer();
 
     int x1 = vert1.X(), x2 = vert2.X(), x3 = vert3.X();
     int y1 = vert1.Y(), y2 = vert2.Y(), y3 = vert3.Y();
@@ -426,10 +460,10 @@ void Renderer::DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, co
 
                             if (_grayscale) {
                                 float grayscaleCol = tex->GetPixelGrayscale(texWidthProd, texHeightProd);
-                                Screen::PlotPixel(glm::vec2(j, i), GetColGlyphGreyScale(grayscaleCol));
+                                screen.PlotPixel(glm::vec2(j, i), GetColGlyphGreyScale(grayscaleCol));
                             } else {
                                 glm::vec3 rgbCol = tex->GetPixelRGB(texWidthProd, texHeightProd);
-                                Screen::PlotPixel(glm::vec2(j, i), GetColGlyph(rgbCol));
+                                screen.PlotPixel(glm::vec2(j, i), GetColGlyph(rgbCol));
                             }
                             depthBuffer[bufferIndex] = tex_w;
                         }
@@ -456,9 +490,10 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
     }
 
     // Cache frequently used values
-    const int screenWidth = Screen::GetVisibleWidth();
-    const int screenHeight = Screen::GetHeight();
-    float* const depthBuffer = Screen::GetDepthBuffer();
+    auto& screen = Screen::GetInstance();
+    const int screenWidth = screen.GetVisibleWidth();
+    const int screenHeight = screen.GetHeight();
+    float* const depthBuffer = screen.GetDepthBuffer();
 
     int x1 = vert1.X(), x2 = vert2.X(), x3 = vert3.X();
     int y1 = vert1.Y(), y2 = vert2.Y(), y3 = vert3.Y();
@@ -534,10 +569,10 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
                             float texHeightProd = tex_vw * texHeight;
                             if (_grayscale) {
                                 float grayscaleCol = tex->GetPixelGrayscale(texWidthProd, texHeightProd);
-                                Screen::PlotPixel(glm::vec2(j, i), GetColGlyphGreyScale(grayscaleCol));
+                                screen.PlotPixel(glm::vec2(j, i), GetColGlyphGreyScale(grayscaleCol));
                             } else {
                                 glm::vec3 rgbCol = tex->GetPixelRGB(texWidthProd, texHeightProd);
-                                Screen::PlotPixel(glm::vec2(j, i), GetColGlyph(rgbCol));
+                                screen.PlotPixel(glm::vec2(j, i), GetColGlyph(rgbCol));
                             }
                             depthBuffer[bufferIndex] = tex_w;
                         }
@@ -658,8 +693,9 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
     const float vert1_v = vert1.V(), vert2_v = vert2.V(), vert3_v = vert3.V();
     
     // Cache screen dimensions and depth buffer reference
-    const int screenWidth = Screen::GetVisibleWidth();
-    float* depthBuffer = Screen::GetDepthBuffer();
+    auto& screen = Screen::GetInstance();
+    const int screenWidth = screen.GetVisibleWidth();
+    float* depthBuffer = screen.GetDepthBuffer();
     
     // Get dynamic sub-pixel sampling pattern for anti-aliasing
     const auto subPixelOffsets = GenerateSubPixelOffsets(_antialiasing_samples);
@@ -781,8 +817,8 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& vert1, const VERTEX
     const float vert1_v = vert1.V(), vert2_v = vert2.V(), vert3_v = vert3.V();
     
     // Cache screen dimensions and depth buffer reference
-    const int screenWidth = Screen::GetVisibleWidth();
-    float* depthBuffer = Screen::GetDepthBuffer();
+    const int screenWidth = Screen::GetInstance().GetVisibleWidth();
+    float* depthBuffer = Screen::GetInstance().GetDepthBuffer();
 
     // Get dynamic sub-pixel sampling pattern for anti-aliasing
     const auto subPixelOffsets = GenerateSubPixelOffsets(_antialiasing_samples);

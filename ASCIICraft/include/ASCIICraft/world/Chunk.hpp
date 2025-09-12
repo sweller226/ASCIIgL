@@ -1,8 +1,10 @@
 #pragma once
 
 #include <ASCIICraft/world/Block.hpp>
+#include <ASCIIgL/engine/Mesh.hpp>
 #include <glm/glm.hpp>
 #include <unordered_map>
+#include <memory>
 
 // Forward declarations
 struct ChunkCoord;
@@ -87,6 +89,9 @@ public:
     // Utility
     bool IsValidBlockCoord(int x, int y, int z) const;
     WorldPos ChunkToWorldPos(int x, int y, int z) const;
+
+    // Rendering
+    void Render(VERTEX_SHADER& vertex_shader, const Camera3D& camera);
     
 private:
     ChunkCoord coord;
@@ -95,6 +100,9 @@ private:
     bool generated;
     bool dirty;
     bool hasMesh;
+    
+    // Mesh data for rendering
+    std::unique_ptr<Mesh> mesh;
     
     // Neighbor chunks (6 directions: +X, -X, +Y, -Y, +Z, -Z)
     Chunk* neighbors[6];

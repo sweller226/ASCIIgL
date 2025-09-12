@@ -18,7 +18,7 @@ Camera3D::~Camera3D()
 	// unused destructor
 }
 
-glm::vec3 Camera3D::getCamFront()
+glm::vec3 Camera3D::getCamFront() const
 {
 	// this function calculates the directional vector of the front of the camera (where the camera is facing)
 	glm::vec3 camDir(0.0f, 0.0f, 0.0f);
@@ -32,17 +32,17 @@ glm::vec3 Camera3D::getCamFront()
 	return camDir;
 }
 
-glm::vec3 Camera3D::getCamBack()
+glm::vec3 Camera3D::getCamBack() const
 {
 	return -getCamFront();
 }
 
-glm::vec3 Camera3D::getCamRight()
+glm::vec3 Camera3D::getCamRight() const
 {
 	return glm::normalize(glm::cross(getCamFront(), glm::vec3(0, 1, 0)));
 }
 
-glm::vec3 Camera3D::getCamLeft()
+glm::vec3 Camera3D::getCamLeft() const
 {
 	return -getCamRight();
 }
@@ -53,16 +53,18 @@ void Camera3D::setCamPos(glm::vec3 Pposition)
 	recalculateViewMat();
 }
 
-void Camera3D::setCamDir(float Pyaw, float Ppitch)
+void Camera3D::setCamDir(float Pyaw, float Ppitch, float Ppitch_clamp, bool Penable_pitch_clamping)
 {
 	// this function takes in a yaw and pitch (no roll cus I didn't code that in (really should)) and sets the yaw in pitch to the new yaw and pitch
 	yaw = Pyaw;
 	pitch = Ppitch;
 
-	if (pitch > 89.0f) // pitch limiting
-		pitch = 89.0f;
-	if (pitch < -89.0f)
-		pitch = -89.0f;
+	if (Penable_pitch_clamping) {
+		if (pitch > Ppitch_clamp) // pitch limiting
+			pitch = Ppitch_clamp;
+		if (pitch < -Ppitch_clamp)
+			pitch = -Ppitch_clamp;
+	}
 
 	recalculateViewMat();
 }

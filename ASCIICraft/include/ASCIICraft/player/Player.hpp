@@ -26,28 +26,29 @@ enum class MovementState {
 class Player {
 public:
     // Constructor/Destructor
-    Player();
+    Player() = default;
     Player(const glm::vec3& startPosition);
     ~Player() = default;
 
     // Core update functions
     void Update(float deltaTime);
     void HandleInput(const InputManager& input, float deltaTime);
-    void UpdatePhysics(float deltaTime, const World& world);
+    // void UpdatePhysics(float deltaTime, const World& world);
     void UpdateCamera();
 
     // Movement
     void Move(const glm::vec3& direction, float deltaTime);
-    void Jump();
+    // void Jump();
     // void StartSprinting();
     // void StopSprinting();
     // void StartSneaking();
     // void StopSneaking();
     // void ToggleFlight();
+    void RecalculateCameraPosition();
 
     // Block interaction
-    void BreakBlock(World& world);
-    void PlaceBlock(World& world);
+    // void BreakBlock(World& world);
+    // void PlaceBlock(World& world);
     // void SelectNextBlock();
     // void SelectPreviousBlock();
     // void SelectHotbarSlot(int slot);
@@ -114,24 +115,23 @@ private:
     // Timers
     float jumpCooldown;
     float lastOnGround;
-    float lastHungerUpdate;
 
     // Private helper functions
     void UpdateMovementState();
-    void ApplyGravity(float deltaTime);
-    void HandleCollisions(const World& world);
-    void UpdateBoundingBox();
-    void CheckGroundCollision(const World& world);
+    // void ApplyGravity(float deltaTime);
+    // void HandleCollisions(const World& world);
+    // void UpdateBoundingBox();
+    // void CheckGroundCollision(const World& world);
     
     // Input helpers
     void ProcessMovementInput(const InputManager& input, float deltaTime);
-    void ProcessMouseInput(const InputManager& input);
-    void ProcessActionInput(const InputManager& input, World& world);
+    void ProcessCameraInput(const InputManager& input);
+    void ProcessActionInput(const InputManager& input, World& world);;
 
     // Block interaction helpers
-    glm::ivec3 GetTargetBlock(const World& world) const;
-    bool CanReachBlock(const glm::ivec3& blockPos) const;
-    float GetBlockBreakTime() const;
+    // glm::ivec3 GetTargetBlock(const World& world) const;
+    // bool CanReachBlock(const glm::ivec3& blockPos) const;
+    // float GetBlockBreakTime() const;
 
     // Movement constants
     static constexpr float DEFAULT_WALK_SPEED = 4.317f;      // Blocks per second
