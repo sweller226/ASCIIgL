@@ -29,6 +29,14 @@ I_Dont_Wanna_Run_For_Christmas
     ./scripts/build_ASCIIgL_christmas_game.ps1
 
 ASCIICraft
+    Run Debug Command
+    cd "C:\Users\Skwig\Desktop\Development\dev\ASCIIgL\ASCIICraft\build\bin\Debug"
+    .\ASCIICraft.exe
+
+    Run Release Command
+    cd "C:\Users\Skwig\Desktop\Development\dev\ASCIIgL\ASCIICraft\build\bin\Release"
+    .\ASCIICraft.exe
+
     Build Release
     ./scripts/build_release.ps1
 
@@ -36,4 +44,4 @@ ASCIICraft
     ./scripts/build_debug.ps1
 
     Rebuild Library
-    ./scripts/build_ASCIIgL_christmas_game.ps1
+    ./scripts/build_ASCIIgL_ASCIICraft.ps1

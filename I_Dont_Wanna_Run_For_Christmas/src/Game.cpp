@@ -68,8 +68,6 @@ void Game::Run()
 	SCR_WIDTH = Screen::GetInstance().GetVisibleWidth();
 	SCR_HEIGHT = Screen::GetInstance().GetHeight();
 	guiCamera.setScreenDimensions(SCR_WIDTH, SCR_HEIGHT);
-
-    Logger::Debug("Screen::InitializeScreen returned: " + std::to_string(screenInitResult));
     Renderer::GetInstance().SetWireframe(false);
     Renderer::GetInstance().SetBackfaceCulling(true);
     Renderer::GetInstance().SetCCW(true);
@@ -111,7 +109,7 @@ void Game::Run()
                 RunWin();
                 break;
             default:
-                Logger::Debug("[WARN] Unknown game state: " + std::to_string(gameState));
+                Logger::Warning("[WARN] Unknown game state: " + std::to_string(gameState));
                 break;
         }
         Renderer::GetInstance().DrawScreenBorder(FG_WHITE);

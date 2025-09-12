@@ -1,6 +1,9 @@
 #include <ASCIICraft/game/Game.hpp>
+
 #include <ASCIIgL/engine/Logger.hpp>
 #include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/Renderer.hpp>
+
 #include <ASCIICraft/world/Block.hpp>
 
 Game::Game() 
@@ -15,7 +18,13 @@ Game::~Game() {
 bool Game::Initialize() {
     Logger::Info("Initializing ASCIICraft...");
 
-    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCREEN_WIDTH, SCREEN_HEIGHT, L"I Don't Wanna Run For Christmas", FONT_SIZE, static_cast<unsigned int>(TARGET_FPS), 1.0f, BG_BLUE);
+    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, static_cast<unsigned int>(TARGET_FPS), 1.0f, BG_BLUE);
+    Renderer::GetInstance().SetWireframe(false);
+    Renderer::GetInstance().SetBackfaceCulling(true);
+    Renderer::GetInstance().SetCCW(true);
+	Renderer::GetInstance().SetAntialiasingsamples(8);
+	Renderer::GetInstance().SetAntialiasing(true);
+	Renderer::GetInstance().SetGrayscale(false);
 
     // Initialize screen
     if (screenInitResult != SCREEN_NOERROR) {
@@ -30,10 +39,16 @@ bool Game::Initialize() {
     }
     
     // Initialize game systems
-    world = std::make_unique<World>();
+    world = std::make_unique<World>(2, WorldPos(0, 5, 0));
     inputManager = std::make_unique<InputManager>();
+    
+    // Create player at spawn point
+    player = std::make_unique<Player>(world->GetSpawnPoint().ToVec3());
+    
+    // Connect player to world
+    world->SetPlayer(player.get());
 
-    world->SetRenderDistance(2); // 2 chunk render distance
+    world->SetRenderDistance(1); // 2 chunk render distance
     world->GenerateWorld();
 
     gameState = GameState::Playing;
@@ -54,24 +69,29 @@ void Game::Run() {
     // Main game loop
     while (isRunning) {
         Screen::GetInstance().StartFPSClock();
-        
-        float deltaTime = Screen::GetInstance().GetDeltaTime();
+        Screen::GetInstance().ClearBuffer();
         
         HandleInput();
-        Update(deltaTime);
+        Update();
         Render();
         
         Screen::GetInstance().EndFPSClock();
+        Screen::GetInstance().RenderTitle(true);
     }
     
     Shutdown();
 }
 
-void Game::Update(float deltaTime) {
+void Game::Update() {
     switch (gameState) {
         case GameState::Playing:
+            // Update player
+            if (player) {
+                player->Update();
+            }
+            
             // Update world (chunk loading, physics, etc.)
-            world->Update(deltaTime);
+            world->Update();
             break;
         case GameState::Exiting:
             isRunning = false;
@@ -79,9 +99,7 @@ void Game::Update(float deltaTime) {
     }
 }
 
-void Game::Render() {
-    Screen::GetInstance().ClearBuffer();
-    
+void Game::Render() {    
     switch (gameState) {
         case GameState::Playing:
             RenderPlaying();
@@ -94,6 +112,11 @@ void Game::Render() {
 void Game::HandleInput() {
     inputManager->Update();
     
+    // Process player input
+    if (player && gameState == GameState::Playing) {
+        player->HandleInput(*inputManager);
+    }
+    
     // Handle exit input
     if (inputManager->IsActionPressed("quit")) {
         gameState = GameState::Exiting;
@@ -103,9 +126,14 @@ void Game::HandleInput() {
 void Game::Shutdown() {
     Logger::Info("Shutting down ASCIICraft...");
     
+    // Clear the block atlas reference before destroying it
+    Block::SetTextureAtlas(nullptr);
+    
     // Clean up resources
+    player.reset();
     world.reset();
     inputManager.reset();
+    blockAtlas.reset();  // Destroy the texture atlas
     
     Screen::GetInstance().Cleanup();
     Logger::Info("ASCIICraft shutdown complete");
@@ -114,8 +142,8 @@ void Game::Shutdown() {
 bool Game::LoadResources() {
     Logger::Info("Loading game resources...");
     
-    // Load block texture atlas
-    std::unique_ptr<Texture> blockAtlas = std::make_unique<Texture>("res/textures/terrain.png");
+    // Load block texture atlas - store as member to prevent destruction
+    blockAtlas = std::make_unique<Texture>("res/textures/terrain.png");
     if (!blockAtlas) {
         Logger::Error("Failed to load block texture atlas");
         return false;

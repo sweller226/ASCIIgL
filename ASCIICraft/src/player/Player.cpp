@@ -38,7 +38,7 @@ Player::Player(const glm::vec3& startPosition)
     UpdateCamera();
 }
 
-void Player::Update(float deltaTime) {
+void Player::Update() {
     // Update movement state
     UpdateMovementState();
     
@@ -46,15 +46,15 @@ void Player::Update(float deltaTime) {
     UpdateCamera();
     
     // Update timers
-    jumpCooldown = std::max(0.0f, jumpCooldown - deltaTime);
-    lastOnGround += deltaTime;
-    
+    jumpCooldown = std::max(0.0f, jumpCooldown - Screen::GetInstance().GetDeltaTime());
+    lastOnGround += Screen::GetInstance().GetDeltaTime();
+
     // Reset jump pressed flag
     jumpPressed = false;
 }
 
-void Player::HandleInput(const InputManager& input, float deltaTime) {
-    ProcessMovementInput(input, deltaTime);
+void Player::HandleInput(const InputManager& input) {
+    ProcessMovementInput(input);
     ProcessCameraInput(input);
 }
 
@@ -67,7 +67,7 @@ void Player::UpdateCamera() {
     camera.recalculateViewMat();
 }
 
-void Player::Move(const glm::vec3& direction, float deltaTime) {
+void Player::Move(const glm::vec3& direction) {
     // Get current movement speed based on state
     float currentSpeed = walkSpeed;
     
@@ -87,7 +87,7 @@ void Player::Move(const glm::vec3& direction, float deltaTime) {
     }
     
     // Apply movement
-    glm::vec3 movement = direction * currentSpeed * deltaTime;
+    glm::vec3 movement = direction * currentSpeed * Screen::GetInstance().GetDeltaTime();
     
     if (flying || gameMode == GameMode::Creative) {
         // Free flight movement
@@ -101,7 +101,7 @@ void Player::Move(const glm::vec3& direction, float deltaTime) {
     RecalculateCameraPosition();
 
     // Update velocity for other systems
-    velocity = movement / deltaTime;
+    velocity = movement / Screen::GetInstance().GetDeltaTime();
 }
 
 void Player::RecalculateCameraPosition() {
@@ -177,7 +177,7 @@ void Player::UpdateMovementState() {
     }
 }
 
-void Player::ProcessMovementInput(const InputManager& input, float deltaTime) {
+void Player::ProcessMovementInput(const InputManager& input) {
     glm::vec3 moveDirection(0.0f);
     
     // Get camera directions for movement
@@ -223,7 +223,7 @@ void Player::ProcessMovementInput(const InputManager& input, float deltaTime) {
     
     // Apply movement
     if (glm::length(moveDirection) > 0.0f) {
-        Move(moveDirection, deltaTime);
+        Move(moveDirection);
     }
 }
 
@@ -251,28 +251,28 @@ void Player::ProcessCameraInput(const InputManager& input) {
     camera.setCamDir(camera.yaw += yawDelta, camera.pitch += pitchDelta);
 }
 
-void Player::ProcessActionInput(const InputManager& input, World& world) {
-    // Process game mode toggle (for testing - remove later)
-    // if (input.IsActionJustPressed("toggle_gamemode")) {
-    //     GameMode newMode = (gameMode == GameMode::Creative) ? GameMode::Survival : GameMode::Creative;
-    //     SetGameMode(newMode);
-    // }
+// void Player::ProcessActionInput(const InputManager& input, World& world) {
+//     // Process game mode toggle (for testing - remove later)
+//     // if (input.IsActionJustPressed("toggle_gamemode")) {
+//     //     GameMode newMode = (gameMode == GameMode::Creative) ? GameMode::Survival : GameMode::Creative;
+//     //     SetGameMode(newMode);
+//     // }
     
-    // Block interaction
-    if (input.IsActionPressed("break_block")) {
-        // Q key - Left click replacement for breaking blocks
-        // TODO: Implement block breaking when BreakBlock method is available
-        Logger::Debug("Break block action pressed");
-    }
+//     // Block interaction
+//     if (input.IsActionPressed("break_block")) {
+//         // Q key - Left click replacement for breaking blocks
+//         // TODO: Implement block breaking when BreakBlock method is available
+//         Logger::Debug("Break block action pressed");
+//     }
     
-    if (input.IsActionPressed("place_block")) {
-        // R key - Right click replacement for placing blocks
-        // TODO: Implement block placing when PlaceBlock method is available
-        Logger::Debug("Place block action pressed");
-    }
+//     if (input.IsActionPressed("place_block")) {
+//         // R key - Right click replacement for placing blocks
+//         // TODO: Implement block placing when PlaceBlock method is available
+//         Logger::Debug("Place block action pressed");
+//     }
     
-    // Inventory toggle
-    if (input.IsActionPressed("open_inventory")) {
-        Logger::Debug("Inventory toggle pressed");
-    }
-}
+//     // Inventory toggle
+//     if (input.IsActionPressed("open_inventory")) {
+//         Logger::Debug("Inventory toggle pressed");
+//     }
+// }

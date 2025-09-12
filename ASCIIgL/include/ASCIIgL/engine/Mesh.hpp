@@ -11,9 +11,9 @@ private:
 
 public:
 	std::vector<VERTEX> vertices;
-	std::vector<Texture*> textures; // puts textures on heap because they break otherwise
+	Texture* texture; // single texture pointer
 
-	Mesh(std::vector<VERTEX> inVerts, std::vector<Texture*> inTex);
+	Mesh(std::vector<VERTEX>&& inVerts, Texture* inTex);
 	~Mesh();
 
 };

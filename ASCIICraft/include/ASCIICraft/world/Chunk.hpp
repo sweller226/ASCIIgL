@@ -2,6 +2,8 @@
 
 #include <ASCIICraft/world/Block.hpp>
 #include <ASCIIgL/engine/Mesh.hpp>
+#include <ASCIIgL/renderer/VertexShader.hpp>
+#include <ASCIIgL/engine/Camera3D.hpp>
 #include <glm/glm.hpp>
 #include <unordered_map>
 #include <memory>

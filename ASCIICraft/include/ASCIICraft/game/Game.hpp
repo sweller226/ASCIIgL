@@ -1,8 +1,10 @@
 #pragma once
 
 #include <memory>
+
 #include <ASCIIgL/renderer/Screen.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
+
 #include <ASCIICraft/world/World.hpp>
 #include <ASCIICraft/player/Player.hpp>
 #include <ASCIICraft/input_manager/InputManager.hpp>
@@ -27,14 +29,18 @@ public:
     GameState GetGameState() const { return gameState; }
     
     // Game loop components
-    void Update(float deltaTime);
+    void Update();
     void Render();
     void HandleInput();
     
 private:
     // Core systems
     std::unique_ptr<World> world;
+    std::unique_ptr<Player> player;
     std::unique_ptr<InputManager> inputManager;
+    
+    // Resources
+    std::unique_ptr<Texture> blockAtlas;  // Block texture atlas - must persist during game lifetime
     
     // Game state
     GameState gameState;
@@ -45,8 +51,8 @@ private:
     void RenderPlaying();
     
     // Constants
-    static constexpr int SCREEN_WIDTH = 120;
-    static constexpr int SCREEN_HEIGHT = 40;
-    static constexpr int FONT_SIZE = 16;
+    static constexpr int SCREEN_WIDTH = 600;
+    static constexpr int SCREEN_HEIGHT = 400;
+    static constexpr int FONT_SIZE = 3;
     static constexpr float TARGET_FPS = 60.0f;
 };

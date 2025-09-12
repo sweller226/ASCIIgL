@@ -2,7 +2,6 @@
 
 #include <ASCIICraft/world/Block.hpp>
 #include <ASCIICraft/world/Chunk.hpp>
-#include <ASCIICraft/player/Player.hpp>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -12,6 +11,9 @@
 
 #include <ASCIIgL/renderer/VertexShader.hpp>
 
+// Forward declarations
+class Player;
+
 // Main World class
 class World {
 public:
@@ -19,7 +21,7 @@ public:
     ~World();
     
     // Core world operations
-    void Update(float deltaTime);
+    void Update();
     void Render();
     void GenerateWorld();
 
@@ -48,7 +50,8 @@ public:
     
     // Rendering support
     std::vector<Chunk*> GetVisibleChunks(const glm::vec3& playerPos, const glm::vec3& viewDir) const;
-    void InvalidateChunkMeshes(const ChunkCoord& coord);  // For block changes
+    void BatchInvalidateChunkMeshes(const ChunkCoord& coord);  // Prevents chain reactions
+    void RegenerateDirtyChunks();  // Batch regenerate all dirty chunks
     
     // World queries
     WorldPos GetSpawnPoint() const { return spawnPoint; }
@@ -72,15 +75,6 @@ private:
     glm::ivec3 WorldPosToLocalChunkPos(const WorldPos& pos) const;
     std::vector<ChunkCoord> GetChunksInRadius(const ChunkCoord& center, int radius) const;
     
-    // Constants for neighbor directions
-    enum NeighborDirection {
-        NEIGHBOR_POS_X = 0,
-        NEIGHBOR_NEG_X = 1,
-        NEIGHBOR_POS_Y = 2,
-        NEIGHBOR_NEG_Y = 3,
-        NEIGHBOR_POS_Z = 4,
-        NEIGHBOR_NEG_Z = 5
-    };
-    
+    // Constants for neighbor directions (indices into NEIGHBOR_OFFSETS)
     static const ChunkCoord NEIGHBOR_OFFSETS[6];
 };

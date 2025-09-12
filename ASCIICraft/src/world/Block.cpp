@@ -23,11 +23,6 @@ bool Block::HasTextureAtlas() {
     return textureAtlas != nullptr;
 }
 
-// Get UV coordinates for the block's texture
-glm::vec4 Block::GetTextureUV(int face) const {
-    return BlockTextures::GetBlockFaceUV(type, static_cast<BlockFace>(face));
-}
-
 namespace BlockTextures {
     
     // Convert tile coordinates to UV coordinates (16x16 atlas)

@@ -1,7 +1,10 @@
 #include <ASCIICraft/world/World.hpp>
-#include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIICraft/player/Player.hpp>
+
 #include <algorithm>
 #include <cmath>
+
+#include <ASCIIgL/engine/Logger.hpp>
 
 // Static member definition
 const ChunkCoord World::NEIGHBOR_OFFSETS[6] = {
@@ -24,11 +27,14 @@ World::~World() {
     Logger::Info("World destroyed");
 }
 
-void World::Update(float deltaTime) {
+void World::Update() {
     // Update chunk loading based on player position
     if (player) {
         UpdateChunkLoading();
     }
+    
+    // Regenerate dirty chunks in batches to prevent chain reactions
+    RegenerateDirtyChunks();
 }
 
 void World::Render() {
@@ -39,13 +45,22 @@ void World::Render() {
 
     glm::vec3 playerPos = player->GetPosition();
     glm::vec3 viewDir = player->GetCamera().getCamFront();
+    
+    Logger::Debug("World::Render - Player position: (" + std::to_string(playerPos.x) + ", " + 
+                  std::to_string(playerPos.y) + ", " + std::to_string(playerPos.z) + ")");
 
     std::vector<Chunk*> visibleChunks = GetVisibleChunks(playerPos, viewDir);
+    Logger::Debug("World::Render - Found " + std::to_string(visibleChunks.size()) + " visible chunks");
+    
+    int renderedChunks = 0;
     for (Chunk* chunk : visibleChunks) {
         if (chunk->HasMesh()) {
             chunk->Render(vertex_shader, player->GetCamera());
+            renderedChunks++;
         }
     }
+    
+    Logger::Debug("World::Render - Rendered " + std::to_string(renderedChunks) + " chunks with meshes");
 }
 
 void World::GenerateWorld() {
@@ -65,15 +80,14 @@ Block World::GetBlock(const WorldPos& pos) {
 }
 
 Block World::GetBlock(int x, int y, int z) {
-    WorldPos pos(x, y, z);
-    ChunkCoord chunkCoord = WorldPosToChunkCoord(pos);
+    ChunkCoord chunkCoord = WorldPosToChunkCoord(WorldPos(x, y, z));
     
     Chunk* chunk = GetChunk(chunkCoord);
     if (!chunk) {
         return Block(); // Return air block if chunk not loaded
     }
     
-    glm::ivec3 localPos = WorldPosToLocalChunkPos(pos);
+    glm::ivec3 localPos = WorldPosToLocalChunkPos(WorldPos(x, y, z));
     return chunk->GetBlock(localPos.x, localPos.y, localPos.z);
 }
 
@@ -82,8 +96,7 @@ void World::SetBlock(const WorldPos& pos, const Block& block) {
 }
 
 void World::SetBlock(int x, int y, int z, const Block& block) {
-    WorldPos pos(x, y, z);
-    ChunkCoord chunkCoord = WorldPosToChunkCoord(pos);
+    ChunkCoord chunkCoord = WorldPosToChunkCoord(WorldPos(x, y, z));
     
     Chunk* chunk = GetOrCreateChunk(chunkCoord);
     if (!chunk) {
@@ -91,11 +104,11 @@ void World::SetBlock(int x, int y, int z, const Block& block) {
         return;
     }
     
-    glm::ivec3 localPos = WorldPosToLocalChunkPos(pos);
+    glm::ivec3 localPos = WorldPosToLocalChunkPos(WorldPos(x, y, z));
     chunk->SetBlock(localPos.x, localPos.y, localPos.z, block);
     
-    // Invalidate mesh for this chunk and neighbors if on edge
-    InvalidateChunkMeshes(chunkCoord);
+    // Batch invalidate meshes to prevent chain reactions
+    BatchInvalidateChunkMeshes(chunkCoord);
 }
 
 Chunk* World::GetChunk(const ChunkCoord& coord) {
@@ -123,14 +136,14 @@ void World::LoadChunk(const ChunkCoord& coord) {
     // Create new chunk
     auto chunk = std::make_unique<Chunk>(coord);
     
-    // Generate empty chunk for now
+    // Store the chunk first so GetChunk() works
+    loadedChunks[coord] = std::move(chunk);
+    
+    // Now generate terrain (GetChunk will find the stored chunk)
     GenerateEmptyChunk(coord);
     
     // Update neighbors
     UpdateChunkNeighbors(coord);
-    
-    // Store the chunk
-    loadedChunks[coord] = std::move(chunk);
     
     Logger::Debug("Loaded chunk at (" + std::to_string(coord.x) + ", " + 
                   std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
@@ -201,6 +214,10 @@ void World::GenerateEmptyChunk(const ChunkCoord& coord) {
                 }
             }
         }
+        
+        // Mark chunk as generated and generate its mesh
+        chunk->SetGenerated(true);
+        chunk->GenerateMesh();
     }
 }
 
@@ -227,19 +244,45 @@ std::vector<Chunk*> World::GetVisibleChunks(const glm::vec3& playerPos, const gl
     return visibleChunks;
 }
 
-void World::InvalidateChunkMeshes(const ChunkCoord& coord) {
-    Chunk* chunk = GetChunk(coord);
-    if (chunk) {
-        chunk->InvalidateMesh();
-    }
+void World::BatchInvalidateChunkMeshes(const ChunkCoord& coord) {
+    // Collect all chunks that need invalidation without triggering regeneration
+    std::unordered_set<ChunkCoord> chunksToInvalidate;
     
-    // Also invalidate neighboring chunks if they exist
+    // Add the main chunk
+    chunksToInvalidate.insert(coord);
+    
+    // Add neighboring chunks
     for (int i = 0; i < 6; ++i) {
         ChunkCoord neighborCoord = coord + NEIGHBOR_OFFSETS[i];
-        Chunk* neighborChunk = GetChunk(neighborCoord);
-        if (neighborChunk) {
-            neighborChunk->InvalidateMesh();
+        if (IsChunkLoaded(neighborCoord)) {
+            chunksToInvalidate.insert(neighborCoord);
         }
+    }
+    
+    // Invalidate all collected chunks at once (mark as dirty, don't regenerate yet)
+    for (const ChunkCoord& chunkCoord : chunksToInvalidate) {
+        Chunk* chunk = GetChunk(chunkCoord);
+        if (chunk) {
+            chunk->InvalidateMesh();
+        }
+    }
+    
+    Logger::Debug("Batch invalidated " + std::to_string(chunksToInvalidate.size()) + " chunk meshes");
+}
+
+void World::RegenerateDirtyChunks() {
+    // Regenerate meshes for all dirty chunks in one pass
+    int regeneratedCount = 0;
+    for (const auto& pair : loadedChunks) {
+        Chunk* chunk = pair.second.get();
+        if (chunk && chunk->IsDirty() && chunk->IsGenerated()) {
+            chunk->GenerateMesh();
+            regeneratedCount++;
+        }
+    }
+    
+    if (regeneratedCount > 0) {
+        Logger::Debug("Regenerated " + std::to_string(regeneratedCount) + " dirty chunk meshes");
     }
 }
 
@@ -253,12 +296,12 @@ void World::UpdateChunkNeighbors(const ChunkCoord& coord) {
     for (int i = 0; i < 6; ++i) {
         ChunkCoord neighborCoord = coord + NEIGHBOR_OFFSETS[i];
         Chunk* neighborChunk = GetChunk(neighborCoord);
-        chunk->SetNeighbor(static_cast<NeighborDirection>(i), neighborChunk);
+        chunk->SetNeighbor(i, neighborChunk);
         
         // Set reverse neighbor
         if (neighborChunk) {
             int reverseDir = (i % 2 == 0) ? i + 1 : i - 1; // Flip direction
-            neighborChunk->SetNeighbor(static_cast<NeighborDirection>(reverseDir), chunk);
+            neighborChunk->SetNeighbor(reverseDir, chunk);
         }
     }
 }

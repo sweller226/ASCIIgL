@@ -6,7 +6,6 @@
 #include <ASCIIgL/engine/Camera3D.hpp>
 #include <ASCIIgL/renderer/Screen.hpp>
 
-#include <ASCIICraft/world/World.hpp>
 #include <ASCIICraft/input_manager/InputManager.hpp>
 
 enum class GameMode {
@@ -31,13 +30,13 @@ public:
     ~Player() = default;
 
     // Core update functions
-    void Update(float deltaTime);
-    void HandleInput(const InputManager& input, float deltaTime);
+    void Update();
+    void HandleInput(const InputManager& input);
     // void UpdatePhysics(float deltaTime, const World& world);
     void UpdateCamera();
 
     // Movement
-    void Move(const glm::vec3& direction, float deltaTime);
+    void Move(const glm::vec3& direction);
     // void Jump();
     // void StartSprinting();
     // void StopSprinting();
@@ -124,9 +123,9 @@ private:
     // void CheckGroundCollision(const World& world);
     
     // Input helpers
-    void ProcessMovementInput(const InputManager& input, float deltaTime);
+    void ProcessMovementInput(const InputManager& input);
     void ProcessCameraInput(const InputManager& input);
-    void ProcessActionInput(const InputManager& input, World& world);;
+    // void ProcessActionInput(const InputManager& input, World& world);
 
     // Block interaction helpers
     // glm::ivec3 GetTargetBlock(const World& world) const;

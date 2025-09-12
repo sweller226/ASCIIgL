@@ -9,7 +9,7 @@ class Model
 {
 public:
     Model(std::string path);
-    Model(std::vector<VERTEX> vertices, std::vector<Texture*> textures);
+    Model(std::vector<VERTEX>&& vertices, Texture* texture);
     ~Model();
 
     // Move constructor and assignment for PIMPL

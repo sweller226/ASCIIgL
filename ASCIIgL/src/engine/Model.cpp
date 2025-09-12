@@ -1,10 +1,11 @@
 #include <ASCIIgL/engine/Model.hpp>
-#include <ASCIIgL/engine/Logger.hpp>
 
 #include <tinyobjloader/tiny_obj_loader.h>
 #include <iostream>
 #include <string>
 #include <set>
+
+#include <ASCIIgL/engine/Logger.hpp>
 
 // PIMPL Implementation class that contains all tinyobjloader-related code
 class Model::Impl
@@ -15,7 +16,7 @@ public:
 
     void loadModel(std::string path, std::vector<Mesh*>& meshes);
     Mesh* processMesh(const tinyobj::attrib_t& attrib, const tinyobj::shape_t& shape, const std::vector<tinyobj::material_t>& materials);
-    std::vector<Texture*> loadMaterialTextures(const tinyobj::material_t& material);
+    Texture* loadMaterialTextures(const tinyobj::material_t& material);
 };
 
 void Model::Impl::loadModel(std::string path, std::vector<Mesh*>& meshes)
@@ -59,7 +60,7 @@ void Model::Impl::loadModel(std::string path, std::vector<Mesh*>& meshes)
 Mesh* Model::Impl::processMesh(const tinyobj::attrib_t& attrib, const tinyobj::shape_t& shape, const std::vector<tinyobj::material_t>& materials)
 {
     std::vector<VERTEX> vertices;
-    std::vector<Texture*> textures;
+    Texture* texture = nullptr;
 
     // Collect unique material IDs for this shape
     std::set<int> uniqueMaterialIds;
@@ -73,8 +74,11 @@ Mesh* Model::Impl::processMesh(const tinyobj::attrib_t& attrib, const tinyobj::s
     for (int materialId : uniqueMaterialIds) {
         if (materialId < materials.size()) {
             const auto& material = materials[materialId];
-            std::vector<Texture*> materialTextures = loadMaterialTextures(material);
-            textures.insert(textures.end(), materialTextures.begin(), materialTextures.end());
+            Texture* materialTexture = loadMaterialTextures(material);
+            if (materialTexture != nullptr) {
+                texture = materialTexture;
+                break; // Only use the first diffuse texture found
+            }
         }
     }
 
@@ -124,16 +128,14 @@ Mesh* Model::Impl::processMesh(const tinyobj::attrib_t& attrib, const tinyobj::s
         index_offset += fv;
     }
 
-    return new Mesh(vertices, textures);
+    return new Mesh(std::move(vertices), texture);
 }
 
-std::vector<Texture*> Model::Impl::loadMaterialTextures(const tinyobj::material_t& material)
+Texture* Model::Impl::loadMaterialTextures(const tinyobj::material_t& material)
 {
-    std::vector<Texture*> textures;
+    Logger::Debug("Loading diffuse texture for material: " + material.name);
     
-    Logger::Debug("Loading textures for material: " + material.name);
-    
-    // Load diffuse texture
+    // Only load diffuse texture (meshes now support only one texture)
     if (!material.diffuse_texname.empty()) {
         std::string texturePath;
         if (material.diffuse_texname.find("res/") == 0 || material.diffuse_texname[0] == '/') {
@@ -146,76 +148,27 @@ std::vector<Texture*> Model::Impl::loadMaterialTextures(const tinyobj::material_
         Logger::Debug("Loading diffuse texture: " + texturePath);
         
         // Check if texture was loaded before
-        bool skip = false;
         for (unsigned int j = 0; j < textures_loaded.size(); j++) {
             if (textures_loaded[j]->GetFilePath() == texturePath) {
-                textures.push_back(textures_loaded[j]);
-                skip = true;
                 Logger::Debug("Reusing previously loaded texture: " + texturePath);
-                break;
+                return textures_loaded[j];
             }
         }
         
-        if (!skip) {
-            try {
-                Texture* texture = new Texture(texturePath, "texture_diffuse");
-                textures.push_back(texture);
-                textures_loaded.push_back(texture);
-                Logger::Info("Successfully loaded diffuse texture: " + texturePath);
-            } catch (const std::exception& e) {
-                Logger::Error("Failed to load diffuse texture: " + texturePath + " - " + e.what());
-            }
+        // Load new texture
+        try {
+            Texture* texture = new Texture(texturePath, "texture_diffuse");
+            textures_loaded.push_back(texture);
+            Logger::Info("Successfully loaded diffuse texture: " + texturePath);
+            return texture;
+        } catch (const std::exception& e) {
+            Logger::Error("Failed to load diffuse texture: " + texturePath + " - " + e.what());
         }
-    }
-    
-    // Load specular texture
-    if (!material.specular_texname.empty()) {
-        std::string texturePath;
-        if (material.specular_texname.find("res/") == 0 || material.specular_texname[0] == '/') {
-            // Already absolute path
-            texturePath = material.specular_texname;
-        } else {
-            // Relative path, prepend directory
-            texturePath = directory + "/" + material.specular_texname;
-        }
-        Logger::Debug("Loading specular texture: " + texturePath);
-        
-        // Check if texture was loaded before
-        bool skip = false;
-        for (unsigned int j = 0; j < textures_loaded.size(); j++) {
-            if (textures_loaded[j]->GetFilePath() == texturePath) {
-                textures.push_back(textures_loaded[j]);
-                skip = true;
-                Logger::Debug("Reusing previously loaded texture: " + texturePath);
-                break;
-            }
-        }
-        
-        if (!skip) {
-            try {
-                Texture* texture = new Texture(texturePath, "texture_specular");
-                textures.push_back(texture);
-                textures_loaded.push_back(texture);
-                Logger::Info("Successfully loaded specular texture: " + texturePath);
-            } catch (const std::exception& e) {
-                Logger::Error("Failed to load specular texture: " + texturePath + " - " + e.what());
-            }
-        }
+    } else {
+        Logger::Debug("No diffuse texture found for material: " + material.name);
     }
 
-    // Also check for other common texture types in tinyobj
-    if (!material.ambient_texname.empty()) {
-        std::string texturePath = material.ambient_texname;
-        Logger::Debug("Found ambient texture: " + texturePath);
-    }
-    
-    if (!material.normal_texname.empty()) {
-        std::string texturePath = material.normal_texname;
-        Logger::Debug("Found normal texture: " + texturePath);
-    }
-
-    Logger::Debug("Loaded " + std::to_string(textures.size()) + " textures for material: " + material.name);
-    return textures;
+    return nullptr;
 }
 
 // Model public interface implementation
@@ -224,9 +177,9 @@ Model::Model(std::string path) : pImpl(std::make_unique<Impl>())
     pImpl->loadModel(path, meshes);
 }
 
-Model::Model(std::vector<VERTEX> vertices, std::vector<Texture*> textures) : pImpl(std::make_unique<Impl>())
+Model::Model(std::vector<VERTEX>&& vertices, Texture* texture) : pImpl(std::make_unique<Impl>())
 {
-    meshes.push_back(new Mesh(vertices, textures));
+    meshes.push_back(new Mesh(std::move(vertices), texture));
 }
 
 Model::~Model() = default;

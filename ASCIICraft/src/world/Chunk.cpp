@@ -52,8 +52,7 @@ void Chunk::GenerateMesh() {
     }
     
     std::vector<VERTEX> vertices;
-    std::vector<Texture*> textures;
-    
+
     // Get the block texture atlas
     if (!Block::HasTextureAtlas()) {
         Logger::Warning("No texture atlas available for chunk mesh generation");
@@ -61,8 +60,7 @@ void Chunk::GenerateMesh() {
     }
     
     Texture* blockAtlas = Block::GetTextureAtlas();
-    textures.push_back(blockAtlas);
-    
+
     // Face normal vectors for cube faces
     const glm::vec3 faceNormals[6] = {
         glm::vec3(0, 1, 0),   // Top
@@ -189,7 +187,60 @@ void Chunk::GenerateMesh() {
     
     // Create the mesh
     if (!vertices.empty()) {
-        mesh = std::make_unique<Mesh>(std::move(vertices), std::move(textures));
+        Logger::Debug("Creating mesh with " + std::to_string(vertices.size()) + " vertices");
+        Logger::Debug("Block atlas texture info:");
+        if (blockAtlas) {
+            Logger::Debug("  Block atlas pointer: " + std::to_string(reinterpret_cast<uintptr_t>(blockAtlas)));
+            
+            Logger::Debug("  About to call blockAtlas->GetWidth()...");
+            int width = 0;
+            try {
+                width = blockAtlas->GetWidth();
+                Logger::Debug("  GetWidth() returned: " + std::to_string(width));
+            } catch (const std::exception& e) {
+                Logger::Error("  Exception in GetWidth(): " + std::string(e.what()));
+                mesh.reset();
+                hasMesh = false;
+                SetDirty(false);
+                return;
+            } catch (...) {
+                Logger::Error("  Unknown exception in GetWidth()!");
+                mesh.reset();
+                hasMesh = false;
+                SetDirty(false);
+                return;
+            }
+            
+            Logger::Debug("  About to call blockAtlas->GetHeight()...");
+            int height = 0;
+            try {
+                height = blockAtlas->GetHeight();
+                Logger::Debug("  GetHeight() returned: " + std::to_string(height));
+            } catch (const std::exception& e) {
+                Logger::Error("  Exception in GetHeight(): " + std::string(e.what()));
+                mesh.reset();
+                hasMesh = false;
+                SetDirty(false);
+                return;
+            } catch (...) {
+                Logger::Error("  Unknown exception in GetHeight()!");
+                mesh.reset();
+                hasMesh = false;
+                SetDirty(false);
+                return;
+            }
+            
+            Logger::Debug("  Block atlas dimensions: " + std::to_string(width) + "x" + std::to_string(height));
+        } else {
+            Logger::Error("  Block atlas is nullptr!");
+            mesh.reset();
+            hasMesh = false;
+            SetDirty(false);
+            return;
+        }
+        
+        mesh = std::make_unique<Mesh>(std::move(vertices), blockAtlas);
+        Logger::Debug("Mesh created successfully");
         hasMesh = true;
     } else {
         mesh.reset();
@@ -234,9 +285,19 @@ int Chunk::GetBlockIndex(int x, int y, int z) const {
 }
 
 void Chunk::Render(VERTEX_SHADER& vertex_shader, const Camera3D& camera) {
-    if (!HasMesh() || !mesh) {
+    // Generate mesh if needed (lazy generation)
+    if (generated && !HasMesh() && dirty) {
+        GenerateMesh();
+    }
+    
+    if (!this->HasMesh() || !this->mesh) {
         return; // No mesh to render
     }
 
-    Renderer::DrawMesh(vertex_shader, mesh.get(), camera);
+    // Check if mesh has valid texture before rendering
+    if (this->mesh->texture) {
+        Renderer::DrawMesh(vertex_shader, this->mesh.get(), camera);
+    } else {
+        Logger::Warning("Chunk mesh has no texture - skipping render");
+    }
 }

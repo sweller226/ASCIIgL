@@ -60,6 +60,9 @@ struct KeyBinding {
     std::string action;
     bool isToggle;
     
+    // Default constructor for std::unordered_map
+    KeyBinding() : key(Key::NONE), action(""), isToggle(false) {}
+    
     KeyBinding(Key k, const std::string& a, bool toggle = false) 
         : key(k), action(a), isToggle(toggle) {}
 };

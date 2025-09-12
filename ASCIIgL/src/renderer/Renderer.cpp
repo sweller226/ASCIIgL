@@ -16,26 +16,25 @@
 // =============================================================================
 
 void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh) {
-    // Find the first diffuse texture
-    for (int i = 0; i < mesh->textures.size(); i++) {
-        if (mesh->textures[i]->texType == "texture_diffuse") {
-            RenderTriangles(VSHADER, mesh->vertices, mesh->textures[i]);
-            break;
-        }
+    if (mesh->texture) {
+        RenderTriangles(VSHADER, mesh->vertices, mesh->texture);
     }
 }
 
 void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const Camera3D& camera) {
+    if (!mesh) {
+        Logger::Error("DrawMesh: mesh is nullptr!");
+        return;
+    }
+    
     VSHADER.SetView(camera.view);
     VSHADER.SetProj(camera.proj);
     VSHADER.UpdateMVP();
 
-    // Find the first diffuse texture
-    for (int i = 0; i < mesh->textures.size(); i++) {
-        if (mesh->textures[i]->texType == "texture_diffuse") {
-            RenderTriangles(VSHADER, mesh->vertices, mesh->textures[i]);
-            break;
-        }
+    if (mesh->texture) {
+        RenderTriangles(VSHADER, mesh->vertices, mesh->texture);
+    } else {
+        Logger::Warning("DrawMesh: mesh texture is null");
     }
 }
 
@@ -47,11 +46,8 @@ void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec
     VSHADER.SetProj(camera.proj);
     VSHADER.UpdateMVP();
 
-    for (int i = 0; i < mesh->textures.size(); i++) {
-        if (mesh->textures[i]->texType == "texture_diffuse") {
-            RenderTriangles(VSHADER, mesh->vertices, mesh->textures[i]);
-            break;
-        }
+    if (mesh->texture) {
+        RenderTriangles(VSHADER, mesh->vertices, mesh->texture);
     }
 }
 
@@ -148,6 +144,38 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
         return;
     }
 
+    // Validate texture integrity if provided
+    if (tex != nullptr) {
+        try {
+            // Test basic texture properties
+            int width = tex->GetWidth();
+            int height = tex->GetHeight();
+            
+            // Check for invalid dimensions
+            if (width <= 0 || height <= 0) {
+                Logger::Error("RenderTriangles: Invalid texture dimensions - Width: " + std::to_string(width) + ", Height: " + std::to_string(height));
+                return;
+            }
+            
+            // Check for reasonable size limits (prevent corrupted textures with massive dimensions)
+            if (width > 4096 || height > 4096) {
+                Logger::Error("RenderTriangles: Texture dimensions too large - Width: " + std::to_string(width) + ", Height: " + std::to_string(height));
+                return;
+            }
+            
+            // Test if we can safely access texture data by sampling a corner pixel
+            glm::vec3 testPixel = tex->GetPixelRGB(0.0f, 0.0f);
+            // If we reach here, the texture appears to be valid
+            
+        } catch (const std::exception& e) {
+            Logger::Error("RenderTriangles: Exception during texture validation - " + std::string(e.what()));
+            return;
+        } catch (...) {
+            Logger::Error("RenderTriangles: Unknown exception during texture validation");
+            return;
+        }
+    }
+
     // Optimize: Use pre-allocated buffers instead of creating new vectors each frame
     _vertexBuffer.clear();
     _vertexBuffer.reserve(vertices.size()); // Reserve to avoid reallocations
@@ -174,7 +202,6 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
         _rasterBuffer = std::move(_clippedBuffer); // Move semantics to avoid copy
     }
 
-    // Optimize: Initialize tiles only once, then reuse the structure
     if (!_tilesInitialized) {
         InitializeTiles();
         _tilesInitialized = true;
@@ -184,7 +211,6 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
 
     BinTrianglesToTiles(_rasterBuffer);
 
-    // Parallel tile rendering (already optimized)
     std::for_each(std::execution::par, _tileBuffer.begin(), _tileBuffer.end(), [&](Tile& tile) {
         if (_wireframe || tex == nullptr) {
             DrawTileWireframe(tile, _rasterBuffer);
@@ -341,7 +367,6 @@ bool Renderer::DoesTileEncapsulate(const Tile& tile, const VERTEX& v1, const VER
 }
 
 void Renderer::DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& raster_triangles, const Texture* tex) {
-    // Optimize: Separate loops by antialiasing mode to reduce branch prediction misses
     if (_antialiasing) {
         // Antialiased path - process all encapsulated triangles first
         for (int triIndex : tile.tri_indices_encapsulated) {
@@ -654,9 +679,22 @@ void Renderer::DrawTriangleWireframePartial(const Tile& tile, const VERTEX& vert
 }
 
 void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex) {
-    int texWidth = tex->GetWidth();
-    int texHeight = tex->GetHeight();
+    if (!tex) {
+        Logger::Error("  Texture is nullptr!");
+        return;
+    }
+    
+    int texWidth, texHeight;
+    try {
+        texWidth = tex->GetWidth();
+        texHeight = tex->GetHeight();
+    } catch (...) {
+        Logger::Error("  Exception caught when accessing texture methods!");
+        return;
+    }
+    
     if (texWidth == 0 || texHeight == 0) {
+        Logger::Error("  Invalid texture dimensions!");
         return;
     }
 
@@ -671,6 +709,10 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
     maxX = std::min((int)Screen::GetInstance().GetVisibleWidth() - 1, maxX);
     minY = std::max(0, minY);
     maxY = std::min((int)Screen::GetInstance().GetHeight() - 1, maxY);
+    
+    if (minX >= maxX || minY >= maxY) {
+        return;
+    }
 
     // Pre-compute triangle vertex positions and edge deltas (moved outside loops)
     const float ax = vert1.X(), ay = vert1.Y();
@@ -684,7 +726,9 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
     
     // Pre-compute triangle area and inverse (for barycentric coordinates)
     const float totalArea = abs((bx - ax) * (cy - ay) - (cx - ax) * (by - ay));
-    if (totalArea <= 1e-7f) return; // Degenerate triangle
+    if (totalArea <= 1e-7f) {
+        return; // Degenerate triangle
+    }
     const float invTotalArea = 1.0f / totalArea;
     
     // Pre-compute vertex attributes
@@ -696,6 +740,11 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
     auto& screen = Screen::GetInstance();
     const int screenWidth = screen.GetVisibleWidth();
     float* depthBuffer = screen.GetDepthBuffer();
+    
+    if (!depthBuffer) {
+        Logger::Error("  Depth buffer is nullptr!");
+        return;
+    }
     
     // Get dynamic sub-pixel sampling pattern for anti-aliasing
     const auto subPixelOffsets = GenerateSubPixelOffsets(_antialiasing_samples);
@@ -737,6 +786,14 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
                     
                     // Interpolate depth and texture coordinates
                     const float tex_w = bw1 * vert1_uvw + bw2 * vert2_uvw + bw3 * vert3_uvw;
+                    
+                    if (tex_w <= 0.0f) {
+                        if (x == minX && y == minY && i == 0) {
+                            Logger::Warning("        tex_w is <= 0: " + std::to_string(tex_w));
+                        }
+                        continue;
+                    }
+                    
                     const float invTexW = 1.0f / tex_w;
                     const float tex_uw = (bw1 * vert1_u + bw2 * vert2_u + bw3 * vert3_u) * invTexW;
                     const float tex_vw = (bw1 * vert1_v + bw2 * vert2_v + bw3 * vert3_v) * invTexW;
@@ -766,6 +823,12 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
                 const float averageDepth = totalDepth * invValidSamples;
                 
                 const int bufferIndex = bufferRowOffset + x;
+                
+                if (bufferIndex >= screenWidth * Screen::GetInstance().GetHeight()) {
+                    Logger::Error("        Buffer index out of bounds! Index: " + std::to_string(bufferIndex) + ", max: " + std::to_string(screenWidth * Screen::GetInstance().GetHeight() - 1));
+                    continue;
+                }
+                
                 if (averageDepth > depthBuffer[bufferIndex]) {
                     if (_grayscale) {
                         const float averageTriangleGrayScale = triangleTotalGrayScale * invValidSamples;

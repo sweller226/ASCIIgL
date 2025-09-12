@@ -14,7 +14,6 @@ int main() {
     try {
         // Create and run the game
         Game game;
-        game.Initialize();
         game.Run();
         game.Shutdown();
     }
