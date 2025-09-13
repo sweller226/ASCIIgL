@@ -8,7 +8,7 @@ class Enemy: public GameObj // this class represents enemies and inherits
 private:
 	
 public:
-	glm::vec2 rotation = glm::vec2(0, 0); // default rotation doesn't matter, as all enemies will be billboard enemies (face camera)
+	glm::vec3 rotation = glm::vec3(0, 0, 0); // default rotation doesn't matter, as all enemies will be billboard enemies (face camera)
 
 	enum MODES // different modes for the mariah carey ai
 	{

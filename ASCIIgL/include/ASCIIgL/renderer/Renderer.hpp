@@ -99,12 +99,12 @@ public:
     }
     
     static void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh);
-    static void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec3 position, const glm::vec2 rotation, const glm::vec3 size, const Camera3D& camera);
+    static void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec3 position, const glm::vec3 rotation, const glm::vec3 size, const Camera3D& camera);
     static void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const Camera3D& camera);
-    static void DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::vec3 position, const glm::vec2 rotation, const glm::vec3 size, const Camera3D& camera);
+    static void DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::vec3 position, const glm::vec3 rotation, const glm::vec3 size, const Camera3D& camera);
     static void DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::mat4 model, const Camera3D& camera);
-    static void Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 position, const glm::vec2 rotation, const glm::vec2 size, const Camera2D& camera, int layer);
-    static void Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 positionPerc, const glm::vec2 rotation, const glm::vec2 sizePerc, const Camera2D& camera, int layer);
+    static void Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 position, const float rotation, const glm::vec2 size, const Camera2D& camera, int layer);
+    static void Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 positionPerc, const float rotation, const glm::vec2 sizePerc, const Camera2D& camera, int layer);
     static void DrawScreenBorder(short col);
     
     static void RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex);
@@ -114,7 +114,9 @@ public:
     static void DrawTriangleWireframe(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, CHAR pixel_type, short col);
     static void DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
 
-    static glm::mat4 CalcModelMatrix(const glm::vec3 position, const glm::vec2 rotation, const glm::vec3 size);
+    static glm::mat4 CalcModelMatrix(const glm::vec3 position, const glm::vec3 rotation, const glm::vec3 size);
+    static glm::mat4 CalcModelMatrix(const glm::vec3 position, const float rotation, const glm::vec3 size);
+
     static float GrayScaleRGB(const glm::vec3 rgb);
     static CHAR_INFO GetColGlyphGreyScale(const float grayscale);
     static CHAR_INFO GetColGlyph(const glm::vec3 rgb);

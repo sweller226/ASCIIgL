@@ -26,10 +26,8 @@ void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const Camera3D
         Logger::Error("DrawMesh: mesh is nullptr!");
         return;
     }
-    
-    VSHADER.SetView(camera.view);
-    VSHADER.SetProj(camera.proj);
-    VSHADER.UpdateMVP();
+
+    VSHADER.SetMatrices(glm::mat4(1.0f), camera.view, camera.proj);
 
     if (mesh->texture) {
         RenderTriangles(VSHADER, mesh->vertices, mesh->texture);
@@ -38,13 +36,10 @@ void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const Camera3D
     }
 }
 
-void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec3 position, const glm::vec2 rotation, const glm::vec3 size, const Camera3D& camera) {
+void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec3 position, const glm::vec3 rotation, const glm::vec3 size, const Camera3D& camera) {
     glm::mat4 model = CalcModelMatrix(position, rotation, size);
 
-    VSHADER.SetModel(model);
-    VSHADER.SetView(camera.view);
-    VSHADER.SetProj(camera.proj);
-    VSHADER.UpdateMVP();
+    VSHADER.SetMatrices(model, camera.view, camera.proj);
 
     if (mesh->texture) {
         RenderTriangles(VSHADER, mesh->vertices, mesh->texture);
@@ -53,13 +48,10 @@ void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec
 
 
 
-void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::vec3 position, const glm::vec2 rotation, const glm::vec3 size, const Camera3D& camera) {
+void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::vec3 position, const glm::vec3 rotation, const glm::vec3 size, const Camera3D& camera) {
     glm::mat4 model = CalcModelMatrix(position, rotation, size);
 
-    VSHADER.SetModel(model);
-    VSHADER.SetView(camera.view);
-    VSHADER.SetProj(camera.proj);
-    VSHADER.UpdateMVP();
+    VSHADER.SetMatrices(model, camera.view, camera.proj);
 
     for (size_t i = 0; i < ModelObj.meshes.size(); i++) {
         DrawMesh(VSHADER, ModelObj.meshes[i]);
@@ -68,24 +60,18 @@ void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const gl
 
 void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::mat4 model, const Camera3D& camera)
 {
-    VSHADER.SetModel(model);
-    VSHADER.SetView(camera.view);
-    VSHADER.SetProj(camera.proj);
-    VSHADER.UpdateMVP();
+    VSHADER.SetMatrices(model, camera.view, camera.proj);
 
     for (size_t i = 0; i < ModelObj.meshes.size(); i++) {
         DrawMesh(VSHADER, ModelObj.meshes[i]);
     }
 }
 
-void Renderer::Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 position, const glm::vec2 rotation, const glm::vec2 size, const Camera2D& camera, int layer)
+void Renderer::Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 position, const float rotation, const glm::vec2 size, const Camera2D& camera, int layer)
 {
     glm::mat4 model = CalcModelMatrix(glm::vec3(position, layer), rotation, glm::vec3(size, 0.0f));
 
-    VSHADER.SetModel(model);
-    VSHADER.SetView(camera.view);
-    VSHADER.SetProj(camera.proj);
-    VSHADER.UpdateMVP();
+    VSHADER.SetMatrices(model, camera.view, camera.proj);
 
     std::vector<VERTEX> vertices = {
         VERTEX({ -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f}), // bottom-left
@@ -99,7 +85,7 @@ void Renderer::Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, 
     Renderer::RenderTriangles(VSHADER, vertices, &tex);
 }
 
-void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 positionPerc, const glm::vec2 rotation, const glm::vec2 sizePerc, const Camera2D& camera, int layer)
+void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 positionPerc, const float rotation, const glm::vec2 sizePerc, const Camera2D& camera, int layer)
 {
     // Convert percentage coordinates to pixel coordinates
     float screenWidth = static_cast<float>(Screen::GetInstance().GetVisibleWidth());
@@ -1018,7 +1004,13 @@ void Renderer::DrawTriangleWireframe(const VERTEX& vert1, const VERTEX& vert2, c
 
 void Renderer::ViewPortTransform(VERTEX& vertice) {
 	// transforms vertice from [-1 to 1] to [0 to scr_dim]
-	glm::vec4 newPos = glm::vec4(((vertice.X() + 1.0f) / 2.0f) * Screen::GetInstance().GetVisibleWidth(), ((vertice.Y() + 1.0f) / 2.0f) * Screen::GetInstance().GetHeight(), vertice.Z(), vertice.W());
+	// Flip Y to match screen coordinates where Y=0 is at top
+	glm::vec4 newPos = glm::vec4(
+		((vertice.X() + 1.0f) / 2.0f) * Screen::GetInstance().GetVisibleWidth(), 
+		((1.0f - vertice.Y()) / 2.0f) * Screen::GetInstance().GetHeight(),  // Flipped Y
+		vertice.Z(), 
+		vertice.W()
+	);
 	vertice.SetXYZW(newPos);
 }
 
@@ -1159,12 +1151,24 @@ VERTEX Renderer::HomogenousPlaneIntersect(const VERTEX& vert2, const VERTEX& ver
 // UTILITY FUNCTIONS
 // =============================================================================
 
-glm::mat4 Renderer::CalcModelMatrix(const glm::vec3 position, const glm::vec2 rotation, const glm::vec3 size) {
+glm::mat4 Renderer::CalcModelMatrix(const glm::vec3 position, const glm::vec3 rotation, const glm::vec3 size) {
 	// this function just saves lines as this needs to be calculated alot
 	glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
 	model = glm::translate(model, glm::vec3(-0.5f * size.x, -0.5f * size.y, -0.5f * size.z));
-	model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(0.0f, 1.0f, 0.0f));
-	model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0.0f, 0.0f, 1.0f));
+	model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f)); // Pitch (X-axis)
+	model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f)); // Yaw (Y-axis)
+	model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f)); // Roll (Z-axis)
+	model = glm::translate(model, glm::vec3(0.5f * size.x, 0.5f * size.y, 0.5f * size.z));
+	model = glm::scale(model, size);
+
+	return model;
+}
+
+glm::mat4 Renderer::CalcModelMatrix(const glm::vec3 position, const float rotation, const glm::vec3 size) {
+	// this function just saves lines as this needs to be calculated alot
+	glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
+	model = glm::translate(model, glm::vec3(-0.5f * size.x, -0.5f * size.y, -0.5f * size.z));
+	model = glm::rotate(model, glm::radians(rotation), glm::vec3(0.0f, 0.0f, 1.0f)); // Roll (Z-axis)
 	model = glm::translate(model, glm::vec3(0.5f * size.x, 0.5f * size.y, 0.5f * size.z));
 	model = glm::scale(model, size);
 

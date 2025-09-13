@@ -37,6 +37,11 @@ public:
 	glm::vec3 getCamRight() const;
 	glm::vec3 getCamLeft() const;
 
+	glm::vec3 getCamFrontNoY() const;
+	glm::vec3 getCamBackNoY() const;
+	glm::vec3 getCamRightNoY() const;
+	glm::vec3 getCamLeftNoY() const;
+
 	void setCamPos(glm::vec3 Pposition);
 	void setCamDir(float Pyaw, float Ppitch, float Ppitch_clamp = 90.0f, bool Penable_pitch_clamping = true); // this sets the camera dir using angles (not vectors)
 	void setCamDir(glm::vec3 dir);

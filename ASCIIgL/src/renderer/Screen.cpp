@@ -486,35 +486,28 @@ void Screen::EndFPSSample() {
     endTimeFps = std::chrono::system_clock::now();
     std::chrono::duration<float> deltaTimeTemp = endTimeFps - startTimeFps;
     _deltaTime = deltaTimeTemp.count();
-    Logger::Debug("Frame _deltaTime: " + std::to_string(_deltaTime));
 }
 
 void Screen::CapFPS() {
-    Logger::Debug("CapFPS called. _deltaTime: " + std::to_string(_deltaTime) + ", _fpsCap: " + std::to_string(_fpsCap));
     const float inverseFrameCap = (1.0f / _fpsCap);
 
     if (_deltaTime < inverseFrameCap) {
-        Logger::Debug("Sleeping for " + std::to_string(inverseFrameCap - _deltaTime) + " seconds to cap FPS.");
         std::this_thread::sleep_for(std::chrono::duration<double>(inverseFrameCap - _deltaTime));
         _deltaTime = inverseFrameCap; // Ensure _deltaTime is at least the frame cap
     }
 }
 
 void Screen::FPSSampleCalculate(const double currentDeltaTime) {
-    Logger::Debug("FPSSampleCalculate called. Current _deltaTime: " + std::to_string(currentDeltaTime));
     _frameTimes.push_back(currentDeltaTime);
     _currDeltaSum += currentDeltaTime;
-    Logger::Debug("_frameTimes size after push: " + std::to_string(_frameTimes.size()));
 
     while (!_frameTimes.empty() && _currDeltaSum > _fpsWindowSec) {
         const double popped_front = _frameTimes.front();
         _frameTimes.pop_front();
         _currDeltaSum -= popped_front;
-        Logger::Debug("_frameTimes popped. New size: " + std::to_string(_frameTimes.size()));
     }
 
     double calculatedFps = _frameTimes.size() * (1 / _currDeltaSum);
-    Logger::Debug("Calculated FPS: " + std::to_string(calculatedFps));
     _fps = calculatedFps;
 }
 

@@ -32,9 +32,16 @@ typedef struct Vertex_Shader {
     const glm::mat4& GetMVP()   const { return GLmvp; }
 
     // Setters
-    void SetModel(const glm::mat4& model) { GLmodel = model; }
-    void SetView(const glm::mat4& view)   { GLview  = view; }
-    void SetProj(const glm::mat4& proj)   { GLproj  = proj; }
+    void SetModel(const glm::mat4& model) { GLmodel = model; UpdateMVP(); }
+    void SetView(const glm::mat4& view)   { GLview  = view;  UpdateMVP(); }
+    void SetProj(const glm::mat4& proj)   { GLproj  = proj;  UpdateMVP(); }
+
+    void SetMatrices(const glm::mat4& model, const glm::mat4& view, const glm::mat4& proj) {
+        GLmodel = model;
+        GLview  = view;
+        GLproj  = proj;
+        UpdateMVP();
+    }
 
     // Original single vertex transformation (SIMD-optimized by GLM)
     void GLUse(VERTEX& vertice) const {

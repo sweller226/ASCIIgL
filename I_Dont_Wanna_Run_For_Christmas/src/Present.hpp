@@ -12,7 +12,7 @@ private:
 public:
 	bool collected = false;
 
-	glm::vec2 rotation = glm::vec2(0, 0);
+	glm::vec3 rotation = glm::vec3(0, 0, 0);
 
 	Present(glm::vec3 pos, glm::vec3 size, Model* model)
 		: GameObj(pos, rotation, size, model)

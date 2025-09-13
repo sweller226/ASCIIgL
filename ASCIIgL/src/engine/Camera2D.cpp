@@ -20,7 +20,7 @@ void Camera2D::setCamPos(glm::vec2 Pposition)
 
 void Camera2D::recalculateViewMat()
 {
-	view = glm::translate(glm::mat4(1.0f), glm::vec3(-position, 0.0f)); // creating a new 
+	view = glm::translate(glm::mat4(1.0f), glm::vec3(-position, 0.0f));
 }
 
 void Camera2D::setScreenDimensions(unsigned int width, unsigned int height)
@@ -32,5 +32,5 @@ void Camera2D::setScreenDimensions(unsigned int width, unsigned int height)
 
 void Camera2D::recalculateProjMat()
 {
-	proj = glm::ortho(0.0f, (float)screenWidth, 0.0f, (float)screenHeight, -100.0f, 100.0f);
+	proj = glm::ortho(0.0f, (float)screenWidth, (float)screenHeight, 0.0f, -100.0f, 100.0f);
 }

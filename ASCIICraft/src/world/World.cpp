@@ -6,20 +6,21 @@
 
 #include <ASCIIgL/engine/Logger.hpp>
 
-// Static member definition
+// Static member definition - ordered to match face indices in Chunk::GenerateMesh()
 const ChunkCoord World::NEIGHBOR_OFFSETS[6] = {
-    ChunkCoord(1, 0, 0),   // NEIGHBOR_POS_X
-    ChunkCoord(-1, 0, 0),  // NEIGHBOR_NEG_X
-    ChunkCoord(0, 1, 0),   // NEIGHBOR_POS_Y
-    ChunkCoord(0, -1, 0),  // NEIGHBOR_NEG_Y
-    ChunkCoord(0, 0, 1),   // NEIGHBOR_POS_Z
-    ChunkCoord(0, 0, -1)   // NEIGHBOR_NEG_Z
+    ChunkCoord(0, 1, 0),   // Face 0: Top (Y+)
+    ChunkCoord(0, -1, 0),  // Face 1: Bottom (Y-)
+    ChunkCoord(0, 0, 1),   // Face 2: North (Z+)
+    ChunkCoord(0, 0, -1),  // Face 3: South (Z-)
+    ChunkCoord(1, 0, 0),   // Face 4: East (X+)
+    ChunkCoord(-1, 0, 0)   // Face 5: West (X-)
 };
 
-World::World(unsigned int renderDistance, const WorldPos& spawnPoint) 
+World::World(unsigned int renderDistance, const WorldPos& spawnPoint, unsigned int maxWorldChunkRadius) 
     : renderDistance(renderDistance)
     , spawnPoint(spawnPoint)
-    , player(nullptr) {
+    , player(nullptr)
+    , maxWorldChunkRadius(maxWorldChunkRadius) {
     Logger::Info("World created");
 }
 
@@ -45,12 +46,8 @@ void World::Render() {
 
     glm::vec3 playerPos = player->GetPosition();
     glm::vec3 viewDir = player->GetCamera().getCamFront();
-    
-    Logger::Debug("World::Render - Player position: (" + std::to_string(playerPos.x) + ", " + 
-                  std::to_string(playerPos.y) + ", " + std::to_string(playerPos.z) + ")");
 
     std::vector<Chunk*> visibleChunks = GetVisibleChunks(playerPos, viewDir);
-    Logger::Debug("World::Render - Found " + std::to_string(visibleChunks.size()) + " visible chunks");
     
     int renderedChunks = 0;
     for (Chunk* chunk : visibleChunks) {
@@ -59,15 +56,16 @@ void World::Render() {
             renderedChunks++;
         }
     }
-    
-    Logger::Debug("World::Render - Rendered " + std::to_string(renderedChunks) + " chunks with meshes");
 }
 
 void World::GenerateWorld() {
-    // Generate chunks in the surrounding area (cubic)
-    for (int x = -renderDistance; x <= renderDistance; ++x) {
-        for (int y = -renderDistance; y <= renderDistance; ++y) {  // Now includes Y-axis
-            for (int z = -renderDistance; z <= renderDistance; ++z) {
+    // Generate chunks in the surrounding area (cubic) within world limits
+    // Cast to signed int to avoid unsigned wraparound issues
+    int signedRenderDistance = static_cast<int>(renderDistance);
+    
+    for (int x = -signedRenderDistance; x <= signedRenderDistance; ++x) {
+        for (int y = -signedRenderDistance; y <= signedRenderDistance; ++y) {  // Now includes Y-axis
+            for (int z = -signedRenderDistance; z <= signedRenderDistance; ++z) {
                 ChunkCoord chunkCoord(x, y, z);  // Full 3D chunk generation
                 GetOrCreateChunk(chunkCoord);
             }
@@ -173,6 +171,12 @@ void World::UpdateChunkLoading() {
     
     // Get chunks that should be loaded
     std::vector<ChunkCoord> chunksToLoad = GetChunksInRadius(playerChunk, renderDistance);
+
+    // Filter chunks based on world limits
+    chunksToLoad.erase(std::remove_if(chunksToLoad.begin(), chunksToLoad.end(),
+        [this](const ChunkCoord& coord) {
+            return IsChunkOutsideWorld(coord);
+        }), chunksToLoad.end());
     
     // Load new chunks
     for (const ChunkCoord& coord : chunksToLoad) {
@@ -210,7 +214,7 @@ void World::GenerateEmptyChunk(const ChunkCoord& coord) {
             // Generate grass layer at y=0 chunks
             for (int x = 0; x < Chunk::SIZE; ++x) {
                 for (int z = 0; z < Chunk::SIZE; ++z) {
-                    chunk->SetBlock(x, 0, z, Block(BlockType::Grass));
+                    chunk->SetBlock(x, 0, z, Block(BlockType::Wood));
                 }
             }
         }
@@ -304,6 +308,24 @@ void World::UpdateChunkNeighbors(const ChunkCoord& coord) {
             neighborChunk->SetNeighbor(reverseDir, chunk);
         }
     }
+    
+    // Also update all existing neighbors to point back to this new chunk
+    for (int i = 0; i < 6; ++i) {
+        ChunkCoord neighborCoord = coord + NEIGHBOR_OFFSETS[i];
+        Chunk* neighborChunk = GetChunk(neighborCoord);
+        if (neighborChunk) {
+            // Update the neighbor's neighbor pointers to include this chunk
+            int reverseDir = (i % 2 == 0) ? i + 1 : i - 1; // Flip direction
+            neighborChunk->SetNeighbor(reverseDir, chunk);
+            
+            // Also update the neighbor's other neighbors in case they weren't set before
+            for (int j = 0; j < 6; ++j) {
+                ChunkCoord neighborNeighborCoord = neighborCoord + NEIGHBOR_OFFSETS[j];
+                Chunk* neighborNeighborChunk = GetChunk(neighborNeighborCoord);
+                neighborChunk->SetNeighbor(j, neighborNeighborChunk);
+            }
+        }
+    }
 }
 
 ChunkCoord World::WorldPosToChunkCoord(const WorldPos& pos) const {
@@ -319,7 +341,7 @@ glm::ivec3 World::WorldPosToLocalChunkPos(const WorldPos& pos) const {
     );
 }
 
-std::vector<ChunkCoord> World::GetChunksInRadius(const ChunkCoord& center, int radius) const {
+std::vector<ChunkCoord> World::GetChunksInRadius(const ChunkCoord& center, unsigned int radius) const {
     std::vector<ChunkCoord> chunks;
     
     for (int x = center.x - radius; x <= center.x + radius; ++x) {
@@ -341,4 +363,13 @@ std::vector<ChunkCoord> World::GetChunksInRadius(const ChunkCoord& center, int r
     }
     
     return chunks;
+}
+
+bool World::IsChunkOutsideWorld(const ChunkCoord& coord) const {
+    // Calculate distance from world origin (0, 0, 0)
+    int dx = std::abs(coord.x);
+    int dy = std::abs(coord.y);
+    int dz = std::abs(coord.z);
+    int distanceFromOrigin = std::max({dx, dy, dz});
+    return distanceFromOrigin > maxWorldChunkRadius;
 }

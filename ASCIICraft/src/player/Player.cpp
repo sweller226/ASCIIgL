@@ -1,9 +1,11 @@
 #include <ASCIICraft/player/Player.hpp>
-#include <ASCIIgL/engine/Logger.hpp>
+
 #include <algorithm>
 #include <cmath>
 
-Player::Player(const glm::vec3& startPosition)
+#include <ASCIIgL/engine/Logger.hpp>
+
+Player::Player(const glm::vec3& startPosition, GameMode mode)
     : position(startPosition)
     , velocity(0.0f)
     , camera(startPosition + glm::vec3(0.0f, PLAYER_EYE_HEIGHT, 0.0f), 70.0f, 16.0f/9.0f, glm::vec2(0.0f, 0.0f), 0.1f, 1000.0f)
@@ -14,10 +16,10 @@ Player::Player(const glm::vec3& startPosition)
     , jumpHeight(DEFAULT_JUMP_HEIGHT)
     , gravity(DEFAULT_GRAVITY)
     , reach(DEFAULT_REACH)
-    , gameMode(GameMode::Creative)
+    , gameMode(mode)
     , movementState(MovementState::Walking)
     , onGround(false)
-    , flying(true) // Start flying in creative mode
+    , flying(false) // Start on ground in survival mode
     , sprinting(false)
     , sneaking(false)
     , jumpPressed(false)
@@ -61,10 +63,7 @@ void Player::HandleInput(const InputManager& input) {
 void Player::UpdateCamera() {
     // Update camera position to player eye position
     glm::vec3 eyePosition = position + eyeOffset;
-    camera.setCamPos(eyePosition);
-    
-    // Recalculate view matrix
-    camera.recalculateViewMat();
+    camera.setCamPos(eyePosition);;
 }
 
 void Player::Move(const glm::vec3& direction) {
@@ -89,10 +88,11 @@ void Player::Move(const glm::vec3& direction) {
     // Apply movement
     glm::vec3 movement = direction * currentSpeed * Screen::GetInstance().GetDeltaTime();
     
-    if (flying || gameMode == GameMode::Creative) {
-        // Free flight movement
+    if (flying || gameMode == GameMode::Spectator) {
+        // Free flight movement (spectator noclip)
         position += movement;
     } else {
+        // Ground-based movement for survival
         position.x += movement.x;
         position.z += movement.z;
         position.y += movement.y;
@@ -111,11 +111,6 @@ void Player::RecalculateCameraPosition() {
 void Player::SetPosition(const glm::vec3& pos) {
     position = pos;
     UpdateCamera();
-    
-    Logger::Debug("Player position set to (" + 
-                  std::to_string(position.x) + ", " + 
-                  std::to_string(position.y) + ", " + 
-                  std::to_string(position.z) + ")");
 }
 
 void Player::SetGameMode(GameMode mode) {
@@ -123,16 +118,12 @@ void Player::SetGameMode(GameMode mode) {
     
     // Update movement capabilities based on game mode
     switch (mode) {
-        case GameMode::Creative:
-            flying = true;
-            movementState = MovementState::Flying;
-            break;
         case GameMode::Survival:
             flying = false;
             movementState = MovementState::Walking;
             break;
         case GameMode::Spectator:
-            flying = true;
+            flying = true;  // Enable noclip for spectator mode
             movementState = MovementState::Flying;
             break;
     }
@@ -145,8 +136,8 @@ void Player::Respawn(const glm::vec3& spawnPosition) {
     velocity = glm::vec3(0.0f);
     
     // Reset player state
-    movementState = (gameMode == GameMode::Creative) ? MovementState::Flying : MovementState::Walking;
-    flying = (gameMode == GameMode::Creative || gameMode == GameMode::Spectator);
+    movementState = (gameMode == GameMode::Spectator) ? MovementState::Flying : MovementState::Walking;
+    flying = (gameMode == GameMode::Spectator);
     onGround = false;
     sprinting = false;
     sneaking = false;
@@ -179,10 +170,10 @@ void Player::UpdateMovementState() {
 
 void Player::ProcessMovementInput(const InputManager& input) {
     glm::vec3 moveDirection(0.0f);
-    
+
     // Get camera directions for movement
-    glm::vec3 forward = camera.getCamFront();
-    glm::vec3 right = camera.getCamRight();
+    glm::vec3 forward = camera.getCamFrontNoY();
+    glm::vec3 right = camera.getCamRightNoY();
     
     // Normalize forward and right for horizontal movement
     if (!flying) {
@@ -193,25 +184,25 @@ void Player::ProcessMovementInput(const InputManager& input) {
     }
     
     // Process WASD movement
-    if (input.IsActionPressed("move_forward")) {
+    if (input.IsActionHeld("move_forward")) {
         moveDirection += forward;
     }
-    if (input.IsActionPressed("move_backward")) {
+    if (input.IsActionHeld("move_backward")) {
         moveDirection -= forward;
     }
-    if (input.IsActionPressed("move_left")) {
+    if (input.IsActionHeld("move_left")) {
         moveDirection -= right;
     }
-    if (input.IsActionPressed("move_right")) {
+    if (input.IsActionHeld("move_right")) {
         moveDirection += right;
     }
     
-    // Process vertical movement for flying
-    if (flying || gameMode == GameMode::Creative) {
-        if (input.IsActionPressed("jump")) {
+    // Process vertical movement for spectator mode (noclip)
+    if (flying || gameMode == GameMode::Spectator) {
+        if (input.IsActionHeld("jump")) {
             moveDirection.y += 1.0f;
         }
-        if (input.IsActionPressed("sneak")) {
+        if (input.IsActionHeld("sneak")) {
             moveDirection.y -= 1.0f;
         }
     }
@@ -234,16 +225,16 @@ void Player::ProcessCameraInput(const InputManager& input) {
     float pitchDelta = 0.0f;
     
     // Arrow keys for camera rotation
-    if (input.IsActionPressed("camera_left")) {
+    if (input.IsActionHeld("camera_left")) {
         yawDelta -= input.GetMouseSensitivity() * Screen::GetInstance().GetDeltaTime();
     }
-    if (input.IsActionPressed("camera_right")) {
+    if (input.IsActionHeld("camera_right")) {
         yawDelta += input.GetMouseSensitivity() * Screen::GetInstance().GetDeltaTime();
     }
-    if (input.IsActionPressed("camera_up")) {
+    if (input.IsActionHeld("camera_up")) {
         pitchDelta += input.GetMouseSensitivity() * Screen::GetInstance().GetDeltaTime();
     }
-    if (input.IsActionPressed("camera_down")) {
+    if (input.IsActionHeld("camera_down")) {
         pitchDelta -= input.GetMouseSensitivity() * Screen::GetInstance().GetDeltaTime();
     }
     

@@ -135,9 +135,9 @@ void Game::LoadLevel()
 void Game::RunMainMenu()
 {
 	// Title: position (220, 80) -> (220/450, 80/300) = (0.489, 0.267), size (130, 50) -> (130/450, 50/300) = (0.289, 0.167)
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Title"], glm::vec2(0.489f, 0.267f), glm::vec2(0, 0), glm::vec2(0.289f, 0.167f), guiCamera, 0);
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Title"], glm::vec2(0.489f, 0.267f), 0.0f, glm::vec2(0.289f, 0.167f), guiCamera, 0);
 	// Select button: position (105, 270) -> (105/450, 270/300) = (0.233, 0.9), size (100, 15) -> (100/450, 15/300) = (0.222, 0.05)
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Select_Btn"], glm::vec2(0.233f, 0.9f), glm::vec2(0, 0), glm::vec2(0.222f, 0.05f), guiCamera, 0);
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Select_Btn"], glm::vec2(0.233f, 0.9f), 0.0f, glm::vec2(0.222f, 0.05f), guiCamera, 0);
 
 	if (GetKeyState(VK_UP) & 0x8000)
 	{
@@ -165,16 +165,16 @@ void Game::RunMainMenu()
 	if (BtnSelected != 0)
 	{
 		// How to Play Selected: position (215, 150) -> (215/450, 150/300) = (0.478, 0.5), size (75, 30) -> (75/450, 30/300) = (0.167, 0.1)
-		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["How_To_Play_Sel"], glm::vec2(0.478f, 0.5f), glm::vec2(0, 0), glm::vec2(0.167f, 0.1f), guiCamera, 0);
+		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["How_To_Play_Sel"], glm::vec2(0.478f, 0.5f), 0.0f, glm::vec2(0.167f, 0.1f), guiCamera, 0);
 		// Start Unselected: position (217, 200) -> (217/450, 200/300) = (0.482, 0.667), size (60, 30) -> (60/450, 30/300) = (0.133, 0.1)
-		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Start_Unsel"], glm::vec2(0.482f, 0.667f), glm::vec2(0, 0), glm::vec2(0.133f, 0.1f), guiCamera, 0);
+		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Start_Unsel"], glm::vec2(0.482f, 0.667f), 0.0f, glm::vec2(0.133f, 0.1f), guiCamera, 0);
 	}
 	else
 	{
 		// How to Play Unselected: position (215, 150) -> (215/450, 150/300) = (0.478, 0.5), size (75, 30) -> (75/450, 30/300) = (0.167, 0.1)
-		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["How_To_Play_Unsel"], glm::vec2(0.478f, 0.5f), glm::vec2(0, 0), glm::vec2(0.167f, 0.1f), guiCamera, 0);
+		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["How_To_Play_Unsel"], glm::vec2(0.478f, 0.5f), 0.0f, glm::vec2(0.167f, 0.1f), guiCamera, 0);
 		// Start Selected: position (217, 200) -> (217/450, 200/300) = (0.482, 0.667), size (60, 30) -> (60/450, 30/300) = (0.133, 0.1)
-		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Start_Sel"], glm::vec2(0.482f, 0.667f), glm::vec2(0, 0), glm::vec2(0.133f, 0.1f), guiCamera, 0);
+		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Start_Sel"], glm::vec2(0.482f, 0.667f), 0.0f, glm::vec2(0.133f, 0.1f), guiCamera, 0);
 	}
 	
 }
@@ -190,16 +190,16 @@ void Game::RunHowToPlay()
 	}
 
 	// Game Info 2: position (215, 120) -> (215/450, 120/300) = (0.478, 0.4), size (175, 100) -> (175/450, 100/300) = (0.389, 0.333)
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["GameInfo2"], glm::vec2(0.478f, 0.4f), glm::vec2(0, 0), glm::vec2(0.389f, 0.333f), guiCamera, 0);
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["GameInfo2"], glm::vec2(0.478f, 0.4f), 0.0f, glm::vec2(0.389f, 0.333f), guiCamera, 0);
 	// Back Info: position (217, 250) -> (217/450, 250/300) = (0.482, 0.833), size (100, 15) -> (100/450, 15/300) = (0.222, 0.05)
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["BackInfo"], glm::vec2(0.482f, 0.833f), glm::vec2(0, 0), glm::vec2(0.222f, 0.05f), guiCamera, 0);
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["BackInfo"], glm::vec2(0.482f, 0.833f), 0.0f, glm::vec2(0.222f, 0.05f), guiCamera, 0);
 
 }
 
 void Game::RunLore()
 {
 	// Game Info 1: position (225, 150) -> (225/450, 150/300) = (0.5, 0.5), size (200, 125) -> (200/450, 125/300) = (0.444, 0.417)
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["GameInfo1"], glm::vec2(0.5f, 0.5f), glm::vec2(0, 0), glm::vec2(0.444f, 0.417f), guiCamera, 0);
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["GameInfo1"], glm::vec2(0.5f, 0.5f), 0.0f, glm::vec2(0.444f, 0.417f), guiCamera, 0);
 	Screen::GetInstance().OutputBuffer();
 	Sleep(7500);
 	Screen::GetInstance().StartFPSClock();
@@ -254,25 +254,25 @@ void Game::RunMaze()
 	unsigned int chunk = player->GetStaminaChunk(6, 0.05);
 	switch (chunk) {
 		case 6:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina6"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina6"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 		case 5:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina5"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina5"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 		case 4:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina4"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina4"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 		case 3:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina3"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina3"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 		case 2:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina2"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina2"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 		case 1:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina1"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina1"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 		default:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Tired"], barPos, glm::vec2(0, 0), barSize, guiCamera, 0);
+			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Tired"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 	}
 
@@ -286,7 +286,7 @@ void Game::RunMaze()
 
 void Game::RunLost()
 {
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Lost"], glm::vec2(0.5, 0.5), glm::vec2(0, 0), glm::vec2(0.444, 0.417), guiCamera, 0);
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Lost"], glm::vec2(0.5, 0.5), 0.0f, glm::vec2(0.444, 0.417), guiCamera, 0);
 
 	if (GetKeyState('R') & 0x8000)
 	{
@@ -315,11 +315,11 @@ void Game::RunLost()
 
 void Game::MariahAI()
 {
-	// float chaseSpeed = 70.0f;
-	// float patrolSpeed = 130.0f;
+	float chaseSpeed = 70.0f;
+	float patrolSpeed = 130.0f;
 
-	float chaseSpeed = 0.0f;
-	float patrolSpeed = 0.0f;
+	// float chaseSpeed = 0.0f;
+	// float patrolSpeed = 0.0f;
 	
 	for (int i = 0; i < enemies.size(); i++)
 	{
@@ -361,48 +361,48 @@ int Game::GetPresentsCollected()
 
 void Game::RunWin()
 {
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Win"], glm::vec2(0.5, 0.5), glm::vec2(0, 0), glm::vec2(0.444, 0.417), guiCamera, 0);
+	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Win"], glm::vec2(0.5, 0.5), 0.0f, glm::vec2(0.444, 0.417), guiCamera, 0);
 }
 
 void Game::initLevel()
 {
-	Level = new GameObj(glm::vec3(0, 0, 0), glm::vec2(0, 0), glm::vec3(levelXSize, -levelHeight, levelZSize), LevelModel);
+	Level = new GameObj(glm::vec3(0, 0, 0), glm::vec3(0, 0, 0), glm::vec3(levelXSize, levelHeight, levelZSize), LevelModel);
 	player = new Player(glm::vec2(0, levelZSize / 2), glm::vec2(-90, 0));
 	
 	float wOff = 20;
-	glm::vec3 size = glm::vec3(10, -8, 0);
-	enemies.push_back(new Enemy(glm::vec3(0, -20, 0), size, Mariah2Model));
+	glm::vec3 size = glm::vec3(10, 8, 0);
+	enemies.push_back(new Enemy(glm::vec3(0, 20, 0), size, Mariah2Model));
 
-	glm::vec3 sp1 = glm::vec3(levelXSize / 2, -20, 0);
-	enemies.push_back(new Enemy(sp1, size, MariahModel, Enemy::PATROL, sp1, glm::vec3(levelXSize / 2, -20, levelZSize - wOff)));
-	enemies.push_back(new Enemy(sp1, size, MariahModel, Enemy::PATROL, sp1, glm::vec3(levelXSize / 2, -20, -levelZSize + wOff)));
+	glm::vec3 sp1 = glm::vec3(levelXSize / 2, 20, 0);
+	enemies.push_back(new Enemy(sp1, size, MariahModel, Enemy::PATROL, sp1, glm::vec3(levelXSize / 2, 20, levelZSize - wOff)));
+	enemies.push_back(new Enemy(sp1, size, MariahModel, Enemy::PATROL, sp1, glm::vec3(levelXSize / 2, 20, -levelZSize + wOff)));
 
-	glm::vec3 sp2 = glm::vec3(levelXSize - wOff, -20, 0);
-	enemies.push_back(new Enemy(sp2, size, MariahModel, Enemy::PATROL, sp2, glm::vec3(levelXSize - wOff, -20, levelZSize - wOff)));
-	enemies.push_back(new Enemy(sp2, size, MariahModel, Enemy::PATROL, sp2, glm::vec3(levelXSize - wOff, -20, -levelZSize + wOff)));
+	glm::vec3 sp2 = glm::vec3(levelXSize - wOff, 20, 0);
+	enemies.push_back(new Enemy(sp2, size, MariahModel, Enemy::PATROL, sp2, glm::vec3(levelXSize - wOff, 20, levelZSize - wOff)));
+	enemies.push_back(new Enemy(sp2, size, MariahModel, Enemy::PATROL, sp2, glm::vec3(levelXSize - wOff, 20, -levelZSize + wOff)));
 
-	glm::vec3 sp3 = glm::vec3(-levelXSize / 2, -20, 0);
-	enemies.push_back(new Enemy(sp3, size, MariahModel, Enemy::PATROL, sp3, glm::vec3(-levelXSize / 2, -20, levelZSize - wOff)));
-	enemies.push_back(new Enemy(sp3, size, MariahModel, Enemy::PATROL, sp3, glm::vec3(-levelXSize / 2, -20, -levelZSize + wOff)));
+	glm::vec3 sp3 = glm::vec3(-levelXSize / 2, 20, 0);
+	enemies.push_back(new Enemy(sp3, size, MariahModel, Enemy::PATROL, sp3, glm::vec3(-levelXSize / 2, 20, levelZSize - wOff)));
+	enemies.push_back(new Enemy(sp3, size, MariahModel, Enemy::PATROL, sp3, glm::vec3(-levelXSize / 2, 20, -levelZSize + wOff)));
 																						  
-	glm::vec3 sp4 = glm::vec3(-levelXSize + wOff, -20, 0);								  
-	enemies.push_back(new Enemy(sp4, size, MariahModel, Enemy::PATROL, sp4, glm::vec3(-levelXSize + wOff, -20, levelZSize - wOff)));
-	enemies.push_back(new Enemy(sp4, size, MariahModel, Enemy::PATROL, sp4, glm::vec3(-levelXSize + wOff, -20, -levelZSize + wOff)));
+	glm::vec3 sp4 = glm::vec3(-levelXSize + wOff, 20, 0);								  
+	enemies.push_back(new Enemy(sp4, size, MariahModel, Enemy::PATROL, sp4, glm::vec3(-levelXSize + wOff, 20, levelZSize - wOff)));
+	enemies.push_back(new Enemy(sp4, size, MariahModel, Enemy::PATROL, sp4, glm::vec3(-levelXSize + wOff, 20, -levelZSize + wOff)));
 
-	glm::vec3 ep6 = glm::vec3(0, -20, levelZSize - wOff);
-	enemies.push_back(new Enemy(ep6, size, MariahModel, Enemy::PATROL, glm::vec3(levelXSize - wOff, -20, levelZSize - wOff), ep6));
-	enemies.push_back(new Enemy(ep6, size, MariahModel, Enemy::PATROL, glm::vec3(-levelXSize + wOff, -20, levelZSize - wOff), ep6));
+	glm::vec3 ep6 = glm::vec3(0, 20, levelZSize - wOff);
+	enemies.push_back(new Enemy(ep6, size, MariahModel, Enemy::PATROL, glm::vec3(levelXSize - wOff, 20, levelZSize - wOff), ep6));
+	enemies.push_back(new Enemy(ep6, size, MariahModel, Enemy::PATROL, glm::vec3(-levelXSize + wOff, 20, levelZSize - wOff), ep6));
 
-	glm::vec3 ep8 = glm::vec3(0, -20, -levelZSize + wOff);
-	enemies.push_back(new Enemy(ep8, size, MariahModel, Enemy::PATROL, glm::vec3(levelXSize - wOff, -20, -levelZSize + wOff), ep8));
-	enemies.push_back(new Enemy(ep8, size, MariahModel, Enemy::PATROL, glm::vec3(-levelXSize + wOff, -20, -levelZSize + wOff), ep8));
+	glm::vec3 ep8 = glm::vec3(0, 20, -levelZSize + wOff);
+	enemies.push_back(new Enemy(ep8, size, MariahModel, Enemy::PATROL, glm::vec3(levelXSize - wOff, 20, -levelZSize + wOff), ep8));
+	enemies.push_back(new Enemy(ep8, size, MariahModel, Enemy::PATROL, glm::vec3(-levelXSize + wOff, 20, -levelZSize + wOff), ep8));
 
 
-	presents.push_back(new Present(glm::vec3(levelXSize - 30, -15, 0), glm::vec3(10, -10, 0), PresentModel));
-	presents.push_back(new Present(glm::vec3(levelXSize - 30, -15, levelZSize - 30), glm::vec3(10, -10, 0), PresentModel));
-	presents.push_back(new Present(glm::vec3(levelXSize - 30, -15, -levelZSize + 30), glm::vec3(10, -10, 0), PresentModel));
+	presents.push_back(new Present(glm::vec3(levelXSize - 30, 15, 0), glm::vec3(10, 10, 0), PresentModel));
+	presents.push_back(new Present(glm::vec3(levelXSize - 30, 15, levelZSize - 30), glm::vec3(10, 10, 0), PresentModel));
+	presents.push_back(new Present(glm::vec3(levelXSize - 30, 15, -levelZSize + 30), glm::vec3(10, 10, 0), PresentModel));
 
-	presents.push_back(new Present(glm::vec3(-levelXSize + 30, -15, 0), glm::vec3(10, -10, 0), PresentModel));
-	presents.push_back(new Present(glm::vec3(-levelXSize + 30, -15, levelZSize - 30), glm::vec3(10, -10, 0), PresentModel));
-	presents.push_back(new Present(glm::vec3(-levelXSize + 30, -15, -levelZSize + 30), glm::vec3(10, -10, 0), PresentModel));
+	presents.push_back(new Present(glm::vec3(-levelXSize + 30, 15, 0), glm::vec3(10, 10, 0), PresentModel));
+	presents.push_back(new Present(glm::vec3(-levelXSize + 30, 15, levelZSize - 30), glm::vec3(10, 10, 0), PresentModel));
+	presents.push_back(new Present(glm::vec3(-levelXSize + 30, 15, -levelZSize + 30), glm::vec3(10, 10, 0), PresentModel));
 }

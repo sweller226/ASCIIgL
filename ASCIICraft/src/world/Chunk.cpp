@@ -58,6 +58,8 @@ void Chunk::GenerateMesh() {
         Logger::Warning("No texture atlas available for chunk mesh generation");
         return;
     }
+
+    Logger::Debug("Generating mesh for chunk at (" + std::to_string(coord.x) + ", " + std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
     
     Texture* blockAtlas = Block::GetTextureAtlas();
 
@@ -72,36 +74,37 @@ void Chunk::GenerateMesh() {
     };
     
     // Face vertex offsets for cube (each face is 2 triangles = 6 vertices)
+    // Triangle winding order reversed to account for Y-axis flip
     const glm::vec3 faceVertices[6][6] = {
         // Top face (Y+)
         {
-            glm::vec3(0, 1, 0), glm::vec3(1, 1, 0), glm::vec3(1, 1, 1),
-            glm::vec3(0, 1, 0), glm::vec3(1, 1, 1), glm::vec3(0, 1, 1)
+            glm::vec3(0, 1, 0), glm::vec3(0, 1, 1), glm::vec3(1, 1, 1),
+            glm::vec3(0, 1, 0), glm::vec3(1, 1, 1), glm::vec3(1, 1, 0)
         },
         // Bottom face (Y-)
         {
-            glm::vec3(0, 0, 1), glm::vec3(1, 0, 1), glm::vec3(1, 0, 0),
-            glm::vec3(0, 0, 1), glm::vec3(1, 0, 0), glm::vec3(0, 0, 0)
+            glm::vec3(0, 0, 1), glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
+            glm::vec3(0, 0, 1), glm::vec3(1, 0, 0), glm::vec3(1, 0, 1)
         },
         // North face (Z+)
         {
-            glm::vec3(0, 0, 1), glm::vec3(0, 1, 1), glm::vec3(1, 1, 1),
-            glm::vec3(0, 0, 1), glm::vec3(1, 1, 1), glm::vec3(1, 0, 1)
+            glm::vec3(0, 0, 1), glm::vec3(1, 0, 1), glm::vec3(1, 1, 1),
+            glm::vec3(0, 0, 1), glm::vec3(1, 1, 1), glm::vec3(0, 1, 1)
         },
         // South face (Z-)
         {
-            glm::vec3(1, 0, 0), glm::vec3(1, 1, 0), glm::vec3(0, 1, 0),
-            glm::vec3(1, 0, 0), glm::vec3(0, 1, 0), glm::vec3(0, 0, 0)
+            glm::vec3(1, 0, 0), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0),
+            glm::vec3(1, 0, 0), glm::vec3(0, 1, 0), glm::vec3(1, 1, 0)
         },
         // East face (X+)
         {
-            glm::vec3(1, 0, 1), glm::vec3(1, 1, 1), glm::vec3(1, 1, 0),
-            glm::vec3(1, 0, 1), glm::vec3(1, 1, 0), glm::vec3(1, 0, 0)
+            glm::vec3(1, 0, 1), glm::vec3(1, 0, 0), glm::vec3(1, 1, 0),
+            glm::vec3(1, 0, 1), glm::vec3(1, 1, 0), glm::vec3(1, 1, 1)
         },
         // West face (X-)
         {
-            glm::vec3(0, 0, 0), glm::vec3(0, 1, 0), glm::vec3(0, 1, 1),
-            glm::vec3(0, 0, 0), glm::vec3(0, 1, 1), glm::vec3(0, 0, 1)
+            glm::vec3(0, 0, 0), glm::vec3(0, 0, 1), glm::vec3(0, 1, 1),
+            glm::vec3(0, 0, 0), glm::vec3(0, 1, 1), glm::vec3(0, 1, 0)
         }
     };
     
@@ -142,9 +145,52 @@ void Chunk::GenerateMesh() {
                         // Neighbor is within this chunk
                         shouldRenderFace = !GetBlock(neighborX, neighborY, neighborZ).IsSolid();
                     } else {
-                        // Neighbor is in adjacent chunk - for now, always render border faces
-                        // TODO: Implement cross-chunk face culling using neighbor chunks
-                        shouldRenderFace = true;
+                        // Neighbor is in adjacent chunk - check neighboring chunk for face culling
+                        shouldRenderFace = true; // Default to render if we can't determine neighbor state
+                        
+                        // Determine which neighbor chunk to check and the local coordinates within it
+                        int neighborChunkDir = -1;
+                        int localX = x, localY = y, localZ = z; // Start with current block coords
+                        
+                        if (neighborX < 0) {
+                            neighborChunkDir = 5; // West neighbor
+                            localX = SIZE - 1;   // Rightmost edge of west chunk
+                        } else if (neighborX >= SIZE) {
+                            neighborChunkDir = 4; // East neighbor
+                            localX = 0;          // Leftmost edge of east chunk
+                        } else if (neighborY < 0) {
+                            neighborChunkDir = 1; // Bottom neighbor
+                            localY = SIZE - 1;   // Top edge of bottom chunk
+                        } else if (neighborY >= SIZE) {
+                            neighborChunkDir = 0; // Top neighbor
+                            localY = 0;          // Bottom edge of top chunk
+                        } else if (neighborZ < 0) {
+                            neighborChunkDir = 3; // South neighbor
+                            localZ = SIZE - 1;   // Front edge of south chunk
+                        } else if (neighborZ >= SIZE) {
+                            neighborChunkDir = 2; // North neighbor
+                            localZ = 0;          // Back edge of north chunk
+                        }
+                        
+                        // Check the neighboring chunk if it exists and is generated
+                        if (neighborChunkDir >= 0) {
+                            Chunk* neighborChunk = GetNeighbor(neighborChunkDir);
+                            if (neighborChunk && neighborChunk->IsGenerated()) {
+                                // Check if the neighbor block in adjacent chunk is solid
+                                const Block& neighborBlock = neighborChunk->GetBlock(localX, localY, localZ);
+                                shouldRenderFace = !neighborBlock.IsSolid();
+                                
+                                // Only log successful culling to avoid spam
+                                if (!shouldRenderFace) {
+                                    Logger::Debug("Face culled: chunk(" + std::to_string(coord.x) + "," + std::to_string(coord.y) + "," + std::to_string(coord.z) + 
+                                                ") block(" + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z) + ") face=" + std::to_string(face) +
+                                                " neighbor_chunk_dir=" + std::to_string(neighborChunkDir) + 
+                                                " neighbor_block(" + std::to_string(localX) + "," + std::to_string(localY) + "," + std::to_string(localZ) + ")");
+                                }
+                            }
+                            // If neighbor chunk doesn't exist or isn't generated, render the face (shouldRenderFace = true)
+                            // No debug logging for this case to avoid spam
+                        }
                     }
                     
                     if (!shouldRenderFace) {

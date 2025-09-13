@@ -17,7 +17,7 @@ class Player;
 // Main World class
 class World {
 public:
-    World(unsigned int renderDistance = 2, const WorldPos& spawnPoint = WorldPos(0, 10, 0));
+    World(unsigned int renderDistance = 2, const WorldPos& spawnPoint = WorldPos(0, 10, 0), unsigned int maxWorldChunkRadius = 2);
     ~World();
     
     // Core world operations
@@ -37,10 +37,14 @@ public:
     void LoadChunk(const ChunkCoord& coord);
     void UnloadChunk(const ChunkCoord& coord);
     bool IsChunkLoaded(const ChunkCoord& coord) const;
-    
+
+    // World limits
+    unsigned int GetMaxWorldChunkRadius() const { return maxWorldChunkRadius; }
+    void SetMaxWorldChunkRadius(unsigned int radius) { maxWorldChunkRadius = radius; }
+
     // World streaming (based on player position)
-    void SetRenderDistance(int distance) { renderDistance = distance; }
-    int GetRenderDistance() const { return renderDistance; }
+    void SetRenderDistance(unsigned int distance) { renderDistance = distance; }
+    unsigned int GetRenderDistance() const { return renderDistance; }
     void SetPlayer(Player* player) { this->player = player; }
     Player* GetPlayer() const { return player; }
     void UpdateChunkLoading();
@@ -62,9 +66,10 @@ private:
     std::unordered_map<ChunkCoord, std::unique_ptr<Chunk>> loadedChunks;
     
     // World settings
-    int renderDistance;
+    unsigned int renderDistance;
     WorldPos spawnPoint;
     Player* player; // Reference to the current player for chunk streaming
+    unsigned int maxWorldChunkRadius;
 
     // rendering
     VERTEX_SHADER vertex_shader;
@@ -73,8 +78,9 @@ private:
     void UpdateChunkNeighbors(const ChunkCoord& coord);
     ChunkCoord WorldPosToChunkCoord(const WorldPos& pos) const;
     glm::ivec3 WorldPosToLocalChunkPos(const WorldPos& pos) const;
-    std::vector<ChunkCoord> GetChunksInRadius(const ChunkCoord& center, int radius) const;
-    
+    std::vector<ChunkCoord> GetChunksInRadius(const ChunkCoord& center, unsigned int radius) const;
+    bool IsChunkOutsideWorld(const ChunkCoord& coord) const;
+
     // Constants for neighbor directions (indices into NEIGHBOR_OFFSETS)
     static const ChunkCoord NEIGHBOR_OFFSETS[6];
 };

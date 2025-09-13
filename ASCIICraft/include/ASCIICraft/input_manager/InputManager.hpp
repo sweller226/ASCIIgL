@@ -126,5 +126,5 @@ private:
     InputState CalculateKeyState(Key key) const;
     void UpdateActionStates();
     
-    static constexpr float DEFAULT_MOUSE_SENSITIVITY = 1.0f;
+    static constexpr float DEFAULT_MOUSE_SENSITIVITY = 40.0f;
 };

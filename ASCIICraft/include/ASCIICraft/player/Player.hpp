@@ -10,8 +10,7 @@
 
 enum class GameMode {
     Survival,
-    Creative,
-    Spectator
+    Spectator  // Spectator mode with noclip
 };
         
 enum class MovementState {
@@ -26,7 +25,7 @@ class Player {
 public:
     // Constructor/Destructor
     Player() = default;
-    Player(const glm::vec3& startPosition);
+    Player(const glm::vec3& startPosition, GameMode mode = GameMode::Spectator);
     ~Player() = default;
 
     // Core update functions

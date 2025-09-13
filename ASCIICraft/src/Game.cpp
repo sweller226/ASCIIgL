@@ -22,7 +22,7 @@ bool Game::Initialize() {
     Renderer::GetInstance().SetWireframe(false);
     Renderer::GetInstance().SetBackfaceCulling(true);
     Renderer::GetInstance().SetCCW(true);
-	Renderer::GetInstance().SetAntialiasingsamples(8);
+	Renderer::GetInstance().SetAntialiasingsamples(4);
 	Renderer::GetInstance().SetAntialiasing(true);
 	Renderer::GetInstance().SetGrayscale(false);
 
@@ -39,7 +39,7 @@ bool Game::Initialize() {
     }
     
     // Initialize game systems
-    world = std::make_unique<World>(2, WorldPos(0, 5, 0));
+    world = std::make_unique<World>(2, WorldPos(0, 5, 0), 2);
     inputManager = std::make_unique<InputManager>();
     
     // Create player at spawn point
@@ -47,8 +47,6 @@ bool Game::Initialize() {
     
     // Connect player to world
     world->SetPlayer(player.get());
-
-    world->SetRenderDistance(1); // 2 chunk render distance
     world->GenerateWorld();
 
     gameState = GameState::Playing;

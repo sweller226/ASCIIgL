@@ -47,6 +47,34 @@ glm::vec3 Camera3D::getCamLeft() const
 	return -getCamRight();
 }
 
+glm::vec3 Camera3D::getCamFrontNoY() const
+{
+	glm::vec3 front = getCamFront();
+	front.y = 0.0f;
+	return glm::normalize(front);
+}
+
+glm::vec3 Camera3D::getCamBackNoY() const
+{
+	glm::vec3 back = getCamBack();
+	back.y = 0.0f;
+	return glm::normalize(back);
+}
+
+glm::vec3 Camera3D::getCamRightNoY() const
+{
+	glm::vec3 right = getCamRight();
+	right.y = 0.0f;
+	return glm::normalize(right);
+}
+
+glm::vec3 Camera3D::getCamLeftNoY() const
+{
+	glm::vec3 left = getCamLeft();
+	left.y = 0.0f;
+	return glm::normalize(left);
+}
+
 void Camera3D::setCamPos(glm::vec3 Pposition)
 {
 	pos = Pposition;
