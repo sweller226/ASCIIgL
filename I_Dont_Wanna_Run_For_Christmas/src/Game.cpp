@@ -68,12 +68,12 @@ void Game::Run()
 	SCR_WIDTH = Screen::GetInstance().GetVisibleWidth();
 	SCR_HEIGHT = Screen::GetInstance().GetHeight();
 	guiCamera.setScreenDimensions(SCR_WIDTH, SCR_HEIGHT);
-    Renderer::GetInstance().SetWireframe(false);
-    Renderer::GetInstance().SetBackfaceCulling(true);
-    Renderer::GetInstance().SetCCW(true);
-	Renderer::GetInstance().SetAntialiasingsamples(8);
-	Renderer::GetInstance().SetAntialiasing(true);
-	Renderer::GetInstance().SetGrayscale(false);
+    Renderer::SetWireframe(false);
+    Renderer::SetBackfaceCulling(true);
+    Renderer::SetCCW(true);
+	Renderer::SetAntialiasingsamples(8);
+	Renderer::SetAntialiasing(true);
+	Renderer::SetGrayscale(false);
 
     // Logger::Info("Playing background music.");
 	// BOOL soundResult = PlaySound(TEXT(".\\res\\audio\\Man.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
@@ -112,7 +112,7 @@ void Game::Run()
                 Logger::Warning("[WARN] Unknown game state: " + std::to_string(gameState));
                 break;
         }
-        Renderer::GetInstance().DrawScreenBorder(FG_WHITE);
+        Renderer::DrawScreenBorder(FG_WHITE);
 
         Screen::GetInstance().OutputBuffer();
 
@@ -315,11 +315,11 @@ void Game::RunLost()
 
 void Game::MariahAI()
 {
-	float chaseSpeed = 70.0f;
-	float patrolSpeed = 130.0f;
+	// float chaseSpeed = 70.0f;
+	// float patrolSpeed = 130.0f;
 
-	// float chaseSpeed = 0.0f;
-	// float patrolSpeed = 0.0f;
+	float chaseSpeed = 0.0f;
+	float patrolSpeed = 0.0f;
 	
 	for (int i = 0; i < enemies.size(); i++)
 	{

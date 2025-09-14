@@ -23,7 +23,7 @@ struct Tile {
 class Renderer
 {
 private:
-    Renderer() = default;
+    Renderer() = delete;
     Renderer(const Renderer&) = delete;
     Renderer& operator=(const Renderer&) = delete;
 
@@ -93,11 +93,6 @@ private:
     static void DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles);
 
 public:
-    static Renderer& GetInstance() {
-        static Renderer instance;
-        return instance;
-    }
-    
     static void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh);
     static void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec3 position, const glm::vec3 rotation, const glm::vec3 size, const Camera3D& camera);
     static void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const Camera3D& camera);

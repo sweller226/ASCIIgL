@@ -115,10 +115,10 @@ void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, c
 
 void Renderer::DrawScreenBorder(const short col) {
 	// DRAWING BORDERS
-	DrawLine(1, 1, Screen::GetInstance().GetVisibleWidth() - 1, 1, PIXEL_FULL, col);
-	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, 1, Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, PIXEL_FULL, col);
-	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, 1, Screen::GetInstance().GetHeight() - 1, PIXEL_FULL, col);
-	DrawLine(1, 1, 1, Screen::GetInstance().GetHeight() - 1, PIXEL_FULL, col);
+	DrawLine(1, 1, Screen::GetInstance().GetVisibleWidth() - 1, 1, static_cast<CHAR>(PX_TYPE::PX_FULL), col);
+	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, 1, Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, static_cast<CHAR>(PX_TYPE::PX_FULL), col);
+	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, 1, Screen::GetInstance().GetHeight() - 1, static_cast<CHAR>(PX_TYPE::PX_FULL), col);
+	DrawLine(1, 1, 1, Screen::GetInstance().GetHeight() - 1, static_cast<CHAR>(PX_TYPE::PX_FULL), col);
 }
 
 // =============================================================================
@@ -133,17 +133,14 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
     // Validate texture integrity if provided
     if (tex != nullptr) {
         try {
-            // Test basic texture properties
             int width = tex->GetWidth();
             int height = tex->GetHeight();
             
-            // Check for invalid dimensions
             if (width <= 0 || height <= 0) {
                 Logger::Error("RenderTriangles: Invalid texture dimensions - Width: " + std::to_string(width) + ", Height: " + std::to_string(height));
                 return;
             }
             
-            // Check for reasonable size limits (prevent corrupted textures with massive dimensions)
             if (width > 4096 || height > 4096) {
                 Logger::Error("RenderTriangles: Texture dimensions too large - Width: " + std::to_string(width) + ", Height: " + std::to_string(height));
                 return;
@@ -151,7 +148,6 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
             
             // Test if we can safely access texture data by sampling a corner pixel
             glm::vec3 testPixel = tex->GetPixelRGB(0.0f, 0.0f);
-            // If we reach here, the texture appears to be valid
             
         } catch (const std::exception& e) {
             Logger::Error("RenderTriangles: Exception during texture validation - " + std::string(e.what()));
@@ -164,10 +160,9 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
 
     // Optimize: Use pre-allocated buffers instead of creating new vectors each frame
     _vertexBuffer.clear();
-    _vertexBuffer.reserve(vertices.size()); // Reserve to avoid reallocations
-    _vertexBuffer = vertices; // Still need a copy for transformations, but reuse buffer
+    _vertexBuffer.reserve(vertices.size());
+    _vertexBuffer = vertices;
 
-    // SIMD-optimized batch vertex shader execution with GLM's AVX2 support
     const_cast<VERTEX_SHADER&>(VSHADER).GLUseBatch(_vertexBuffer);
 
     _clippedBuffer.clear();
@@ -211,30 +206,30 @@ void Renderer::BackFaceCullHelper(const std::vector<VERTEX>& vertices, std::vect
 
     const size_t triangleCount = vertices.size() / 3;
     
-    // Create a parallel boolean array to mark which triangles to keep
-    std::vector<bool> keepTriangle(triangleCount);
+    // Create a parallel char array to mark which triangles to keep (thread-safe)
+    std::vector<char> keepTriangle(triangleCount);
     
     // Create index vector for parallel processing
     std::vector<size_t> triangleIndices(triangleCount);
     std::iota(triangleIndices.begin(), triangleIndices.end(), 0);
     
     // Parallel pass: determine which triangles to keep (no data races)
-    std::for_each(std::execution::par_unseq, 
-                  triangleIndices.begin(), 
-                  triangleIndices.end(),
-                  [&](size_t triIndex) {
-                      const size_t vertexIndex = triIndex * 3;
-                      keepTriangle[triIndex] = !BackFaceCull(
-                          vertices[vertexIndex], 
-                          vertices[vertexIndex + 1], 
-                          vertices[vertexIndex + 2], 
-                          _ccw
-                      );
-                  });
+    std::for_each(std::execution::par, 
+        triangleIndices.begin(), 
+        triangleIndices.end(),
+        [&keepTriangle, &vertices, ccw = _ccw](size_t triIndex) {  // Capture by value
+            const size_t vertexIndex = triIndex * 3;
+            keepTriangle[triIndex] = !BackFaceCull(
+                vertices[vertexIndex], 
+                vertices[vertexIndex + 1], 
+                vertices[vertexIndex + 2], 
+                ccw  // Use local copy
+            );
+        });
     
     // Sequential pass: collect kept triangles (avoids race conditions on push_back)
     // Reserve space to minimize allocations
-    size_t keepCount = std::count(keepTriangle.begin(), keepTriangle.end(), true);
+    size_t keepCount = std::count(keepTriangle.begin(), keepTriangle.end(), 1);
     raster_triangles.clear();
     raster_triangles.reserve(keepCount * 3);
     
@@ -379,10 +374,10 @@ void Renderer::DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& ras
 void Renderer::DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles) {
     // Draw wireframe for each triangle in the tile
     for (int triIndex : tile.tri_indices_encapsulated) {
-        DrawTriangleWireframe(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], PIXEL_FULL, FG_WHITE);
+        DrawTriangleWireframe(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<CHAR>(PX_TYPE::PX_FULL), FG_WHITE);
     }
     for (int triIndex : tile.tri_indices_partial) {
-        DrawTriangleWireframePartial(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], PIXEL_FULL, FG_WHITE);
+        DrawTriangleWireframePartial(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<CHAR>(PX_TYPE::PX_FULL), FG_WHITE);
     }
 }
 
@@ -759,7 +754,10 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
                 const float w2 = (sampleX - bx) * bc_dy - (sampleY - by) * bc_dx;
                 const float w3 = (sampleX - cx) * ca_dy - (sampleY - cy) * ca_dx;
                 
-                const bool inside = (w1 >= 0 && w2 >= 0 && w3 >= 0) || (w1 <= 0 && w2 <= 0 && w3 <= 0);
+                constexpr float edge_epsilon = -1e-2f; // Small negative value
+
+                const bool inside = (w1 >= edge_epsilon && w2 >= edge_epsilon && w3 >= edge_epsilon) ||
+                                    (w1 <= -edge_epsilon && w2 <= -edge_epsilon && w3 <= -edge_epsilon);
                 
                 if (inside) {
                     // Calculate barycentric coordinates using pre-computed values
@@ -1178,14 +1176,14 @@ glm::mat4 Renderer::CalcModelMatrix(const glm::vec3 position, const float rotati
 CHAR_INFO Renderer::GetColGlyphGreyScale(const float greyscale) {
     static const unsigned int numShades = 16;
     static const CHAR_INFO greyScaleGlyphs[numShades] = {
-        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ PIXEL_QUARTER, FG_DARK_GREY},
-        CHAR_INFO{ PIXEL_QUARTER, FG_GREY}, CHAR_INFO{ PIXEL_QUARTER, FG_WHITE},
-        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ PIXEL_HALF, FG_DARK_GREY},
-        CHAR_INFO{ PIXEL_HALF, FG_GREY}, CHAR_INFO{ PIXEL_HALF, FG_WHITE},
-        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ PIXEL_THREEQUARTERS, FG_DARK_GREY},
-        CHAR_INFO{ PIXEL_THREEQUARTERS, FG_GREY}, CHAR_INFO{ PIXEL_THREEQUARTERS, FG_WHITE},
-        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ PIXEL_FULL, FG_DARK_GREY},
-        CHAR_INFO{ PIXEL_FULL, FG_GREY}, CHAR_INFO{ PIXEL_FULL, FG_WHITE},
+        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_QUARTER), FG_DARK_GREY},
+        CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_QUARTER), FG_GREY}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_QUARTER), FG_WHITE},
+        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_HALF), FG_DARK_GREY},
+        CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_HALF), FG_GREY}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_HALF), FG_WHITE},
+        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_THREEQUARTERS), FG_DARK_GREY},
+        CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_THREEQUARTERS), FG_GREY}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_THREEQUARTERS), FG_WHITE},
+        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_FULL), FG_DARK_GREY},
+        CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_FULL), FG_GREY}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_FULL), FG_WHITE},
     };
 
     int idx = static_cast<int>(greyscale * numShades);
@@ -1238,7 +1236,7 @@ CHAR_INFO Renderer::GetColGlyph(const glm::vec3 rgb) {
     
     // Optimized glyph selection using bit manipulation instead of branches
     const int glyphIndex = static_cast<int>(intensity * 4.0f); // Map [0,1] to [0,4)
-    static const wchar_t glyphs[4] = {PIXEL_QUARTER, PIXEL_HALF, PIXEL_THREEQUARTERS, PIXEL_FULL};
+    static const wchar_t glyphs[4] = {static_cast<wchar_t>(PX_TYPE::PX_QUARTER), static_cast<wchar_t>(PX_TYPE::PX_HALF), static_cast<wchar_t>(PX_TYPE::PX_THREEQUARTERS), static_cast<wchar_t>(PX_TYPE::PX_FULL)};
     const wchar_t glyph = glyphs[glyphIndex > 3 ? 3 : glyphIndex]; // Clamp to valid range
     
     return CHAR_INFO{glyph, colorCodes[bestColorIndex]};
@@ -1262,13 +1260,13 @@ CHAR_INFO Renderer::GetColGlyph(const glm::vec3 rgb, const float greyscale) {
     // Select glyph based on pre-calculated greyscale intensity (4 levels)
     wchar_t glyph;
     if (greyscale < 0.25f) {
-        glyph = PIXEL_QUARTER;
+        glyph = static_cast<wchar_t>(PX_TYPE::PX_QUARTER);
     } else if (greyscale < 0.5f) {
-        glyph = PIXEL_HALF;
+        glyph = static_cast<wchar_t>(PX_TYPE::PX_HALF);
     } else if (greyscale < 0.75f) {
-        glyph = PIXEL_THREEQUARTERS;
+        glyph = static_cast<wchar_t>(PX_TYPE::PX_THREEQUARTERS);
     } else {
-        glyph = PIXEL_FULL;
+        glyph = static_cast<wchar_t>(PX_TYPE::PX_FULL);
     }
     
     // For very dark colors, use background color instead of foreground with glyph

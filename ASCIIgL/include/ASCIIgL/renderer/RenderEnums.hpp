@@ -42,10 +42,15 @@ enum COLOUR
 
 // just a bunch of pixels types defined for easy use, pixel solid is percieved as brighter than pixel quarter
 // Using hashtag (#) character which is universally available in all fonts
-enum PIXEL_TYPE
+enum class PX_TYPE
 {
-    PIXEL_FULL = 219,         // █ (Full block - DOS char 219)
-    PIXEL_THREEQUARTERS = 178, // ▓ (Dark shade - DOS char 178)
-    PIXEL_HALF = 177,          // ▒ (Medium shade - DOS char 177) 
-    PIXEL_QUARTER = 176,       // ░ (Light shade - DOS char 176)
+    PX_FULL = 219,         // █ (Full block - DOS char 219)
+    PX_THREEQUARTERS = 178, // ▓ (Dark shade - DOS char 178)
+    PX_HALF = 177,          // ▒ (Medium shade - DOS char 177) 
+    PX_QUARTER = 176,       // ░ (Light shade - DOS char 176)
+};
+
+enum class CHAR_VARIETY {
+    FOUR = 4,
+    EIGHT = 8,
 };

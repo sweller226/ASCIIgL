@@ -19,12 +19,12 @@ bool Game::Initialize() {
     Logger::Info("Initializing ASCIICraft...");
 
     const int screenInitResult = Screen::GetInstance().InitializeScreen(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, static_cast<unsigned int>(TARGET_FPS), 1.0f, BG_BLUE);
-    Renderer::GetInstance().SetWireframe(false);
-    Renderer::GetInstance().SetBackfaceCulling(true);
-    Renderer::GetInstance().SetCCW(true);
-	Renderer::GetInstance().SetAntialiasingsamples(4);
-	Renderer::GetInstance().SetAntialiasing(true);
-	Renderer::GetInstance().SetGrayscale(false);
+    Renderer::SetWireframe(false);
+    Renderer::SetBackfaceCulling(true);
+    Renderer::SetCCW(true);
+	Renderer::SetAntialiasingsamples(4);
+	Renderer::SetAntialiasing(true);
+	Renderer::SetGrayscale(false);
 
     // Initialize screen
     if (screenInitResult != SCREEN_NOERROR) {
