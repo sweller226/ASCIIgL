@@ -234,15 +234,10 @@ void Chunk::GenerateMesh() {
     // Create the mesh
     if (!vertices.empty()) {
         Logger::Debug("Creating mesh with " + std::to_string(vertices.size()) + " vertices");
-        Logger::Debug("Block atlas texture info:");
         if (blockAtlas) {
-            Logger::Debug("  Block atlas pointer: " + std::to_string(reinterpret_cast<uintptr_t>(blockAtlas)));
-            
-            Logger::Debug("  About to call blockAtlas->GetWidth()...");
             int width = 0;
             try {
                 width = blockAtlas->GetWidth();
-                Logger::Debug("  GetWidth() returned: " + std::to_string(width));
             } catch (const std::exception& e) {
                 Logger::Error("  Exception in GetWidth(): " + std::string(e.what()));
                 mesh.reset();
@@ -257,11 +252,9 @@ void Chunk::GenerateMesh() {
                 return;
             }
             
-            Logger::Debug("  About to call blockAtlas->GetHeight()...");
             int height = 0;
             try {
                 height = blockAtlas->GetHeight();
-                Logger::Debug("  GetHeight() returned: " + std::to_string(height));
             } catch (const std::exception& e) {
                 Logger::Error("  Exception in GetHeight(): " + std::string(e.what()));
                 mesh.reset();
@@ -275,7 +268,6 @@ void Chunk::GenerateMesh() {
                 SetDirty(false);
                 return;
             }
-            
             Logger::Debug("  Block atlas dimensions: " + std::to_string(width) + "x" + std::to_string(height));
         } else {
             Logger::Error("  Block atlas is nullptr!");

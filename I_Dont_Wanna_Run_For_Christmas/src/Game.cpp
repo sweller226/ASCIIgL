@@ -242,7 +242,7 @@ void Game::RunMaze()
 			{
 				presents[i]->collected = true;
 
-				enemies.push_back(new Enemy(glm::vec3(0, -20, 0), glm::vec3(10, -10, 0), Mariah2Model));
+				enemies.push_back(new Enemy(glm::vec3(0, 20, 0), glm::vec3(10, 10, 0), Mariah2Model));
 			}
 		}
 	}
