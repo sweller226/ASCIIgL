@@ -31,8 +31,13 @@ private:
     static inline bool _wireframe = false;
     static inline bool _backface_culling = true;
     static inline bool _ccw = false;
-    static inline bool _antialiasing = true;
     static inline bool _grayscale = false;
+
+    // antialaising
+    static inline bool _antialiasing = true;
+    static inline std::vector<std::pair<float, float>> _subpixel_offsets;
+    static std::vector<std::pair<float, float>> GenerateSubPixelOffsets(int sampleCount); // this is for antialiasing samples
+    static std::vector<std::pair<float, float>> GetSubpixelOffsets();
 
     // Pre-allocated buffers for performance (avoid per-frame allocations)
     static inline std::vector<VERTEX> _vertexBuffer;
@@ -86,9 +91,7 @@ private:
 
     static void DrawTriangleTexturedAntialiased(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
     static void DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
-
-    static std::vector<std::pair<float, float>> GenerateSubPixelOffsets(int sampleCount); // this is for antialiasing samples
-
+    
     static void DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& raster_triangles, const Texture* tex);
     static void DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles);
 

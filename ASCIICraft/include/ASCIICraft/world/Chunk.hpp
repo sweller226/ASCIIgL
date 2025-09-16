@@ -22,17 +22,21 @@ struct ChunkCoord {
     bool operator==(const ChunkCoord& other) const {
         return x == other.x && y == other.y && z == other.z;
     }
-    
+
     bool operator!=(const ChunkCoord& other) const {
         return !(*this == other);
     }
-    
+
     ChunkCoord operator+(const ChunkCoord& other) const {
         return ChunkCoord(x + other.x, y + other.y, z + other.z);
     }
-    
+
     ChunkCoord operator-(const ChunkCoord& other) const {
         return ChunkCoord(x - other.x, y - other.y, z - other.z);
+    }
+
+    std::string ToString() const {
+        return "(" + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z) + ")";
     }
 };
 
@@ -94,6 +98,9 @@ public:
 
     // Rendering
     void Render(VERTEX_SHADER& vertex_shader, const Camera3D& camera);
+
+    // Logging
+    void LogNeighbors() const;
     
 private:
     ChunkCoord coord;

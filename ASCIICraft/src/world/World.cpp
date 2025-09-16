@@ -296,34 +296,16 @@ void World::UpdateChunkNeighbors(const ChunkCoord& coord) {
         return;
     }
     
-    // Set neighbor pointers
     for (int i = 0; i < 6; ++i) {
         ChunkCoord neighborCoord = coord + NEIGHBOR_OFFSETS[i];
         Chunk* neighborChunk = GetChunk(neighborCoord);
         chunk->SetNeighbor(i, neighborChunk);
-        
+
         // Set reverse neighbor
         if (neighborChunk) {
-            int reverseDir = (i % 2 == 0) ? i + 1 : i - 1; // Flip direction
+            int reverseDir = (i % 2 == 0) ? i + 1 : i - 1;
+            neighborChunk->SetDirty(true);
             neighborChunk->SetNeighbor(reverseDir, chunk);
-        }
-    }
-    
-    // Also update all existing neighbors to point back to this new chunk
-    for (int i = 0; i < 6; ++i) {
-        ChunkCoord neighborCoord = coord + NEIGHBOR_OFFSETS[i];
-        Chunk* neighborChunk = GetChunk(neighborCoord);
-        if (neighborChunk) {
-            // Update the neighbor's neighbor pointers to include this chunk
-            int reverseDir = (i % 2 == 0) ? i + 1 : i - 1; // Flip direction
-            neighborChunk->SetNeighbor(reverseDir, chunk);
-            
-            // Also update the neighbor's other neighbors in case they weren't set before
-            for (int j = 0; j < 6; ++j) {
-                ChunkCoord neighborNeighborCoord = neighborCoord + NEIGHBOR_OFFSETS[j];
-                Chunk* neighborNeighborChunk = GetChunk(neighborNeighborCoord);
-                neighborChunk->SetNeighbor(j, neighborNeighborChunk);
-            }
         }
     }
 }

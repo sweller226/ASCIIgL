@@ -660,293 +660,225 @@ void Renderer::DrawTriangleWireframePartial(const Tile& tile, const VERTEX& vert
 }
 
 void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex) {
-    if (!tex) {
-        Logger::Error("  Texture is nullptr!");
-        return;
-    }
-    
+    if (!tex) { Logger::Error("  Texture is nullptr!"); return; }
     int texWidth, texHeight;
-    try {
-        texWidth = tex->GetWidth();
-        texHeight = tex->GetHeight();
-    } catch (...) {
-        Logger::Error("  Exception caught when accessing texture methods!");
-        return;
-    }
-    
-    if (texWidth == 0 || texHeight == 0) {
-        Logger::Error("  Invalid texture dimensions!");
-        return;
-    }
+    try { texWidth = tex->GetWidth(); texHeight = tex->GetHeight(); }
+    catch (...) { Logger::Error("  Exception caught when accessing texture methods!"); return; }
+    if (texWidth == 0 || texHeight == 0) { Logger::Error("  Invalid texture dimensions!"); return; }
 
     // Get triangle bounding box clipped to tile
     int minX = std::max((int)tile.position.x, (int)std::min({vert1.X(), vert2.X(), vert3.X()}));
     int maxX = std::min((int)(tile.position.x + tile.size.x) - 1, (int)std::max({vert1.X(), vert2.X(), vert3.X()}));
     int minY = std::max((int)tile.position.y, (int)std::min({vert1.Y(), vert2.Y(), vert3.Y()}));
     int maxY = std::min((int)(tile.position.y + tile.size.y) - 1, (int)std::max({vert1.Y(), vert2.Y(), vert3.Y()}));
-
-    // Clamp to screen bounds as well
     minX = std::max(0, minX);
     maxX = std::min((int)Screen::GetInstance().GetVisibleWidth() - 1, maxX);
     minY = std::max(0, minY);
     maxY = std::min((int)Screen::GetInstance().GetHeight() - 1, maxY);
-    
-    if (minX >= maxX || minY >= maxY) {
-        return;
-    }
+    if (minX > maxX || minY > maxY) return;
 
-    // Pre-compute triangle vertex positions and edge deltas (moved outside loops)
-    const float ax = vert1.X(), ay = vert1.Y();
-    const float bx = vert2.X(), by = vert2.Y();
-    const float cx = vert3.X(), cy = vert3.Y();
-    
-    // Edge vectors for edge functions
-    const float ab_dx = bx - ax, ab_dy = by - ay;
-    const float bc_dx = cx - bx, bc_dy = cy - by;
-    const float ca_dx = ax - cx, ca_dy = ay - cy;
-    
-    // Pre-compute triangle area and inverse (for barycentric coordinates)
-    const float totalArea = abs((bx - ax) * (cy - ay) - (cx - ax) * (by - ay));
-    if (totalArea <= 1e-7f) {
-        return; // Degenerate triangle
-    }
-    const float invTotalArea = 1.0f / totalArea;
-    
-    // Pre-compute vertex attributes
-    const float vert1_uvw = vert1.UVW(), vert2_uvw = vert2.UVW(), vert3_uvw = vert3.UVW();
-    const float vert1_u = vert1.U(), vert2_u = vert2.U(), vert3_u = vert3.U();
-    const float vert1_v = vert1.V(), vert2_v = vert2.V(), vert3_v = vert3.V();
-    
-    // Cache screen dimensions and depth buffer reference
-    auto& screen = Screen::GetInstance();
+    // Vertex positions
+    const float x1 = vert1.X(), y1 = vert1.Y();
+    const float x2 = vert2.X(), y2 = vert2.Y();
+    const float x3 = vert3.X(), y3 = vert3.Y();
+
+    // Signed doubled area
+    const float area2 = (x2 - x1)*(y3 - y1) - (x3 - x1)*(y2 - y1);
+    if (fabsf(area2) < 1e-7f) return;
+
+    // Perspective-correct attributes
+    const float w1p = vert1.UVW(), w2p = vert2.UVW(), w3p = vert3.UVW();
+    const float u1 = vert1.U(),   u2 = vert2.U(),   u3 = vert3.U();
+    const float v1t = vert1.V(),  v2t = vert2.V(),  v3t = vert3.V();
+
+    // Edge function coefficients (A x + B y + C)
+    auto edgeCoeff = [](float xA, float yA, float xB, float yB, float& A, float& B, float& C){
+        A = yA - yB; B = xB - xA; C = xA * yB - xB * yA; };
+    float A12,B12,C12, A23,B23,C23, A31,B31,C31;
+    edgeCoeff(x1,y1,x2,y2,A12,B12,C12);
+    edgeCoeff(x2,y2,x3,y3,A23,B23,C23);
+    edgeCoeff(x3,y3,x1,y1,A31,B31,C31);
+
+    // Make winding consistent (inside = all edges >= 0)
+    const bool flip = (area2 < 0.0f);
+    auto orient = [&](float& A,float& B,float& C){ if (flip){ A=-A; B=-B; C=-C; } };
+    float signedArea = flip ? -area2 : area2;
+    orient(A12,B12,C12); orient(A23,B23,C23); orient(A31,B31,C31);
+    const float invSignedArea = 1.0f / signedArea;
+
+    // Sub-pixel pattern
+    const auto subPixelOffsets = GetSubpixelOffsets();
+    const int sampleCount = (int)subPixelOffsets.size();
+
+    Screen& screen = Screen::GetInstance();
+    float* depth = screen.GetDepthBuffer();
     const int screenWidth = screen.GetVisibleWidth();
-    float* depthBuffer = screen.GetDepthBuffer();
-    
-    if (!depthBuffer) {
-        Logger::Error("  Depth buffer is nullptr!");
-        return;
-    }
-    
-    // Get dynamic sub-pixel sampling pattern for anti-aliasing
-    const auto subPixelOffsets = GenerateSubPixelOffsets(_antialiasing_samples);
-    const int sampleCount = subPixelOffsets.size();
 
-    // Rasterize with sub-pixel sampling
-    for (int y = minY; y <= maxY; y++) {
-        const int bufferRowOffset = y * screenWidth;
-        const float pixelCenterY = y + 0.5f;
-        
-        for (int x = minX; x <= maxX; x++) {
-            float triangleTotalGrayScale = 0.0f;
-            glm::vec3 triangleTotalRGB = glm::vec3(0.0f);
-            int triangleValidSamples = 0;
-            float totalDepth = 0.0f;
-            
-            const float pixelCenterX = x + 0.5f;
-            
-            // Sample at each sub-pixel location
-            for (int i = 0; i < sampleCount; i++) {
-                const float sampleX = pixelCenterX + subPixelOffsets[i].first;
-                const float sampleY = pixelCenterY + subPixelOffsets[i].second;
-                
-                // Edge function method (optimized - no glm::vec2 construction)
-                const float w1 = (sampleX - ax) * ab_dy - (sampleY - ay) * ab_dx;
-                const float w2 = (sampleX - bx) * bc_dy - (sampleY - by) * bc_dx;
-                const float w3 = (sampleX - cx) * ca_dy - (sampleY - cy) * ca_dx;
-                
-                constexpr float edge_epsilon = -1e-2f; // Small negative value
+    for (int y = minY; y <= maxY; ++y) {
+        const float baseY = y + 0.5f;
+        const int rowOffset = y * screenWidth;
+        for (int x = minX; x <= maxX; ++x) {
+            const float baseX = x + 0.5f;
+            glm::vec3 rgbAccum(0.0f); float grayAccum = 0.0f; float depthAccum = 0.0f; int insideSamples = 0;
 
-                const bool inside = (w1 >= edge_epsilon && w2 >= edge_epsilon && w3 >= edge_epsilon) ||
-                                    (w1 <= -edge_epsilon && w2 <= -edge_epsilon && w3 <= -edge_epsilon);
-                
-                if (inside) {
-                    // Calculate barycentric coordinates using pre-computed values
-                    const float area1 = abs((bx - sampleX) * (cy - sampleY) - (cx - sampleX) * (by - sampleY));
-                    const float area2 = abs((cx - sampleX) * (ay - sampleY) - (ax - sampleX) * (cy - sampleY));
-                    
-                    const float bw1 = area1 * invTotalArea;
-                    const float bw2 = area2 * invTotalArea;
-                    const float bw3 = 1.0f - bw1 - bw2; // Third weight (saves computation)
-                    
-                    // Interpolate depth and texture coordinates
-                    const float tex_w = bw1 * vert1_uvw + bw2 * vert2_uvw + bw3 * vert3_uvw;
-                    
-                    if (tex_w <= 0.0f) {
-                        if (x == minX && y == minY && i == 0) {
-                            Logger::Warning("        tex_w is <= 0: " + std::to_string(tex_w));
-                        }
-                        continue;
-                    }
-                    
-                    const float invTexW = 1.0f / tex_w;
-                    const float tex_uw = (bw1 * vert1_u + bw2 * vert2_u + bw3 * vert3_u) * invTexW;
-                    const float tex_vw = (bw1 * vert1_v + bw2 * vert2_v + bw3 * vert3_v) * invTexW;
-                    
-                    if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
-                        // Use bilinear filtered sampling for smoother edges
-                        float texWidthProd = tex_uw * texWidth;
-                        float texHeightProd = tex_vw * texHeight;
-                        
-                        if (_grayscale) {
-                            const float sampleGrayScale = tex->GetPixelGrayscale(texWidthProd, texHeightProd);
-                            triangleTotalGrayScale += sampleGrayScale;
-                        } else {
-                            const glm::vec3 sampleRGB = tex->GetPixelRGB(texWidthProd, texHeightProd);
-                            triangleTotalRGB += sampleRGB;
-                        }
-                        totalDepth += tex_w;
-                        triangleValidSamples++;
-                    }
+            // Pixel center edge evaluations
+            const float e12c = A12 * baseX + B12 * baseY + C12;
+            const float e23c = A23 * baseX + B23 * baseY + C23;
+            const float e31c = A31 * baseX + B31 * baseY + C31;
+
+            // If clearly outside (all negative beyond margin) skip
+            if (e12c < -1.1f && e23c < -1.1f && e31c < -1.1f) continue;
+
+            for (int si = 0; si < sampleCount; ++si) {
+                const float sx = baseX + subPixelOffsets[si].first;
+                const float sy = baseY + subPixelOffsets[si].second;
+                const float e12 = A12 * sx + B12 * sy + C12;
+                const float e23 = A23 * sx + B23 * sy + C23;
+                const float e31 = A31 * sx + B31 * sy + C31;
+                if (e12 < 0.f || e23 < 0.f || e31 < 0.f) continue;
+                const float wA = e23 * invSignedArea;
+                const float wB = e31 * invSignedArea;
+                const float wC = 1.0f - wA - wB;
+                const float perspW = wA*w1p + wB*w2p + wC*w3p;
+                const float invPerspW = 1.0f / perspW;
+                const float tu = (wA*u1 + wB*u2 + wC*u3) * invPerspW;
+                const float tv = (wA*v1t + wB*v2t + wC*v3t) * invPerspW;
+                if (tu < 0.f || tu >= 1.f || tv < 0.f || tv >= 1.f) continue;
+                const float sX = tu * texWidth;
+                const float sY = tv * texHeight;
+                if (_grayscale) {
+                    grayAccum += tex->GetPixelGrayscale(sX, sY);
+                } else {
+                    rgbAccum += tex->GetPixelRGB(sX, sY);
                 }
+                depthAccum += perspW;
+                ++insideSamples;
             }
-            
-            // Calculate final pixel color
-            if (triangleValidSamples > 0) {
-                // Use reciprocal multiplication instead of division for better performance
-                const float invValidSamples = 1.0f / triangleValidSamples;
-                const float averageDepth = totalDepth * invValidSamples;
-                
-                const int bufferIndex = bufferRowOffset + x;
-                
-                if (bufferIndex >= screenWidth * Screen::GetInstance().GetHeight()) {
-                    Logger::Error("        Buffer index out of bounds! Index: " + std::to_string(bufferIndex) + ", max: " + std::to_string(screenWidth * Screen::GetInstance().GetHeight() - 1));
-                    continue;
-                }
-                
-                if (averageDepth > depthBuffer[bufferIndex]) {
+
+            if (insideSamples) {
+                const int idx = rowOffset + x;
+                const float avgDepth = depthAccum / insideSamples;
+                if (avgDepth > depth[idx]) {
                     if (_grayscale) {
-                        const float averageTriangleGrayScale = triangleTotalGrayScale * invValidSamples;
-                        Screen::GetInstance().PlotPixel(glm::vec2(x, y), GetColGlyphGreyScale(averageTriangleGrayScale));
+                        const float g = grayAccum / insideSamples;
+                        screen.PlotPixel(glm::vec2(x, y), GetColGlyphGreyScale(g));
                     } else {
-                        const glm::vec3 averageTriangleRGB = triangleTotalRGB * invValidSamples;
-                        Screen::GetInstance().PlotPixel(glm::vec2(x, y), GetColGlyph(averageTriangleRGB));
+                        const glm::vec3 c = rgbAccum * (1.0f / insideSamples);
+                        screen.PlotPixel(glm::vec2(x, y), GetColGlyph(c));
                     }
-                    depthBuffer[bufferIndex] = averageDepth;
+                    depth[idx] = avgDepth;
                 }
             }
-            // Note: We don't render pure background pixels here since this is partial antialiasing
-            // The background should already be cleared before rendering triangles
         }
     }
 }
 
-void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex) {
-    int texWidth = tex->GetWidth();
-    int texHeight = tex->GetHeight();
-    if (texWidth == 0 || texHeight == 0) {
-        return;
-    }
+void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& v1, const VERTEX& v2, const VERTEX& v3, const Texture* tex) {
+    if (!tex) { Logger::Error("  Texture is nullptr!"); return; }
 
-    // Get triangle bounding box
-    int minX = std::max(0, (int)std::min({vert1.X(), vert2.X(), vert3.X()}));
-    int maxX = std::min((int)Screen::GetInstance().GetVisibleWidth() - 1, (int)std::max({vert1.X(), vert2.X(), vert3.X()}));
-    int minY = std::max(0, (int)std::min({vert1.Y(), vert2.Y(), vert3.Y()}));
-    int maxY = std::min((int)Screen::GetInstance().GetHeight() - 1, (int)std::max({vert1.Y(), vert2.Y(), vert3.Y()}));
+    const int texWidth = tex->GetWidth();
+    const int texHeight = tex->GetHeight();
+    if (texWidth == 0 || texHeight == 0) return;
 
-    // Pre-compute triangle vertex positions and edge deltas (moved outside loops)
-    const float ax = vert1.X(), ay = vert1.Y();
-    const float bx = vert2.X(), by = vert2.Y();
-    const float cx = vert3.X(), cy = vert3.Y();
-    
-    // Edge vectors for edge functions
-    const float ab_dx = bx - ax, ab_dy = by - ay;
-    const float bc_dx = cx - bx, bc_dy = cy - by;
-    const float ca_dx = ax - cx, ca_dy = ay - cy;
-    
-    // Pre-compute triangle area and inverse (for barycentric coordinates)
-    const float totalArea = abs((bx - ax) * (cy - ay) - (cx - ax) * (by - ay));
-    if (totalArea <= 1e-7f) return; // Degenerate triangle
-    const float invTotalArea = 1.0f / totalArea;
-    
-    // Pre-compute vertex attributes
-    const float vert1_uvw = vert1.UVW(), vert2_uvw = vert2.UVW(), vert3_uvw = vert3.UVW();
-    const float vert1_u = vert1.U(), vert2_u = vert2.U(), vert3_u = vert3.U();
-    const float vert1_v = vert1.V(), vert2_v = vert2.V(), vert3_v = vert3.V();
-    
-    // Cache screen dimensions and depth buffer reference
-    const int screenWidth = Screen::GetInstance().GetVisibleWidth();
-    float* depthBuffer = Screen::GetInstance().GetDepthBuffer();
+    // Triangle bounding box (clamped)
+    int minX = std::max(0, (int)std::floor(std::min({ v1.X(), v2.X(), v3.X() })));
+    int maxX = std::min((int)Screen::GetInstance().GetVisibleWidth() - 1, (int)std::ceil (std::max({ v1.X(), v2.X(), v3.X() })));
+    int minY = std::max(0, (int)std::floor(std::min({ v1.Y(), v2.Y(), v3.Y() })));
+    int maxY = std::min((int)Screen::GetInstance().GetHeight()       - 1, (int)std::ceil (std::max({ v1.Y(), v2.Y(), v3.Y() })));
+    if (minX > maxX || minY > maxY) return;
 
-    // Get dynamic sub-pixel sampling pattern for anti-aliasing
-    const auto subPixelOffsets = GenerateSubPixelOffsets(_antialiasing_samples);
-    const int sampleCount = subPixelOffsets.size();
+    // Vertex positions
+    const float x1 = v1.X(), y1 = v1.Y();
+    const float x2 = v2.X(), y2 = v2.Y();
+    const float x3 = v3.X(), y3 = v3.Y();
 
-    // Rasterize with sub-pixel sampling
-    for (int y = minY; y <= maxY; y++) {
-        const int bufferRowOffset = y * screenWidth;
-        const float pixelCenterY = y + 0.5f;
-        
-        for (int x = minX; x <= maxX; x++) {
-            float triangleTotalGrayScale = 0.0f;
-            glm::vec3 triangleTotalRGB = glm::vec3(0.0f);
-            int triangleValidSamples = 0;
-            float totalDepth = 0.0f;
-            
-            const float pixelCenterX = x + 0.5f;
-            
-            // Sample at each sub-pixel location
-            for (int i = 0; i < sampleCount; i++) {
-                const float sampleX = pixelCenterX + subPixelOffsets[i].first;
-                const float sampleY = pixelCenterY + subPixelOffsets[i].second;
-                
-                // Edge function method (optimized - no glm::vec2 construction)
-                const float w1 = (sampleX - ax) * ab_dy - (sampleY - ay) * ab_dx;
-                const float w2 = (sampleX - bx) * bc_dy - (sampleY - by) * bc_dx;
-                const float w3 = (sampleX - cx) * ca_dy - (sampleY - cy) * ca_dx;
-                
-                const bool inside = (w1 >= 0 && w2 >= 0 && w3 >= 0) || (w1 <= 0 && w2 <= 0 && w3 <= 0);
-                
-                if (inside) {
-                    // Calculate barycentric coordinates using pre-computed values
-                    const float area1 = abs((bx - sampleX) * (cy - sampleY) - (cx - sampleX) * (by - sampleY));
-                    const float area2 = abs((cx - sampleX) * (ay - sampleY) - (ax - sampleX) * (cy - sampleY));
-                    
-                    const float bw1 = area1 * invTotalArea;
-                    const float bw2 = area2 * invTotalArea;
-                    const float bw3 = 1.0f - bw1 - bw2; // Third weight (saves computation)
-                    
-                    // Interpolate depth and texture coordinates
-                    const float tex_w = bw1 * vert1_uvw + bw2 * vert2_uvw + bw3 * vert3_uvw;
-                    const float invTexW = 1.0f / tex_w;
-                    const float tex_uw = (bw1 * vert1_u + bw2 * vert2_u + bw3 * vert3_u) * invTexW;
-                    const float tex_vw = (bw1 * vert1_v + bw2 * vert2_v + bw3 * vert3_v) * invTexW;
-                    
-                    if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
-                        // Use bilinear filtered sampling for smoother edges
-                        float texWidthProd = tex_uw * texWidth;
-                        float texHeightProd = tex_vw * texHeight;
-                        
-                        if (_grayscale) {
-                            const float sampleGrayScale = tex->GetPixelGrayscale(texWidthProd, texHeightProd);
-                            triangleTotalGrayScale += sampleGrayScale;
-                        } else {
-                            const glm::vec3 sampleRGB = tex->GetPixelRGB(texWidthProd, texHeightProd);
-                            triangleTotalRGB += sampleRGB;
-                        }
-                        totalDepth += tex_w;
-                        triangleValidSamples++;
-                    }
+    // Signed doubled area
+    const float area2 = (x2 - x1)*(y3 - y1) - (x3 - x1)*(y2 - y1);
+    if (fabsf(area2) < 1e-7f) return;
+
+    // Perspective-correct attributes
+    const float w1p = v1.UVW(), w2p = v2.UVW(), w3p = v3.UVW();
+    const float u1 = v1.U(),   u2 = v2.U(),   u3 = v3.U();
+    const float v1t = v1.V(),  v2t = v2.V(),  v3t = v3.V();
+
+    // Edge function coefficients (A x + B y + C)
+    auto edgeCoeff = [](float xA, float yA, float xB, float yB, float& A, float& B, float& C){
+        A = yA - yB; B = xB - xA; C = xA * yB - xB * yA; };
+    float A12,B12,C12, A23,B23,C23, A31,B31,C31;
+    edgeCoeff(x1,y1,x2,y2,A12,B12,C12);
+    edgeCoeff(x2,y2,x3,y3,A23,B23,C23);
+    edgeCoeff(x3,y3,x1,y1,A31,B31,C31);
+
+    // Make winding consistent (inside = all edges >= 0)
+    const bool flip = (area2 < 0.0f);
+    auto orient = [&](float& A,float& B,float& C){ if (flip){ A=-A; B=-B; C=-C; } };
+    float signedArea = flip ? -area2 : area2;
+    orient(A12,B12,C12); orient(A23,B23,C23); orient(A31,B31,C31);
+    const float invSignedArea = 1.0f / signedArea;
+
+    // Sub-pixel pattern
+    const auto subPixelOffsets = GetSubpixelOffsets();
+    const int sampleCount = (int)subPixelOffsets.size();
+
+    Screen& screen = Screen::GetInstance();
+    float* depth = screen.GetDepthBuffer();
+    const int screenWidth = screen.GetVisibleWidth();
+
+    for (int y = minY; y <= maxY; ++y) {
+        const float baseY = y + 0.5f;
+        const int rowOffset = y * screenWidth;
+        for (int x = minX; x <= maxX; ++x) {
+            const float baseX = x + 0.5f;
+
+            glm::vec3 rgbAccum(0.0f); float grayAccum = 0.0f; float depthAccum = 0.0f; int insideSamples = 0;
+
+            // Pixel center edge evaluations
+            const float e12c = A12 * baseX + B12 * baseY + C12;
+            const float e23c = A23 * baseX + B23 * baseY + C23;
+            const float e31c = A31 * baseX + B31 * baseY + C31;
+
+            // If clearly outside (all negative beyond margin) skip
+            if (e12c < -1.1f && e23c < -1.1f && e31c < -1.1f) continue;
+
+            // Multisample path
+            for (int si = 0; si < sampleCount; ++si) {
+                const float sx = baseX + subPixelOffsets[si].first;
+                const float sy = baseY + subPixelOffsets[si].second;
+                const float e12 = A12 * sx + B12 * sy + C12;
+                const float e23 = A23 * sx + B23 * sy + C23;
+                const float e31 = A31 * sx + B31 * sy + C31;
+                if (e12 < 0.f || e23 < 0.f || e31 < 0.f) continue;
+                const float wA = e23 * invSignedArea;
+                const float wB = e31 * invSignedArea;
+                const float wC = 1.0f - wA - wB;
+                const float perspW = wA*w1p + wB*w2p + wC*w3p;
+                const float invPerspW = 1.0f / perspW;
+                const float tu = (wA*u1 + wB*u2 + wC*u3) * invPerspW;
+                const float tv = (wA*v1t + wB*v2t + wC*v3t) * invPerspW;
+                if (tu < 0.f || tu >= 1.f || tv < 0.f || tv >= 1.f) continue;
+                const float sX = tu * texWidth;
+                const float sY = tv * texHeight;
+                if (_grayscale) {
+                    grayAccum += tex->GetPixelGrayscale(sX, sY);
+                } else {
+                    rgbAccum += tex->GetPixelRGB(sX, sY);
                 }
+                depthAccum += perspW;
+                ++insideSamples;
             }
-            
-            // Calculate final pixel color
-            if (triangleValidSamples > 0) {
-                // Use reciprocal multiplication instead of division for better performance
-                const float invValidSamples = 1.0f / triangleValidSamples;
-                const float averageDepth = totalDepth * invValidSamples;
-                
-                const int bufferIndex = bufferRowOffset + x;
-                if (averageDepth > depthBuffer[bufferIndex]) {
+
+            if (insideSamples) {
+                const int idx = rowOffset + x;
+                const float avgDepth = depthAccum / insideSamples;
+                if (avgDepth > depth[idx]) {
                     if (_grayscale) {
-                        const float averageTriangleGrayScale = triangleTotalGrayScale * invValidSamples;
-                        const CHAR_INFO finalGlyph = GetColGlyphGreyScale(averageTriangleGrayScale);
-                        Screen::GetInstance().PlotPixel(glm::vec2(x, y), finalGlyph);
+                        const float g = grayAccum / insideSamples;
+                        screen.PlotPixel(glm::vec2(x, y), GetColGlyphGreyScale(g));
                     } else {
-                        const glm::vec3 averageTriangleRGB = triangleTotalRGB * invValidSamples;
-                        const CHAR_INFO finalGlyph = GetColGlyph(averageTriangleRGB);
-                        Screen::GetInstance().PlotPixel(glm::vec2(x, y), finalGlyph);
+                        const glm::vec3 c = rgbAccum * (1.0f / insideSamples);
+                        screen.PlotPixel(glm::vec2(x, y), GetColGlyph(c));
                     }
-                    depthBuffer[bufferIndex] = averageDepth;
+                    depth[idx] = avgDepth;
                 }
             }
         }
@@ -1194,7 +1126,7 @@ CHAR_INFO Renderer::GetColGlyphGreyScale(const float greyscale) {
 
 CHAR_INFO Renderer::GetColGlyph(const glm::vec3 rgb) {
     // Pre-calculate intensity once using optimized luminance weights
-    const float intensity = 0.299f * rgb.r + 0.587f * rgb.g + 0.114f * rgb.b;
+    const float intensity = GrayScaleRGB(rgb);
     
     // Early exit for very dark colors - use black background
     if (intensity < 0.1f) {
@@ -1366,3 +1298,9 @@ std::vector<std::pair<float, float>> Renderer::GenerateSubPixelOffsets(int sampl
     return offsets;
 }
 
+std::vector<std::pair<float, float>> Renderer::GetSubpixelOffsets() {
+    if (_subpixel_offsets.empty()) {
+        _subpixel_offsets = GenerateSubPixelOffsets(_antialiasing_samples);
+    }
+    return _subpixel_offsets;
+}

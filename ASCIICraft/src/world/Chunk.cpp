@@ -50,6 +50,8 @@ void Chunk::GenerateMesh() {
     if (!generated) {
         return; // Can't generate mesh for ungenerated chunk
     }
+
+
     
     std::vector<VERTEX> vertices;
 
@@ -58,6 +60,8 @@ void Chunk::GenerateMesh() {
         Logger::Warning("No texture atlas available for chunk mesh generation");
         return;
     }
+
+    // LogNeighbors();
 
     Logger::Debug("Generating mesh for chunk at (" + std::to_string(coord.x) + ", " + std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
     
@@ -179,17 +183,7 @@ void Chunk::GenerateMesh() {
                                 // Check if the neighbor block in adjacent chunk is solid
                                 const Block& neighborBlock = neighborChunk->GetBlock(localX, localY, localZ);
                                 shouldRenderFace = !neighborBlock.IsSolid();
-                                
-                                // Only log successful culling to avoid spam
-                                if (!shouldRenderFace) {
-                                    Logger::Debug("Face culled: chunk(" + std::to_string(coord.x) + "," + std::to_string(coord.y) + "," + std::to_string(coord.z) + 
-                                                ") block(" + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z) + ") face=" + std::to_string(face) +
-                                                " neighbor_chunk_dir=" + std::to_string(neighborChunkDir) + 
-                                                " neighbor_block(" + std::to_string(localX) + "," + std::to_string(localY) + "," + std::to_string(localZ) + ")");
-                                }
                             }
-                            // If neighbor chunk doesn't exist or isn't generated, render the face (shouldRenderFace = true)
-                            // No debug logging for this case to avoid spam
                         }
                     }
                     
@@ -337,5 +331,15 @@ void Chunk::Render(VERTEX_SHADER& vertex_shader, const Camera3D& camera) {
         Renderer::DrawMesh(vertex_shader, this->mesh.get(), camera);
     } else {
         Logger::Warning("Chunk mesh has no texture - skipping render");
+    }
+}
+
+void Chunk::LogNeighbors() const {
+    for (int i = 0; i < 6; ++i) {
+        if (neighbors[i]) {
+            Logger::Debug("Neighbor " + std::to_string(i) + ": " + neighbors[i]->coord.ToString());
+        } else {
+            Logger::Debug("Neighbor " + std::to_string(i) + ": nullptr");
+        }
     }
 }

@@ -315,11 +315,11 @@ void Game::RunLost()
 
 void Game::MariahAI()
 {
-	// float chaseSpeed = 70.0f;
-	// float patrolSpeed = 130.0f;
+	float chaseSpeed = 40.0f;
+	float patrolSpeed = 130.0f;
 
-	float chaseSpeed = 0.0f;
-	float patrolSpeed = 0.0f;
+	// float chaseSpeed = 0.0f;
+	// float patrolSpeed = 0.0f;
 	
 	for (int i = 0; i < enemies.size(); i++)
 	{
