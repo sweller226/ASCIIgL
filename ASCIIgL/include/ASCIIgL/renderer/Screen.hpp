@@ -28,14 +28,7 @@
 #ifdef _WIN32
     // Windows types are already included above
 #else
-    // Define minimal types for non-Windows platforms
-    struct CHAR_INFO {
-        union {
-            wchar_t UnicodeChar;
-            char AsciiChar;
-        } Char;
-        unsigned short Attributes;
-    };
+
 #endif
 
 // Error codes
@@ -63,7 +56,7 @@ private:
     unsigned int _screen_height = 0;
     std::wstring _title = L"";
     unsigned int _fontSize = 0;
-    unsigned short _backgroundCol = BG_BLACK;
+    COLOR _backgroundCol = COLOR::BG_BLACK;
 
     // Buffers
     float* depthBuffer = nullptr;
@@ -104,7 +97,7 @@ public:
         const unsigned int fontSize, 
         const unsigned int fpsCap, 
         const float fpsWindowSec, 
-        const unsigned short backgroundCol
+        const COLOR backgroundCol
     );
 
     void SetFontConsole(HANDLE currentHandle, unsigned int fontSize);
@@ -116,13 +109,13 @@ public:
     float GetDeltaTime();
 
     // Rendering and buffer management
-    void RenderTitle(bool showFps);
+    void RenderTitle(const bool showFps);
     void ClearBuffer();
     void OutputBuffer();
-    void PlotPixel(glm::vec2 p, char character, short Colour);
-    void PlotPixel(glm::vec2 p, CHAR_INFO charCol);
-    void PlotPixel(int x, int y, char character, short Colour);
-    void PlotPixel(int x, int y, CHAR_INFO charCol);
+    void PlotPixel(const glm::vec2& p, const CHAR character, const COLOR Colour);
+    void PlotPixel(const glm::vec2& p, const CHAR_INFO charCol);
+    void PlotPixel(int x, int y, const CHAR character, const COLOR Colour);
+    void PlotPixel(int x, int y, const CHAR_INFO charCol);
 
     std::wstring GetTitle();
     void SetTitle(const std::wstring& title);
@@ -139,8 +132,8 @@ public:
     void SetTileSize(const unsigned int x, const unsigned int y);
     void CalculateTileCounts();
 
-    unsigned short GetBackgroundColor();
-    void SetBackgroundColor(const unsigned short color);
+    COLOR GetBackgroundColor();
+    void SetBackgroundColor(const COLOR color);
 
     // Public buffer access (needed for renderer)
     CHAR_INFO* GetPixelBuffer();

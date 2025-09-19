@@ -5,6 +5,7 @@
 #include <ASCIIgL/renderer/Renderer.hpp>
 
 #include <ASCIICraft/world/Block.hpp>
+#include <ASCIICraft/gui/GuiManager.hpp>
 
 Game::Game() 
     : gameState(GameState::Playing)
@@ -18,13 +19,15 @@ Game::~Game() {
 bool Game::Initialize() {
     Logger::Info("Initializing ASCIICraft...");
 
-    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, static_cast<unsigned int>(TARGET_FPS), 1.0f, BG_BLUE);
+    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, static_cast<unsigned int>(TARGET_FPS), 1.0f, COLOR::BG_BLUE);
     Renderer::SetWireframe(false);
     Renderer::SetBackfaceCulling(true);
     Renderer::SetCCW(true);
 	Renderer::SetAntialiasingsamples(4);
 	Renderer::SetAntialiasing(true);
 	Renderer::SetGrayscale(false);
+    Renderer::SetCharVariety(CHAR_VARIETY::EIGHT);
+    Renderer::SetContrast(1.f); // Set default contrast
 
     // Initialize screen
     if (screenInitResult != SCREEN_NOERROR) {
@@ -63,16 +66,21 @@ void Game::Run() {
     }
     
     Logger::Info("Starting game loop...");
-    
+
+    GuiManager guiManager = GuiManager(SCREEN_WIDTH, SCREEN_HEIGHT);
+    // Texture grassTexture = Texture("res/textures/green-grass-close-up.png");
+    Texture grassTexture = Texture("res/textures/green-gradient.jpg");
+
     // Main game loop
     while (isRunning) {
         Screen::GetInstance().StartFPSClock();
         Screen::GetInstance().ClearBuffer();
         
         HandleInput();
-        Update();
-        Render();
-        
+        // Update();
+        Renderer::Draw2DQuadPercSpace(guiManager.GetVShader(), grassTexture, glm::vec2(0.3f, 0.25f), 0.0f, glm::vec2(1, 1), guiManager.GetCamera(), 0);
+        // Render();
+        Screen::GetInstance().OutputBuffer();
         Screen::GetInstance().EndFPSClock();
         Screen::GetInstance().RenderTitle(true);
     }
@@ -104,7 +112,6 @@ void Game::Render() {
             break;
     }
     
-    Screen::GetInstance().OutputBuffer();
 }
 
 void Game::HandleInput() {

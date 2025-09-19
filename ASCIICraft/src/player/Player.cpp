@@ -19,7 +19,7 @@ Player::Player(const glm::vec3& startPosition, GameMode mode)
     , gameMode(mode)
     , movementState(MovementState::Walking)
     , onGround(false)
-    , flying(false) // Start on ground in survival mode
+    , flying(true) // Start on ground in survival mode
     , sprinting(false)
     , sneaking(false)
     , jumpPressed(false)
@@ -69,6 +69,12 @@ void Player::UpdateCamera() {
 void Player::Move(const glm::vec3& direction) {
     // Get current movement speed based on state
     float currentSpeed = walkSpeed;
+
+    Logger::Debug("Player Move: direction=(" + 
+                  std::to_string(direction.x) + ", " + 
+                  std::to_string(direction.y) + ", " + 
+                  std::to_string(direction.z) + "), state=" + 
+                  std::to_string(static_cast<int>(movementState)));
     
     switch (movementState) {
         case MovementState::Running:
@@ -155,16 +161,16 @@ void Player::Respawn(const glm::vec3& spawnPosition) {
 }
 
 void Player::UpdateMovementState() {
-    if (flying) {
-        movementState = MovementState::Flying;
-    } else if (sprinting) {
+    if (sprinting) {
         movementState = MovementState::Running;
     } else if (sneaking) {
         movementState = MovementState::Sneaking;
-    } else if (!onGround) {
-        movementState = MovementState::Falling;
     } else {
         movementState = MovementState::Walking;
+    }
+
+    if (flying) {
+        movementState = MovementState::Flying;
     }
 }
 

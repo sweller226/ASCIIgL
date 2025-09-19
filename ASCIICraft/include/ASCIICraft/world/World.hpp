@@ -50,7 +50,8 @@ public:
     void UpdateChunkLoading();
     
     // Manual chunk generation (for now - no automatic terrain)
-    void GenerateEmptyChunk(const ChunkCoord& coord);
+    void GenerateGrassLayerChunk(const ChunkCoord& coord);
+    void GenerateOneBlockGrassChunk(const ChunkCoord& coord);
     
     // Rendering support
     std::vector<Chunk*> GetVisibleChunks(const glm::vec3& playerPos, const glm::vec3& viewDir) const;

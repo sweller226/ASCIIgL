@@ -59,7 +59,7 @@ namespace BlockTextures {
                 
             case BlockType::Wood:
                 switch (face) {
-                    case BlockFace::Top:
+                    case BlockFace::Top:    return GetTileUV(5, 1);
                     case BlockFace::Bottom: return GetTileUV(5, 1);  // Wood top/bottom (rings)
                     default:                return GetTileUV(4, 1);  // Wood side (bark)
                 }

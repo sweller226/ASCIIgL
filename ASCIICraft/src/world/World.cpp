@@ -138,7 +138,7 @@ void World::LoadChunk(const ChunkCoord& coord) {
     loadedChunks[coord] = std::move(chunk);
     
     // Now generate terrain (GetChunk will find the stored chunk)
-    GenerateEmptyChunk(coord);
+    GenerateOneBlockGrassChunk(coord);
     
     // Update neighbors
     UpdateChunkNeighbors(coord);
@@ -204,7 +204,7 @@ void World::UpdateChunkLoading() {
     }
 }
 
-void World::GenerateEmptyChunk(const ChunkCoord& coord) {
+void World::GenerateGrassLayerChunk(const ChunkCoord& coord) {
     // For now, just generate an empty chunk
     // TODO: Implement proper terrain generation
     Chunk* chunk = GetChunk(coord);
@@ -214,12 +214,21 @@ void World::GenerateEmptyChunk(const ChunkCoord& coord) {
             // Generate grass layer at y=0 chunks
             for (int x = 0; x < Chunk::SIZE; ++x) {
                 for (int z = 0; z < Chunk::SIZE; ++z) {
-                    chunk->SetBlock(x, 0, z, Block(BlockType::Wood));
+                    chunk->SetBlock(x, 0, z, Block(BlockType::Grass));
                 }
             }
         }
         
         // Mark chunk as generated and generate its mesh
+        chunk->SetGenerated(true);
+        chunk->GenerateMesh();
+    }
+}
+
+void World::GenerateOneBlockGrassChunk(const ChunkCoord& coord) {
+    Chunk* chunk = GetChunk(coord);
+    if (chunk) {
+        chunk->SetBlock(0, 0, 0, Block(BlockType::Grass));
         chunk->SetGenerated(true);
         chunk->GenerateMesh();
     }

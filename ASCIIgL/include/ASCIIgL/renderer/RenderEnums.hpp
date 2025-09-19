@@ -1,7 +1,7 @@
 #pragma once
 
 // just a bunch of enums for different colours, taken from a series on OneLoneCoder.com
-enum COLOUR
+enum class COLOR
 {	
 	FG_WHITE = 0x000F,
 	FG_GREY = 0x0007,
@@ -44,10 +44,15 @@ enum COLOUR
 // Using hashtag (#) character which is universally available in all fonts
 enum class PX_TYPE
 {
-    PX_FULL = 219,         // █ (Full block - DOS char 219)
-    PX_THREEQUARTERS = 178, // ▓ (Dark shade - DOS char 178)
-    PX_HALF = 177,          // ▒ (Medium shade - DOS char 177) 
-    PX_QUARTER = 176,       // ░ (Light shade - DOS char 176)
+    PX_FULL = 219,           // █ (Full block - DOS char 219)
+    PX_SEVEN_EIGHTHS = 178,  // ▓ (Dark shade - DOS char 178)
+    PX_THREE_QUARTERS = 177, // ▒ (Medium shade - DOS char 177)
+    PX_FIVE_EIGHTHS = 176,   // ░ (Light shade - DOS char 176)
+    PX_HALF = 35,            // # (Hash, as a visible half block)
+    PX_THREE_EIGHTHS = 42,   // * (Asterisk, as a visible partial block)
+    PX_QUARTER = 46,         // . (Dot, as a faint quarter block)
+    PX_ONE_EIGHTH = 32,      //   (Space, as empty)
+    PX_NONE = 0              // No pixel
 };
 
 enum class CHAR_VARIETY {

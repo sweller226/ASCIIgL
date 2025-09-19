@@ -59,11 +59,11 @@
         int Initialize(const unsigned int true_width, const unsigned int height, const unsigned int fontSize);
         void ClearBuffer();
         void OutputBuffer();
-        void RenderTitle(bool showFps);
-        void PlotPixel(glm::vec2 p, char character, short Colour);
-        void PlotPixel(glm::vec2 p, CHAR_INFO charCol);
-        void PlotPixel(int x, int y, char character, short Colour);
-        void PlotPixel(int x, int y, CHAR_INFO charCol);
+        void RenderTitle(const bool showFps);
+        void PlotPixel(const glm::vec2& p, const CHAR character, const COLOR Colour);
+        void PlotPixel(const glm::vec2& p, const CHAR_INFO charCol);
+        void PlotPixel(int x, int y, const CHAR character, const COLOR Colour);
+        void PlotPixel(int x, int y, const CHAR_INFO charCol);
         CHAR_INFO* GetPixelBuffer();
         bool IsWindowsTerminal();
         std::wstring GetWindowsTerminalSettingsPath();
@@ -192,14 +192,14 @@ int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigne
 }
 
 void Screen::WindowsImpl::ClearBuffer() {
-    std::fill(pixelBuffer, pixelBuffer + screen._true_screen_width * screen._screen_height, CHAR_INFO{'\0', screen._backgroundCol});
+    std::fill(pixelBuffer, pixelBuffer + screen._true_screen_width * screen._screen_height, CHAR_INFO{'\0', static_cast<WORD>(screen._backgroundCol)});
 }
 
 void Screen::WindowsImpl::OutputBuffer() {
     WriteConsoleOutput(_hOutput, pixelBuffer, dwBufferSize, dwBufferCoord, &rcRegion);
 }
 
-void Screen::WindowsImpl::RenderTitle(bool showFps) {
+void Screen::WindowsImpl::RenderTitle(const bool showFps) {
     char titleBuffer[256];
 
     if (showFps) {
@@ -219,19 +219,19 @@ void Screen::WindowsImpl::RenderTitle(bool showFps) {
     SetConsoleTitleA(titleBuffer);
 }
 
-void Screen::WindowsImpl::PlotPixel(glm::vec2 p, char character, short Colour) {
+void Screen::WindowsImpl::PlotPixel(const glm::vec2& p, const CHAR character, const COLOR Colour) {
     int x = static_cast<int>(p.x) * 2; // Double the x coordinate for wide buffer
     int y = static_cast<int>(p.y);
     if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot the pixel twice horizontally
         pixelBuffer[y * screen._true_screen_width + x].Char.AsciiChar = character;
-        pixelBuffer[y * screen._true_screen_width + x].Attributes = Colour;
+        pixelBuffer[y * screen._true_screen_width + x].Attributes = static_cast<WORD>(Colour);
         pixelBuffer[y * screen._true_screen_width + x + 1].Char.AsciiChar = character;
-        pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = Colour;
+        pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = static_cast<WORD>(Colour);
     }
 }
 
-void Screen::WindowsImpl::PlotPixel(glm::vec2 p, CHAR_INFO charCol) {
+void Screen::WindowsImpl::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol) {
     int x = static_cast<int>(p.x) * 2; // Double the x coordinate for wide buffer
     int y = static_cast<int>(p.y);
     if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
@@ -241,14 +241,14 @@ void Screen::WindowsImpl::PlotPixel(glm::vec2 p, CHAR_INFO charCol) {
     }
 }
 
-void Screen::WindowsImpl::PlotPixel(int x, int y, char character, short Colour) {
+void Screen::WindowsImpl::PlotPixel(int x, int y, CHAR character, const COLOR Colour) {
     x *= 2; // Double the x coordinate for wide buffer
     if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot the pixel twice horizontally
         pixelBuffer[y * screen._true_screen_width + x].Char.AsciiChar = character;
-        pixelBuffer[y * screen._true_screen_width + x].Attributes = Colour;
+        pixelBuffer[y * screen._true_screen_width + x].Attributes = static_cast<WORD>(Colour);
         pixelBuffer[y * screen._true_screen_width + x + 1].Char.AsciiChar = character;
-        pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = Colour;
+        pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = static_cast<WORD>(Colour);
     }
 }
 
@@ -304,7 +304,7 @@ int Screen::InitializeScreen(
     const unsigned int fontSize, 
     const unsigned int fpsCap, 
     const float fpsWindowSec, 
-    const unsigned short backgroundCol
+    const COLOR backgroundCol
 ) {
     Logger::Debug(L"CPU has max " + std::to_wstring(std::thread::hardware_concurrency()) + L" threads.");
 
@@ -366,7 +366,7 @@ int Screen::InitializeScreen(
     return SCREEN_NOERROR;
 }
 
-void Screen::RenderTitle(bool showFps) {
+void Screen::RenderTitle(const bool showFps) {
     _impl->RenderTitle(showFps);
 }
 
@@ -380,19 +380,19 @@ void Screen::OutputBuffer() {
     _impl->OutputBuffer();
 }
 
-void Screen::PlotPixel(glm::vec2 p, char character, short Colour) {
+void Screen::PlotPixel(const glm::vec2& p, const CHAR character, const COLOR Colour) {
     _impl->PlotPixel(p, character, Colour);
 }
 
-void Screen::PlotPixel(glm::vec2 p, CHAR_INFO charCol) {
+void Screen::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol) {
     _impl->PlotPixel(p, charCol);
 }
 
-void Screen::PlotPixel(int x, int y, char character, short Colour) {
+void Screen::PlotPixel(int x, int y, const CHAR character, const COLOR Colour) {
     _impl->PlotPixel(x, y, character, Colour);
 }
 
-void Screen::PlotPixel(int x, int y, CHAR_INFO charCol) {
+void Screen::PlotPixel(int x, int y, const CHAR_INFO charCol) {
     _impl->PlotPixel(x, y, charCol);
 }
 
@@ -452,11 +452,11 @@ void Screen::CalculateTileCounts() {
     TILE_COUNT_Y = (_screen_height + TILE_SIZE_Y - 1) / TILE_SIZE_Y;
 }
 
-unsigned short Screen::GetBackgroundColor() {
+COLOR Screen::GetBackgroundColor() {
     return _backgroundCol;
 }
 
-void Screen::SetBackgroundColor(unsigned short color) {
+void Screen::SetBackgroundColor(const COLOR color) {
     _backgroundCol = color;
 }
 

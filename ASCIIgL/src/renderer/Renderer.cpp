@@ -36,7 +36,7 @@ void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const Camera3D
     }
 }
 
-void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec3 position, const glm::vec3 rotation, const glm::vec3 size, const Camera3D& camera) {
+void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera) {
     glm::mat4 model = CalcModelMatrix(position, rotation, size);
 
     VSHADER.SetMatrices(model, camera.view, camera.proj);
@@ -48,7 +48,7 @@ void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec
 
 
 
-void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::vec3 position, const glm::vec3 rotation, const glm::vec3 size, const Camera3D& camera) {
+void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera) {
     glm::mat4 model = CalcModelMatrix(position, rotation, size);
 
     VSHADER.SetMatrices(model, camera.view, camera.proj);
@@ -58,7 +58,7 @@ void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const gl
     }
 }
 
-void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::mat4 model, const Camera3D& camera)
+void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::mat4& model, const Camera3D& camera)
 {
     VSHADER.SetMatrices(model, camera.view, camera.proj);
 
@@ -67,7 +67,7 @@ void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const gl
     }
 }
 
-void Renderer::Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 position, const float rotation, const glm::vec2 size, const Camera2D& camera, int layer)
+void Renderer::Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2& position, const float rotation, const glm::vec2& size, const Camera2D& camera, const int layer)
 {
     glm::mat4 model = CalcModelMatrix(glm::vec3(position, layer), rotation, glm::vec3(size, 0.0f));
 
@@ -85,7 +85,7 @@ void Renderer::Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, 
     Renderer::RenderTriangles(VSHADER, vertices, &tex);
 }
 
-void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2 positionPerc, const float rotation, const glm::vec2 sizePerc, const Camera2D& camera, int layer)
+void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer)
 {
     // Convert percentage coordinates to pixel coordinates
     float screenWidth = static_cast<float>(Screen::GetInstance().GetVisibleWidth());
@@ -113,7 +113,7 @@ void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, c
     Renderer::RenderTriangles(VSHADER, vertices, &tex);
 }
 
-void Renderer::DrawScreenBorder(const short col) {
+void Renderer::DrawScreenBorder(const COLOR col) {
 	// DRAWING BORDERS
 	DrawLine(1, 1, Screen::GetInstance().GetVisibleWidth() - 1, 1, static_cast<CHAR>(PX_TYPE::PX_FULL), col);
 	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, 1, Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, static_cast<CHAR>(PX_TYPE::PX_FULL), col);
@@ -374,10 +374,10 @@ void Renderer::DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& ras
 void Renderer::DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles) {
     // Draw wireframe for each triangle in the tile
     for (int triIndex : tile.tri_indices_encapsulated) {
-        DrawTriangleWireframe(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<CHAR>(PX_TYPE::PX_FULL), FG_WHITE);
+        DrawTriangleWireframe(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<CHAR>(PX_TYPE::PX_FULL), COLOR::FG_WHITE);
     }
     for (int triIndex : tile.tri_indices_partial) {
-        DrawTriangleWireframePartial(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<CHAR>(PX_TYPE::PX_FULL), FG_WHITE);
+        DrawTriangleWireframePartial(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<CHAR>(PX_TYPE::PX_FULL), COLOR::FG_WHITE);
     }
 }
 
@@ -466,10 +466,10 @@ void Renderer::DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, co
 
                             if (_grayscale) {
                                 float grayscaleCol = tex->GetPixelGrayscale(texWidthProd, texHeightProd);
-                                screen.PlotPixel(glm::vec2(j, i), GetColGlyphGreyScale(grayscaleCol));
+                                screen.PlotPixel(glm::vec2(j, i), GetCharInfoGreyScale(grayscaleCol));
                             } else {
                                 glm::vec3 rgbCol = tex->GetPixelRGB(texWidthProd, texHeightProd);
-                                screen.PlotPixel(glm::vec2(j, i), GetColGlyph(rgbCol));
+                                screen.PlotPixel(glm::vec2(j, i), GetCharInfoRGB(rgbCol));
                             }
                             depthBuffer[bufferIndex] = tex_w;
                         }
@@ -575,10 +575,10 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
                             float texHeightProd = tex_vw * texHeight;
                             if (_grayscale) {
                                 float grayscaleCol = tex->GetPixelGrayscale(texWidthProd, texHeightProd);
-                                screen.PlotPixel(glm::vec2(j, i), GetColGlyphGreyScale(grayscaleCol));
+                                screen.PlotPixel(glm::vec2(j, i), GetCharInfoGreyScale(grayscaleCol));
                             } else {
                                 glm::vec3 rgbCol = tex->GetPixelRGB(texWidthProd, texHeightProd);
-                                screen.PlotPixel(glm::vec2(j, i), GetColGlyph(rgbCol));
+                                screen.PlotPixel(glm::vec2(j, i), GetCharInfoRGB(rgbCol));
                             }
                             depthBuffer[bufferIndex] = tex_w;
                         }
@@ -596,7 +596,7 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
     drawScanlines(y2, y3, x2, y2, x3, y3, u2, v2, w2, u3, v3, w3, x3, y3, u3, v3, w3);
 }
 
-void Renderer::DrawTriangleWireframePartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, CHAR pixel_type, short col) {
+void Renderer::DrawTriangleWireframePartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const CHAR pixel_type, const COLOR col) {
     // Get tile bounds for clipping
     const int minX = static_cast<int>(tile.position.x);
     const int maxX = static_cast<int>(tile.position.x + tile.size.x);
@@ -761,10 +761,10 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
                 if (avgDepth > depth[idx]) {
                     if (_grayscale) {
                         const float g = grayAccum / insideSamples;
-                        screen.PlotPixel(glm::vec2(x, y), GetColGlyphGreyScale(g));
+                        screen.PlotPixel(glm::vec2(x, y), GetCharInfoGreyScale(g));
                     } else {
                         const glm::vec3 c = rgbAccum * (1.0f / insideSamples);
-                        screen.PlotPixel(glm::vec2(x, y), GetColGlyph(c));
+                        screen.PlotPixel(glm::vec2(x, y), GetCharInfoRGB(c));
                     }
                     depth[idx] = avgDepth;
                 }
@@ -873,10 +873,10 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& v1, const VERTEX& v
                 if (avgDepth > depth[idx]) {
                     if (_grayscale) {
                         const float g = grayAccum / insideSamples;
-                        screen.PlotPixel(glm::vec2(x, y), GetColGlyphGreyScale(g));
+                        screen.PlotPixel(glm::vec2(x, y), GetCharInfoGreyScale(g));
                     } else {
                         const glm::vec3 c = rgbAccum * (1.0f / insideSamples);
-                        screen.PlotPixel(glm::vec2(x, y), GetColGlyph(c));
+                        screen.PlotPixel(glm::vec2(x, y), GetCharInfoRGB(c));
                     }
                     depth[idx] = avgDepth;
                 }
@@ -885,7 +885,7 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& v1, const VERTEX& v
     }
 }
 
-void Renderer::DrawLine(const int x1, const int y1, const int x2, const int y2, const CHAR pixel_type, const short col) {
+void Renderer::DrawLine(const int x1, const int y1, const int x2, const int y2, const CHAR pixel_type, const COLOR col) {
     int dx = abs(x2 - x1);
     int dy = abs(y2 - y1);
     int incx = (x2 > x1) ? 1 : -1;
@@ -921,7 +921,7 @@ void Renderer::DrawLine(const int x1, const int y1, const int x2, const int y2, 
     }
 }
 
-void Renderer::DrawTriangleWireframe(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, CHAR pixel_type, short col) {
+void Renderer::DrawTriangleWireframe(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const CHAR pixel_type, const COLOR col) {
 	// RENDERING LINES BETWEEN VERTICES
 	DrawLine((int) vert1.X(), (int) vert1.Y(), (int) vert2.X(), (int) vert2.Y(), pixel_type, col);
 	DrawLine((int) vert2.X(), (int) vert2.Y(), (int) vert3.X(), (int) vert3.Y(), pixel_type, col);
@@ -1081,7 +1081,7 @@ VERTEX Renderer::HomogenousPlaneIntersect(const VERTEX& vert2, const VERTEX& ver
 // UTILITY FUNCTIONS
 // =============================================================================
 
-glm::mat4 Renderer::CalcModelMatrix(const glm::vec3 position, const glm::vec3 rotation, const glm::vec3 size) {
+glm::mat4 Renderer::CalcModelMatrix(const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size) {
 	// this function just saves lines as this needs to be calculated alot
 	glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
 	model = glm::translate(model, glm::vec3(-0.5f * size.x, -0.5f * size.y, -0.5f * size.z));
@@ -1094,7 +1094,7 @@ glm::mat4 Renderer::CalcModelMatrix(const glm::vec3 position, const glm::vec3 ro
 	return model;
 }
 
-glm::mat4 Renderer::CalcModelMatrix(const glm::vec3 position, const float rotation, const glm::vec3 size) {
+glm::mat4 Renderer::CalcModelMatrix(const glm::vec3& position, const float rotation, const glm::vec3& size) {
 	// this function just saves lines as this needs to be calculated alot
 	glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
 	model = glm::translate(model, glm::vec3(-0.5f * size.x, -0.5f * size.y, -0.5f * size.z));
@@ -1105,82 +1105,33 @@ glm::mat4 Renderer::CalcModelMatrix(const glm::vec3 position, const float rotati
 	return model;
 }
 
-CHAR_INFO Renderer::GetColGlyphGreyScale(const float greyscale) {
-    static const unsigned int numShades = 16;
-    static const CHAR_INFO greyScaleGlyphs[numShades] = {
-        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_QUARTER), FG_DARK_GREY},
-        CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_QUARTER), FG_GREY}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_QUARTER), FG_WHITE},
-        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_HALF), FG_DARK_GREY},
-        CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_HALF), FG_GREY}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_HALF), FG_WHITE},
-        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_THREEQUARTERS), FG_DARK_GREY},
-        CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_THREEQUARTERS), FG_GREY}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_THREEQUARTERS), FG_WHITE},
-        CHAR_INFO{ '\0', BG_BLACK}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_FULL), FG_DARK_GREY},
-        CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_FULL), FG_GREY}, CHAR_INFO{ static_cast<wchar_t>(PX_TYPE::PX_FULL), FG_WHITE},
-    };
+CHAR_INFO Renderer::GetCharInfoGreyScale(const float intensity) {
+    float clamped = intensity < 0.0f ? 0.0f : (intensity > 1.0f ? 1.0f : intensity);
 
-    int idx = static_cast<int>(greyscale * numShades);
-    if (idx > numShades - 1) idx = numShades - 1;
-    if (idx < 0) idx = 0;
-    return greyScaleGlyphs[idx];
+    // Increase contrast
+    float adjusted = powf(clamped, _contrast);
+
+    int glyphIndex = static_cast<int>(adjusted * static_cast<int>(_char_variety) + 0.5f);
+    int colorIndex = static_cast<int>(adjusted * 3.0f + 0.5f);
+
+    if (glyphIndex > static_cast<int>(_char_variety)) glyphIndex = static_cast<int>(_char_variety);
+    if (colorIndex > 3) colorIndex = 3;
+
+    wchar_t glyph = static_cast<wchar_t>(_glyphPixels[glyphIndex]);
+    return CHAR_INFO{glyph, static_cast<unsigned short>(greyScaleCodes[colorIndex])};
 }
 
-CHAR_INFO Renderer::GetColGlyph(const glm::vec3 rgb) {
-    // Pre-calculate intensity once using optimized luminance weights
+CHAR_INFO Renderer::GetCharInfoRGB(const glm::vec3& rgb) {
     const float intensity = GrayScaleRGB(rgb);
-    
-    // Early exit for very dark colors - use black background
-    if (intensity < 0.1f) {
-        return CHAR_INFO{' ', BG_BLACK};
-    }
-    
-    // Find closest color using unrolled loop and manual comparison for better cache performance
-    float minDistSq = FLT_MAX;
-    int bestColorIndex = 0;
-    
-    // Unroll the loop partially to reduce loop overhead and improve branch prediction
-    const float r = rgb.r, g = rgb.g, b = rgb.b;
-    
-    // Check colors 0-7 (dark colors)
-    for (int i = 0; i < 8; ++i) {
-        const float dr = r - consoleColors[i].x;
-        const float dg = g - consoleColors[i].y;
-        const float db = b - consoleColors[i].z;
-        const float distSq = dr * dr + dg * dg + db * db;
-        
-        if (distSq < minDistSq) {
-            minDistSq = distSq;
-            bestColorIndex = i;
-        }
-    }
-    
-    // Check colors 8-15 (bright colors)
-    for (int i = 8; i < 16; ++i) {
-        const float dr = r - consoleColors[i].x;
-        const float dg = g - consoleColors[i].y;
-        const float db = b - consoleColors[i].z;
-        const float distSq = dr * dr + dg * dg + db * db;
-        
-        if (distSq < minDistSq) {
-            minDistSq = distSq;
-            bestColorIndex = i;
-        }
-    }
-    
-    // Optimized glyph selection using bit manipulation instead of branches
-    const int glyphIndex = static_cast<int>(intensity * 4.0f); // Map [0,1] to [0,4)
-    static const wchar_t glyphs[4] = {static_cast<wchar_t>(PX_TYPE::PX_QUARTER), static_cast<wchar_t>(PX_TYPE::PX_HALF), static_cast<wchar_t>(PX_TYPE::PX_THREEQUARTERS), static_cast<wchar_t>(PX_TYPE::PX_FULL)};
-    const wchar_t glyph = glyphs[glyphIndex > 3 ? 3 : glyphIndex]; // Clamp to valid range
-    
-    return CHAR_INFO{glyph, colorCodes[bestColorIndex]};
+    return GetCharInfoRGB(rgb, intensity);
 }
 
-CHAR_INFO Renderer::GetColGlyph(const glm::vec3 rgb, const float greyscale) {
-    
+
+CHAR_INFO Renderer::GetCharInfoRGB(const glm::vec3& rgb, const float intensity) {
     // Find closest color using squared distance (avoid sqrt for speed)
     float minDistSq = FLT_MAX;
     int bestColorIndex = 0;
-    
-    for (int i = 0; i < 16; ++i) {
+    for (int i = 0; i < consoleColors.size(); ++i) {
         const glm::vec3 diff = rgb - consoleColors[i];
         const float distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
         if (distSq < minDistSq) {
@@ -1188,30 +1139,21 @@ CHAR_INFO Renderer::GetColGlyph(const glm::vec3 rgb, const float greyscale) {
             bestColorIndex = i;
         }
     }
-    
-    // Select glyph based on pre-calculated greyscale intensity (4 levels)
-    wchar_t glyph;
-    if (greyscale < 0.25f) {
-        glyph = static_cast<wchar_t>(PX_TYPE::PX_QUARTER);
-    } else if (greyscale < 0.5f) {
-        glyph = static_cast<wchar_t>(PX_TYPE::PX_HALF);
-    } else if (greyscale < 0.75f) {
-        glyph = static_cast<wchar_t>(PX_TYPE::PX_THREEQUARTERS);
-    } else {
-        glyph = static_cast<wchar_t>(PX_TYPE::PX_FULL);
-    }
-    
-    // For very dark colors, use background color instead of foreground with glyph
-    if (greyscale < 0.1f) {
-        return CHAR_INFO{' ', static_cast<unsigned short>(colorCodes[bestColorIndex] << 4)}; // Shift to background
-    }
-    
-    return CHAR_INFO{glyph, colorCodes[bestColorIndex]};
+
+    // Use intensity to select glyph
+    float clamped = intensity < 0.0f ? 0.0f : (intensity > 1.0f ? 1.0f : intensity);
+    float adjusted = powf(clamped, _contrast);
+    int glyphIndex = static_cast<int>(adjusted * (_char_options - 1) + 0.5f);
+    if (glyphIndex >= static_cast<int>(_char_options)) glyphIndex = static_cast<int>(_char_options) - 1;
+
+    wchar_t glyph = static_cast<wchar_t>(_glyphPixels[glyphIndex]);
+    unsigned short color = static_cast<unsigned short>(colorCodes[bestColorIndex]);
+
+    return CHAR_INFO{glyph, color};
 }
 
-float Renderer::GrayScaleRGB(const glm::vec3 rgb)
-{
-	return (0.299f * rgb.r + 0.587f * rgb.g + 0.114f * rgb.b); // grayscales based on how much we see that wavelength of light instead of just averaging
+float Renderer::GrayScaleRGB(const glm::vec3& rgb) {
+    return (rgb.r + rgb.g + rgb.b) * (1.0f/3.0f);
 }
 
 void Renderer::SetAntialiasingsamples(int samples) {
@@ -1255,12 +1197,34 @@ bool Renderer::GetAntialiasing() {
     return _antialiasing;
 }
 
+void Renderer::SetContrast(const float contrast) {
+    _contrast = std::min(5.0f, std::max(0.0f, contrast));
+}
+
+float Renderer::GetContrast() {
+    return _contrast;
+}
+
 void Renderer::SetGrayscale(bool grayscale) {
     _grayscale = grayscale;
 }
 
 bool Renderer::GetGrayscale() {
     return _grayscale;
+}
+
+void Renderer::SetCharVariety(const CHAR_VARIETY variety) {
+    _char_variety = variety;
+    _char_options = static_cast<unsigned int>(variety) + 1;
+    if (variety == CHAR_VARIETY::FOUR) {
+        _glyphPixels = _glyphPixelsFour.data();
+    } else if (variety == CHAR_VARIETY::EIGHT) {
+        _glyphPixels = _glyphPixelsEight.data();
+    }
+}
+
+CHAR_VARIETY Renderer::GetCharVariety() {
+    return _char_variety;
 }
 
 void Renderer::InvalidateTiles() {

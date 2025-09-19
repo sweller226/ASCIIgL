@@ -64,7 +64,7 @@ Game* Game::GetInstance()
 void Game::Run()
 {
     Logger::Info("Game loop starting.");
-    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 3, 60, 1.0f, BG_BLACK);
+    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 3, 60, 1.0f, COLOR::BG_BLACK);
 	SCR_WIDTH = Screen::GetInstance().GetVisibleWidth();
 	SCR_HEIGHT = Screen::GetInstance().GetHeight();
 	guiCamera.setScreenDimensions(SCR_WIDTH, SCR_HEIGHT);
@@ -112,7 +112,7 @@ void Game::Run()
                 Logger::Warning("[WARN] Unknown game state: " + std::to_string(gameState));
                 break;
         }
-        Renderer::DrawScreenBorder(FG_WHITE);
+        Renderer::DrawScreenBorder(COLOR::FG_WHITE);
 
         Screen::GetInstance().OutputBuffer();
 

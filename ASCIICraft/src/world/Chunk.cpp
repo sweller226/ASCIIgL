@@ -211,7 +211,7 @@ void Chunk::GenerateMesh() {
                         glm::vec2 faceUV = faceUVs[vertIdx];
                         glm::vec2 textureUV = glm::vec2(
                             blockTextureUV.x + faceUV.x * (blockTextureUV.z - blockTextureUV.x),
-                            blockTextureUV.y + faceUV.y * (blockTextureUV.w - blockTextureUV.y)
+                            blockTextureUV.w - faceUV.y * (blockTextureUV.w - blockTextureUV.y)
                         );
                         vertex.SetUV(textureUV);
                         
