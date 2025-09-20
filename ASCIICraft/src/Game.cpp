@@ -26,8 +26,7 @@ bool Game::Initialize() {
 	Renderer::SetAntialiasingsamples(4);
 	Renderer::SetAntialiasing(true);
 	Renderer::SetGrayscale(false);
-    Renderer::SetCharVariety(CHAR_VARIETY::EIGHT);
-    Renderer::SetContrast(1.f); // Set default contrast
+    Renderer::SetContrast(1.1f); // Set default contrast
 
     // Initialize screen
     if (screenInitResult != SCREEN_NOERROR) {
@@ -78,8 +77,9 @@ void Game::Run() {
         
         HandleInput();
         // Update();
-        Renderer::Draw2DQuadPercSpace(guiManager.GetVShader(), grassTexture, glm::vec2(0.3f, 0.25f), 0.0f, glm::vec2(1, 1), guiManager.GetCamera(), 0);
+        Renderer::Draw2DQuadPercSpace(guiManager.GetVShader(), grassTexture, glm::vec2(0.625, 0.625), 0.0f, glm::vec2(0.25f, 0.25f), guiManager.GetCamera(), 0);
         // Render();
+        // Renderer::TestRender();
         Screen::GetInstance().OutputBuffer();
         Screen::GetInstance().EndFPSClock();
         Screen::GetInstance().RenderTitle(true);

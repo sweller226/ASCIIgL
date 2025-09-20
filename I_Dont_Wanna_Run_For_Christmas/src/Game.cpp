@@ -3,8 +3,6 @@
 #include <ASCIIgL/engine/Logger.hpp>
 #include <ASCIIgL/engine/Collision.hpp>
 
-#include <ASCIIgL/renderer/RenderEnums.hpp>
-
 Game::Game()
 	: guiCamera(glm::vec2(0, 0), SCR_WIDTH, SCR_HEIGHT)
 {

@@ -13,7 +13,7 @@
 
 #include <ASCIIgL/renderer/VertexShader.hpp>
 #include <ASCIIgL/renderer/Screen.hpp>
-#include <ASCIIgL/renderer/RenderEnums.hpp>
+#include <ASCIIgL/renderer/Palette.hpp>
 
 struct Tile {
     glm::vec2 position;
@@ -35,7 +35,7 @@ private:
     static inline bool _backface_culling = true;
     static inline bool _ccw = false;
     static inline bool _grayscale = false;
-    static inline float _contrast = 1.5f;
+    static inline float _contrast = 1.2f;
     
     // antialaising
     static inline int _antialiasing_samples = 4;
@@ -69,9 +69,10 @@ private:
     static void ClearTileTriangleLists(); // Clear triangle lists but keep tile structure
     static void BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles);
     static bool DoesTileEncapsulate(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3);
+    static void InvalidateTiles();
     
     static void DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
-    static void DrawTriangleWireframePartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const CHAR pixel_type, const COLOR col);
+    static void DrawTriangleWireframePartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const WCHAR pixel_type, const COLOR col);
 
     static void DrawTriangleTexturedAntialiased(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
     static void DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
@@ -80,58 +81,39 @@ private:
     static void DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles);
 
     // Glyphs
-    static inline constexpr unsigned int _max_char_variety = static_cast<unsigned int>(CHAR_VARIETY::EIGHT) + 1;
-    static inline CHAR_VARIETY _char_variety = CHAR_VARIETY::FOUR;
-    static inline unsigned int _char_options = static_cast<unsigned int>(_char_variety) + 1;
-
-    static constexpr std::array<PX_TYPE, _max_char_variety> _glyphPixelsEight = {
-        PX_TYPE::PX_NONE, PX_TYPE::PX_ONE_EIGHTH, PX_TYPE::PX_QUARTER,
-        PX_TYPE::PX_THREE_EIGHTHS, PX_TYPE::PX_HALF, PX_TYPE::PX_FIVE_EIGHTHS,
-        PX_TYPE::PX_THREE_QUARTERS, PX_TYPE::PX_SEVEN_EIGHTHS, PX_TYPE::PX_FULL
+    static inline const std::array<wchar_t, 9> _charRamp = {
+        L' ',  // space (darkest)
+        L'-',
+        176,   // ░ (Light shade - DOS char 176)
+        L'o',
+        L'@',
+        177,   // ▒ (Medium shade - DOS char 177)
+        L'#',
+        178,   // ▓ (Dark shade - DOS char 178)  
+        219,   // █ (Full block - DOS char 219)
     };
-    static constexpr std::array<PX_TYPE, _max_char_variety> _glyphPixelsFour = {
-        PX_TYPE::PX_NONE, PX_TYPE::PX_QUARTER, PX_TYPE::PX_HALF, PX_TYPE::PX_THREE_QUARTERS, PX_TYPE::PX_FULL
-    };
-    static inline const PX_TYPE* _glyphPixels = _glyphPixelsFour.data();
 
-    // Grayscale lookup
-    static float GrayScaleRGB(const glm::vec3& rgb);
-    static CHAR_INFO GetCharInfoGreyScale(const float intensity);
-
-    static inline const COLOR greyScaleCodes[4] = {
-        COLOR::FG_BLACK, COLOR::FG_DARK_GREY, COLOR::FG_GREY, COLOR::FG_WHITE,
+    static inline const std::array<float, 9> _charCoverage = {
+        0.00f,  // ' ' (space)
+        0.18f,  // '-'
+        0.28f,  // ░ (176)
+        0.32f,  // 'o'
+        0.60f,  // '@'
+        0.68f,  // ▒ (177)
+        0.76f,  // '#'
+        0.86f,  // ▓ (178)
+        1.00f   // █ (219)
     };
 
     // Colored lookup
     static CHAR_INFO GetCharInfoRGB(const glm::vec3& rgb);
-    static CHAR_INFO GetCharInfoRGB(const glm::vec3& rgb, const float intensity);
 
-    // Pre-compiled console color codes for fast lookup
-    static inline const std::array<glm::vec3, 16> consoleColors = {
-        glm::vec3(0.0f, 0.0f, 0.0f),           // Black
-        glm::vec3(0.0f, 0.0f, 0.545f),         // Dark Blue
-        glm::vec3(0.0f, 0.5f, 0.0f),         // Dark Green
-        glm::vec3(0.0f, 0.545f, 0.545f),       // Dark Cyan
-        glm::vec3(0.545f, 0.0f, 0.0f),         // Dark Red
-        glm::vec3(0.545f, 0.0f, 0.545f),       // Dark Magenta
-        glm::vec3(0.647f, 0.165f, 0.165f),     // Brown (Dark Yellow)
-        glm::vec3(0.753f, 0.753f, 0.753f),     // Light Gray
-        glm::vec3(0.412f, 0.412f, 0.412f),     // Dark Gray
-        glm::vec3(0.0f, 0.0f, 0.9f),           // Blue
-        glm::vec3(0.0f, 0.8f, 0.0f),           // Green
-        glm::vec3(0.0f, 0.9f, 0.9f),           // Cyan
-        glm::vec3(0.9f, 0.0f, 0.0f),           // Red
-        glm::vec3(0.9f, 0.0f, 0.9f),           // Magenta
-        glm::vec3(0.9f, 0.9f, 0.0f),           // Yellow
-        glm::vec3(0.9f, 0.9f, 0.9f)            // White
-    };
-
-    static constexpr std::array<COLOR, 16> colorCodes = {
-        COLOR::FG_BLACK, COLOR::FG_DARK_BLUE, COLOR::FG_DARK_GREEN, COLOR::FG_DARK_CYAN,
-        COLOR::FG_DARK_RED, COLOR::FG_DARK_MAGENTA, COLOR::FG_DARK_YELLOW, COLOR::FG_GREY,
-        COLOR::FG_DARK_GREY, COLOR::FG_BLUE, COLOR::FG_GREEN, COLOR::FG_CYAN,
-        COLOR::FG_RED, COLOR::FG_MAGENTA, COLOR::FG_YELLOW, COLOR::FG_WHITE
-    };
+    // Precompute a full LUT for all combinations of fg, bg, and char for super fast rendering
+    // 16*16*7 is for all of the characters that need fractional rendering, these need to blend the background and foreground
+    // + 2*16 is for the space and full block characters which are just solid colors
+    static void PrecomputeColorLUT();
+    static inline bool _colorLUTComputed = false;
+    static inline std::array<CHAR_INFO, Palette::COLOR_COUNT*Palette::COLOR_COUNT*7 + 2*Palette::COLOR_COUNT> _colorLUT;
 
 
 public:
@@ -147,8 +129,8 @@ public:
     static void RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex);
 
     // NOT THREAD SAFE, NOT TILE BASED
-    static void DrawLine(int x1, int y1, int x2, int y2, CHAR pixel_type, const COLOR col);
-    static void DrawTriangleWireframe(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, CHAR pixel_type, const COLOR col);
+    static void DrawLine(int x1, int y1, int x2, int y2, WCHAR pixel_type, const COLOR col);
+    static void DrawTriangleWireframe(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, WCHAR pixel_type, const COLOR col);
     static void DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
 
     static glm::mat4 CalcModelMatrix(const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size);
@@ -177,9 +159,5 @@ public:
     static void SetGrayscale(const bool grayscale);
     static bool GetGrayscale();
 
-    static void SetCharVariety(const CHAR_VARIETY variety);
-    static CHAR_VARIETY GetCharVariety();
-
-    // Performance optimization - call when screen dimensions change
-    static void InvalidateTiles(); // Forces tile re-initialization on next render
+    static void TestRender();
 };

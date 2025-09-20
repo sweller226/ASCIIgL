@@ -1,5 +1,6 @@
 #include <ASCIIgL/renderer/Renderer.hpp>
 
+#include <algorithm>
 #include <execution>
 #include <numeric>
 
@@ -9,7 +10,6 @@
 #include <ASCIIgL/util/MathUtil.hpp>
 
 #include <ASCIIgL/renderer/Screen.hpp>
-#include <ASCIIgL/renderer/RenderEnums.hpp>
 
 // =============================================================================
 // PUBLIC HIGH-LEVEL DRAWING FUNCTIONS
@@ -115,10 +115,10 @@ void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, c
 
 void Renderer::DrawScreenBorder(const COLOR col) {
 	// DRAWING BORDERS
-	DrawLine(1, 1, Screen::GetInstance().GetVisibleWidth() - 1, 1, static_cast<CHAR>(PX_TYPE::PX_FULL), col);
-	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, 1, Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, static_cast<CHAR>(PX_TYPE::PX_FULL), col);
-	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, 1, Screen::GetInstance().GetHeight() - 1, static_cast<CHAR>(PX_TYPE::PX_FULL), col);
-	DrawLine(1, 1, 1, Screen::GetInstance().GetHeight() - 1, static_cast<CHAR>(PX_TYPE::PX_FULL), col);
+	DrawLine(1, 1, Screen::GetInstance().GetVisibleWidth() - 1, 1, static_cast<WCHAR>(L'█'), col);
+	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, 1, Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, static_cast<WCHAR>(L'█'), col);
+	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, 1, Screen::GetInstance().GetHeight() - 1, static_cast<WCHAR>(L'█'), col);
+	DrawLine(1, 1, 1, Screen::GetInstance().GetHeight() - 1, static_cast<WCHAR>(L'█'), col);
 }
 
 // =============================================================================
@@ -188,6 +188,11 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
         _tilesInitialized = true;
     } else {
         ClearTileTriangleLists();
+    }
+
+    // Initialize color LUT if not already done (one-time precomputation)
+    if (!_colorLUTComputed) {
+        PrecomputeColorLUT();
     }
 
     BinTrianglesToTiles(_rasterBuffer);
@@ -374,10 +379,10 @@ void Renderer::DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& ras
 void Renderer::DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles) {
     // Draw wireframe for each triangle in the tile
     for (int triIndex : tile.tri_indices_encapsulated) {
-        DrawTriangleWireframe(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<CHAR>(PX_TYPE::PX_FULL), COLOR::FG_WHITE);
+        DrawTriangleWireframe(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<WCHAR>(L'█'), COLOR::FG_WHITE);
     }
     for (int triIndex : tile.tri_indices_partial) {
-        DrawTriangleWireframePartial(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<CHAR>(PX_TYPE::PX_FULL), COLOR::FG_WHITE);
+        DrawTriangleWireframePartial(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<WCHAR>(L'█'), COLOR::FG_WHITE);
     }
 }
 
@@ -596,7 +601,7 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
     drawScanlines(y2, y3, x2, y2, x3, y3, u2, v2, w2, u3, v3, w3, x3, y3, u3, v3, w3);
 }
 
-void Renderer::DrawTriangleWireframePartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const CHAR pixel_type, const COLOR col) {
+void Renderer::DrawTriangleWireframePartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const WCHAR pixel_type, const COLOR col) {
     // Get tile bounds for clipping
     const int minX = static_cast<int>(tile.position.x);
     const int maxX = static_cast<int>(tile.position.x + tile.size.x);
@@ -885,7 +890,7 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& v1, const VERTEX& v
     }
 }
 
-void Renderer::DrawLine(const int x1, const int y1, const int x2, const int y2, const CHAR pixel_type, const COLOR col) {
+void Renderer::DrawLine(const int x1, const int y1, const int x2, const int y2, const WCHAR pixel_type, const COLOR col) {
     int dx = abs(x2 - x1);
     int dy = abs(y2 - y1);
     int incx = (x2 > x1) ? 1 : -1;
@@ -921,7 +926,7 @@ void Renderer::DrawLine(const int x1, const int y1, const int x2, const int y2, 
     }
 }
 
-void Renderer::DrawTriangleWireframe(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const CHAR pixel_type, const COLOR col) {
+void Renderer::DrawTriangleWireframe(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const WCHAR pixel_type, const COLOR col) {
 	// RENDERING LINES BETWEEN VERTICES
 	DrawLine((int) vert1.X(), (int) vert1.Y(), (int) vert2.X(), (int) vert2.Y(), pixel_type, col);
 	DrawLine((int) vert2.X(), (int) vert2.Y(), (int) vert3.X(), (int) vert3.Y(), pixel_type, col);
@@ -1082,7 +1087,7 @@ VERTEX Renderer::HomogenousPlaneIntersect(const VERTEX& vert2, const VERTEX& ver
 // =============================================================================
 
 glm::mat4 Renderer::CalcModelMatrix(const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size) {
-	// this function just saves lines as this needs to be calculated alot
+    // position is the bottom right corner if this is a 2D object
 	glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
 	model = glm::translate(model, glm::vec3(-0.5f * size.x, -0.5f * size.y, -0.5f * size.z));
 	model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f)); // Pitch (X-axis)
@@ -1095,7 +1100,7 @@ glm::mat4 Renderer::CalcModelMatrix(const glm::vec3& position, const glm::vec3& 
 }
 
 glm::mat4 Renderer::CalcModelMatrix(const glm::vec3& position, const float rotation, const glm::vec3& size) {
-	// this function just saves lines as this needs to be calculated alot
+    // position is the bottom right corner if this is a 2D object
 	glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
 	model = glm::translate(model, glm::vec3(-0.5f * size.x, -0.5f * size.y, -0.5f * size.z));
 	model = glm::rotate(model, glm::radians(rotation), glm::vec3(0.0f, 0.0f, 1.0f)); // Roll (Z-axis)
@@ -1105,55 +1110,55 @@ glm::mat4 Renderer::CalcModelMatrix(const glm::vec3& position, const float rotat
 	return model;
 }
 
-CHAR_INFO Renderer::GetCharInfoGreyScale(const float intensity) {
-    float clamped = intensity < 0.0f ? 0.0f : (intensity > 1.0f ? 1.0f : intensity);
-
-    // Increase contrast
-    float adjusted = powf(clamped, _contrast);
-
-    int glyphIndex = static_cast<int>(adjusted * static_cast<int>(_char_variety) + 0.5f);
-    int colorIndex = static_cast<int>(adjusted * 3.0f + 0.5f);
-
-    if (glyphIndex > static_cast<int>(_char_variety)) glyphIndex = static_cast<int>(_char_variety);
-    if (colorIndex > 3) colorIndex = 3;
-
-    wchar_t glyph = static_cast<wchar_t>(_glyphPixels[glyphIndex]);
-    return CHAR_INFO{glyph, static_cast<unsigned short>(greyScaleCodes[colorIndex])};
-}
-
 CHAR_INFO Renderer::GetCharInfoRGB(const glm::vec3& rgb) {
-    const float intensity = GrayScaleRGB(rgb);
-    return GetCharInfoRGB(rgb, intensity);
-}
+    // Use precomputed LUT if available
+    if (_colorLUTComputed) {
+        // Convert RGB to discrete indices for LUT lookup
+        int maxIndex = static_cast<int>(MAX_PALETTE_SIZE - 1);
+        int r = std::max(0, std::min(static_cast<int>(rgb.r * maxIndex + 0.5f), maxIndex));
+        int g = std::max(0, std::min(static_cast<int>(rgb.g * maxIndex + 0.5f), maxIndex));
+        int b = std::max(0, std::min(static_cast<int>(rgb.b * maxIndex + 0.5f), maxIndex));
+        
+        int index = (r * MAX_PALETTE_SIZE * MAX_PALETTE_SIZE) + (g * MAX_PALETTE_SIZE) + b;
+        return _colorLUT[index];
+    }
 
+    // Fallback to exhaustive search if LUT not computed
+    float minError = FLT_MAX;
+    int bestFgIndex = 0;
+    int bestBgIndex = 0;
+    int bestCharIndex = 0;
 
-CHAR_INFO Renderer::GetCharInfoRGB(const glm::vec3& rgb, const float intensity) {
-    // Find closest color using squared distance (avoid sqrt for speed)
-    float minDistSq = FLT_MAX;
-    int bestColorIndex = 0;
-    for (int i = 0; i < consoleColors.size(); ++i) {
-        const glm::vec3 diff = rgb - consoleColors[i];
-        const float distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
-        if (distSq < minDistSq) {
-            minDistSq = distSq;
-            bestColorIndex = i;
+    // Try all combinations of foreground, background, and character
+    for (int fgIdx = 0; fgIdx < 16; ++fgIdx) {
+        for (int bgIdx = 0; bgIdx < 16; ++bgIdx) {
+            for (int charIdx = 0; charIdx < _charRamp.size(); ++charIdx) {
+                float coverage = _charCoverage[charIdx];
+                
+                // Simulate the blended color: coverage * fg + (1-coverage) * bg
+                glm::vec3 simulatedColor = coverage * consoleColors[fgIdx] + (1.0f - coverage) * consoleColors[bgIdx];
+                
+                // Calculate color distance
+                glm::vec3 diff = rgb - simulatedColor;
+                float error = glm::dot(diff, diff);
+                
+                if (error < minError) {
+                    minError = error;
+                    bestFgIndex = fgIdx;
+                    bestBgIndex = bgIdx;
+                    bestCharIndex = charIdx;
+                }
+            }
         }
     }
 
-    // Use intensity to select glyph
-    float clamped = intensity < 0.0f ? 0.0f : (intensity > 1.0f ? 1.0f : intensity);
-    float adjusted = powf(clamped, _contrast);
-    int glyphIndex = static_cast<int>(adjusted * (_char_options - 1) + 0.5f);
-    if (glyphIndex >= static_cast<int>(_char_options)) glyphIndex = static_cast<int>(_char_options) - 1;
-
-    wchar_t glyph = static_cast<wchar_t>(_glyphPixels[glyphIndex]);
-    unsigned short color = static_cast<unsigned short>(colorCodes[bestColorIndex]);
-
-    return CHAR_INFO{glyph, color};
-}
-
-float Renderer::GrayScaleRGB(const glm::vec3& rgb) {
-    return (rgb.r + rgb.g + rgb.b) * (1.0f/3.0f);
+    // Combine foreground and background color codes using arrays
+    wchar_t glyph = _charRamp[bestCharIndex];
+    unsigned short fgColor = static_cast<unsigned short>(fgColorCodes[bestFgIndex]);
+    unsigned short bgColor = static_cast<unsigned short>(bgColorCodes[bestBgIndex]);
+    unsigned short combinedColor = fgColor | bgColor;
+    
+    return CHAR_INFO{glyph, combinedColor};
 }
 
 void Renderer::SetAntialiasingsamples(int samples) {
@@ -1213,20 +1218,6 @@ bool Renderer::GetGrayscale() {
     return _grayscale;
 }
 
-void Renderer::SetCharVariety(const CHAR_VARIETY variety) {
-    _char_variety = variety;
-    _char_options = static_cast<unsigned int>(variety) + 1;
-    if (variety == CHAR_VARIETY::FOUR) {
-        _glyphPixels = _glyphPixelsFour.data();
-    } else if (variety == CHAR_VARIETY::EIGHT) {
-        _glyphPixels = _glyphPixelsEight.data();
-    }
-}
-
-CHAR_VARIETY Renderer::GetCharVariety() {
-    return _char_variety;
-}
-
 void Renderer::InvalidateTiles() {
     _tilesInitialized = false;
 }
@@ -1267,4 +1258,100 @@ std::vector<std::pair<float, float>> Renderer::GetSubpixelOffsets() {
         _subpixel_offsets = GenerateSubPixelOffsets(_antialiasing_samples);
     }
     return _subpixel_offsets;
+}
+
+void Renderer::TestRender() {
+    Screen& screen = Screen::GetInstance();
+    int screenWidth = screen.GetVisibleWidth();
+    int screenHeight = screen.GetHeight();
+    
+    // Get the number of characters in the ramp
+    const int numChars = static_cast<int>(_charRamp.size());
+    
+    // Calculate grid dimensions (square-ish grid)
+    int gridCols = static_cast<int>(std::ceil(std::sqrt(numChars)));
+    int gridRows = static_cast<int>(std::ceil(static_cast<float>(numChars) / gridCols));
+    
+    // Calculate patch size for each character
+    int patchWidth = screenWidth / gridCols;
+    int patchHeight = screenHeight / gridRows;
+    
+    // Combined foreground and background color
+    unsigned short combinedColor = static_cast<unsigned short>(COLOR::FG_GREEN) | static_cast<unsigned short>(COLOR::BG_BLUE);
+    
+    // Fill screen with character patches
+    for (int charIdx = 0; charIdx < numChars; ++charIdx) {
+        // Calculate which patch this character belongs to
+        int patchX = charIdx % gridCols;
+        int patchY = charIdx / gridCols;
+        
+        // Calculate the bounds of this patch
+        int startX = patchX * patchWidth;
+        int startY = patchY * patchHeight;
+        int endX = (patchX == gridCols - 1) ? screenWidth : startX + patchWidth;  // Handle remainder
+        int endY = (patchY == gridRows - 1) ? screenHeight : startY + patchHeight; // Handle remainder
+        
+        // Fill the entire patch with this character
+        wchar_t currentChar = _charRamp[charIdx];
+        CHAR_INFO charInfo;
+
+        charInfo.Char.UnicodeChar = currentChar;
+        charInfo.Attributes = combinedColor;
+        
+        for (int y = startY; y < endY; ++y) {
+            for (int x = startX; x < endX; ++x) {
+                screen.PlotPixel(glm::vec2(x, y), charInfo);
+            }
+        }
+    }
+}
+
+void Renderer::PrecomputeColorLUT() {
+    if (_colorLUTComputed) return;
+    // Precompute all possible RGB combinations
+    for (int r = 0; r < MAX_PALETTE_SIZE; ++r) {
+        for (int g = 0; g < MAX_PALETTE_SIZE; ++g) {
+            for (int b = 0; b < MAX_PALETTE_SIZE; ++b) {
+                    // Convert discrete RGB to normalized [0,1] range
+                    glm::vec3 rgb(
+                        r / float(MAX_PALETTE_SIZE - 1),
+                        g / float(MAX_PALETTE_SIZE - 1),
+                        b / float(MAX_PALETTE_SIZE - 1)
+                    );
+                    
+                    // Find best match using original algorithm
+                    float minError = FLT_MAX;
+                    int bestFgIndex = 0, bestBgIndex = 0, bestCharIndex = 0;
+                    
+                    for (int fgIdx = 0; fgIdx < 16; ++fgIdx) {
+                        for (int bgIdx = 0; bgIdx < 16; ++bgIdx) {
+                            for (int charIdx = 0; charIdx < _charRamp.size(); ++charIdx) {
+                                float coverage = _charCoverage[charIdx];
+                                glm::vec3 simulatedColor = coverage * consoleColors[fgIdx] + (1.0f - coverage) * consoleColors[bgIdx];
+                                glm::vec3 diff = rgb - simulatedColor;
+                                float error = glm::dot(diff, diff);
+                                
+                                if (error < minError) {
+                                    minError = error;
+                                    bestFgIndex = fgIdx;
+                                    bestBgIndex = bgIdx;
+                                    bestCharIndex = charIdx;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Store precomputed result
+                    int index = (r * MAX_PALETTE_SIZE * MAX_PALETTE_SIZE) + (g * MAX_PALETTE_SIZE) + b;
+                    wchar_t glyph = _charRamp[bestCharIndex];
+                    unsigned short fgColor = static_cast<unsigned short>(fgColorCodes[bestFgIndex]);
+                    unsigned short bgColor = static_cast<unsigned short>(bgColorCodes[bestBgIndex]);
+                    unsigned short combinedColor = fgColor | bgColor;
+                    
+                    _colorLUT[index] = {glyph, combinedColor};
+                }
+            }
+        }
+        
+        _colorLUTComputed = true;
 }

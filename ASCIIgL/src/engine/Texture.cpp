@@ -8,9 +8,9 @@
 class Texture::Impl
 {
 public:
-    stbi_uc* m_RGBBuffer;       // buffer that holds RGB color data (3 channels)
-    stbi_uc* m_GrayscaleBuffer; // buffer that holds grayscale data (1 channel)
-    int m_Width, m_Height, m_BPP;
+    float* _RGBBuffer;       // buffer that holds RGB color data (3 channels)
+    float* _GrayscaleBuffer; // buffer that holds grayscale data (1 channel)
+    int _width, _height, _bpp;
     std::string FilePath;
 
     Impl(const std::string& path);
@@ -20,26 +20,33 @@ public:
 };
 
 Texture::Impl::Impl(const std::string& path)
-    : FilePath(path), m_RGBBuffer(nullptr), m_GrayscaleBuffer(nullptr), m_Width(0), m_Height(0), m_BPP(0)
+    : FilePath(path), _RGBBuffer(nullptr), _GrayscaleBuffer(nullptr), _width(0), _height(0), _bpp(0)
 {
     Logger::Info("TEXTURE: Attempting to load texture: " + path);
     
     stbi_set_flip_vertically_on_load(0);
     
     // Load RGB version (3 channels)
-    m_RGBBuffer = stbi_load(path.c_str(), &m_Width, &m_Height, &m_BPP, 3);
+    stbi_uc* tempRGBBuffer = stbi_load(path.c_str(), &_width, &_height, &_bpp, 3);
+        _RGBBuffer = new float[_width * _height * 3];
+    for (int i = 0; i < _width * _height * 3; ++i) { _RGBBuffer[i] = tempRGBBuffer[i] / 255.0f; }
+    stbi_image_free(tempRGBBuffer);
+    
     
     // Load grayscale version (1 channel)
     int grayWidth, grayHeight, grayBPP;
-    m_GrayscaleBuffer = stbi_load(path.c_str(), &grayWidth, &grayHeight, &grayBPP, 1);
-    
+    stbi_uc* tempGrayscaleBuffer = stbi_load(path.c_str(), &grayWidth, &grayHeight, &grayBPP, 1);
+        _GrayscaleBuffer = new float[grayWidth * grayHeight];
+    for (int i = 0; i < _width * _height; ++i) { _GrayscaleBuffer[i] = tempGrayscaleBuffer[i] / 255.0f; }
+    stbi_image_free(tempGrayscaleBuffer);
+
     // Verify if texture loaded successfully
-    if (m_RGBBuffer && m_GrayscaleBuffer) {
+    if (_RGBBuffer && _GrayscaleBuffer) {
         Logger::Info("TEXTURE: Successfully loaded '" + path + "'");
-        Logger::Debug("TEXTURE: Dimensions: " + std::to_string(m_Width) + "x" + std::to_string(m_Height));
-        Logger::Debug("TEXTURE: Original channels: " + std::to_string(m_BPP));
-        Logger::Debug("TEXTURE: RGB buffer size: " + std::to_string(m_Width * m_Height * 3) + " bytes");
-        Logger::Debug("TEXTURE: Grayscale buffer size: " + std::to_string(m_Width * m_Height) + " bytes");
+        Logger::Debug("TEXTURE: Dimensions: " + std::to_string(_width) + "x" + std::to_string(_height));
+        Logger::Debug("TEXTURE: Original channels: " + std::to_string(_bpp));
+        Logger::Debug("TEXTURE: RGB buffer size: " + std::to_string(_width * _height * 3) + " bytes");
+        Logger::Debug("TEXTURE: Grayscale buffer size: " + std::to_string(_width * _height) + " bytes");
     } else {
         const char* stbi_error = stbi_failure_reason();
         Logger::Error("TEXTURE: Failed to load '" + path + "'");
@@ -51,40 +58,30 @@ Texture::Impl::Impl(const std::string& path)
 Texture::Impl::~Impl()
 {
     // deletes the buffers
-    if (m_RGBBuffer) {
-        stbi_image_free(m_RGBBuffer);
+    if (_RGBBuffer) {
+        delete[] _RGBBuffer;
     }
-    if (m_GrayscaleBuffer) {
-        stbi_image_free(m_GrayscaleBuffer);
+    if (_GrayscaleBuffer) {
+        delete[] _GrayscaleBuffer;
     }
 }
 
 float Texture::Impl::GetPixelGrayscale(int x, int y) const
 {
-    if (!m_GrayscaleBuffer) return 0.0f;
-    
-    // Use integer math for offset calculation and unsigned char for pixel data
-    const size_t offset = static_cast<size_t>(y) * static_cast<size_t>(m_Width) + static_cast<size_t>(x);
-    const unsigned char* buffer = reinterpret_cast<const unsigned char*>(m_GrayscaleBuffer);
-    unsigned int shade = buffer[offset];
-
-    constexpr float inv255 = 1.0f / 255.0f;
-    return shade * inv255;
+    if (!_GrayscaleBuffer) return 0.0f;
+    const size_t offset = static_cast<size_t>(y) * static_cast<size_t>(_width) + static_cast<size_t>(x);
+        return _GrayscaleBuffer[offset];
 }
 
 glm::vec3 Texture::Impl::GetPixelRGB(int x, int y) const
 {
-    if (!m_RGBBuffer) return glm::vec3(0.0f);
-    
-    // Use integer math for offset calculation - RGB has 3 channels
-    const size_t offset = (static_cast<size_t>(y) * static_cast<size_t>(m_Width) + static_cast<size_t>(x)) * 3;
-    const unsigned char* buffer = reinterpret_cast<const unsigned char*>(m_RGBBuffer);
-    
-    constexpr float inv255 = 1.0f / 255.0f;
+    if (!_RGBBuffer) return glm::vec3(0.0f);
+
+    const size_t offset = (static_cast<size_t>(y) * static_cast<size_t>(_width) + static_cast<size_t>(x)) * 3;
     return glm::vec3(
-        buffer[offset] * inv255,     // Red
-        buffer[offset + 1] * inv255, // Green
-        buffer[offset + 2] * inv255  // Blue
+        _RGBBuffer[offset],     // Red
+        _RGBBuffer[offset + 1], // Green
+        _RGBBuffer[offset + 2]  // Blue
     );
 }
 
@@ -113,12 +110,12 @@ Texture& Texture::operator=(Texture&& other) noexcept
 
 int Texture::GetWidth() const
 {
-    return pImpl->m_Width;
+    return pImpl->_width;
 }
 
 int Texture::GetHeight() const
 {
-    return pImpl->m_Height;
+    return pImpl->_height;
 }
 
 std::string Texture::GetFilePath() const

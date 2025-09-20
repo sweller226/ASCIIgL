@@ -21,9 +21,6 @@
 #include <Windows.h>
 #endif
 
-// Engine includes
-#include <ASCIIgL/renderer/RenderEnums.hpp>
-
 // Platform-specific type definitions
 #ifdef _WIN32
     // Windows types are already included above
@@ -112,9 +109,9 @@ public:
     void RenderTitle(const bool showFps);
     void ClearBuffer();
     void OutputBuffer();
-    void PlotPixel(const glm::vec2& p, const CHAR character, const COLOR Colour);
+    void PlotPixel(const glm::vec2& p, const WCHAR character, const COLOR Colour);
     void PlotPixel(const glm::vec2& p, const CHAR_INFO charCol);
-    void PlotPixel(int x, int y, const CHAR character, const COLOR Colour);
+    void PlotPixel(int x, int y, const WCHAR character, const COLOR Colour);
     void PlotPixel(int x, int y, const CHAR_INFO charCol);
 
     std::wstring GetTitle();

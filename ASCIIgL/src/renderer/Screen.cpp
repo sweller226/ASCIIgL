@@ -60,9 +60,9 @@
         void ClearBuffer();
         void OutputBuffer();
         void RenderTitle(const bool showFps);
-        void PlotPixel(const glm::vec2& p, const CHAR character, const COLOR Colour);
+        void PlotPixel(const glm::vec2& p, const WCHAR character, const COLOR Colour);
         void PlotPixel(const glm::vec2& p, const CHAR_INFO charCol);
-        void PlotPixel(int x, int y, const CHAR character, const COLOR Colour);
+        void PlotPixel(int x, int y, const WCHAR character, const COLOR Colour);
         void PlotPixel(int x, int y, const CHAR_INFO charCol);
         CHAR_INFO* GetPixelBuffer();
         bool IsWindowsTerminal();
@@ -219,14 +219,14 @@ void Screen::WindowsImpl::RenderTitle(const bool showFps) {
     SetConsoleTitleA(titleBuffer);
 }
 
-void Screen::WindowsImpl::PlotPixel(const glm::vec2& p, const CHAR character, const COLOR Colour) {
+void Screen::WindowsImpl::PlotPixel(const glm::vec2& p, const WCHAR character, const COLOR Colour) {
     int x = static_cast<int>(p.x) * 2; // Double the x coordinate for wide buffer
     int y = static_cast<int>(p.y);
     if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot the pixel twice horizontally
-        pixelBuffer[y * screen._true_screen_width + x].Char.AsciiChar = character;
+        pixelBuffer[y * screen._true_screen_width + x].Char.UnicodeChar = character;
         pixelBuffer[y * screen._true_screen_width + x].Attributes = static_cast<WORD>(Colour);
-        pixelBuffer[y * screen._true_screen_width + x + 1].Char.AsciiChar = character;
+        pixelBuffer[y * screen._true_screen_width + x + 1].Char.UnicodeChar = character;
         pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = static_cast<WORD>(Colour);
     }
 }
@@ -241,13 +241,13 @@ void Screen::WindowsImpl::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol)
     }
 }
 
-void Screen::WindowsImpl::PlotPixel(int x, int y, CHAR character, const COLOR Colour) {
+void Screen::WindowsImpl::PlotPixel(int x, int y, WCHAR character, const COLOR Colour) {
     x *= 2; // Double the x coordinate for wide buffer
     if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot the pixel twice horizontally
-        pixelBuffer[y * screen._true_screen_width + x].Char.AsciiChar = character;
+        pixelBuffer[y * screen._true_screen_width + x].Char.UnicodeChar = character;
         pixelBuffer[y * screen._true_screen_width + x].Attributes = static_cast<WORD>(Colour);
-        pixelBuffer[y * screen._true_screen_width + x + 1].Char.AsciiChar = character;
+        pixelBuffer[y * screen._true_screen_width + x + 1].Char.UnicodeChar = character;
         pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = static_cast<WORD>(Colour);
     }
 }
@@ -380,7 +380,7 @@ void Screen::OutputBuffer() {
     _impl->OutputBuffer();
 }
 
-void Screen::PlotPixel(const glm::vec2& p, const CHAR character, const COLOR Colour) {
+void Screen::PlotPixel(const glm::vec2& p, const WCHAR character, const COLOR Colour) {
     _impl->PlotPixel(p, character, Colour);
 }
 
@@ -388,7 +388,7 @@ void Screen::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol) {
     _impl->PlotPixel(p, charCol);
 }
 
-void Screen::PlotPixel(int x, int y, const CHAR character, const COLOR Colour) {
+void Screen::PlotPixel(int x, int y, const WCHAR character, const COLOR Colour) {
     _impl->PlotPixel(x, y, character, Colour);
 }
 
