@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ASCIIgL/renderer/Palette.hpp>
+
 // External libraries
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -46,17 +48,19 @@ private:
 #else
     // std::unique_ptr<GenericImpl> genericImpl;
 #endif
-
     // Platform-agnostic member variables (now instance members)
     unsigned int _true_screen_width = 0;
     unsigned int _visible_screen_width = 0;
     unsigned int _screen_height = 0;
     std::wstring _title = L"";
     unsigned int _fontSize = 0;
-    COLOR _backgroundCol = COLOR::BG_BLACK;
+    unsigned short _backgroundCol = 0x0;
 
     // Buffers
     float* depthBuffer = nullptr;
+
+    // Color palette that the terminal uses
+    Palette _palette;
 
     // Tile properties
     unsigned int TILE_COUNT_X = 0;
@@ -93,12 +97,10 @@ public:
         const std::wstring title, 
         const unsigned int fontSize, 
         const unsigned int fpsCap, 
-        const float fpsWindowSec, 
-        const COLOR backgroundCol
+        const float fpsWindowSec,
+        const unsigned short backgroundCol,
+        const Palette palette = Palette()
     );
-
-    void SetFontConsole(HANDLE currentHandle, unsigned int fontSize);
-    void SetFontModernTerminal(HANDLE currentHandle, unsigned int fontSize);
 
     // Fps management
     void StartFPSClock();
@@ -109,11 +111,12 @@ public:
     void RenderTitle(const bool showFps);
     void ClearBuffer();
     void OutputBuffer();
-    void PlotPixel(const glm::vec2& p, const WCHAR character, const COLOR Colour);
+    void PlotPixel(const glm::vec2& p, const WCHAR character, const unsigned short Colour);
     void PlotPixel(const glm::vec2& p, const CHAR_INFO charCol);
-    void PlotPixel(int x, int y, const WCHAR character, const COLOR Colour);
+    void PlotPixel(int x, int y, const WCHAR character, const unsigned short Colour);
     void PlotPixel(int x, int y, const CHAR_INFO charCol);
 
+    // title font and screen properties
     std::wstring GetTitle();
     void SetTitle(const std::wstring& title);
     unsigned int GetFontSize();
@@ -129,8 +132,12 @@ public:
     void SetTileSize(const unsigned int x, const unsigned int y);
     void CalculateTileCounts();
 
-    COLOR GetBackgroundColor();
-    void SetBackgroundColor(const COLOR color);
+    // background color
+    unsigned short GetBackgroundColor();
+    void SetBackgroundColor(const unsigned short color);
+
+    // palette
+    Palette& GetPalette();
 
     // Public buffer access (needed for renderer)
     CHAR_INFO* GetPixelBuffer();

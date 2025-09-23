@@ -28,9 +28,6 @@ public:
 	int GetWidth() const;
 	int GetHeight() const;
 	std::string GetFilePath() const;
-
-	// returns grayscale value between 0 and 1
-	float GetPixelGrayscale(int x, int y) const;
 	
 	// returns RGB color as vec3 with values between 0 and 1
 	glm::vec3 GetPixelRGB(int x, int y) const;

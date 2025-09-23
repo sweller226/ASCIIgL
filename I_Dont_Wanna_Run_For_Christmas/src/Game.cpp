@@ -6,7 +6,6 @@
 Game::Game()
 	: guiCamera(glm::vec2(0, 0), SCR_WIDTH, SCR_HEIGHT)
 {
-
 	// don't mind me just loading in 100030423 textures for my simple gui
 	Textures["Title"] = new Texture("res/textures/GUI/Title.png");
 	Textures["Start_Sel"] = new Texture("res/textures/GUI/StartSelected.png");
@@ -30,8 +29,7 @@ Game::Game()
 	Textures["Stamina6"] = new Texture("res/textures/GUI/Stamina6.png");
 }
 
-Game::~Game()
-{
+Game::~Game() {
 	// this destructor just deletes everything
 	for (auto const& [key, val] : Textures)
 	{
@@ -46,8 +44,7 @@ Game::~Game()
 	delete Instance, player, LevelModel, Level, PresentModel, MariahModel, Mariah2Model;
 }
 
-Game* Game::GetInstance()
-{
+Game* Game::GetInstance() {
 	if (Instance == nullptr)
 	{
 		Instance = new Game();
@@ -59,10 +56,9 @@ Game* Game::GetInstance()
 	}
 }
 
-void Game::Run()
-{
+void Game::Run() {
     Logger::Info("Game loop starting.");
-    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 3, 60, 1.0f, COLOR::BG_BLACK);
+    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 3, 60, 1.0f, 0x0);
 	SCR_WIDTH = Screen::GetInstance().GetVisibleWidth();
 	SCR_HEIGHT = Screen::GetInstance().GetHeight();
 	guiCamera.setScreenDimensions(SCR_WIDTH, SCR_HEIGHT);
@@ -71,14 +67,13 @@ void Game::Run()
     Renderer::SetCCW(true);
 	Renderer::SetAntialiasingsamples(8);
 	Renderer::SetAntialiasing(true);
-	Renderer::SetGrayscale(false);
 
-    // Logger::Info("Playing background music.");
-	// BOOL soundResult = PlaySound(TEXT(".\\res\\audio\\Man.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
-	// if (soundResult)
-	// 	Logger::Info("Background music started successfully.");
-	// else
-	// 	Logger::Error("Failed to start background music.");
+    Logger::Info("Playing background music.");
+	BOOL soundResult = PlaySound(TEXT(".\\res\\audio\\Man.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
+	if (soundResult)
+		Logger::Info("Background music started successfully.");
+	else
+		Logger::Error("Failed to start background music.");
 
     // main gameloop
     while (running == true)
@@ -110,7 +105,7 @@ void Game::Run()
                 Logger::Warning("[WARN] Unknown game state: " + std::to_string(gameState));
                 break;
         }
-        Renderer::DrawScreenBorder(COLOR::FG_WHITE);
+        Renderer::DrawScreenBorder(0xF);
 
         Screen::GetInstance().OutputBuffer();
 
@@ -120,8 +115,7 @@ void Game::Run()
     Logger::Info("Game loop ended.");
 }
 
-void Game::LoadLevel()
-{
+void Game::LoadLevel() {
 	LevelModel = new Model("res/models/level2/MazeTest.obj");
 	MariahModel = new Model("res/models/mariah/mariah.obj");
 	Mariah2Model = new Model("res/models/Mariah2/mariah.obj");
@@ -130,11 +124,8 @@ void Game::LoadLevel()
 	initLevel();
 }
 
-void Game::RunMainMenu()
-{
-	// Title: position (220, 80) -> (220/450, 80/300) = (0.489, 0.267), size (130, 50) -> (130/450, 50/300) = (0.289, 0.167)
+void Game::RunMainMenu() {
 	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Title"], glm::vec2(0.489f, 0.267f), 0.0f, glm::vec2(0.289f, 0.167f), guiCamera, 0);
-	// Select button: position (105, 270) -> (105/450, 270/300) = (0.233, 0.9), size (100, 15) -> (100/450, 15/300) = (0.222, 0.05)
 	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Select_Btn"], glm::vec2(0.233f, 0.9f), 0.0f, glm::vec2(0.222f, 0.05f), guiCamera, 0);
 
 	if (GetKeyState(VK_UP) & 0x8000)
@@ -177,8 +168,7 @@ void Game::RunMainMenu()
 	
 }
 
-void Game::RunHowToPlay()
-{
+void Game::RunHowToPlay() {
 	if (GetKeyState('Q') & 0x8000)
 	{
 		gameState = MAIN_MENU;
@@ -194,8 +184,7 @@ void Game::RunHowToPlay()
 
 }
 
-void Game::RunLore()
-{
+void Game::RunLore() {
 	// Game Info 1: position (225, 150) -> (225/450, 150/300) = (0.5, 0.5), size (200, 125) -> (200/450, 125/300) = (0.444, 0.417)
 	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["GameInfo1"], glm::vec2(0.5f, 0.5f), 0.0f, glm::vec2(0.444f, 0.417f), guiCamera, 0);
 	Screen::GetInstance().OutputBuffer();
@@ -205,8 +194,7 @@ void Game::RunLore()
 	LoadLevel();
 }
 
-void Game::RunMaze()
-{
+void Game::RunMaze() {
 	player->Update(Level);
 	MariahAI();
 
@@ -282,8 +270,7 @@ void Game::RunMaze()
 	Renderer::DrawModel(vertexShader, *Level->model, Level->position, Level->rotation, Level->size, player->GetCamera());
 }
 
-void Game::RunLost()
-{
+void Game::RunLost() {
 	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Lost"], glm::vec2(0.5, 0.5), 0.0f, glm::vec2(0.444, 0.417), guiCamera, 0);
 
 	if (GetKeyState('R') & 0x8000)
@@ -311,8 +298,7 @@ void Game::RunLost()
 	}
 }
 
-void Game::MariahAI()
-{
+void Game::MariahAI() {
 	float chaseSpeed = 40.0f;
 	float patrolSpeed = 130.0f;
 
@@ -345,8 +331,7 @@ void Game::MariahAI()
 	}
 }
 
-int Game::GetPresentsCollected()
-{
+int Game::GetPresentsCollected() {
 	int presentsCollected = 0;
 
 	for (int i = 0; i < presents.size(); i++)
@@ -357,13 +342,11 @@ int Game::GetPresentsCollected()
 	return presentsCollected;
 }
 
-void Game::RunWin()
-{
+void Game::RunWin() {
 	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Win"], glm::vec2(0.5, 0.5), 0.0f, glm::vec2(0.444, 0.417), guiCamera, 0);
 }
 
-void Game::initLevel()
-{
+void Game::initLevel() {
 	Level = new GameObj(glm::vec3(0, 0, 0), glm::vec3(0, 0, 0), glm::vec3(levelXSize, levelHeight, levelZSize), LevelModel);
 	player = new Player(glm::vec2(0, levelZSize / 2), glm::vec2(-90, 0));
 	

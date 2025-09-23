@@ -56,21 +56,37 @@
         }
 
         // Implementation methods
-        int Initialize(const unsigned int true_width, const unsigned int height, const unsigned int fontSize);
+        int Initialize(const unsigned int true_width, const unsigned int height, const unsigned int fontSize, const Palette& palette);
         void ClearBuffer();
         void OutputBuffer();
         void RenderTitle(const bool showFps);
-        void PlotPixel(const glm::vec2& p, const WCHAR character, const COLOR Colour);
+        void PlotPixel(const glm::vec2& p, const WCHAR character, const unsigned short Colour);
         void PlotPixel(const glm::vec2& p, const CHAR_INFO charCol);
-        void PlotPixel(int x, int y, const WCHAR character, const COLOR Colour);
+        void PlotPixel(int x, int y, const WCHAR character, const unsigned short Colour);
         void PlotPixel(int x, int y, const CHAR_INFO charCol);
         CHAR_INFO* GetPixelBuffer();
-        bool IsWindowsTerminal();
-        std::wstring GetWindowsTerminalSettingsPath();
-        bool ModifyWindowsTerminalFont(const std::wstring& settingsPath, float fontSize);
+
+        // Windows terminal font stuff
+        void SetFontTerminal(HANDLE currentHandle, unsigned int fontSize);
+        bool IsTerminal();
+        std::wstring GetTerminalSettingsPath();
+        bool ModifyTerminalFont(const std::wstring& settingsPath, float fontSize);
         float ConvertPixelSizeToTerminalPoints(unsigned int pixelSize);
+
+        // windows console font stuff
+        void SetFontConsole(HANDLE currentHandle, unsigned int fontSize);
+
+        // either console or terminal font stuff
         bool IsFontInstalled(const std::wstring& fontName);
         bool InstallFontFromFile(const std::wstring& fontFilePath);
+
+        // windows console settings
+        void SetCursorInvisibleConsole(HANDLE currentHandle);
+        void DisableWindowResizingConsole();
+
+        // palette stuff
+        void SetPaletteTerminal(const Palette& palette, HANDLE& hOutput);
+        void SetPaletteConsole(const Palette& palette, HANDLE& hOutput);
     };
 
 #else
@@ -81,7 +97,7 @@
 #ifdef _WIN32
 
 // WindowsImpl method implementations (Unified Windows console implementation)
-int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigned int height, const unsigned int fontSize) {
+int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigned int height, const unsigned int fontSize, const Palette& palette) {
     // First, get current console handle to check maximum window size with proper font
     HANDLE currentHandle = GetStdHandle(STD_OUTPUT_HANDLE);
     if (currentHandle == INVALID_HANDLE_VALUE) {
@@ -91,11 +107,11 @@ int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigne
 
     // Set the font FIRST to get accurate maximum window size calculations
     Logger::Debug(L"Setting font for accurate size calculations.");
-    if (IsWindowsTerminal()) {
-        screen.SetFontModernTerminal(currentHandle, fontSize);
+    if (IsTerminal()) {
+        SetFontTerminal(currentHandle, fontSize);
     }
     else {
-        screen.SetFontConsole(currentHandle, fontSize);
+        SetFontConsole(currentHandle, fontSize);
     }
 
     // Small delay to ensure font change takes effect
@@ -153,12 +169,24 @@ int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigne
     SMALL_RECT m_rectWindow = { 0, 0, 1, 1 };
     SetConsoleWindowInfo(_hOutput, TRUE, &m_rectWindow);
 
-	Logger::Debug(L"Creating console font.");
-    if (IsWindowsTerminal()) {
-        screen.SetFontModernTerminal(_hOutput, fontSize);
+    // console vs terminal stuff
+    if (IsTerminal()) {
+        SetFontTerminal(_hOutput, fontSize);
+
+        // set palette here
+        SetPaletteTerminal(palette, _hOutput);
     }
     else {
-        screen.SetFontConsole(_hOutput, fontSize);
+        SetFontConsole(_hOutput, fontSize);
+
+        // set palette here
+        SetPaletteConsole(palette, _hOutput);
+
+        // setting console cursor to invisible for the console
+        SetCursorInvisibleConsole(_hOutput);
+
+        // disabling window resizing for the console
+        DisableWindowResizingConsole();
     }
 
     Logger::Debug(L"Setting physical size of console window.");
@@ -166,23 +194,6 @@ int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigne
 
     Logger::Debug(L"Setting _hOutput as the active console screen buffer.");
     SetConsoleActiveScreenBuffer(_hOutput);
-
-    Logger::Debug(L"Setting console cursor to invisible.");
-    CONSOLE_CURSOR_INFO cursorInfo;
-    GetConsoleCursorInfo(_hOutput, &cursorInfo);
-    cursorInfo.bVisible = FALSE;
-    SetConsoleCursorInfo(_hOutput, &cursorInfo);
-
-    Logger::Debug(L"Disabling window resizing");
-    HWND hwnd = GetConsoleWindow();
-    if (hwnd) {
-        LONG style = GetWindowLong(hwnd, GWL_STYLE);
-        style &= ~WS_MAXIMIZEBOX;
-        style &= ~WS_SIZEBOX;
-        SetWindowLong(hwnd, GWL_STYLE, style);
-    } else {
-        Logger::Error(L"Failed to get console window handle for disabling resizing.");
-    }
 
     Logger::Debug(L"Deleting old buffers and creating new ones.");
 	if (pixelBuffer) { delete[] pixelBuffer; pixelBuffer = nullptr; }
@@ -192,11 +203,11 @@ int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigne
 }
 
 void Screen::WindowsImpl::ClearBuffer() {
-    std::fill(pixelBuffer, pixelBuffer + screen._true_screen_width * screen._screen_height, CHAR_INFO{'\0', static_cast<WORD>(screen._backgroundCol)});
+    std::fill(pixelBuffer, pixelBuffer + screen._true_screen_width * screen._screen_height, CHAR_INFO{L' ', static_cast<WORD>(screen._backgroundCol << 4)});
 }
 
 void Screen::WindowsImpl::OutputBuffer() {
-    WriteConsoleOutput(_hOutput, pixelBuffer, dwBufferSize, dwBufferCoord, &rcRegion);
+    WriteConsoleOutputW(_hOutput, pixelBuffer, dwBufferSize, dwBufferCoord, &rcRegion);
 }
 
 void Screen::WindowsImpl::RenderTitle(const bool showFps) {
@@ -219,7 +230,7 @@ void Screen::WindowsImpl::RenderTitle(const bool showFps) {
     SetConsoleTitleA(titleBuffer);
 }
 
-void Screen::WindowsImpl::PlotPixel(const glm::vec2& p, const WCHAR character, const COLOR Colour) {
+void Screen::WindowsImpl::PlotPixel(const glm::vec2& p, const WCHAR character, const unsigned short Colour) {
     int x = static_cast<int>(p.x) * 2; // Double the x coordinate for wide buffer
     int y = static_cast<int>(p.y);
     if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
@@ -241,7 +252,7 @@ void Screen::WindowsImpl::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol)
     }
 }
 
-void Screen::WindowsImpl::PlotPixel(int x, int y, WCHAR character, const COLOR Colour) {
+void Screen::WindowsImpl::PlotPixel(int x, int y, WCHAR character, const unsigned short Colour) {
     x *= 2; // Double the x coordinate for wide buffer
     if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot the pixel twice horizontally
@@ -265,7 +276,7 @@ CHAR_INFO* Screen::WindowsImpl::GetPixelBuffer() {
     return pixelBuffer;
 }
 
-bool Screen::WindowsImpl::IsWindowsTerminal() {
+bool Screen::WindowsImpl::IsTerminal() {
     // Method 1: Check for Windows Terminal specific environment variables
     const char* wtSession = std::getenv("WT_SESSION");
     if (wtSession != nullptr) {
@@ -304,7 +315,8 @@ int Screen::InitializeScreen(
     const unsigned int fontSize, 
     const unsigned int fpsCap, 
     const float fpsWindowSec, 
-    const COLOR backgroundCol
+    const unsigned short backgroundCol,
+    const Palette palette
 ) {
     Logger::Debug(L"CPU has max " + std::to_wstring(std::thread::hardware_concurrency()) + L" threads.");
 
@@ -334,12 +346,15 @@ int Screen::InitializeScreen(
     Logger::Debug(L"Setting font size to " + std::to_wstring(adjustedFontSize));
     _fontSize = adjustedFontSize;
 
+    // setting palette reference
+    _palette = palette;
+
 #ifdef _WIN32
     // Use unified Windows implementation for both CMD and Windows Terminal
     _impl = std::make_unique<WindowsImpl>(*this);
     
     // Windows-specific initialization through delegation
-    int initResult = _impl->Initialize(_true_screen_width, height, adjustedFontSize);
+    int initResult = _impl->Initialize(_true_screen_width, height, adjustedFontSize, palette);
     if (initResult != SCREEN_NOERROR) {
         return initResult;
     }
@@ -380,7 +395,7 @@ void Screen::OutputBuffer() {
     _impl->OutputBuffer();
 }
 
-void Screen::PlotPixel(const glm::vec2& p, const WCHAR character, const COLOR Colour) {
+void Screen::PlotPixel(const glm::vec2& p, const WCHAR character, const unsigned short Colour) {
     _impl->PlotPixel(p, character, Colour);
 }
 
@@ -388,7 +403,7 @@ void Screen::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol) {
     _impl->PlotPixel(p, charCol);
 }
 
-void Screen::PlotPixel(int x, int y, const WCHAR character, const COLOR Colour) {
+void Screen::PlotPixel(int x, int y, const WCHAR character, const unsigned short Colour) {
     _impl->PlotPixel(x, y, character, Colour);
 }
 
@@ -452,11 +467,11 @@ void Screen::CalculateTileCounts() {
     TILE_COUNT_Y = (_screen_height + TILE_SIZE_Y - 1) / TILE_SIZE_Y;
 }
 
-COLOR Screen::GetBackgroundColor() {
+unsigned short Screen::GetBackgroundColor() {
     return _backgroundCol;
 }
 
-void Screen::SetBackgroundColor(const COLOR color) {
+void Screen::SetBackgroundColor(const unsigned short color) {
     _backgroundCol = color;
 }
 
@@ -515,7 +530,7 @@ void Screen::Cleanup() {
     _impl.reset();
 }
 
-void Screen::SetFontConsole(HANDLE currentHandle, unsigned int fontSize) {
+void Screen::WindowsImpl::SetFontConsole(HANDLE currentHandle, unsigned int fontSize) {
     CONSOLE_FONT_INFOEX fontForSizing;
     fontForSizing.cbSize = sizeof(fontForSizing);
     fontForSizing.nFont = 0;
@@ -529,16 +544,16 @@ void Screen::SetFontConsole(HANDLE currentHandle, unsigned int fontSize) {
     }
 }
 
-void Screen::SetFontModernTerminal(HANDLE currentHandle, unsigned int fontSize) {
+void Screen::WindowsImpl::SetFontTerminal(HANDLE currentHandle, unsigned int fontSize) {
     Logger::Info(L"Attempting to modify Windows Terminal settings.json file directly.");
     
     // Convert pixel-based font size to Windows Terminal point size
-    float terminalFontSize = _impl->ConvertPixelSizeToTerminalPoints(fontSize);
+    float terminalFontSize = ConvertPixelSizeToTerminalPoints(fontSize);
     Logger::Debug(L"Converting pixel size " + std::to_wstring(fontSize) + 
                   L" to terminal point size " + std::to_wstring(terminalFontSize));
-    
-    std::wstring settingsPath = _impl->GetWindowsTerminalSettingsPath();
-    if (!settingsPath.empty() && _impl->ModifyWindowsTerminalFont(settingsPath, terminalFontSize)) {
+
+    std::wstring settingsPath = GetTerminalSettingsPath();
+    if (!settingsPath.empty() && ModifyTerminalFont(settingsPath, terminalFontSize)) {
         Logger::Info(L"Successfully modified Windows Terminal settings.json");
     }
 }
@@ -579,7 +594,7 @@ float Screen::WindowsImpl::ConvertPixelSizeToTerminalPoints(unsigned int pixelSi
     return std::max(1.0f, pointSize);
 }
 
-std::wstring Screen::WindowsImpl::GetWindowsTerminalSettingsPath() {
+std::wstring Screen::WindowsImpl::GetTerminalSettingsPath() {
     // Windows Terminal settings are stored in:
     // %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
     
@@ -613,7 +628,7 @@ std::wstring Screen::WindowsImpl::GetWindowsTerminalSettingsPath() {
     return L"";
 }
 
-bool Screen::WindowsImpl::ModifyWindowsTerminalFont(const std::wstring& settingsPath, float fontSize) {             
+bool Screen::WindowsImpl::ModifyTerminalFont(const std::wstring& settingsPath, float fontSize) {             
     try {   
         std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
         std::string settingsPathStr = converter.to_bytes(settingsPath);
@@ -771,4 +786,158 @@ bool Screen::WindowsImpl::InstallFontFromFile(const std::wstring& fontPath) {
     }
     
     return true;
+}
+
+void Screen::WindowsImpl::SetCursorInvisibleConsole(HANDLE currentHandle) {
+    CONSOLE_CURSOR_INFO cursorInfo;
+    GetConsoleCursorInfo(currentHandle, &cursorInfo);
+    cursorInfo.bVisible = FALSE; // Set cursor visibility to false
+    SetConsoleCursorInfo(currentHandle, &cursorInfo);
+}
+
+void Screen::WindowsImpl::DisableWindowResizingConsole() {
+    HWND hwnd = GetConsoleWindow();
+    if (hwnd) {
+        LONG style = GetWindowLong(hwnd, GWL_STYLE);
+        style &= ~WS_MAXIMIZEBOX; // Disable maximize button
+        style &= ~WS_SIZEBOX;     // Disable resizing border
+        SetWindowLong(hwnd, GWL_STYLE, style);
+    } else {
+        Logger::Error(L"Failed to get console window handle for disabling resizing.");
+    }
+}
+
+Palette& Screen::GetPalette() {
+    return _palette;
+}
+
+void Screen::WindowsImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOutput) {
+    Logger::Info(L"Attempting to modify Windows Terminal color scheme.");
+
+    std::wstring settingsPath = GetTerminalSettingsPath();
+    if (settingsPath.empty()) {
+        Logger::Error(L"Could not find Windows Terminal settings path.");
+        return;
+    }
+
+    try {
+        std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+        std::string settingsPathStr = converter.to_bytes(settingsPath);
+
+        // Read file
+        std::wifstream file(settingsPathStr);
+        if (!file.is_open()) {
+            Logger::Error(L"Could not open Windows Terminal settings file.");
+            return;
+        }
+
+        std::wstringstream buffer;
+        buffer << file.rdbuf();
+        file.close();
+        std::wstring content = buffer.str();
+
+        // Create backup
+        std::filesystem::copy_file(settingsPath, settingsPath + L".palette_backup",
+                                   std::filesystem::copy_options::overwrite_existing);
+
+        // Build custom color scheme JSON
+        std::wstring customScheme = L"        {\n            \"name\": \"ASCIIgL Custom\",\n";
+        std::vector<std::wstring> colorNames = {
+            L"black", L"red", L"green", L"yellow", L"blue", L"purple", L"cyan", L"white",
+            L"brightBlack", L"brightRed", L"brightGreen", L"brightYellow",
+            L"brightBlue", L"brightPurple", L"brightCyan", L"brightWhite"
+        };
+
+        for (size_t i = 0; i < std::min(static_cast<size_t>(Palette::COLOR_COUNT), colorNames.size()); ++i) {
+            glm::vec3 rgb = palette.GetRGB(static_cast<uint8_t>(i));
+            int r = static_cast<int>(rgb.r * 255.0f + 0.5f);
+            int g = static_cast<int>(rgb.g * 255.0f + 0.5f);
+            int b = static_cast<int>(rgb.b * 255.0f + 0.5f);
+            wchar_t hexColor[8];
+            swprintf_s(hexColor, L"#%02X%02X%02X", r, g, b);
+            customScheme += L"            \"" + colorNames[i] + L"\": \"" + hexColor + L"\"";
+            if (i < colorNames.size() - 1) customScheme += L",";
+            customScheme += L"\n";
+        }
+        customScheme += L"        }";
+
+        // Find the root "schemes" array and replace or add the scheme
+        std::wregex schemesRegex(LR"("schemes"\s*:\s*\[([\s\S]*?)\])");
+        std::wsmatch match;
+        if (std::regex_search(content, match, schemesRegex)) {
+            // Remove any existing ASCIIgL Custom scheme
+            std::wstring schemesBlock = match[1].str();
+            std::wregex asciiGlRegex(LR"(\s*\{\s*"name"\s*:\s*"ASCIIgL Custom"[\s\S]*?\}\s*,?)");
+            schemesBlock = std::regex_replace(schemesBlock, asciiGlRegex, L"");
+            // Clean up trailing commas and whitespace
+            schemesBlock = std::regex_replace(schemesBlock, std::wregex(LR"(,\s*\])"), L"]");
+            // Add the new scheme
+            if (!schemesBlock.empty() && schemesBlock.find_first_not_of(L" \t\n\r") != std::wstring::npos) {
+                schemesBlock += L",\n";
+            }
+            schemesBlock += customScheme + L"\n    ";
+            std::wstring replacement = L"\"schemes\": [\n" + schemesBlock + L"]";
+            content = std::regex_replace(content, schemesRegex, replacement);
+        } else {
+            // Add schemes array at the root if it doesn't exist
+            std::wregex jsonEndRegex(LR"(\}\s*$)");
+            if (std::regex_search(content, jsonEndRegex)) {
+                std::wstring addition = L",\n    \"schemes\": [\n" + customScheme + L"\n    ]\n}";
+                content = std::regex_replace(content, jsonEndRegex, addition);
+            }
+        }
+
+        // Write back
+        std::wofstream outFile(settingsPathStr);
+        if (!outFile.is_open()) {
+            Logger::Error(L"Could not write to Windows Terminal settings file.");
+            return;
+        }
+        outFile << content;
+        outFile.close();
+
+        Logger::Info(L"Successfully modified Windows Terminal color scheme.");
+
+    } catch (const std::exception& e) {
+        Logger::Error(L"Failed to modify Windows Terminal color scheme: " + std::wstring(e.what(), e.what() + strlen(e.what())));
+    }
+}
+
+void Screen::WindowsImpl::SetPaletteConsole(const Palette& palette, HANDLE& hOutput) {
+    Logger::Info(L"Setting console palette for legacy Command Prompt.");
+
+    if (hOutput == INVALID_HANDLE_VALUE) {
+        Logger::Error(L"Failed to get console output handle for palette setting.");
+        return;
+    }
+    
+    // Get current console screen buffer info
+    CONSOLE_SCREEN_BUFFER_INFOEX csbi;
+    csbi.cbSize = sizeof(CONSOLE_SCREEN_BUFFER_INFOEX);
+    
+    if (!GetConsoleScreenBufferInfoEx(hOutput, &csbi)) {
+        Logger::Error(L"Failed to get console screen buffer info for palette setting.");
+        return;
+    }
+    
+    // Map the 16 palette colors to the console color table
+    for (uint8_t i = 0; i < Palette::COLOR_COUNT; ++i) {
+        glm::vec3 rgb = palette.GetRGB(i);
+        
+        // Convert RGB [0,1] to [0,255] range
+        BYTE r = static_cast<BYTE>(rgb.r * 255.0f + 0.5f);
+        BYTE g = static_cast<BYTE>(rgb.g * 255.0f + 0.5f);
+        BYTE b = static_cast<BYTE>(rgb.b * 255.0f + 0.5f);
+        
+        // Set the color in the console color table
+        csbi.ColorTable[i] = RGB(r, g, b);
+    }
+    
+    // Apply the updated color table to the console
+    if (!SetConsoleScreenBufferInfoEx(hOutput, &csbi)) {
+        Logger::Error(L"Failed to set console screen buffer info for palette.");
+        return;
+    }
+    
+    Logger::Info(L"Successfully set console palette for legacy Command Prompt.");
 }

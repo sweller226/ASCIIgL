@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <execution>
 #include <numeric>
+#include <sstream>
 
 #include <ASCIIgL/engine/Logger.hpp>
 #include <ASCIIgL/engine/Collision.hpp>
@@ -113,12 +114,12 @@ void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, c
     Renderer::RenderTriangles(VSHADER, vertices, &tex);
 }
 
-void Renderer::DrawScreenBorder(const COLOR col) {
+void Renderer::DrawScreenBorder(const unsigned short col) {
 	// DRAWING BORDERS
-	DrawLine(1, 1, Screen::GetInstance().GetVisibleWidth() - 1, 1, static_cast<WCHAR>(L'█'), col);
-	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, 1, Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, static_cast<WCHAR>(L'█'), col);
-	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, 1, Screen::GetInstance().GetHeight() - 1, static_cast<WCHAR>(L'█'), col);
-	DrawLine(1, 1, 1, Screen::GetInstance().GetHeight() - 1, static_cast<WCHAR>(L'█'), col);
+	DrawLine(1, 1, Screen::GetInstance().GetVisibleWidth() - 1, 1, static_cast<WCHAR>(219), col);
+	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, 1, Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, static_cast<WCHAR>(219), col);
+	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, 1, Screen::GetInstance().GetHeight() - 1, static_cast<WCHAR>(219), col);
+	DrawLine(1, 1, 1, Screen::GetInstance().GetHeight() - 1, static_cast<WCHAR>(219), col);
 }
 
 // =============================================================================
@@ -379,10 +380,10 @@ void Renderer::DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& ras
 void Renderer::DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles) {
     // Draw wireframe for each triangle in the tile
     for (int triIndex : tile.tri_indices_encapsulated) {
-        DrawTriangleWireframe(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<WCHAR>(L'█'), COLOR::FG_WHITE);
+        DrawTriangleWireframe(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<WCHAR>(L'█'), 0xF);
     }
     for (int triIndex : tile.tri_indices_partial) {
-        DrawTriangleWireframePartial(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<WCHAR>(L'█'), COLOR::FG_WHITE);
+        DrawTriangleWireframePartial(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<WCHAR>(L'█'), 0xF);
     }
 }
 
@@ -468,14 +469,8 @@ void Renderer::DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, co
                             // Use integer texture coordinates for better cache performance
                             float texWidthProd = tex_uw * texWidth;
                             float texHeightProd = tex_vw * texHeight;
-
-                            if (_grayscale) {
-                                float grayscaleCol = tex->GetPixelGrayscale(texWidthProd, texHeightProd);
-                                screen.PlotPixel(glm::vec2(j, i), GetCharInfoGreyScale(grayscaleCol));
-                            } else {
-                                glm::vec3 rgbCol = tex->GetPixelRGB(texWidthProd, texHeightProd);
-                                screen.PlotPixel(glm::vec2(j, i), GetCharInfoRGB(rgbCol));
-                            }
+                            glm::vec3 rgbCol = tex->GetPixelRGB(texWidthProd, texHeightProd);
+                            screen.PlotPixel(glm::vec2(j, i), GetCharInfo(rgbCol));
                             depthBuffer[bufferIndex] = tex_w;
                         }
                     }
@@ -578,13 +573,8 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
                         if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
                             float texWidthProd = tex_uw * texWidth;
                             float texHeightProd = tex_vw * texHeight;
-                            if (_grayscale) {
-                                float grayscaleCol = tex->GetPixelGrayscale(texWidthProd, texHeightProd);
-                                screen.PlotPixel(glm::vec2(j, i), GetCharInfoGreyScale(grayscaleCol));
-                            } else {
-                                glm::vec3 rgbCol = tex->GetPixelRGB(texWidthProd, texHeightProd);
-                                screen.PlotPixel(glm::vec2(j, i), GetCharInfoRGB(rgbCol));
-                            }
+                            glm::vec3 rgbCol = tex->GetPixelRGB(texWidthProd, texHeightProd);
+                            screen.PlotPixel(glm::vec2(j, i), GetCharInfo(rgbCol));
                             depthBuffer[bufferIndex] = tex_w;
                         }
                     }
@@ -601,7 +591,7 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
     drawScanlines(y2, y3, x2, y2, x3, y3, u2, v2, w2, u3, v3, w3, x3, y3, u3, v3, w3);
 }
 
-void Renderer::DrawTriangleWireframePartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const WCHAR pixel_type, const COLOR col) {
+void Renderer::DrawTriangleWireframePartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const WCHAR pixel_type, const unsigned short col) {
     // Get tile bounds for clipping
     const int minX = static_cast<int>(tile.position.x);
     const int maxX = static_cast<int>(tile.position.x + tile.size.x);
@@ -724,7 +714,7 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
         const int rowOffset = y * screenWidth;
         for (int x = minX; x <= maxX; ++x) {
             const float baseX = x + 0.5f;
-            glm::vec3 rgbAccum(0.0f); float grayAccum = 0.0f; float depthAccum = 0.0f; int insideSamples = 0;
+            glm::vec3 rgbAccum(0.0f); float depthAccum = 0.0f; int insideSamples = 0;
 
             // Pixel center edge evaluations
             const float e12c = A12 * baseX + B12 * baseY + C12;
@@ -751,11 +741,7 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
                 if (tu < 0.f || tu >= 1.f || tv < 0.f || tv >= 1.f) continue;
                 const float sX = tu * texWidth;
                 const float sY = tv * texHeight;
-                if (_grayscale) {
-                    grayAccum += tex->GetPixelGrayscale(sX, sY);
-                } else {
-                    rgbAccum += tex->GetPixelRGB(sX, sY);
-                }
+                rgbAccum += tex->GetPixelRGB(sX, sY);
                 depthAccum += perspW;
                 ++insideSamples;
             }
@@ -764,13 +750,8 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
                 const int idx = rowOffset + x;
                 const float avgDepth = depthAccum / insideSamples;
                 if (avgDepth > depth[idx]) {
-                    if (_grayscale) {
-                        const float g = grayAccum / insideSamples;
-                        screen.PlotPixel(glm::vec2(x, y), GetCharInfoGreyScale(g));
-                    } else {
-                        const glm::vec3 c = rgbAccum * (1.0f / insideSamples);
-                        screen.PlotPixel(glm::vec2(x, y), GetCharInfoRGB(c));
-                    }
+                    const glm::vec3 c = rgbAccum * (1.0f / insideSamples);
+                    screen.PlotPixel(glm::vec2(x, y), GetCharInfo(c));
                     depth[idx] = avgDepth;
                 }
             }
@@ -835,7 +816,7 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& v1, const VERTEX& v
         for (int x = minX; x <= maxX; ++x) {
             const float baseX = x + 0.5f;
 
-            glm::vec3 rgbAccum(0.0f); float grayAccum = 0.0f; float depthAccum = 0.0f; int insideSamples = 0;
+            glm::vec3 rgbAccum(0.0f); float depthAccum = 0.0f; int insideSamples = 0;
 
             // Pixel center edge evaluations
             const float e12c = A12 * baseX + B12 * baseY + C12;
@@ -863,11 +844,7 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& v1, const VERTEX& v
                 if (tu < 0.f || tu >= 1.f || tv < 0.f || tv >= 1.f) continue;
                 const float sX = tu * texWidth;
                 const float sY = tv * texHeight;
-                if (_grayscale) {
-                    grayAccum += tex->GetPixelGrayscale(sX, sY);
-                } else {
-                    rgbAccum += tex->GetPixelRGB(sX, sY);
-                }
+                rgbAccum += tex->GetPixelRGB(sX, sY);
                 depthAccum += perspW;
                 ++insideSamples;
             }
@@ -876,13 +853,8 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& v1, const VERTEX& v
                 const int idx = rowOffset + x;
                 const float avgDepth = depthAccum / insideSamples;
                 if (avgDepth > depth[idx]) {
-                    if (_grayscale) {
-                        const float g = grayAccum / insideSamples;
-                        screen.PlotPixel(glm::vec2(x, y), GetCharInfoGreyScale(g));
-                    } else {
-                        const glm::vec3 c = rgbAccum * (1.0f / insideSamples);
-                        screen.PlotPixel(glm::vec2(x, y), GetCharInfoRGB(c));
-                    }
+                    const glm::vec3 c = rgbAccum * (1.0f / insideSamples);
+                    screen.PlotPixel(glm::vec2(x, y), GetCharInfo(c));
                     depth[idx] = avgDepth;
                 }
             }
@@ -890,7 +862,7 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& v1, const VERTEX& v
     }
 }
 
-void Renderer::DrawLine(const int x1, const int y1, const int x2, const int y2, const WCHAR pixel_type, const COLOR col) {
+void Renderer::DrawLine(const int x1, const int y1, const int x2, const int y2, const WCHAR pixel_type, const unsigned short col) {
     int dx = abs(x2 - x1);
     int dy = abs(y2 - y1);
     int incx = (x2 > x1) ? 1 : -1;
@@ -926,7 +898,7 @@ void Renderer::DrawLine(const int x1, const int y1, const int x2, const int y2, 
     }
 }
 
-void Renderer::DrawTriangleWireframe(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const WCHAR pixel_type, const COLOR col) {
+void Renderer::DrawTriangleWireframe(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const WCHAR pixel_type, const unsigned short col) {
 	// RENDERING LINES BETWEEN VERTICES
 	DrawLine((int) vert1.X(), (int) vert1.Y(), (int) vert2.X(), (int) vert2.Y(), pixel_type, col);
 	DrawLine((int) vert2.X(), (int) vert2.Y(), (int) vert3.X(), (int) vert3.Y(), pixel_type, col);
@@ -1110,16 +1082,17 @@ glm::mat4 Renderer::CalcModelMatrix(const glm::vec3& position, const float rotat
 	return model;
 }
 
-CHAR_INFO Renderer::GetCharInfoRGB(const glm::vec3& rgb) {
+CHAR_INFO Renderer::GetCharInfo(const glm::vec3& rgb) {
+    Palette& palette = Screen::GetInstance().GetPalette();
     // Use precomputed LUT if available
     if (_colorLUTComputed) {
         // Convert RGB to discrete indices for LUT lookup
-        int maxIndex = static_cast<int>(MAX_PALETTE_SIZE - 1);
+        int maxIndex = static_cast<int>(_rgbLUTDepth - 1);
         int r = std::max(0, std::min(static_cast<int>(rgb.r * maxIndex + 0.5f), maxIndex));
         int g = std::max(0, std::min(static_cast<int>(rgb.g * maxIndex + 0.5f), maxIndex));
         int b = std::max(0, std::min(static_cast<int>(rgb.b * maxIndex + 0.5f), maxIndex));
-        
-        int index = (r * MAX_PALETTE_SIZE * MAX_PALETTE_SIZE) + (g * MAX_PALETTE_SIZE) + b;
+
+        int index = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
         return _colorLUT[index];
     }
 
@@ -1136,7 +1109,7 @@ CHAR_INFO Renderer::GetCharInfoRGB(const glm::vec3& rgb) {
                 float coverage = _charCoverage[charIdx];
                 
                 // Simulate the blended color: coverage * fg + (1-coverage) * bg
-                glm::vec3 simulatedColor = coverage * consoleColors[fgIdx] + (1.0f - coverage) * consoleColors[bgIdx];
+                glm::vec3 simulatedColor = coverage * palette.GetRGB(fgIdx) + (1.0f - coverage) * palette.GetRGB(bgIdx);
                 
                 // Calculate color distance
                 glm::vec3 diff = rgb - simulatedColor;
@@ -1154,8 +1127,8 @@ CHAR_INFO Renderer::GetCharInfoRGB(const glm::vec3& rgb) {
 
     // Combine foreground and background color codes using arrays
     wchar_t glyph = _charRamp[bestCharIndex];
-    unsigned short fgColor = static_cast<unsigned short>(fgColorCodes[bestFgIndex]);
-    unsigned short bgColor = static_cast<unsigned short>(bgColorCodes[bestBgIndex]);
+    unsigned short fgColor = static_cast<unsigned short>(palette.GetFgColor(bestFgIndex));
+    unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
     unsigned short combinedColor = fgColor | bgColor;
     
     return CHAR_INFO{glyph, combinedColor};
@@ -1210,14 +1183,6 @@ float Renderer::GetContrast() {
     return _contrast;
 }
 
-void Renderer::SetGrayscale(bool grayscale) {
-    _grayscale = grayscale;
-}
-
-bool Renderer::GetGrayscale() {
-    return _grayscale;
-}
-
 void Renderer::InvalidateTiles() {
     _tilesInitialized = false;
 }
@@ -1260,7 +1225,7 @@ std::vector<std::pair<float, float>> Renderer::GetSubpixelOffsets() {
     return _subpixel_offsets;
 }
 
-void Renderer::TestRender() {
+void Renderer::TestRenderFont() {
     Screen& screen = Screen::GetInstance();
     int screenWidth = screen.GetVisibleWidth();
     int screenHeight = screen.GetHeight();
@@ -1277,7 +1242,8 @@ void Renderer::TestRender() {
     int patchHeight = screenHeight / gridRows;
     
     // Combined foreground and background color
-    unsigned short combinedColor = static_cast<unsigned short>(COLOR::FG_GREEN) | static_cast<unsigned short>(COLOR::BG_BLUE);
+    Palette& palette = screen.GetPalette();
+    unsigned short combinedColor = palette.GetFgColor(6) | palette.GetBgColor(11);
     
     // Fill screen with character patches
     for (int charIdx = 0; charIdx < numChars; ++charIdx) {
@@ -1307,16 +1273,17 @@ void Renderer::TestRender() {
 }
 
 void Renderer::PrecomputeColorLUT() {
+    Palette& palette = Screen::GetInstance().GetPalette();
     if (_colorLUTComputed) return;
     // Precompute all possible RGB combinations
-    for (int r = 0; r < MAX_PALETTE_SIZE; ++r) {
-        for (int g = 0; g < MAX_PALETTE_SIZE; ++g) {
-            for (int b = 0; b < MAX_PALETTE_SIZE; ++b) {
+    for (int r = 0; r < _rgbLUTDepth; ++r) {
+        for (int g = 0; g < _rgbLUTDepth; ++g) {
+            for (int b = 0; b < _rgbLUTDepth; ++b) {
                     // Convert discrete RGB to normalized [0,1] range
                     glm::vec3 rgb(
-                        r / float(MAX_PALETTE_SIZE - 1),
-                        g / float(MAX_PALETTE_SIZE - 1),
-                        b / float(MAX_PALETTE_SIZE - 1)
+                        r / float(_rgbLUTDepth - 1),
+                        g / float(_rgbLUTDepth - 1),
+                        b / float(_rgbLUTDepth - 1)
                     );
                     
                     // Find best match using original algorithm
@@ -1327,7 +1294,7 @@ void Renderer::PrecomputeColorLUT() {
                         for (int bgIdx = 0; bgIdx < 16; ++bgIdx) {
                             for (int charIdx = 0; charIdx < _charRamp.size(); ++charIdx) {
                                 float coverage = _charCoverage[charIdx];
-                                glm::vec3 simulatedColor = coverage * consoleColors[fgIdx] + (1.0f - coverage) * consoleColors[bgIdx];
+                                glm::vec3 simulatedColor = coverage * palette.GetRGB(fgIdx) + (1.0f - coverage) * palette.GetRGB(bgIdx);
                                 glm::vec3 diff = rgb - simulatedColor;
                                 float error = glm::dot(diff, diff);
                                 
@@ -1342,10 +1309,10 @@ void Renderer::PrecomputeColorLUT() {
                     }
                     
                     // Store precomputed result
-                    int index = (r * MAX_PALETTE_SIZE * MAX_PALETTE_SIZE) + (g * MAX_PALETTE_SIZE) + b;
+                    int index = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
                     wchar_t glyph = _charRamp[bestCharIndex];
-                    unsigned short fgColor = static_cast<unsigned short>(fgColorCodes[bestFgIndex]);
-                    unsigned short bgColor = static_cast<unsigned short>(bgColorCodes[bestBgIndex]);
+                    unsigned short fgColor = static_cast<unsigned short>(palette.GetFgColor(bestFgIndex));
+                    unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
                     unsigned short combinedColor = fgColor | bgColor;
                     
                     _colorLUT[index] = {glyph, combinedColor};
@@ -1354,4 +1321,48 @@ void Renderer::PrecomputeColorLUT() {
         }
         
         _colorLUTComputed = true;
+}
+
+void Renderer::TestRenderColor() {
+    Screen& screen = Screen::GetInstance();
+    int screenWidth = screen.GetVisibleWidth();
+    int screenHeight = screen.GetHeight();
+
+    // 16 colors, arrange in a 4x4 grid
+    const int numColors = Palette::COLOR_COUNT;
+    const int gridCols = 4;
+    const int gridRows = 4;
+
+    int patchWidth = screenWidth / gridCols;
+    int patchHeight = screenHeight / gridRows;
+
+    Palette& palette = screen.GetPalette();
+
+    for (int colorIdx = 0; colorIdx < numColors; ++colorIdx) {
+        int patchX = colorIdx % gridCols;
+        int patchY = colorIdx / gridCols;
+
+        int startX = patchX * patchWidth;
+        int startY = patchY * patchHeight;
+        int endX = (patchX == gridCols - 1) ? screenWidth : startX + patchWidth;
+        int endY = (patchY == gridRows - 1) ? screenHeight : startY + patchHeight;
+
+        // Use a solid block character for visibility
+        CHAR_INFO charInfo;
+        charInfo.Char.UnicodeChar = 0x2588;
+        charInfo.Attributes = palette.GetFgColor(colorIdx) | palette.GetBgColor(colorIdx);
+        std::wstringstream ss;
+        ss << L"Color " << colorIdx << L" RGB: ("
+           << palette.GetRGB(colorIdx).r << L", "
+           << palette.GetRGB(colorIdx).g << L", "
+           << palette.GetRGB(colorIdx).b << L") "
+           << "FG: " << palette.GetFgColor(colorIdx) << L" | BG: " << palette.GetBgColor(colorIdx);
+        Logger::Debug(ss.str());
+
+        for (int y = startY; y < endY; ++y) {
+            for (int x = startX; x < endX; ++x) {
+                screen.PlotPixel(glm::vec2(x, y), charInfo);
+            }
+        }
+    }
 }
