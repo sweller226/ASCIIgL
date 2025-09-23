@@ -216,13 +216,13 @@ void Screen::WindowsImpl::RenderTitle(const bool showFps) {
     if (showFps) {
         sprintf_s(
             titleBuffer, sizeof(titleBuffer),
-            "[WIN] ASCIIGL - Console Game Engine - %ls - FPS: %.2f",
+            "%ls - FPS: %.2f",
             screen._title.c_str(), std::min(screen._fps, static_cast<double>(screen._fpsCap))
         );
     } else {
         sprintf_s(
             titleBuffer, sizeof(titleBuffer),
-            "[WIN] ASCIIGL - Console Game Engine - %ls",
+            "%ls",
             screen._title.c_str()
         );
     }
@@ -843,9 +843,22 @@ void Screen::WindowsImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOu
         // Build custom color scheme JSON
         std::wstring customScheme = L"        {\n            \"name\": \"ASCIIgL Custom\",\n";
         std::vector<std::wstring> colorNames = {
-            L"black", L"red", L"green", L"yellow", L"blue", L"purple", L"cyan", L"white",
-            L"brightBlack", L"brightRed", L"brightGreen", L"brightYellow",
-            L"brightBlue", L"brightPurple", L"brightCyan", L"brightWhite"
+            L"black",        // 0
+            L"blue",         // 1 (dark blue)
+            L"green",        // 2 (dark green)
+            L"cyan",         // 3 (dark cyan / teal)
+            L"red",          // 4 (dark red)
+            L"purple",       // 5 (dark magenta)
+            L"yellow",       // 6 (dark yellow / olive)
+            L"white",        // 7 (gray / light gray)
+            L"brightBlack",  // 8 (dark gray)
+            L"brightBlue",   // 9
+            L"brightGreen",  // 10
+            L"brightCyan",   // 11
+            L"brightRed",    // 12
+            L"brightPurple", // 13 (bright magenta)
+            L"brightYellow", // 14
+            L"brightWhite"   // 15
         };
 
         for (size_t i = 0; i < std::min(static_cast<size_t>(Palette::COLOR_COUNT), colorNames.size()); ++i) {
