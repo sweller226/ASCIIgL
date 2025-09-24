@@ -90,7 +90,6 @@ bool Game::Initialize() {
     Renderer::SetCCW(true);
 	Renderer::SetAntialiasingsamples(4);
 	Renderer::SetAntialiasing(true);
-    Renderer::SetContrast(1.1f); // Set default contrast
 
     // Initialize screen
     if (screenInitResult != SCREEN_NOERROR) {

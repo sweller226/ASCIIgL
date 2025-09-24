@@ -58,7 +58,29 @@ Game* Game::GetInstance() {
 
 void Game::Run() {
     Logger::Info("Game loop starting.");
-    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 3, 60, 1.0f, 0x0);
+
+    Logger::Info("Setting up palette and screen...");
+	std::array<PaletteEntry, Palette::COLOR_COUNT> paletteEntries = {{
+        { {0.0000f, 0.0000f, 0.0000f}, 0, 0x0 },  // Black
+        { {0.0667f, 0.0667f, 0.0667f}, 1, 0x1 },  // Very Dark Gray
+        { {0.1333f, 0.1333f, 0.1333f}, 2, 0x2 },  // Darker Gray
+        { {0.2000f, 0.2000f, 0.2000f}, 3, 0x3 },  // Dark Gray
+        { {0.2667f, 0.2667f, 0.2667f}, 4, 0x4 },  // Charcoal Gray
+        { {0.3333f, 0.3333f, 0.3333f}, 5, 0x5 },  // Medium Dark Gray
+        { {0.4000f, 0.4000f, 0.4000f}, 6, 0x6 },  // Mid Gray
+        { {0.4667f, 0.4667f, 0.4667f}, 7, 0x7 },  // Soft Gray
+        { {0.5333f, 0.5333f, 0.5333f}, 8, 0x8 },  // Neutral Gray
+        { {0.6000f, 0.6000f, 0.6000f}, 9, 0x9 },  // Light Neutral Gray
+        { {0.6667f, 0.6667f, 0.6667f}, 10, 0xA }, // Light Gray
+        { {0.7333f, 0.7333f, 0.7333f}, 11, 0xB }, // Brighter Gray
+        { {0.8000f, 0.8000f, 0.8000f}, 12, 0xC }, // Pale Gray
+        { {0.8667f, 0.8667f, 0.8667f}, 13, 0xD }, // Very Pale Gray
+        { {0.9333f, 0.9333f, 0.9333f}, 14, 0xE }, // Near White
+        { {1.0000f, 1.0000f, 1.0000f}, 15, 0xF }  // White
+    }};
+    Palette gamePalette = Palette(paletteEntries); // Default palette
+
+    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 3, 60, 1.0f, 0x0, gamePalette);
 	SCR_WIDTH = Screen::GetInstance().GetVisibleWidth();
 	SCR_HEIGHT = Screen::GetInstance().GetHeight();
 	guiCamera.setScreenDimensions(SCR_WIDTH, SCR_HEIGHT);
