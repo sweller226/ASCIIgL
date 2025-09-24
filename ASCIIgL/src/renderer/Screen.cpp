@@ -1,5 +1,7 @@
+// header include
 #include <ASCIIgL/renderer/Screen.hpp>
 
+// c++ standard library
 #include <thread>
 #include <chrono>
 #include <algorithm>
@@ -10,11 +12,17 @@
 #include <filesystem>
 #include <sstream>
 #include <regex>
+#include <iterator>
+#include <algorithm>
 #include <locale>
 #include <codecvt>
 
+// ASCIIgL includes
 #include <ASCIIgL/engine/Logger.hpp>
 #include <ASCIIgL/util/MathUtil.hpp>
+
+// vendor
+#include <nlohmann/json.hpp>
 
 // Platform-specific implementation
 #ifdef _WIN32
@@ -629,43 +637,33 @@ std::wstring Screen::WindowsImpl::GetTerminalSettingsPath() {
 }
 
 bool Screen::WindowsImpl::ModifyTerminalFont(const std::wstring& settingsPath, float fontSize) {             
-    try {   
-        std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+    try {
         std::string settingsPathStr = converter.to_bytes(settingsPath);
-        
-        // Read file
-        std::wifstream file(settingsPathStr);
+
+        // Read file as UTF-8
+        std::ifstream file(settingsPathStr);
         if (!file.is_open()) {
             Logger::Error(L"Could not open Windows Terminal settings file.");
             return false;
         }
-        
-        std::wstringstream buffer;
-        buffer << file.rdbuf();
+        std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
         file.close();
-        std::wstring content = buffer.str();
-        
+
         // Create backup
-        std::filesystem::copy_file(settingsPath, settingsPath + L".backup", 
-                                 std::filesystem::copy_options::overwrite_existing);
-        
-        // Simple regex replacements - just update existing values or add minimal font object
-        std::wregex sizeRegex(LR"("size"\s*:\s*[\d.]+)");  // Support both integers and floats
-        std::wregex faceRegex(LR"("face"\s*:\s*"[^"]*")");
-        std::wregex lineHeightRegex(LR"("lineHeight"\s*:\s*[\d.]+)");  // Line height regex
-        
-        // Update size if it exists
-        if (std::regex_search(content, sizeRegex)) {
-            content = std::regex_replace(content, sizeRegex, L"\"size\": " + std::to_wstring(fontSize));
+        std::filesystem::copy_file(settingsPath, settingsPath + L".backup", std::filesystem::copy_options::overwrite_existing);
+
+        // Parse JSON
+        nlohmann::json j;
+        try {
+            j = nlohmann::json::parse(content);
+        } catch (const std::exception& e) {
+            Logger::Error(L"Failed to parse Windows Terminal settings.json: " + std::wstring(converter.from_bytes(e.what())));
+            return false;
         }
-        
-        // Update line height to minimum (1.0) if it exists
-        if (std::regex_search(content, lineHeightRegex)) {
-            content = std::regex_replace(content, lineHeightRegex, L"\"lineHeight\": 1.0");
-        }
-        
+
+        // Ensure font is installed
         if (!IsFontInstalled(L"Perfect DOS VGA 437")) {
-            // Attempt to install font from bundled resources
             std::wstring fontPath = L"res\\ASCIIgL\\fonts\\perfect_dos_vga_437\\Perfect DOS VGA 437.ttf";
             if (InstallFontFromFile(fontPath)) {
                 Logger::Info(L"Successfully installed 'Perfect DOS VGA 437' font.");
@@ -674,47 +672,36 @@ bool Screen::WindowsImpl::ModifyTerminalFont(const std::wstring& settingsPath, f
             }
         }
 
-        // Update face if it exists  
-        if (std::regex_search(content, faceRegex)) {
-            content = std::regex_replace(content, faceRegex, L"\"face\": \"Perfect DOS VGA 437\"");  // True square font at all sizes
-        }
-        
-        // If line height doesn't exist but other font settings do, add it
-        if ((std::regex_search(content, sizeRegex) || std::regex_search(content, faceRegex)) && 
-            !std::regex_search(content, lineHeightRegex)) {
-            // Find font object and add line height
-            std::wregex fontObjectRegex(LR"("font"\s*:\s*\{([^}]*)\})");
-            std::wsmatch match;
-            if (std::regex_search(content, match, fontObjectRegex)) {
-                std::wstring fontContent = match[1].str();
-                // Add line height to the font object
-                std::wstring newFontContent = fontContent + L", \"lineHeight\": 1.0";
-                std::wstring replacement = L"\"font\": {" + newFontContent + L"}";
-                content = std::regex_replace(content, fontObjectRegex, replacement);
+        // Only update font in profiles.defaults, not at the root level
+        if (j.contains("profiles") && j["profiles"].is_object()) {
+            nlohmann::json& profiles = j["profiles"];
+            if (!profiles.contains("defaults") || !profiles["defaults"].is_object()) {
+                profiles["defaults"] = nlohmann::json::object();
             }
-        }
-        
-        // If no font settings exist, add simple font object to defaults
-        if (!std::regex_search(content, sizeRegex) && !std::regex_search(content, faceRegex)) {
-            std::wregex defaultsRegex(LR"("defaults"\s*:\s*\{)");
-            if (std::regex_search(content, defaultsRegex)) {
-                std::wstring fontAdd = L"\"defaults\": {\n        \"font\": {\"size\": " + 
-                                      std::to_wstring(fontSize) + L", \"face\": \"Perfect DOS VGA 437\", \"lineHeight\": 1.0},";  // Perfect square font with minimum line height
-                content = std::regex_replace(content, defaultsRegex, fontAdd);
+            nlohmann::json& defaults = profiles["defaults"];
+            if (!defaults.contains("font") || !defaults["font"].is_object()) {
+                defaults["font"] = nlohmann::json::object();
             }
+            nlohmann::json& fontObj = defaults["font"];
+            fontObj["size"] = fontSize;
+            fontObj["face"] = "Perfect DOS VGA 437";
+            fontObj["lineHeight"] = 1.0;
+        } else {
+            Logger::Error(L"Could not find 'profiles' object in settings.json.");
+            return false;
         }
-        
-        // Write back
-        std::wofstream outFile(settingsPathStr);
+
+        // Write back as UTF-8
+        std::ofstream outFile(settingsPathStr);
         if (!outFile.is_open()) return false;
-        outFile << content;
+        outFile << j.dump(4);
         outFile.close();
-        
+
         Logger::Debug(L"Modified Windows Terminal settings");
         return true;
-        
+
     } catch (const std::exception& e) {
-        Logger::Error(L"Failed to modify Windows Terminal settings");
+        Logger::Error(L"Failed to modify Windows Terminal settings: " + std::wstring(converter.from_bytes(e.what())));
         return false;
     }
 }
@@ -820,99 +807,75 @@ void Screen::WindowsImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOu
         return;
     }
 
+    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
     try {
-        std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
         std::string settingsPathStr = converter.to_bytes(settingsPath);
 
-        // Read file
-        std::wifstream file(settingsPathStr);
+        // Read file as UTF-8
+        std::ifstream file(settingsPathStr);
         if (!file.is_open()) {
             Logger::Error(L"Could not open Windows Terminal settings file.");
             return;
         }
-
-        std::wstringstream buffer;
-        buffer << file.rdbuf();
+        std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
         file.close();
-        std::wstring content = buffer.str();
 
         // Create backup
-        std::filesystem::copy_file(settingsPath, settingsPath + L".palette_backup",
-                                   std::filesystem::copy_options::overwrite_existing);
+        std::filesystem::copy_file(settingsPath, settingsPath + L".palette_backup", std::filesystem::copy_options::overwrite_existing);
 
-        // Build custom color scheme JSON
-        std::wstring customScheme = L"        {\n            \"name\": \"ASCIIgL Custom\",\n";
-        std::vector<std::wstring> colorNames = {
-            L"black",        // 0
-            L"blue",         // 1 (dark blue)
-            L"green",        // 2 (dark green)
-            L"cyan",         // 3 (dark cyan / teal)
-            L"red",          // 4 (dark red)
-            L"purple",       // 5 (dark magenta)
-            L"yellow",       // 6 (dark yellow / olive)
-            L"white",        // 7 (gray / light gray)
-            L"brightBlack",  // 8 (dark gray)
-            L"brightBlue",   // 9
-            L"brightGreen",  // 10
-            L"brightCyan",   // 11
-            L"brightRed",    // 12
-            L"brightPurple", // 13 (bright magenta)
-            L"brightYellow", // 14
-            L"brightWhite"   // 15
+        // Parse JSON
+        nlohmann::json j;
+        try {
+            j = nlohmann::json::parse(content);
+        } catch (const std::exception& e) {
+            Logger::Error(L"Failed to parse Windows Terminal settings.json: " + std::wstring(converter.from_bytes(e.what())));
+            return;
+        }
+
+        // Build custom color scheme JSON object
+        nlohmann::json customScheme;
+        customScheme["name"] = "ASCIIgL Custom";
+        std::vector<std::string> colorNames = {
+            "black", "blue", "green", "cyan", "red", "purple", "yellow", "white",
+            "brightBlack", "brightBlue", "brightGreen", "brightCyan", "brightRed", "brightPurple", "brightYellow", "brightWhite"
         };
-
         for (size_t i = 0; i < std::min(static_cast<size_t>(Palette::COLOR_COUNT), colorNames.size()); ++i) {
             glm::vec3 rgb = palette.GetRGB(static_cast<uint8_t>(i));
             int r = static_cast<int>(rgb.r * 255.0f + 0.5f);
             int g = static_cast<int>(rgb.g * 255.0f + 0.5f);
             int b = static_cast<int>(rgb.b * 255.0f + 0.5f);
-            wchar_t hexColor[8];
-            swprintf_s(hexColor, L"#%02X%02X%02X", r, g, b);
-            customScheme += L"            \"" + colorNames[i] + L"\": \"" + hexColor + L"\"";
-            if (i < colorNames.size() - 1) customScheme += L",";
-            customScheme += L"\n";
-        }
-        customScheme += L"        }";
-
-        // Find the root "schemes" array and replace or add the scheme
-        std::wregex schemesRegex(LR"("schemes"\s*:\s*\[([\s\S]*?)\])");
-        std::wsmatch match;
-        if (std::regex_search(content, match, schemesRegex)) {
-            // Remove any existing ASCIIgL Custom scheme
-            std::wstring schemesBlock = match[1].str();
-            std::wregex asciiGlRegex(LR"(\s*\{\s*"name"\s*:\s*"ASCIIgL Custom"[\s\S]*?\}\s*,?)");
-            schemesBlock = std::regex_replace(schemesBlock, asciiGlRegex, L"");
-            // Clean up trailing commas and whitespace
-            schemesBlock = std::regex_replace(schemesBlock, std::wregex(LR"(,\s*\])"), L"]");
-            // Add the new scheme
-            if (!schemesBlock.empty() && schemesBlock.find_first_not_of(L" \t\n\r") != std::wstring::npos) {
-                schemesBlock += L",\n";
-            }
-            schemesBlock += customScheme + L"\n    ";
-            std::wstring replacement = L"\"schemes\": [\n" + schemesBlock + L"]";
-            content = std::regex_replace(content, schemesRegex, replacement);
-        } else {
-            // Add schemes array at the root if it doesn't exist
-            std::wregex jsonEndRegex(LR"(\}\s*$)");
-            if (std::regex_search(content, jsonEndRegex)) {
-                std::wstring addition = L",\n    \"schemes\": [\n" + customScheme + L"\n    ]\n}";
-                content = std::regex_replace(content, jsonEndRegex, addition);
-            }
+            char hexColor[8];
+            snprintf(hexColor, sizeof(hexColor), "#%02X%02X%02X", r, g, b);
+            customScheme[colorNames[i]] = hexColor;
         }
 
-        // Write back
-        std::wofstream outFile(settingsPathStr);
+        // Ensure "schemes" exists and is an array
+        if (!j.contains("schemes") || !j["schemes"].is_array()) {
+            j["schemes"] = nlohmann::json::array();
+        }
+
+        // Remove any existing "ASCIIgL Custom" scheme
+        auto& schemes = j["schemes"];
+        schemes.erase(std::remove_if(schemes.begin(), schemes.end(), [](const nlohmann::json& scheme) -> bool {
+            return scheme.contains("name") && scheme["name"] == "ASCIIgL Custom";
+        }), schemes.end());
+
+        // Add the new custom scheme
+        schemes.push_back(customScheme);
+
+        // Write back as UTF-8
+        std::ofstream outFile(settingsPathStr);
         if (!outFile.is_open()) {
             Logger::Error(L"Could not write to Windows Terminal settings file.");
             return;
         }
-        outFile << content;
+        outFile << j.dump(4); // Pretty print with 4-space indent
         outFile.close();
 
         Logger::Info(L"Successfully modified Windows Terminal color scheme.");
 
     } catch (const std::exception& e) {
-        Logger::Error(L"Failed to modify Windows Terminal color scheme: " + std::wstring(e.what(), e.what() + strlen(e.what())));
+        Logger::Error(L"Failed to modify Windows Terminal color scheme: " + std::wstring(converter.from_bytes(e.what())));
     }
 }
 

@@ -66,9 +66,9 @@ void Logger::LogInternal(LogLevel level, const std::string& message) {
         
         switch (level) {
             case LogLevel::Error: logFile << "[ERROR] "; break;
+            case LogLevel::Warning: logFile << "[WARNING] "; break;
             case LogLevel::Info:  logFile << "[INFO] "; break;
             case LogLevel::Debug: logFile << "[DEBUG] "; break;
-            case LogLevel::Warning: logFile << "[WARNING] "; break;
         }
         logFile << message << std::endl;
     }
@@ -84,9 +84,9 @@ void Logger::LogInternal(LogLevel level, const std::wstring& message) {
 
         switch (level) {
             case LogLevel::Error: logFile << "[ERROR] "; break;
+            case LogLevel::Warning: logFile << "[WARNING] "; break;
             case LogLevel::Info:  logFile << "[INFO] "; break;
             case LogLevel::Debug: logFile << "[DEBUG] "; break;
-            case LogLevel::Warning: logFile << "[WARNING] "; break;
         }
         std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
         logFile << conv.to_bytes(message) << std::endl;
