@@ -20,76 +20,40 @@ Game::~Game() {
 bool Game::Initialize() {
     Logger::Info("Initializing ASCIICraft...");
 
-
     Logger::Info("Setting up palette and screen...");
 
     std::array<PaletteEntry, Palette::COLOR_COUNT> paletteEntries = {{
-        { {0.0f, 0.0f, 0.0f}, 0, 0x0 }, // Black
-        { {0.7765f, 0.7765f, 0.7765f}, 1, 0x1 }, // Stone Light Gray
-        { {0.5882f, 0.5882f, 0.5882f}, 2, 0x2 }, // Smooth Stone Gray
-        { {0.4902f, 0.4902f, 0.4902f}, 3, 0x3 }, // Cobblestone Gray
-        { {0.3451f, 0.3451f, 0.3451f}, 4, 0x4 }, // Shady Rock Gray
-        { {0.2353f, 0.2353f, 0.2353f}, 5, 0x5 }, // Deep Rock Gray
+        { {0.0f, 0.0f, 0.0f}, 0x0 }, // Black
+        { {0.5882f, 0.5882f, 0.5882f}, 0x1 }, // Smooth Stone Gray
+        { {0.4902f, 0.4902f, 0.4902f}, 0x2 }, // Cobblestone Gray
+        { {0.3451f, 0.3451f, 0.3451f}, 0x3 }, // Shady Rock Gray
+        { {0.2353f, 0.2353f, 0.2353f}, 0x4 }, // Deep Rock Gray
 
-        { {0.4196f, 0.6510f, 1.0000f}, 6, 0x6 }, // Sky Blue
+        { {0.4196f, 0.6510f, 1.0000f}, 0x5 }, // Sky Blue
 
-        { {0.3725f, 0.6235f, 0.2078f}, 7, 0x7 }, // Grass Green
-        { {0.2510f, 0.4275f, 0.1255f}, 8, 0x8 }, // Leaf Green
-        { {0.1569f, 0.2745f, 0.0784f}, 9, 0x9 }, // Dark Foliage Green
-        { {0.4941f, 0.7843f, 0.3137f}, 10, 0xA }, // Bright Grass Tip Green
+        { {0.3725f, 0.6235f, 0.2078f}, 0x6 }, // Grass Green
+        { {0.2510f, 0.4275f, 0.1255f}, 0x7 }, // Leaf Green
+        { {0.1569f, 0.2745f, 0.0784f}, 0x8 }, // Dark Foliage Green
+        { {0.4941f, 0.7843f, 0.3137f}, 0x9 }, // Bright Grass Tip Green
+        { {0.50f, 0.980f, 0.400f}, 0xA },    // Light Grass Green
 
-        { {0.4000f, 0.3020f, 0.1804f}, 11, 0xB }, // Oak Log Brown
-        { {0.6353f, 0.5098f, 0.3098f}, 12, 0xC }, // Plank Brown
-        { {0.5216f, 0.3765f, 0.2588f}, 13, 0xD }, // Dirt Brown
-        { {0.3137f, 0.2039f, 0.1294f}, 14, 0xE }, // Dark Wood Brown
-        { {0.2000f, 0.1200f, 0.0600f}, 15, 0xF }  // Deep Brown
+        { {0.4000f, 0.3020f, 0.1804f},  0xB }, // Oak Log Brown
+        { {0.6353f, 0.5098f, 0.3098f},  0xC }, // Plank Brown
+        { {0.5216f, 0.3765f, 0.2588f},  0xD }, // Dirt Brown
+        { {0.3137f, 0.2039f, 0.1294f},  0xE }, // Dark Wood Brown
+        { {0.2000f, 0.1200f, 0.0600f},  0xF }  // Deep Brown
     }};
 
-    // std::array<PaletteEntry, Palette::COLOR_COUNT> paletteEntries = {{
-    //     { {0.0000f, 0.0000f, 0.0000f}, 0, 0x0 },  // Black
-    //     { {0.0667f, 0.0667f, 0.0667f}, 1, 0x1 },  // Very Dark Gray
-    //     { {0.1333f, 0.1333f, 0.1333f}, 2, 0x2 },  // Darker Gray
-    //     { {0.2000f, 0.2000f, 0.2000f}, 3, 0x3 },  // Dark Gray
-    //     { {0.2667f, 0.2667f, 0.2667f}, 4, 0x4 },  // Charcoal Gray
-    //     { {0.3333f, 0.3333f, 0.3333f}, 5, 0x5 },  // Medium Dark Gray
-    //     { {0.4000f, 0.4000f, 0.4000f}, 6, 0x6 },  // Mid Gray
-    //     { {0.4667f, 0.4667f, 0.4667f}, 7, 0x7 },  // Soft Gray
-    //     { {0.5333f, 0.5333f, 0.5333f}, 8, 0x8 },  // Neutral Gray
-    //     { {0.6000f, 0.6000f, 0.6000f}, 9, 0x9 },  // Light Neutral Gray
-    //     { {0.6667f, 0.6667f, 0.6667f}, 10, 0xA }, // Light Gray
-    //     { {0.7333f, 0.7333f, 0.7333f}, 11, 0xB }, // Brighter Gray
-    //     { {0.8000f, 0.8000f, 0.8000f}, 12, 0xC }, // Pale Gray
-    //     { {0.8667f, 0.8667f, 0.8667f}, 13, 0xD }, // Very Pale Gray
-    //     { {0.9333f, 0.9333f, 0.9333f}, 14, 0xE }, // Near White
-    //     { {1.0000f, 1.0000f, 1.0000f}, 15, 0xF }  // White
-    // }};
 
-    // std::array<PaletteEntry, Palette::COLOR_COUNT> paletteEntries = {{
-    //     { {0.00f, 0.00f, 0.00f}, 0, 0x0 },    // Black - 0
-    //     { {0.00f, 0.00f, 1.00f}, 1, 0x1 },    // Blue - 4
-    //     { {0.00f, 1.00f, 0.00f}, 2, 0x2 },    // Green - 2
-    //     { {1.00f, 0.00f, 0.00f}, 3, 0x3 },    // Red - 6
-    //     { {1.00f, 1.00f, 0.00f}, 4, 0x4 },    // Yellow - 1
-    //     { {0.00f, 1.00f, 1.00f}, 5, 0x5 },    // Cyan - 5
-    //     { {1.00f, 0.00f, 1.00f}, 6, 0x6 },    // Magenta - 3
-    //     { {1.00f, 1.00f, 1.00f}, 7, 0x7 },    // White - 7
-    //     { {0.00f, 0.00f, 0.00f}, 8, 0x8 },    // Black
-    //     { {0.00f, 0.00f, 0.00f}, 9, 0x9 },    // Black
-    //     { {0.00f, 0.00f, 0.00f}, 10, 0xA },    // Black
-    //     { {0.00f, 0.00f, 0.00f}, 11, 0xB },    // Black
-    //     { {0.00f, 0.00f, 0.00f}, 12, 0xC },    // Black
-    //     { {0.00f, 0.00f, 0.00f}, 13, 0xD },    // Black
-    //     { {0.00f, 0.00f, 0.00f}, 14, 0xE },    // Black
-    //     { {0.00f, 0.00f, 0.00f}, 15, 0xF },    // Black
-    // }};
     Palette gamePalette = Palette(paletteEntries); // Default palette
 
-    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, static_cast<unsigned int>(TARGET_FPS), 1.0f, 0x6, gamePalette);
+    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, static_cast<unsigned int>(TARGET_FPS), 1.0f, 0x5, gamePalette);
     Renderer::SetWireframe(false);
     Renderer::SetBackfaceCulling(true);
     Renderer::SetCCW(true);
 	Renderer::SetAntialiasingsamples(4);
 	Renderer::SetAntialiasing(true);
+    Renderer::SetContrast(0.9f);
 
     // Initialize screen
     if (screenInitResult != SCREEN_NOERROR) {
@@ -130,8 +94,6 @@ void Game::Run() {
     Logger::Info("Starting game loop...");
 
     GuiManager guiManager = GuiManager(SCREEN_WIDTH, SCREEN_HEIGHT);
-    // Texture grassTexture = Texture("res/textures/green-grass-close-up.png");
-    Texture grassTexture = Texture("res/textures/blue-gradient.jpg");
 
     // Main game loop
     while (isRunning) {
@@ -140,9 +102,8 @@ void Game::Run() {
         
         HandleInput();
         Update();
-        // Renderer::Draw2DQuadPercSpace(guiManager.GetVShader(), grassTexture, glm::vec2(0.625, 0.625), 0.0f, glm::vec2(0.25f, 0.25f), guiManager.GetCamera(), 0);
         Render();
-        // Renderer::TestRenderColor();
+
         Screen::GetInstance().OutputBuffer();
         Screen::GetInstance().EndFPSClock();
         Screen::GetInstance().RenderTitle(true);

@@ -355,7 +355,12 @@ int Screen::InitializeScreen(
     _fontSize = adjustedFontSize;
 
     // setting palette reference
-    _palette = palette;
+    if (palette.entries.size() != Palette::COLOR_COUNT) {
+        Logger::Warning(L"Palette does not have exactly " + std::to_wstring(Palette::COLOR_COUNT) + L" colors. Using default palette.");
+        _palette = Palette(); // Default palette
+    } else {
+        _palette = palette;
+    }
 
 #ifdef _WIN32
     // Use unified Windows implementation for both CMD and Windows Terminal

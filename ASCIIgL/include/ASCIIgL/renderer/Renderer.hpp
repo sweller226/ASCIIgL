@@ -90,7 +90,7 @@ private:
         0.28f,  // ░ (176)
         0.32f,  // 'o'
         0.60f,  // '@'
-        0.68f,  // ▒ (177)
+        0.70f,  // ▒ (177)
         0.76f,  // '#'
         0.86f,  // ▓ (178)
         1.00f   // █ (219)
@@ -146,5 +146,5 @@ public:
     static float GetContrast();
 
     static void TestRenderFont();
-    static void TestRenderColor();
+    static void TestRenderColorDiscrete();
 };

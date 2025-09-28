@@ -138,8 +138,8 @@ void World::LoadChunk(const ChunkCoord& coord) {
     loadedChunks[coord] = std::move(chunk);
     
     // Now generate terrain (GetChunk will find the stored chunk)
-    // GenerateOneBlockGrassChunk(coord);
-    GenerateGrassLayerChunk(coord);
+    GenerateOneBlockGrassChunk(coord);
+    // GenerateGrassLayerChunk(coord);
     
     // Update neighbors
     UpdateChunkNeighbors(coord);
@@ -229,7 +229,7 @@ void World::GenerateGrassLayerChunk(const ChunkCoord& coord) {
 void World::GenerateOneBlockGrassChunk(const ChunkCoord& coord) {
     Chunk* chunk = GetChunk(coord);
     if (chunk) {
-        chunk->SetBlock(0, 0, 0, Block(BlockType::Grass));
+        chunk->SetBlock(0, 0, 0, Block(BlockType::Diamond_Ore));
         chunk->SetGenerated(true);
         chunk->GenerateMesh();
     }

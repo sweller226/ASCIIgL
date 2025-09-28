@@ -14,12 +14,12 @@ enum class BlockType : uint8_t {
     Grass = 3,
     Wood = 4,
     Leaves = 5,
-    Sand = 6,
     Gravel = 8,
     Coal_Ore = 9,
     Iron_Ore = 10,
     Gold_Ore = 11,
     Diamond_Ore = 12,
+    Cobblestone = 13,
     Bedrock = 255
 };
 

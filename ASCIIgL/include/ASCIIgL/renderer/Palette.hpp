@@ -7,7 +7,6 @@
 // A palette entry: RGB color and its console enum hex mapping
 struct PaletteEntry {
     glm::vec3 rgb;      // RGB in [0,1] range
-    unsigned int   index;    // 0-15 index (matches enum value & hex mapping)
     unsigned short  hex;      // Hex value used in COLOR enum
 };
 

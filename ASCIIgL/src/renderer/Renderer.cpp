@@ -1177,6 +1177,7 @@ bool Renderer::GetAntialiasing() {
 
 void Renderer::SetContrast(const float contrast) {
     _contrast = std::min(5.0f, std::max(0.0f, contrast));
+    _colorLUTComputed = false; // Mark LUT for recomputation
 }
 
 float Renderer::GetContrast() {
@@ -1279,51 +1280,55 @@ void Renderer::PrecomputeColorLUT() {
     for (int r = 0; r < _rgbLUTDepth; ++r) {
         for (int g = 0; g < _rgbLUTDepth; ++g) {
             for (int b = 0; b < _rgbLUTDepth; ++b) {
-                    // Convert discrete RGB to normalized [0,1] range
-                    glm::vec3 rgb(
-                        r / float(_rgbLUTDepth - 1),
-                        g / float(_rgbLUTDepth - 1),
-                        b / float(_rgbLUTDepth - 1)
-                    );
-                    
-                    // Find best match using original algorithm
-                    float minError = FLT_MAX;
-                    int bestFgIndex = 0, bestBgIndex = 0, bestCharIndex = 0;
-                    
-                    for (int fgIdx = 0; fgIdx < 16; ++fgIdx) {
-                        for (int bgIdx = 0; bgIdx < 16; ++bgIdx) {
-                            for (int charIdx = 0; charIdx < _charRamp.size(); ++charIdx) {
-                                float coverage = _charCoverage[charIdx];
-                                glm::vec3 simulatedColor = coverage * palette.GetRGB(fgIdx) + (1.0f - coverage) * palette.GetRGB(bgIdx);
-                                glm::vec3 diff = rgb - simulatedColor;
-                                float error = glm::dot(diff, diff);
-                                
-                                if (error < minError) {
-                                    minError = error;
-                                    bestFgIndex = fgIdx;
-                                    bestBgIndex = bgIdx;
-                                    bestCharIndex = charIdx;
-                                }
+                // Convert discrete RGB to normalized [0,1] range
+                glm::vec3 rgb(
+                    r / float(_rgbLUTDepth - 1),
+                    g / float(_rgbLUTDepth - 1),
+                    b / float(_rgbLUTDepth - 1)
+                );
+
+                // Apply contrast adjustment
+                rgb = (rgb - 0.5f) * _contrast + 0.5f;
+                rgb = glm::clamp(rgb, 0.0f, 1.0f);
+
+                // Find best match using original algorithm
+                float minError = FLT_MAX;
+                int bestFgIndex = 0, bestBgIndex = 0, bestCharIndex = 0;
+
+                for (int fgIdx = 0; fgIdx < 16; ++fgIdx) {
+                    for (int bgIdx = 0; bgIdx < 16; ++bgIdx) {
+                        for (int charIdx = 0; charIdx < _charRamp.size(); ++charIdx) {
+                            float coverage = _charCoverage[charIdx];
+                            glm::vec3 simulatedColor = coverage * palette.GetRGB(fgIdx) + (1.0f - coverage) * palette.GetRGB(bgIdx);
+                            glm::vec3 diff = rgb - simulatedColor;
+                            float error = glm::dot(diff, diff);
+
+                            if (error < minError) {
+                                minError = error;
+                                bestFgIndex = fgIdx;
+                                bestBgIndex = bgIdx;
+                                bestCharIndex = charIdx;
                             }
                         }
                     }
-                    
-                    // Store precomputed result
-                    int index = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
-                    wchar_t glyph = _charRamp[bestCharIndex];
-                    unsigned short fgColor = static_cast<unsigned short>(palette.GetFgColor(bestFgIndex));
-                    unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
-                    unsigned short combinedColor = fgColor | bgColor;
-                    
-                    _colorLUT[index] = {glyph, combinedColor};
                 }
+
+                // Store precomputed result
+                int index = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
+                wchar_t glyph = _charRamp[bestCharIndex];
+                unsigned short fgColor = static_cast<unsigned short>(palette.GetFgColor(bestFgIndex));
+                unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
+                unsigned short combinedColor = fgColor | bgColor;
+
+                _colorLUT[index] = {glyph, combinedColor};
             }
         }
-        
-        _colorLUTComputed = true;
+    }
+
+    _colorLUTComputed = true;
 }
 
-void Renderer::TestRenderColor() {
+void Renderer::TestRenderColorDiscrete() {
     Screen& screen = Screen::GetInstance();
     int screenWidth = screen.GetVisibleWidth();
     int screenHeight = screen.GetHeight();

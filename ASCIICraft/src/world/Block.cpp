@@ -67,9 +67,6 @@ namespace BlockTextures {
             case BlockType::Leaves:
                 return GetTileUV(4, 3);  // Leaves texture (all faces same)
                 
-            case BlockType::Sand:
-                return GetTileUV(2, 1);  // Sand texture (all faces same)
-                
             case BlockType::Gravel:
                 return GetTileUV(3, 1);  // Gravel texture (all faces same)
                 
@@ -87,7 +84,10 @@ namespace BlockTextures {
                 
             case BlockType::Bedrock:
                 return GetTileUV(1, 1);  // Bedrock texture (all faces same)
-                
+
+            case BlockType::Cobblestone:
+                return GetTileUV(0, 1);  // Cobblestone texture (all faces same)
+
             default:
                 return GetTileUV(0, 0);  // Default to empty/air
         }
