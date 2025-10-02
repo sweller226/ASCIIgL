@@ -379,26 +379,12 @@ bool Renderer::DoesTileEncapsulate(const Tile& tile, const VERTEX& v1, const VER
 }
 
 void Renderer::DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& raster_triangles, const Texture* tex) {
-    if (_antialiasing) {
-        // Antialiased path - process all encapsulated triangles first
-        for (int triIndex : tile.tri_indices_encapsulated) {
-            DrawTriangleTexturedAntialiased(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], tex);
-        }
-        
-        // Then process partial triangles
-        for (int triIndex : tile.tri_indices_partial) {
-            DrawTriangleTexturedPartialAntialiased(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], tex);
-        }
-    } else {
-        // Non-antialiased path - process all encapsulated triangles first
-        for (int triIndex : tile.tri_indices_encapsulated) {
-            DrawTriangleTextured(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], tex);
-        }
-        
-        // Then process partial triangles
-        for (int triIndex : tile.tri_indices_partial) {
-            DrawTriangleTexturedPartial(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], tex);
-        }
+    for (int triIndex : tile.tri_indices_encapsulated) {
+        DrawTriangleTextured(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], tex);
+    }
+    
+    for (int triIndex : tile.tri_indices_partial) {
+        DrawTriangleTexturedPartial(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], tex);
     }
 }
 
@@ -415,196 +401,6 @@ void Renderer::DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& ra
 // =============================================================================
 // TRIANGLE RASTERIZATION FUNCTIONS
 // =============================================================================
-
-void Renderer::DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex) {
-    const int texWidth = tex->GetWidth();
-    const int texHeight = tex->GetHeight();
-    if (texWidth == 0 || texHeight == 0)
-    {
-        Logger::Error("Invalid texture size. Width: " + std::to_string(texWidth) + ", Height: " + std::to_string(texHeight));
-        return;
-    }
-
-    // Cache frequently used values to avoid repeated function calls
-    auto& screen = Screen::GetInst();
-    const int screenWidth = screen.GetVisibleWidth();
-    const int screenHeight = screen.GetHeight();
-
-    int x1 = vert1.X(), x2 = vert2.X(), x3 = vert3.X();
-    int y1 = vert1.Y(), y2 = vert2.Y(), y3 = vert3.Y();
-    float w1 = vert1.UVW(), w2 = vert2.UVW(), w3 = vert3.UVW();
-    float u1 = vert1.U(), u2 = vert2.U(), u3 = vert3.U();
-    float v1 = vert1.V(), v2 = vert2.V(), v3 = vert3.V();
-
-    // Sort vertices by y
-    if (y2 < y1) { std::swap(y1, y2); std::swap(x1, x2); std::swap(u1, u2); std::swap(v1, v2); std::swap(w1, w2); }
-    if (y3 < y1) { std::swap(y1, y3); std::swap(x1, x3); std::swap(u1, u3); std::swap(v1, v3); std::swap(w1, w3); }
-    if (y3 < y2) { std::swap(y2, y3); std::swap(x2, x3); std::swap(u2, u3); std::swap(v2, v3); std::swap(w2, w3); }
-
-    // Helper lambda for drawing scanlines
-    auto drawScanlines = [&](int startY, int endY, int xa, int ya, int xb, int yb, 
-                             float ua, float va, float wa, float ub, float vb, float wb,
-                             int x_long, int y_long, float u_long, float v_long, float w_long) {
-        int dy_short = endY - startY;
-        int dy_long = y_long - y1;
-        int dx_short = xb - xa;
-        int dx_long = x_long - x1;
-        float du_short = ub - ua, dv_short = vb - va, dw_short = wb - wa;
-        float du_long = u_long - u1, dv_long = v_long - v1, dw_long = w_long - w1;
-
-        float dax_step = dy_short ? dx_short / (float)abs(dy_short) : 0;
-        float dbx_step = dy_long ? dx_long / (float)abs(dy_long) : 0;
-        float du1_step = dy_short ? du_short / (float)abs(dy_short) : 0;
-        float dv1_step = dy_short ? dv_short / (float)abs(dy_short) : 0;
-        float dw1_step = dy_short ? dw_short / (float)abs(dy_short) : 0;
-        float du2_step = dy_long ? du_long / (float)abs(dy_long) : 0;
-        float dv2_step = dy_long ? dv_long / (float)abs(dy_long) : 0;
-        float dw2_step = dy_long ? dw_long / (float)abs(dy_long) : 0;
-
-        if (dy_short) {
-            for (int i = startY; i <= endY && i < screenHeight; i++) {
-                int ax = xa + (float)(i - startY) * dax_step;
-                int bx = x1 + (float)(i - y1) * dbx_step;
-                float tex_su = ua + (float)(i - startY) * du1_step;
-                float tex_sv = va + (float)(i - startY) * dv1_step;
-                float tex_sw = wa + (float)(i - startY) * dw1_step;
-                float tex_eu = u1 + (float)(i - y1) * du2_step;
-                float tex_ev = v1 + (float)(i - y1) * dv2_step;
-                float tex_ew = w1 + (float)(i - y1) * dw2_step;
-                if (ax > bx) { std::swap(ax, bx); std::swap(tex_su, tex_eu); std::swap(tex_sv, tex_ev); std::swap(tex_sw, tex_ew); }
-                
-                float tstep = (bx != ax) ? 1.0f / ((float)(bx - ax)) : 0.0f;
-                float t = 0.0f;
-                
-                // Pre-compute buffer row offset for this scanline
-                const int bufferRowOffset = i * screenWidth;
-                
-                for (int j = ax; j < bx && j < screenWidth; j++) {
-                    float tex_w = (1.0f - t) * tex_sw + t * tex_ew;
-                    const int bufferIndex = bufferRowOffset + j;
-                    
-                    float inv_tex_w = 1.0f / tex_w;
-                    float tex_uw = ((1.0f - t) * tex_su + t * tex_eu) * inv_tex_w;
-                    float tex_vw = ((1.0f - t) * tex_sv + t * tex_ev) * inv_tex_w;
-                    
-                    if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
-                        // Use integer texture coordinates for better cache performance
-                        float texWidthProd = tex_uw * texWidth;
-                        float texHeightProd = tex_vw * texHeight;
-                        glm::vec4 rgbaCol = tex->GetPixelRGBA(texWidthProd, texHeightProd);
-                        PlotColorBlend(j, i, rgbaCol, tex_w);
-                    }
-                    t += tstep;
-                }
-            }
-        }
-    };
-
-    // Upper half: y1 to y2
-    drawScanlines(y1, y2, x1, y1, x2, y2, u1, v1, w1, u2, v2, w2, x3, y3, u3, v3, w3);
-    
-    // Lower half: y2 to y3
-    drawScanlines(y2, y3, x2, y2, x3, y3, u2, v2, w2, u3, v3, w3, x3, y3, u3, v3, w3);
-}
-
-void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex) {
-    const int texWidth = tex->GetWidth();
-    const int texHeight = tex->GetHeight();
-    if (texWidth == 0 || texHeight == 0) {
-        Logger::Error("Invalid texture size. Width: " + std::to_string(texWidth) + ", Height: " + std::to_string(texHeight));
-        return;
-    }
-
-    // Cache frequently used values
-    auto& screen = Screen::GetInst();
-    const int screenWidth = screen.GetVisibleWidth();
-    const int screenHeight = screen.GetHeight();
-
-    int x1 = vert1.X(), x2 = vert2.X(), x3 = vert3.X();
-    int y1 = vert1.Y(), y2 = vert2.Y(), y3 = vert3.Y();
-    float w1 = vert1.UVW(), w2 = vert2.UVW(), w3 = vert3.UVW();
-    float u1 = vert1.U(), u2 = vert2.U(), u3 = vert3.U();
-    float v1 = vert1.V(), v2 = vert2.V(), v3 = vert3.V();
-
-    // Sort vertices by y
-    if (y2 < y1) { std::swap(y1, y2); std::swap(x1, x2); std::swap(u1, u2); std::swap(v1, v2); std::swap(w1, w2); }
-    if (y3 < y1) { std::swap(y1, y3); std::swap(x1, x3); std::swap(u1, u3); std::swap(v1, v3); std::swap(w1, w3); }
-    if (y3 < y2) { std::swap(y2, y3); std::swap(x2, x3); std::swap(u2, u3); std::swap(v2, v3); std::swap(w2, w3); }
-
-    // Tile bounds - cache these values
-    const int minX = int(tile.position.x);
-    const int maxX = int(tile.position.x + tile.size.x);
-    const int minY = int(tile.position.y);
-    const int maxY = int(tile.position.y + tile.size.y);
-
-    // Helper lambda for drawing scanlines
-    auto drawScanlines = [&](int startY, int endY, int xa, int ya, int xb, int yb, 
-                             float ua, float va, float wa, float ub, float vb, float wb,
-                             int x_long, int y_long, float u_long, float v_long, float w_long) {
-        int dy_short = endY - startY;
-        int dy_long = y_long - y1;
-        int dx_short = xb - xa;
-        int dx_long = x_long - x1;
-        float du_short = ub - ua, dv_short = vb - va, dw_short = wb - wa;
-        float du_long = u_long - u1, dv_long = v_long - v1, dw_long = w_long - w1;
-
-        float dax_step = dy_short ? dx_short / (float)abs(dy_short) : 0;
-        float dbx_step = dy_long ? dx_long / (float)abs(dy_long) : 0;
-        float du1_step = dy_short ? du_short / (float)abs(dy_short) : 0;
-        float dv1_step = dy_short ? dv_short / (float)abs(dy_short) : 0;
-        float dw1_step = dy_short ? dw_short / (float)abs(dy_short) : 0;
-        float du2_step = dy_long ? du_long / (float)abs(dy_long) : 0;
-        float dv2_step = dy_long ? dv_long / (float)abs(dy_long) : 0;
-        float dw2_step = dy_long ? dw_long / (float)abs(dy_long) : 0;
-
-        if (dy_short) {
-            for (int i = std::max(startY, minY); i <= std::min(endY, maxY - 1) && i < screenHeight; i++) {
-                int ax = xa + (float)(i - startY) * dax_step;
-                int bx = x1 + (float)(i - y1) * dbx_step;
-                float tex_su = ua + (float)(i - startY) * du1_step;
-                float tex_sv = va + (float)(i - startY) * dv1_step;
-                float tex_sw = wa + (float)(i - startY) * dw1_step;
-                float tex_eu = u1 + (float)(i - y1) * du2_step;
-                float tex_ev = v1 + (float)(i - y1) * dv2_step;
-                float tex_ew = w1 + (float)(i - y1) * dw2_step;
-                if (ax > bx) { std::swap(ax, bx); std::swap(tex_su, tex_eu); std::swap(tex_sv, tex_ev); std::swap(tex_sw, tex_ew); }
-                
-                float tstep = (bx != ax) ? 1.0f / ((float)(bx - ax)) : 0.0f;
-                int startX = std::max(ax, minX);
-                int endX = std::min(bx, maxX);
-                
-                // Calculate starting t value based on clipped X position
-                float t = (startX - ax) * tstep;
-                
-                // Pre-compute buffer row offset
-                const int bufferRowOffset = i * screenWidth;
-                
-                for (int j = startX; j < endX && j < screenWidth; j++) {
-                    float tex_w = (1.0f - t) * tex_sw + t * tex_ew;
-                    const int bufferIndex = bufferRowOffset + j;
-                    
-                    float inv_tex_w = 1.0f / tex_w;
-                    float tex_uw = ((1.0f - t) * tex_su + t * tex_eu) * inv_tex_w;
-                    float tex_vw = ((1.0f - t) * tex_sv + t * tex_ev) * inv_tex_w;
-                    
-                    if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
-                        float texWidthProd = tex_uw * texWidth;
-                        float texHeightProd = tex_vw * texHeight;
-                        glm::vec4 rgbCol = tex->GetPixelRGBA(texWidthProd, texHeightProd);
-                        PlotColorBlend(j, i, rgbCol, tex_w);
-                    }
-                    t += tstep;
-                }
-            }
-        }
-    };
-    
-    // Upper half: y1 to y2
-    drawScanlines(y1, y2, x1, y1, x2, y2, u1, v1, w1, u2, v2, w2, x3, y3, u3, v3, w3);
-    
-    // Lower half: y2 to y3
-    drawScanlines(y2, y3, x2, y2, x3, y3, u2, v2, w2, u3, v3, w3, x3, y3, u3, v3, w3);
-}
 
 void Renderer::DrawClippedLinePxBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, WCHAR pixel_type, unsigned short col) {
     // Bresenham's line algorithm with tile bounds clipping
@@ -717,7 +513,7 @@ void Renderer::DrawTriangleWireframeColBuffPartial(const Tile& tile, const VERTE
                     minX, maxX, minY, maxY, col);
 }
 
-void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex) {
+void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex) {
     if (!tex) { Logger::Error("  Texture is nullptr!"); return; }
     const int texWidth = tex->GetWidth(), texHeight = tex->GetHeight();
     if (texWidth == 0 || texHeight == 0) { Logger::Error("  Invalid texture dimensions!"); return; }
@@ -774,8 +570,10 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
     orient(A12,B12,C12); orient(A23,B23,C23); orient(A31,B31,C31);
     const float invSignedArea = 1.0f / signedArea;
 
-    // Sub-pixel pattern
-    const auto& subPixelOffsets = GetSubpixelOffsets();
+    // Choose sampling pattern based on antialiasing setting
+    // When AA is off, use single sample at pixel center (0.0, 0.0 offset)
+    static const std::vector<std::pair<float, float>> centerSample = {{0.0f, 0.0f}};
+    const auto& subPixelOffsets = _antialiasing ? GetSubpixelOffsets() : centerSample;
     const int sampleCount = (int)subPixelOffsets.size();
 
     for (int y = minY; y <= maxY; ++y) {
@@ -849,7 +647,7 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
     }
 }
 
-void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& v1, const VERTEX& v2, const VERTEX& v3, const Texture* tex) {
+void Renderer::DrawTriangleTextured(const VERTEX& v1, const VERTEX& v2, const VERTEX& v3, const Texture* tex) {
     if (!tex) { Logger::Error("  Texture is nullptr!"); return; }
     const int texWidth = tex->GetWidth(), texHeight = tex->GetHeight();
     if (texWidth == 0 || texHeight == 0) { Logger::Error("  Invalid texture dimensions!"); return; }
@@ -896,8 +694,10 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& v1, const VERTEX& v
     orient(A12,B12,C12); orient(A23,B23,C23); orient(A31,B31,C31);
     const float invSignedArea = 1.0f / signedArea;
 
-    // Sub-pixel pattern
-    const auto& subPixelOffsets = GetSubpixelOffsets();
+    // Choose sampling pattern based on antialiasing setting
+    // When AA is off, use single sample at pixel center (0.0, 0.0 offset)
+    static const std::vector<std::pair<float, float>> centerSample = {{0.0f, 0.0f}};
+    const auto& subPixelOffsets = _antialiasing ? GetSubpixelOffsets() : centerSample;
     const int sampleCount = (int)subPixelOffsets.size();
 
     for (int y = minY; y <= maxY; ++y) {
