@@ -23,19 +23,19 @@ bool Game::Initialize() {
     Logger::Info("Setting up palette and screen...");
 
     std::array<PaletteEntry, Palette::COLOR_COUNT> paletteEntries = {{
-        { {0.0f, 0.0f, 0.0f}, 0x0 }, // Black
-        { {0.5882f, 0.5882f, 0.5882f}, 0x1 }, // Smooth Stone Gray
-        { {0.4902f, 0.4902f, 0.4902f}, 0x2 }, // Cobblestone Gray
-        { {0.3451f, 0.3451f, 0.3451f}, 0x3 }, // Shady Rock Gray
-        { {0.2353f, 0.2353f, 0.2353f}, 0x4 }, // Deep Rock Gray
+        { {0.0f, 0.0f, 0.0f}, 0x0 },           // Black
+        { {0.5882f, 0.5882f, 0.5882f}, 0x1 },  // Smooth Stone Gray
+        { {0.4902f, 0.4902f, 0.4902f}, 0x2 },  // Cobblestone Gray
+        { {0.3451f, 0.3451f, 0.3451f}, 0x3 },  // Shady Rock Gray
+        { {0.2353f, 0.2353f, 0.2353f}, 0x4 },  // Deep Rock Gray
 
-        { {0.4196f, 0.6510f, 1.0000f}, 0x5 }, // Sky Blue
+        { {0.4196f, 0.6510f, 1.0000f}, 0x5 },  // Sky Blue
 
-        { {0.3725f, 0.6235f, 0.2078f}, 0x6 }, // Grass Green
-        { {0.2510f, 0.4275f, 0.1255f}, 0x7 }, // Leaf Green
-        { {0.1569f, 0.2745f, 0.0784f}, 0x8 }, // Dark Foliage Green
-        { {0.4941f, 0.7843f, 0.3137f}, 0x9 }, // Bright Grass Tip Green
-        { {0.50f, 0.980f, 0.400f}, 0xA },    // Light Grass Green
+        { {0.3725f, 0.6235f, 0.2078f}, 0x6 },  // Grass Green
+        { {0.2510f, 0.4275f, 0.1255f}, 0x7 },  // Leaf Green
+        { {0.1569f, 0.2745f, 0.0784f}, 0x8 },  // Dark Foliage Green
+        { {0.4941f, 0.7843f, 0.3137f}, 0x9 },  // Bright Grass Tip Green
+        { {0.50f, 0.980f, 0.400f}, 0xA },      // Light Grass Green
 
         { {0.4000f, 0.3020f, 0.1804f},  0xB }, // Oak Log Brown
         { {0.6353f, 0.5098f, 0.3098f},  0xC }, // Plank Brown
@@ -47,20 +47,21 @@ bool Game::Initialize() {
 
     Palette gamePalette = Palette(paletteEntries); // Default palette
 
-    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, static_cast<unsigned int>(TARGET_FPS), 1.0f, 0x5, gamePalette);
-    Renderer::SetWireframe(false);
-    Renderer::SetBackfaceCulling(true);
-    Renderer::SetCCW(true);
-	Renderer::SetAntialiasingsamples(4);
-	Renderer::SetAntialiasing(true);
-    Renderer::SetContrast(0.9f);
-
     // Initialize screen
-    if (screenInitResult != SCREEN_NOERROR) {
+    if (Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, static_cast<unsigned int>(TARGET_FPS), 1.0f, gamePalette) != SCREEN_NOERROR) {
         Logger::Error("Failed to initialize screen");
         return false;
     }
+    Renderer::GetInst().Initialize();
+    Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(5));
     
+    Renderer::GetInst().SetWireframe(false);
+    Renderer::GetInst().SetBackfaceCulling(true);
+    Renderer::GetInst().SetCCW(true);
+    Renderer::GetInst().SetContrast(0.9f);
+	Renderer::GetInst().SetAntialiasingsamples(4);
+	Renderer::GetInst().SetAntialiasing(true);
+
     // Load resources
     if (!LoadResources()) {
         Logger::Error("Failed to load resources");
@@ -97,16 +98,23 @@ void Game::Run() {
 
     // Main game loop
     while (isRunning) {
-        Screen::GetInstance().StartFPSClock();
-        Screen::GetInstance().ClearBuffer();
+        Screen::GetInst().StartFPSClock();
+        Screen::GetInst().ClearPixelBuffer();
+        Renderer::GetInst().ClearBuffers();
         
         HandleInput();
         Update();
         Render();
 
-        Screen::GetInstance().OutputBuffer();
-        Screen::GetInstance().EndFPSClock();
-        Screen::GetInstance().RenderTitle(true);
+        // color buffer draws ending
+        Renderer::GetInst().OverwritePxBuffWithColBuff();
+        
+        // pixel buffer draws
+        Renderer::GetInst().DrawScreenBorderPxBuff(0xF);
+        Screen::GetInst().OutputBuffer();
+
+        Screen::GetInst().EndFPSClock();
+        Screen::GetInst().RenderTitle(true);
     }
     
     Shutdown();
@@ -164,7 +172,7 @@ void Game::Shutdown() {
     inputManager.reset();
     blockAtlas.reset();  // Destroy the texture atlas
     
-    Screen::GetInstance().Cleanup();
+    // Screen cleanup happens automatically in destructor
     Logger::Info("ASCIICraft shutdown complete");
 }
 

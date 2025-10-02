@@ -9,7 +9,7 @@
 
 
 Player::Player(glm::vec2 xz, glm::vec2 yawPitch)
-	: camera(glm::vec3(xz.x, playerHeight, xz.y), fov, (float)Screen::GetInstance().GetVisibleWidth() / (float)Screen::GetInstance().GetHeight(), yawPitch, nearClip, farClip)
+	: camera(glm::vec3(xz.x, playerHeight, xz.y), fov, (float)Screen::GetInst().GetVisibleWidth() / (float)Screen::GetInst().GetHeight(), yawPitch, nearClip, farClip)
 {
 
 }
@@ -37,10 +37,10 @@ glm::vec3 Player::GetMoveVector() {
 glm::vec2 Player::GetViewChange() {
 	glm::vec2 view(camera.yaw, camera.pitch);
 
-	if (GetKeyState(VK_UP) & 0x8000) { view.y += cameraTurnRate * 0.5 * Screen::GetInstance().GetDeltaTime(); }
-	if (GetKeyState(VK_DOWN) & 0x8000) { view.y -= cameraTurnRate * 0.5 * Screen::GetInstance().GetDeltaTime(); }
-	if (GetKeyState(VK_LEFT) & 0x8000) { view.x -= cameraTurnRate * Screen::GetInstance().GetDeltaTime(); }
-	if (GetKeyState(VK_RIGHT) & 0x8000) { view.x += cameraTurnRate * Screen::GetInstance().GetDeltaTime(); }
+	if (GetKeyState(VK_UP) & 0x8000) { view.y += cameraTurnRate * 0.5 * Screen::GetInst().GetDeltaTime(); }
+	if (GetKeyState(VK_DOWN) & 0x8000) { view.y -= cameraTurnRate * 0.5 * Screen::GetInst().GetDeltaTime(); }
+	if (GetKeyState(VK_LEFT) & 0x8000) { view.x -= cameraTurnRate * Screen::GetInst().GetDeltaTime(); }
+	if (GetKeyState(VK_RIGHT) & 0x8000) { view.x += cameraTurnRate * Screen::GetInst().GetDeltaTime(); }
 	return view;
 }
 
@@ -58,7 +58,7 @@ unsigned int Player::GetStaminaChunk(unsigned int numChunks, int leeway) {
 }
 
 void Player::Update(GameObj* Level) {
-	glm::vec3 newPos = GetMoveVector() * Screen::GetInstance().GetDeltaTime() * walkingSpeed;
+	glm::vec3 newPos = GetMoveVector() * Screen::GetInst().GetDeltaTime() * walkingSpeed;
 	newPos = Sprinting(newPos);
 
 	// checks if you are colliding om the x axis first, then the z axis

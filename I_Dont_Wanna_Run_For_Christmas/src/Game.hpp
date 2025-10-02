@@ -95,7 +95,7 @@ public:
 	void Run();
 
 	// singleton method that returns an instance of the game, if there isnt one already it creates one
-	static Game* GetInstance();
+	static Game* GetInst();
 
 	// I have so many things on heap memory at this point I must be leaking memory lord help me
 	Player* player = nullptr;

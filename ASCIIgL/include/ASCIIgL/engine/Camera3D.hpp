@@ -43,8 +43,8 @@ public:
 	glm::vec3 getCamLeftNoY() const;
 
 	void setCamPos(glm::vec3 Pposition);
-	void setCamDir(float Pyaw, float Ppitch, float Ppitch_clamp = 90.0f, bool Penable_pitch_clamping = true); // this sets the camera dir using angles (not vectors)
-	void setCamDir(glm::vec3 dir);
+	void setCamDir(float Pyaw, float Ppitch, float Ppitch_clamp = 89.9f); // this sets the camera dir using angles (not vectors)
+	void setCamDir(glm::vec3 dir, float Ppitch_clamp = 89.9f);
 	void setScreenDimensions(unsigned int width, unsigned int height); // this updates screen dimensions and recalculates projection matrix
 	void recalculateViewMat(); // recalculates the view matrix using the cameras euler angles and position
 	void recalculateProjMat(); // recalculates the projection matrix using current screen dimensions and aspect ratio

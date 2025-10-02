@@ -13,6 +13,28 @@
 #include <ASCIIgL/renderer/Screen.hpp>
 
 // =============================================================================
+// CONSTRUCTION / DESTRUCTION / INITIALIZATION
+// =============================================================================
+
+Renderer::~Renderer() {
+    _depth_buffer.clear();
+    _color_buffer.clear();
+}
+
+void Renderer::Initialize() {
+    if (!Screen::GetInst().IsInitialized()) {
+        Logger::Error("Renderer: Screen must be initialized before creating Renderer.");
+        throw std::runtime_error("Renderer: Screen must be initialized before creating Renderer.");
+    }
+    auto& screen = Screen::GetInst();
+    _depth_buffer.resize(screen.GetVisibleWidth() * screen.GetHeight());
+    _color_buffer.resize(screen.GetVisibleWidth() * screen.GetHeight());
+
+    _vertexBuffer.reserve(100000);  // Enough for ~33k triangles
+    _clippedBuffer.reserve(200000); // Clipping can double vertices
+}
+
+// =============================================================================
 // PUBLIC HIGH-LEVEL DRAWING FUNCTIONS
 // =============================================================================
 
@@ -89,8 +111,8 @@ void Renderer::Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, 
 void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer)
 {
     // Convert percentage coordinates to pixel coordinates
-    float screenWidth = static_cast<float>(Screen::GetInstance().GetVisibleWidth());
-    float screenHeight = static_cast<float>(Screen::GetInstance().GetHeight());
+    float screenWidth = static_cast<float>(Screen::GetInst().GetVisibleWidth());
+    float screenHeight = static_cast<float>(Screen::GetInst().GetHeight());
     
     glm::vec2 pixelPosition = glm::vec2(positionPerc.x * screenWidth, positionPerc.y * screenHeight);
     glm::vec2 pixelSize = glm::vec2(sizePerc.x * screenWidth, sizePerc.y * screenHeight);
@@ -114,12 +136,20 @@ void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, c
     Renderer::RenderTriangles(VSHADER, vertices, &tex);
 }
 
-void Renderer::DrawScreenBorder(const unsigned short col) {
+void Renderer::DrawScreenBorderPxBuff(const unsigned short col) {
 	// DRAWING BORDERS
-	DrawLine(1, 1, Screen::GetInstance().GetVisibleWidth() - 1, 1, static_cast<WCHAR>(219), col);
-	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, 1, Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, static_cast<WCHAR>(219), col);
-	DrawLine(Screen::GetInstance().GetVisibleWidth() - 1, Screen::GetInstance().GetHeight() - 1, 1, Screen::GetInstance().GetHeight() - 1, static_cast<WCHAR>(219), col);
-	DrawLine(1, 1, 1, Screen::GetInstance().GetHeight() - 1, static_cast<WCHAR>(219), col);
+	DrawLinePxBuff(0, 0, Screen::GetInst().GetVisibleWidth() - 1, 0, static_cast<WCHAR>(219), col);
+	DrawLinePxBuff(Screen::GetInst().GetVisibleWidth() - 1, 0, Screen::GetInst().GetVisibleWidth() - 1, Screen::GetInst().GetHeight() - 1, static_cast<WCHAR>(219), col);
+	DrawLinePxBuff(Screen::GetInst().GetVisibleWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, static_cast<WCHAR>(219), col);
+	DrawLinePxBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, static_cast<WCHAR>(219), col);
+}
+
+void Renderer::DrawScreenBorderColBuff(const glm::vec3& col) {
+    // DRAWING BORDERS
+    DrawLineColBuff(0, 0, Screen::GetInst().GetVisibleWidth() - 1, 0, col);
+    DrawLineColBuff(Screen::GetInst().GetVisibleWidth() - 1, 0, Screen::GetInst().GetVisibleWidth() - 1, Screen::GetInst().GetHeight() - 1, col);
+    DrawLineColBuff(Screen::GetInst().GetVisibleWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, col);
+    DrawLineColBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, col);
 }
 
 // =============================================================================
@@ -131,57 +161,24 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
         return;
     }
 
-    // Validate texture integrity if provided
-    if (tex != nullptr) {
-        try {
-            int width = tex->GetWidth();
-            int height = tex->GetHeight();
-            
-            if (width <= 0 || height <= 0) {
-                Logger::Error("RenderTriangles: Invalid texture dimensions - Width: " + std::to_string(width) + ", Height: " + std::to_string(height));
-                return;
-            }
-            
-            if (width > 4096 || height > 4096) {
-                Logger::Error("RenderTriangles: Texture dimensions too large - Width: " + std::to_string(width) + ", Height: " + std::to_string(height));
-                return;
-            }
-            
-            // Test if we can safely access texture data by sampling a corner pixel
-            glm::vec3 testPixel = tex->GetPixelRGB(0.0f, 0.0f);
-            
-        } catch (const std::exception& e) {
-            Logger::Error("RenderTriangles: Exception during texture validation - " + std::string(e.what()));
-            return;
-        } catch (...) {
-            Logger::Error("RenderTriangles: Unknown exception during texture validation");
-            return;
-        }
+    if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) {
+        return; // Fast fail only
     }
 
-    // Optimize: Use pre-allocated buffers instead of creating new vectors each frame
-    _vertexBuffer.clear();
-    _vertexBuffer.reserve(vertices.size());
+    if (_vertexBuffer.capacity() < vertices.size()) {
+        _vertexBuffer.reserve(vertices.size() * 1.5f);  // Reserve 50% extra for growth
+    }
     _vertexBuffer = vertices;
 
     const_cast<VERTEX_SHADER&>(VSHADER).GLUseBatch(_vertexBuffer);
 
-    _clippedBuffer.clear();
     ClippingHelper(_vertexBuffer, _clippedBuffer);
 
-    // Optimize: Parallel perspective division and viewport transform
-    std::for_each(std::execution::par_unseq, _clippedBuffer.begin(), _clippedBuffer.end(), 
-        [](VERTEX& v) {
-            PerspectiveDivision(v);
-            ViewPortTransform(v);
-        });
+    PerspectiveAndViewportTransformHelper(_clippedBuffer);
 
-    // Remove back-face culled triangles before rasterization
+    // Remove back-face culled triangles in-place (if enabled)
     if (_backface_culling) {
-        _rasterBuffer.clear();
-        BackFaceCullHelper(_clippedBuffer, _rasterBuffer);
-    } else {
-        _rasterBuffer = std::move(_clippedBuffer); // Move semantics to avoid copy
+        BackFaceCullHelper(_clippedBuffer);
     }
 
     if (!_tilesInitialized) {
@@ -196,18 +193,29 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
         PrecomputeColorLUT();
     }
 
-    BinTrianglesToTiles(_rasterBuffer);
+    BinTrianglesToTiles(_clippedBuffer);
 
-    std::for_each(std::execution::par, _tileBuffer.begin(), _tileBuffer.end(), [&](Tile& tile) {
-        if (_wireframe || tex == nullptr) {
-            DrawTileWireframe(tile, _rasterBuffer);
-        } else {
-            DrawTileTextured(tile, _rasterBuffer, tex);
+    // Better: Only process tiles with triangles
+    std::vector<Tile*> activeTiles;
+    activeTiles.reserve(_tileBuffer.size());
+    for (auto& tile : _tileBuffer) {
+        if (!tile.tri_indices_encapsulated.empty() || !tile.tri_indices_partial.empty()) {
+            activeTiles.push_back(&tile);
         }
-    });
+    }
+
+    // Parallel over active tiles only
+    std::for_each(std::execution::par, activeTiles.begin(), activeTiles.end(), 
+        [&](Tile* tile) {
+            if (_wireframe || tex == nullptr) {
+                DrawTileWireframe(*tile, _clippedBuffer);
+            } else {
+                DrawTileTextured(*tile, _clippedBuffer, tex);
+            }
+        });
 }
 
-void Renderer::BackFaceCullHelper(const std::vector<VERTEX>& vertices, std::vector<VERTEX>& raster_triangles) {
+void Renderer::BackFaceCullHelper(std::vector<VERTEX>& vertices) {
     if (vertices.size() < 3) return;
 
     const size_t triangleCount = vertices.size() / 3;
@@ -219,34 +227,51 @@ void Renderer::BackFaceCullHelper(const std::vector<VERTEX>& vertices, std::vect
     std::vector<size_t> triangleIndices(triangleCount);
     std::iota(triangleIndices.begin(), triangleIndices.end(), 0);
     
-    // Parallel pass: determine which triangles to keep (no data races)
-    std::for_each(std::execution::par, 
-        triangleIndices.begin(), 
-        triangleIndices.end(),
-        [&keepTriangle, &vertices, ccw = _ccw](size_t triIndex) {  // Capture by value
+    // Adaptive culling: parallel for large meshes, sequential for small meshes
+    if (triangleCount >= 1000) {
+        // Parallel pass for large meshes (thread overhead is worth it)
+        std::for_each(std::execution::par, 
+            triangleIndices.begin(), 
+            triangleIndices.end(),
+            [this, &keepTriangle, &vertices, ccw = _ccw](size_t triIndex) {
+                const size_t vertexIndex = triIndex * 3;
+                keepTriangle[triIndex] = !BackFaceCull(
+                    vertices[vertexIndex], 
+                    vertices[vertexIndex + 1], 
+                    vertices[vertexIndex + 2], 
+                    ccw
+                );
+            });
+    } else {
+        // Sequential pass for small meshes (avoid thread overhead)
+        for (size_t triIndex = 0; triIndex < triangleCount; ++triIndex) {
             const size_t vertexIndex = triIndex * 3;
             keepTriangle[triIndex] = !BackFaceCull(
                 vertices[vertexIndex], 
                 vertices[vertexIndex + 1], 
                 vertices[vertexIndex + 2], 
-                ccw  // Use local copy
+                _ccw
             );
-        });
-    
-    // Sequential pass: collect kept triangles (avoids race conditions on push_back)
-    // Reserve space to minimize allocations
-    size_t keepCount = std::count(keepTriangle.begin(), keepTriangle.end(), 1);
-    raster_triangles.clear();
-    raster_triangles.reserve(keepCount * 3);
-    
-    for (size_t triIndex = 0; triIndex < triangleCount; ++triIndex) {
-        if (keepTriangle[triIndex]) {
-            const size_t vertexIndex = triIndex * 3;
-            raster_triangles.push_back(vertices[vertexIndex]);
-            raster_triangles.push_back(vertices[vertexIndex + 1]);
-            raster_triangles.push_back(vertices[vertexIndex + 2]);
         }
     }
+    
+    // In-place removal: shift kept triangles to the front
+    size_t writeIndex = 0;
+    for (size_t triIndex = 0; triIndex < triangleCount; ++triIndex) {
+        if (keepTriangle[triIndex]) {
+            const size_t readIndex = triIndex * 3;
+            if (writeIndex != readIndex) {
+                // Only move if positions differ
+                vertices[writeIndex]     = vertices[readIndex];
+                vertices[writeIndex + 1] = vertices[readIndex + 1];
+                vertices[writeIndex + 2] = vertices[readIndex + 2];
+            }
+            writeIndex += 3;
+        }
+    }
+    
+    // Resize to remove culled triangles
+    vertices.resize(writeIndex);
 }
 
 // =============================================================================
@@ -255,19 +280,19 @@ void Renderer::BackFaceCullHelper(const std::vector<VERTEX>& vertices, std::vect
 
 void Renderer::InitializeTiles() {
     // One-time initialization of tile structure - much faster than recreating every frame
-    int tileCount = Screen::GetInstance().GetTileCountX() * Screen::GetInstance().GetTileCountY();
+    int tileCount = Screen::GetInst().GetTileCountX() * Screen::GetInst().GetTileCountY();
     _tileBuffer.clear();
     _tileBuffer.resize(tileCount);
     
-    for (int ty = 0; ty < Screen::GetInstance().GetTileCountY(); ++ty) {
-        for (int tx = 0; tx < Screen::GetInstance().GetTileCountX(); ++tx) {
-            int tileIndex = ty * Screen::GetInstance().GetTileCountX() + tx;
-            int posX = tx * Screen::GetInstance().GetTileSizeX();
-            int posY = ty * Screen::GetInstance().GetTileSizeY();
+    for (int ty = 0; ty < Screen::GetInst().GetTileCountY(); ++ty) {
+        for (int tx = 0; tx < Screen::GetInst().GetTileCountX(); ++tx) {
+            int tileIndex = ty * Screen::GetInst().GetTileCountX() + tx;
+            int posX = tx * Screen::GetInst().GetTileSizeX();
+            int posY = ty * Screen::GetInst().GetTileSizeY();
 
             // Clamp tile size if it would overflow the screen
-            int sizeX = std::min(Screen::GetInstance().GetTileSizeX(), Screen::GetInstance().GetVisibleWidth() - posX);
-            int sizeY = std::min(Screen::GetInstance().GetTileSizeY(), Screen::GetInstance().GetHeight() - posY);
+            int sizeX = std::min(Screen::GetInst().GetTileSizeX(), Screen::GetInst().GetVisibleWidth() - posX);
+            int sizeY = std::min(Screen::GetInst().GetTileSizeY(), Screen::GetInst().GetHeight() - posY);
 
             _tileBuffer[tileIndex].position = glm::ivec2(posX, posY);
             _tileBuffer[tileIndex].size = glm::ivec2(sizeX, sizeY);
@@ -289,7 +314,7 @@ void Renderer::ClearTileTriangleLists() {
 
 void Renderer::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles) {
     // Optimized version that works directly with pre-allocated tile buffer
-    auto& screen = Screen::GetInstance();
+    auto& screen = Screen::GetInst();
     const int tileSizeX = screen.GetTileSizeX();
     const int tileSizeY = screen.GetTileSizeY();
     const int tileCountX = screen.GetTileCountX();
@@ -380,10 +405,10 @@ void Renderer::DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& ras
 void Renderer::DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles) {
     // Draw wireframe for each triangle in the tile
     for (int triIndex : tile.tri_indices_encapsulated) {
-        DrawTriangleWireframe(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<WCHAR>(L'█'), 0xF);
+        DrawTriangleWireframeColBuff(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
     }
     for (int triIndex : tile.tri_indices_partial) {
-        DrawTriangleWireframePartial(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], static_cast<WCHAR>(L'█'), 0xF);
+        DrawTriangleWireframeColBuffPartial(tile, raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
     }
 }
 
@@ -401,10 +426,9 @@ void Renderer::DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, co
     }
 
     // Cache frequently used values to avoid repeated function calls
-    auto& screen = Screen::GetInstance();
+    auto& screen = Screen::GetInst();
     const int screenWidth = screen.GetVisibleWidth();
     const int screenHeight = screen.GetHeight();
-    float* const depthBuffer = screen.GetDepthBuffer();
 
     int x1 = vert1.X(), x2 = vert2.X(), x3 = vert3.X();
     int y1 = vert1.Y(), y2 = vert2.Y(), y3 = vert3.Y();
@@ -459,20 +483,16 @@ void Renderer::DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, co
                     float tex_w = (1.0f - t) * tex_sw + t * tex_ew;
                     const int bufferIndex = bufferRowOffset + j;
                     
-                    if (tex_w > depthBuffer[bufferIndex]) {
-                        // Use reciprocal multiplication instead of division (much faster)
-                        float inv_tex_w = 1.0f / tex_w;
-                        float tex_uw = ((1.0f - t) * tex_su + t * tex_eu) * inv_tex_w;
-                        float tex_vw = ((1.0f - t) * tex_sv + t * tex_ev) * inv_tex_w;
-                        
-                        if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
-                            // Use integer texture coordinates for better cache performance
-                            float texWidthProd = tex_uw * texWidth;
-                            float texHeightProd = tex_vw * texHeight;
-                            glm::vec3 rgbCol = tex->GetPixelRGB(texWidthProd, texHeightProd);
-                            screen.PlotPixel(glm::vec2(j, i), GetCharInfo(rgbCol));
-                            depthBuffer[bufferIndex] = tex_w;
-                        }
+                    float inv_tex_w = 1.0f / tex_w;
+                    float tex_uw = ((1.0f - t) * tex_su + t * tex_eu) * inv_tex_w;
+                    float tex_vw = ((1.0f - t) * tex_sv + t * tex_ev) * inv_tex_w;
+                    
+                    if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
+                        // Use integer texture coordinates for better cache performance
+                        float texWidthProd = tex_uw * texWidth;
+                        float texHeightProd = tex_vw * texHeight;
+                        glm::vec4 rgbaCol = tex->GetPixelRGBA(texWidthProd, texHeightProd);
+                        PlotColorBlend(j, i, rgbaCol, tex_w);
                     }
                     t += tstep;
                 }
@@ -496,10 +516,9 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
     }
 
     // Cache frequently used values
-    auto& screen = Screen::GetInstance();
+    auto& screen = Screen::GetInst();
     const int screenWidth = screen.GetVisibleWidth();
     const int screenHeight = screen.GetHeight();
-    float* const depthBuffer = screen.GetDepthBuffer();
 
     int x1 = vert1.X(), x2 = vert2.X(), x3 = vert3.X();
     int y1 = vert1.Y(), y2 = vert2.Y(), y3 = vert3.Y();
@@ -564,19 +583,15 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
                     float tex_w = (1.0f - t) * tex_sw + t * tex_ew;
                     const int bufferIndex = bufferRowOffset + j;
                     
-                    if (tex_w > depthBuffer[bufferIndex]) {
-                        // Use reciprocal multiplication instead of division (much faster)
-                        float inv_tex_w = 1.0f / tex_w;
-                        float tex_uw = ((1.0f - t) * tex_su + t * tex_eu) * inv_tex_w;
-                        float tex_vw = ((1.0f - t) * tex_sv + t * tex_ev) * inv_tex_w;
-                        
-                        if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
-                            float texWidthProd = tex_uw * texWidth;
-                            float texHeightProd = tex_vw * texHeight;
-                            glm::vec3 rgbCol = tex->GetPixelRGB(texWidthProd, texHeightProd);
-                            screen.PlotPixel(glm::vec2(j, i), GetCharInfo(rgbCol));
-                            depthBuffer[bufferIndex] = tex_w;
-                        }
+                    float inv_tex_w = 1.0f / tex_w;
+                    float tex_uw = ((1.0f - t) * tex_su + t * tex_eu) * inv_tex_w;
+                    float tex_vw = ((1.0f - t) * tex_sv + t * tex_ev) * inv_tex_w;
+                    
+                    if (tex_uw < 1.0f && tex_vw < 1.0f && tex_uw >= 0.0f && tex_vw >= 0.0f) {
+                        float texWidthProd = tex_uw * texWidth;
+                        float texHeightProd = tex_vw * texHeight;
+                        glm::vec4 rgbCol = tex->GetPixelRGBA(texWidthProd, texHeightProd);
+                        PlotColorBlend(j, i, rgbCol, tex_w);
                     }
                     t += tstep;
                 }
@@ -591,85 +606,143 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
     drawScanlines(y2, y3, x2, y2, x3, y3, u2, v2, w2, u3, v3, w3, x3, y3, u3, v3, w3);
 }
 
-void Renderer::DrawTriangleWireframePartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const WCHAR pixel_type, const unsigned short col) {
+void Renderer::DrawClippedLinePxBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, WCHAR pixel_type, unsigned short col) {
+    // Bresenham's line algorithm with tile bounds clipping
+    int dx = abs(x1 - x0);
+    int dy = abs(y1 - y0);
+    int incx = (x1 > x0) ? 1 : -1;
+    int incy = (y1 > y0) ? 1 : -1;
+    int x = x0, y = y0;
+
+    // Plot first pixel if within bounds
+    if (x >= minX && x < maxX && y >= minY && y < maxY) {
+        Screen::GetInst().PlotPixel(x, y, pixel_type, col);
+    }
+
+    if (dx > dy) {
+        int e = 2 * dy - dx;
+        for (int i = 0; i < dx; ++i) {
+            x += incx;
+            if (e >= 0) {
+                y += incy;
+                e += 2 * (dy - dx);
+            } else {
+                e += 2 * dy;
+            }
+            // Only plot if within tile bounds
+            if (x >= minX && x < maxX && y >= minY && y < maxY) {
+                Screen::GetInst().PlotPixel(x, y, pixel_type, col);
+            }
+        }
+    } else {
+        int e = 2 * dx - dy;
+        for (int i = 0; i < dy; ++i) {
+            y += incy;
+            if (e >= 0) {
+                x += incx;
+                e += 2 * (dx - dy);
+            } else {
+                e += 2 * dx;
+            }
+            // Only plot if within tile bounds
+            if (x >= minX && x < maxX && y >= minY && y < maxY) {
+                Screen::GetInst().PlotPixel(x, y, pixel_type, col);
+            }
+        }
+    }
+}
+
+void Renderer::DrawClippedLineColBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, const glm::vec4& col) {
+    // Bresenham's line algorithm with tile bounds clipping
+    int dx = abs(x1 - x0);
+    int dy = abs(y1 - y0);
+    int incx = (x1 > x0) ? 1 : -1;
+    int incy = (y1 > y0) ? 1 : -1;
+    int x = x0, y = y0;
+
+    // Plot first pixel if within bounds
+    if (x >= minX && x < maxX && y >= minY && y < maxY) {
+        PlotColorBlend(x, y, col, 1.0f);
+    }
+
+    if (dx > dy) {
+        int e = 2 * dy - dx;
+        for (int i = 0; i < dx; ++i) {
+            x += incx;
+            if (e >= 0) {
+                y += incy;
+                e += 2 * (dy - dx);
+            } else {
+                e += 2 * dy;
+            }
+            // Only plot if within tile bounds
+            if (x >= minX && x < maxX && y >= minY && y < maxY) {
+                PlotColorBlend(x, y, col, 1.0f);
+            }
+        }
+    } else {
+        int e = 2 * dx - dy;
+        for (int i = 0; i < dy; ++i) {
+            y += incy;
+            if (e >= 0) {
+                x += incx;
+                e += 2 * (dx - dy);
+            } else {
+                e += 2 * dx;
+            }
+            // Only plot if within tile bounds
+            if (x >= minX && x < maxX && y >= minY && y < maxY) {
+                PlotColorBlend(x, y, col, 1.0f);
+            }
+        }
+    }
+}
+
+void Renderer::DrawTriangleWireframeColBuffPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::vec4& col) {
     // Get tile bounds for clipping
     const int minX = static_cast<int>(tile.position.x);
     const int maxX = static_cast<int>(tile.position.x + tile.size.x);
     const int minY = static_cast<int>(tile.position.y);
     const int maxY = static_cast<int>(tile.position.y + tile.size.y);
     
-    // Helper function to draw a line segment clipped to the tile bounds
-    auto drawClippedLine = [&](int x0, int y0, int x1, int y1) {
-        // Simple line clipping - only draw pixels within tile bounds
-        int dx = abs(x1 - x0);
-        int dy = abs(y1 - y0);
-        int incx = (x1 > x0) ? 1 : -1;
-        int incy = (y1 > y0) ? 1 : -1;
-        int x = x0, y = y0;
-
-        // Plot first pixel if within bounds
-        if (x >= minX && x < maxX && y >= minY && y < maxY) {
-            Screen::GetInstance().PlotPixel(x, y, pixel_type, col);
-        }
-
-        if (dx > dy) {
-            int e = 2 * dy - dx;
-            for (int i = 0; i < dx; ++i) {
-                x += incx;
-                if (e >= 0) {
-                    y += incy;
-                    e += 2 * (dy - dx);
-                } else {
-                    e += 2 * dy;
-                }
-                // Only plot if within tile bounds
-                if (x >= minX && x < maxX && y >= minY && y < maxY) {
-                    Screen::GetInstance().PlotPixel(x, y, pixel_type, col);
-                }
-            }
-        } else {
-            int e = 2 * dx - dy;
-            for (int i = 0; i < dy; ++i) {
-                y += incy;
-                if (e >= 0) {
-                    x += incx;
-                    e += 2 * (dx - dy);
-                } else {
-                    e += 2 * dx;
-                }
-                // Only plot if within tile bounds
-                if (x >= minX && x < maxX && y >= minY && y < maxY) {
-                    Screen::GetInstance().PlotPixel(x, y, pixel_type, col);
-                }
-            }
-        }
-    };
-    
     // Draw the three edges of the triangle with tile clipping
-    drawClippedLine(static_cast<int>(vert1.X()), static_cast<int>(vert1.Y()), 
-                    static_cast<int>(vert2.X()), static_cast<int>(vert2.Y()));
-    drawClippedLine(static_cast<int>(vert2.X()), static_cast<int>(vert2.Y()), 
-                    static_cast<int>(vert3.X()), static_cast<int>(vert3.Y()));
-    drawClippedLine(static_cast<int>(vert3.X()), static_cast<int>(vert3.Y()), 
-                    static_cast<int>(vert1.X()), static_cast<int>(vert1.Y()));
+    DrawClippedLineColBuff(static_cast<int>(vert1.X()), static_cast<int>(vert1.Y()), 
+                    static_cast<int>(vert2.X()), static_cast<int>(vert2.Y()),
+                    minX, maxX, minY, maxY, col);
+    DrawClippedLineColBuff(static_cast<int>(vert2.X()), static_cast<int>(vert2.Y()), 
+                    static_cast<int>(vert3.X()), static_cast<int>(vert3.Y()),
+                    minX, maxX, minY, maxY, col);
+    DrawClippedLineColBuff(static_cast<int>(vert3.X()), static_cast<int>(vert3.Y()),
+                    static_cast<int>(vert1.X()), static_cast<int>(vert1.Y()),
+                    minX, maxX, minY, maxY, col);
 }
 
 void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex) {
     if (!tex) { Logger::Error("  Texture is nullptr!"); return; }
-    int texWidth, texHeight;
-    try { texWidth = tex->GetWidth(); texHeight = tex->GetHeight(); }
-    catch (...) { Logger::Error("  Exception caught when accessing texture methods!"); return; }
+    const int texWidth = tex->GetWidth(), texHeight = tex->GetHeight();
     if (texWidth == 0 || texHeight == 0) { Logger::Error("  Invalid texture dimensions!"); return; }
 
+    // Cache screen dimensions and texture size as floats
+    const int screenWidth = Screen::GetInst().GetVisibleWidth();
+    const int screenHeight = Screen::GetInst().GetHeight();
+    const float texWidthF = static_cast<float>(texWidth);
+    const float texHeightF = static_cast<float>(texHeight);
+
+    // Hoist tile bounds
+    const int tileMinX = static_cast<int>(tile.position.x);
+    const int tileMaxX = static_cast<int>(tile.position.x + tile.size.x) - 1;
+    const int tileMinY = static_cast<int>(tile.position.y);
+    const int tileMaxY = static_cast<int>(tile.position.y + tile.size.y) - 1;
+
     // Get triangle bounding box clipped to tile
-    int minX = std::max((int)tile.position.x, (int)std::min({vert1.X(), vert2.X(), vert3.X()}));
-    int maxX = std::min((int)(tile.position.x + tile.size.x) - 1, (int)std::max({vert1.X(), vert2.X(), vert3.X()}));
-    int minY = std::max((int)tile.position.y, (int)std::min({vert1.Y(), vert2.Y(), vert3.Y()}));
-    int maxY = std::min((int)(tile.position.y + tile.size.y) - 1, (int)std::max({vert1.Y(), vert2.Y(), vert3.Y()}));
+    int minX = std::max(tileMinX, static_cast<int>(std::min({vert1.X(), vert2.X(), vert3.X()})));
+    int maxX = std::min(tileMaxX, static_cast<int>(std::max({vert1.X(), vert2.X(), vert3.X()})));
+    int minY = std::max(tileMinY, static_cast<int>(std::min({vert1.Y(), vert2.Y(), vert3.Y()})));
+    int maxY = std::min(tileMaxY, static_cast<int>(std::max({vert1.Y(), vert2.Y(), vert3.Y()})));
     minX = std::max(0, minX);
-    maxX = std::min((int)Screen::GetInstance().GetVisibleWidth() - 1, maxX);
+    maxX = std::min(screenWidth - 1, maxX);
     minY = std::max(0, minY);
-    maxY = std::min((int)Screen::GetInstance().GetHeight() - 1, maxY);
+    maxY = std::min(screenHeight - 1, maxY);
     if (minX > maxX || minY > maxY) return;
 
     // Vertex positions
@@ -702,27 +775,37 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
     const float invSignedArea = 1.0f / signedArea;
 
     // Sub-pixel pattern
-    const auto subPixelOffsets = GetSubpixelOffsets();
+    const auto& subPixelOffsets = GetSubpixelOffsets();
     const int sampleCount = (int)subPixelOffsets.size();
-
-    Screen& screen = Screen::GetInstance();
-    float* depth = screen.GetDepthBuffer();
-    const int screenWidth = screen.GetVisibleWidth();
 
     for (int y = minY; y <= maxY; ++y) {
         const float baseY = y + 0.5f;
-        const int rowOffset = y * screenWidth;
+        const size_t rowOffset = y * screenWidth;
+        
+        // Initialize edge functions at start of row (x = minX + 0.5)
+        const float startX = minX + 0.5f;
+        float e12c = A12 * startX + B12 * baseY + C12;
+        float e23c = A23 * startX + B23 * baseY + C23;
+        float e31c = A31 * startX + B31 * baseY + C31;
+        
         for (int x = minX; x <= maxX; ++x) {
             const float baseX = x + 0.5f;
-            glm::vec3 rgbAccum(0.0f); float depthAccum = 0.0f; int insideSamples = 0;
+            glm::vec4 rgbAccum(0.0f); float depthAccum = 0.0f; int insideSamples = 0;
 
-            // Pixel center edge evaluations
-            const float e12c = A12 * baseX + B12 * baseY + C12;
-            const float e23c = A23 * baseX + B23 * baseY + C23;
-            const float e31c = A31 * baseX + B31 * baseY + C31;
+            // Use current edge function values (already computed incrementally)
 
             // If clearly outside (all negative beyond margin) skip
-            if (e12c < -1.1f && e23c < -1.1f && e31c < -1.1f) continue;
+            if (e12c < -1.1f && e23c < -1.1f && e31c < -1.1f) {
+                // Increment edge functions for next pixel
+                e12c += A12;
+                e23c += A23;
+                e31c += A31;
+                continue;
+            }
+
+            // Pre-fetch current depth for early rejection
+            const size_t depthIndex = rowOffset + x;
+            const float currentDepth = _depth_buffer[depthIndex];
 
             for (int si = 0; si < sampleCount; ++si) {
                 const float sx = baseX + subPixelOffsets[si].first;
@@ -735,42 +818,53 @@ void Renderer::DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VE
                 const float wB = e31 * invSignedArea;
                 const float wC = 1.0f - wA - wB;
                 const float perspW = wA*w1p + wB*w2p + wC*w3p;
+                
+                // Early depth test BEFORE expensive texture sampling
+                // Note: Uses reverse depth (larger = closer), so reject if perspW <= currentDepth
+                if (perspW <= currentDepth) continue;
+                
                 const float invPerspW = 1.0f / perspW;
                 const float tu = (wA*u1 + wB*u2 + wC*u3) * invPerspW;
                 const float tv = (wA*v1t + wB*v2t + wC*v3t) * invPerspW;
                 if (tu < 0.f || tu >= 1.f || tv < 0.f || tv >= 1.f) continue;
-                const float sX = tu * texWidth;
-                const float sY = tv * texHeight;
-                rgbAccum += tex->GetPixelRGB(sX, sY);
+                const float sX = tu * texWidthF;
+                const float sY = tv * texHeightF;
+                rgbAccum += tex->GetPixelRGBA(sX, sY);
                 depthAccum += perspW;
                 ++insideSamples;
             }
 
             if (insideSamples) {
-                const int idx = rowOffset + x;
-                const float avgDepth = depthAccum / insideSamples;
-                if (avgDepth > depth[idx]) {
-                    const glm::vec3 c = rgbAccum * (1.0f / insideSamples);
-                    screen.PlotPixel(glm::vec2(x, y), GetCharInfo(c));
-                    depth[idx] = avgDepth;
-                }
+                const float inv_inside_samples = 1.0f / insideSamples;
+                const float avgDepth = depthAccum * inv_inside_samples;
+                const glm::vec4 c = rgbAccum * inv_inside_samples;
+                PlotColorBlend(x, y, c, avgDepth);
             }
+            
+            // Increment edge functions for next pixel (moving right by 1.0)
+            e12c += A12;
+            e23c += A23;
+            e31c += A31;
         }
     }
 }
 
 void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& v1, const VERTEX& v2, const VERTEX& v3, const Texture* tex) {
     if (!tex) { Logger::Error("  Texture is nullptr!"); return; }
+    const int texWidth = tex->GetWidth(), texHeight = tex->GetHeight();
+    if (texWidth == 0 || texHeight == 0) { Logger::Error("  Invalid texture dimensions!"); return; }
 
-    const int texWidth = tex->GetWidth();
-    const int texHeight = tex->GetHeight();
-    if (texWidth == 0 || texHeight == 0) return;
+    // Cache screen dimensions and texture size as floats
+    const int screenWidth = Screen::GetInst().GetVisibleWidth();
+    const int screenHeight = Screen::GetInst().GetHeight();
+    const float texWidthF = static_cast<float>(texWidth);
+    const float texHeightF = static_cast<float>(texHeight);
 
     // Triangle bounding box (clamped)
     int minX = std::max(0, (int)std::floor(std::min({ v1.X(), v2.X(), v3.X() })));
-    int maxX = std::min((int)Screen::GetInstance().GetVisibleWidth() - 1, (int)std::ceil (std::max({ v1.X(), v2.X(), v3.X() })));
+    int maxX = std::min(screenWidth - 1, (int)std::ceil (std::max({ v1.X(), v2.X(), v3.X() })));
     int minY = std::max(0, (int)std::floor(std::min({ v1.Y(), v2.Y(), v3.Y() })));
-    int maxY = std::min((int)Screen::GetInstance().GetHeight()       - 1, (int)std::ceil (std::max({ v1.Y(), v2.Y(), v3.Y() })));
+    int maxY = std::min(screenHeight - 1, (int)std::ceil (std::max({ v1.Y(), v2.Y(), v3.Y() })));
     if (minX > maxX || minY > maxY) return;
 
     // Vertex positions
@@ -803,28 +897,38 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& v1, const VERTEX& v
     const float invSignedArea = 1.0f / signedArea;
 
     // Sub-pixel pattern
-    const auto subPixelOffsets = GetSubpixelOffsets();
+    const auto& subPixelOffsets = GetSubpixelOffsets();
     const int sampleCount = (int)subPixelOffsets.size();
-
-    Screen& screen = Screen::GetInstance();
-    float* depth = screen.GetDepthBuffer();
-    const int screenWidth = screen.GetVisibleWidth();
 
     for (int y = minY; y <= maxY; ++y) {
         const float baseY = y + 0.5f;
-        const int rowOffset = y * screenWidth;
+        const size_t rowOffset = y * screenWidth;
+        
+        // Initialize edge functions at start of row (x = minX + 0.5)
+        const float startX = minX + 0.5f;
+        float e12c = A12 * startX + B12 * baseY + C12;
+        float e23c = A23 * startX + B23 * baseY + C23;
+        float e31c = A31 * startX + B31 * baseY + C31;
+        
         for (int x = minX; x <= maxX; ++x) {
             const float baseX = x + 0.5f;
 
-            glm::vec3 rgbAccum(0.0f); float depthAccum = 0.0f; int insideSamples = 0;
+            glm::vec4 rgbAccum(0.0f); float depthAccum = 0.0f; int insideSamples = 0;
 
-            // Pixel center edge evaluations
-            const float e12c = A12 * baseX + B12 * baseY + C12;
-            const float e23c = A23 * baseX + B23 * baseY + C23;
-            const float e31c = A31 * baseX + B31 * baseY + C31;
+            // Use current edge function values (already computed incrementally)
 
             // If clearly outside (all negative beyond margin) skip
-            if (e12c < -1.1f && e23c < -1.1f && e31c < -1.1f) continue;
+            if (e12c < -1.1f && e23c < -1.1f && e31c < -1.1f) {
+                // Increment edge functions for next pixel
+                e12c += A12;
+                e23c += A23;
+                e31c += A31;
+                continue;
+            }
+
+            // Pre-fetch current depth for early rejection
+            const size_t depthIndex = rowOffset + x;
+            const float currentDepth = _depth_buffer[depthIndex];
 
             // Multisample path
             for (int si = 0; si < sampleCount; ++si) {
@@ -838,38 +942,45 @@ void Renderer::DrawTriangleTexturedAntialiased(const VERTEX& v1, const VERTEX& v
                 const float wB = e31 * invSignedArea;
                 const float wC = 1.0f - wA - wB;
                 const float perspW = wA*w1p + wB*w2p + wC*w3p;
+                
+                // Early depth test BEFORE expensive texture sampling
+                // Note: Uses reverse depth (larger = closer), so reject if perspW <= currentDepth
+                if (perspW <= currentDepth) continue;
+                
                 const float invPerspW = 1.0f / perspW;
                 const float tu = (wA*u1 + wB*u2 + wC*u3) * invPerspW;
                 const float tv = (wA*v1t + wB*v2t + wC*v3t) * invPerspW;
                 if (tu < 0.f || tu >= 1.f || tv < 0.f || tv >= 1.f) continue;
-                const float sX = tu * texWidth;
-                const float sY = tv * texHeight;
-                rgbAccum += tex->GetPixelRGB(sX, sY);
+                const float sX = tu * texWidthF;
+                const float sY = tv * texHeightF;
+                rgbAccum += tex->GetPixelRGBA(sX, sY);
                 depthAccum += perspW;
                 ++insideSamples;
             }
 
             if (insideSamples) {
-                const int idx = rowOffset + x;
-                const float avgDepth = depthAccum / insideSamples;
-                if (avgDepth > depth[idx]) {
-                    const glm::vec3 c = rgbAccum * (1.0f / insideSamples);
-                    screen.PlotPixel(glm::vec2(x, y), GetCharInfo(c));
-                    depth[idx] = avgDepth;
-                }
+                const float inv_inside_samples = 1.0f / insideSamples;
+                const float avgDepth = depthAccum * inv_inside_samples;
+                const glm::vec4 c = rgbAccum * inv_inside_samples;
+                PlotColorBlend(x, y, c, avgDepth);
             }
+            
+            // Increment edge functions for next pixel (moving right by 1.0)
+            e12c += A12;
+            e23c += A23;
+            e31c += A31;
         }
     }
 }
 
-void Renderer::DrawLine(const int x1, const int y1, const int x2, const int y2, const WCHAR pixel_type, const unsigned short col) {
+void Renderer::DrawLinePxBuff(const int x1, const int y1, const int x2, const int y2, const WCHAR pixel_type, const unsigned short col) {
     int dx = abs(x2 - x1);
     int dy = abs(y2 - y1);
     int incx = (x2 > x1) ? 1 : -1;
     int incy = (y2 > y1) ? 1 : -1;
     int x = x1, y = y1;
 
-    Screen::GetInstance().PlotPixel(x, y, pixel_type, col);
+    Screen::GetInst().PlotPixel(x, y, pixel_type, col);
 
     if (dx > dy) {
         int e = 2 * dy - dx;
@@ -881,7 +992,7 @@ void Renderer::DrawLine(const int x1, const int y1, const int x2, const int y2, 
             } else {
                 e += 2 * dy;
             }
-            Screen::GetInstance().PlotPixel(x, y, pixel_type, col);
+            Screen::GetInst().PlotPixel(x, y, pixel_type, col);
         }
     } else {
         int e = 2 * dx - dy;
@@ -893,16 +1004,67 @@ void Renderer::DrawLine(const int x1, const int y1, const int x2, const int y2, 
             } else {
                 e += 2 * dx;
             }
-            Screen::GetInstance().PlotPixel(x, y, pixel_type, col);
+            Screen::GetInst().PlotPixel(x, y, pixel_type, col);
         }
     }
 }
 
-void Renderer::DrawTriangleWireframe(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const WCHAR pixel_type, const unsigned short col) {
+void Renderer::DrawLineColBuff(const int x1, const int y1, const int x2, const int y2, const glm::vec4& col) {
+    int dx = abs(x2 - x1);
+    int dy = abs(y2 - y1);
+    int incx = (x2 > x1) ? 1 : -1;
+    int incy = (y2 > y1) ? 1 : -1;
+    int x = x1, y = y1;
+
+    PlotColorBlend(x, y, col, 1.0f);
+
+    if (dx > dy) {
+        int e = 2 * dy - dx;
+        for (int i = 0; i < dx; ++i) {
+            x += incx;
+            if (e >= 0) {
+                y += incy;
+                e += 2 * (dy - dx);
+            } else {
+                e += 2 * dy;
+            }
+            PlotColorBlend(x, y, col, 1.0f);
+        }
+    } else {
+        int e = 2 * dx - dy;
+        for (int i = 0; i < dy; ++i) {
+            y += incy;
+            if (e >= 0) {
+                x += incx;
+                e += 2 * (dx - dy);
+            } else {
+                e += 2 * dx;
+            }
+            PlotColorBlend(x, y, col, 1.0f);
+        }
+    }
+}
+
+void Renderer::DrawLineColBuff(int x1, int y1, int x2, int y2, const glm::vec3& col) {
+    DrawLineColBuff(x1, y1, x2, y2, glm::vec4(col, 1.0f));
+}
+
+void Renderer::DrawTriangleWireframePxBuff(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const WCHAR pixel_type, const unsigned short col) {
 	// RENDERING LINES BETWEEN VERTICES
-	DrawLine((int) vert1.X(), (int) vert1.Y(), (int) vert2.X(), (int) vert2.Y(), pixel_type, col);
-	DrawLine((int) vert2.X(), (int) vert2.Y(), (int) vert3.X(), (int) vert3.Y(), pixel_type, col);
-	DrawLine((int) vert3.X(), (int) vert3.Y(), (int) vert1.X(), (int) vert1.Y(), pixel_type, col);
+	DrawLinePxBuff((int) vert1.X(), (int) vert1.Y(), (int) vert2.X(), (int) vert2.Y(), pixel_type, col);
+	DrawLinePxBuff((int) vert2.X(), (int) vert2.Y(), (int) vert3.X(), (int) vert3.Y(), pixel_type, col);
+	DrawLinePxBuff((int) vert3.X(), (int) vert3.Y(), (int) vert1.X(), (int) vert1.Y(), pixel_type, col);
+}
+
+void Renderer::DrawTriangleWireframeColBuff(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::vec4& col) {
+    // RENDERING LINES BETWEEN VERTICES
+    DrawLineColBuff((int) vert1.X(), (int) vert1.Y(), (int) vert2.X(), (int) vert2.Y(), col);
+    DrawLineColBuff((int) vert2.X(), (int) vert2.Y(), (int) vert3.X(), (int) vert3.Y(), col);
+    DrawLineColBuff((int) vert3.X(), (int) vert3.Y(), (int) vert1.X(), (int) vert1.Y(), col);
+}
+
+void Renderer::DrawTriangleWireframeColBuff(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::vec3& col) {
+    DrawTriangleWireframeColBuff(vert1, vert2, vert3, glm::vec4(col, 1.0f));
 }
 
 // =============================================================================
@@ -913,8 +1075,8 @@ void Renderer::ViewPortTransform(VERTEX& vertice) {
 	// transforms vertice from [-1 to 1] to [0 to scr_dim]
 	// Flip Y to match screen coordinates where Y=0 is at top
 	glm::vec4 newPos = glm::vec4(
-		((vertice.X() + 1.0f) / 2.0f) * Screen::GetInstance().GetVisibleWidth(), 
-		((1.0f - vertice.Y()) / 2.0f) * Screen::GetInstance().GetHeight(),  // Flipped Y
+		((vertice.X() + 1.0f) / 2.0f) * Screen::GetInst().GetVisibleWidth(), 
+		((1.0f - vertice.Y()) / 2.0f) * Screen::GetInst().GetHeight(),  // Flipped Y
 		vertice.Z(), 
 		vertice.W()
 	);
@@ -969,61 +1131,80 @@ void Renderer::ClippingHelper(const std::vector<VERTEX>& vertices, std::vector<V
 
 std::vector<VERTEX> Renderer::Clipping(const std::vector<VERTEX>& vertices, const int component, const bool Near) {
     std::vector<VERTEX> clipped;
+    clipped.reserve(vertices.size() * 2); // Clipping can double triangle count
 
     for (int i = 0; i < static_cast<int>(vertices.size()); i += 3)
     {
-        std::vector<int> inside;
-        std::vector<int> outside;
+        const VERTEX& v0 = vertices[i];
+        const VERTEX& v1 = vertices[i + 1];
+        const VERTEX& v2 = vertices[i + 2];
 
-        VERTEX temp[6];
-        int newTri = 0;
-
-        // Use direct array indexing for w and component
+        // Classify vertices
         auto isInside = [&](const VERTEX& v) {
             float w = v.W();
             float val = v.data[component];
             return Near ? (val > -w) : (val < w);
         };
 
-        if (isInside(vertices[i]))      inside.push_back(i);      else outside.push_back(i);
-        if (isInside(vertices[i + 1]))  inside.push_back(i + 1);  else outside.push_back(i + 1);
-        if (isInside(vertices[i + 2]))  inside.push_back(i + 2);  else outside.push_back(i + 2);
+        bool in0 = isInside(v0);
+        bool in1 = isInside(v1);
+        bool in2 = isInside(v2);
+        int insideCount = (in0 ? 1 : 0) + (in1 ? 1 : 0) + (in2 ? 1 : 0);
 
-        if (inside.size() == 3) {
-            clipped.push_back(vertices[inside[0]]);
-            clipped.push_back(vertices[inside[1]]);
-            clipped.push_back(vertices[inside[2]]);
-            continue;
+        // All vertices inside - keep triangle as-is
+        if (insideCount == 3) {
+            clipped.push_back(v0);
+            clipped.push_back(v1);
+            clipped.push_back(v2);
         }
-        else if (inside.size() == 1) {
-            VERTEX newPos1 = HomogenousPlaneIntersect(vertices[inside[0]], vertices[outside[0]], component, Near);
-            VERTEX newPos2 = HomogenousPlaneIntersect(vertices[inside[0]], vertices[outside[1]], component, Near);
-
-            temp[outside[0] - i] = newPos1;
-            temp[outside[1] - i] = newPos2;
-            temp[inside[0] - i] = vertices[inside[0]];
-            newTri = 3;
+        // One vertex inside - create 1 smaller triangle
+        else if (insideCount == 1) {
+            VERTEX insideVert, outsideVert0, outsideVert1;
+            
+            if (in0) {
+                insideVert = v0; outsideVert0 = v1; outsideVert1 = v2;
+            } else if (in1) {
+                insideVert = v1; outsideVert0 = v2; outsideVert1 = v0;
+            } else { // in2
+                insideVert = v2; outsideVert0 = v0; outsideVert1 = v1;
+            }
+            
+            VERTEX newVert0 = HomogenousPlaneIntersect(insideVert, outsideVert0, component, Near);
+            VERTEX newVert1 = HomogenousPlaneIntersect(insideVert, outsideVert1, component, Near);
+            
+            // Output triangle with correct winding
+            clipped.push_back(insideVert);
+            clipped.push_back(newVert0);
+            clipped.push_back(newVert1);
         }
-        else if (inside.size() == 2) {
-            VERTEX newPos1 = HomogenousPlaneIntersect(vertices[inside[0]], vertices[outside[0]], component, Near);
-            VERTEX newPos2 = HomogenousPlaneIntersect(vertices[inside[1]], vertices[outside[0]], component, Near);
-
-            // triangle 1
-            temp[inside[0] - i] = vertices[inside[0]];
-            temp[inside[1] - i] = vertices[inside[1]];
-            temp[outside[0] - i] = newPos1;
-
-            // triangle 2
-            temp[outside[0] - i + 3] = newPos2;
-            temp[inside[0] - i + 3] = newPos1;
-            temp[inside[1] - i + 3] = vertices[inside[1]];
-            newTri = 6;
+        // Two vertices inside - create 2 triangles (quad split)
+        else if (insideCount == 2) {
+            VERTEX insideVert0, insideVert1, outsideVert;
+            
+            if (!in0) {
+                outsideVert = v0; insideVert0 = v1; insideVert1 = v2;
+            } else if (!in1) {
+                outsideVert = v1; insideVert0 = v2; insideVert1 = v0;
+            } else { // !in2
+                outsideVert = v2; insideVert0 = v0; insideVert1 = v1;
+            }
+            
+            VERTEX newVert0 = HomogenousPlaneIntersect(insideVert0, outsideVert, component, Near);
+            VERTEX newVert1 = HomogenousPlaneIntersect(insideVert1, outsideVert, component, Near);
+            
+            // Triangle 1: insideVert0, insideVert1, newVert0
+            clipped.push_back(insideVert0);
+            clipped.push_back(insideVert1);
+            clipped.push_back(newVert0);
+            
+            // Triangle 2: insideVert1, newVert1, newVert0
+            clipped.push_back(insideVert1);
+            clipped.push_back(newVert1);
+            clipped.push_back(newVert0);
         }
-        
-        for (int k = 0; k < newTri; k++) {
-            clipped.push_back(temp[k]);
-        }
+        // else insideCount == 0: triangle completely outside, discard
     }
+    
     return clipped;
 }
 
@@ -1048,7 +1229,7 @@ VERTEX Renderer::HomogenousPlaneIntersect(const VERTEX& vert2, const VERTEX& ver
     else
         t = (i0 - w0) / (vi - vw); // far clipping
 
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 7; i++)
         newVert.data[i] = glm::mix(vert1.data[i], vert2.data[i], t); // interpolate attributes
 
     return newVert;
@@ -1083,7 +1264,7 @@ glm::mat4 Renderer::CalcModelMatrix(const glm::vec3& position, const float rotat
 }
 
 CHAR_INFO Renderer::GetCharInfo(const glm::vec3& rgb) {
-    Palette& palette = Screen::GetInstance().GetPalette();
+    Palette& palette = Screen::GetInst().GetPalette();
     // Use precomputed LUT if available
     if (_colorLUTComputed) {
         // Convert RGB to discrete indices for LUT lookup
@@ -1139,7 +1320,7 @@ void Renderer::SetAntialiasingsamples(int samples) {
     _antialiasing_samples = std::max(1, std::min(16, samples));
 }
 
-int Renderer::GetAntialiasingsamples() {
+int Renderer::GetAntialiasingsamples() const {
     return _antialiasing_samples;
 }
 
@@ -1147,7 +1328,7 @@ void Renderer::SetWireframe(bool wireframe) {
     _wireframe = wireframe;
 }
 
-bool Renderer::GetWireframe() {
+bool Renderer::GetWireframe() const {
     return _wireframe;
 }
 
@@ -1155,7 +1336,7 @@ void Renderer::SetBackfaceCulling(bool backfaceCulling) {
     _backface_culling = backfaceCulling;
 }
 
-bool Renderer::GetBackfaceCulling() {
+bool Renderer::GetBackfaceCulling() const {
     return _backface_culling;
 }
 
@@ -1163,7 +1344,7 @@ void Renderer::SetCCW(bool ccw) {
     _ccw = ccw;
 }
 
-bool Renderer::GetCCW() {
+bool Renderer::GetCCW() const {
     return _ccw;
 }
 
@@ -1171,7 +1352,7 @@ void Renderer::SetAntialiasing(bool antialiasing) {
     _antialiasing = antialiasing;
 }
 
-bool Renderer::GetAntialiasing() {
+bool Renderer::GetAntialiasing() const {
     return _antialiasing;
 }
 
@@ -1180,7 +1361,7 @@ void Renderer::SetContrast(const float contrast) {
     _colorLUTComputed = false; // Mark LUT for recomputation
 }
 
-float Renderer::GetContrast() {
+float Renderer::GetContrast() const {
     return _contrast;
 }
 
@@ -1188,7 +1369,7 @@ void Renderer::InvalidateTiles() {
     _tilesInitialized = false;
 }
 
-std::vector<std::pair<float, float>> Renderer::GenerateSubPixelOffsets(int sampleCount) {
+void Renderer::GenerateSubPixelOffsets(int sampleCount) {
     std::vector<std::pair<float, float>> offsets;
     
     if (sampleCount == 1) {
@@ -1216,18 +1397,18 @@ std::vector<std::pair<float, float>> Renderer::GenerateSubPixelOffsets(int sampl
         }
     }
     
-    return offsets;
+    _subpixel_offsets = std::move(offsets);
 }
 
-std::vector<std::pair<float, float>> Renderer::GetSubpixelOffsets() {
+const std::vector<std::pair<float, float>>& Renderer::GetSubpixelOffsets() {
     if (_subpixel_offsets.empty()) {
-        _subpixel_offsets = GenerateSubPixelOffsets(_antialiasing_samples);
+        GenerateSubPixelOffsets(_antialiasing_samples);
     }
     return _subpixel_offsets;
 }
 
 void Renderer::TestRenderFont() {
-    Screen& screen = Screen::GetInstance();
+    Screen& screen = Screen::GetInst();
     int screenWidth = screen.GetVisibleWidth();
     int screenHeight = screen.GetHeight();
     
@@ -1274,7 +1455,7 @@ void Renderer::TestRenderFont() {
 }
 
 void Renderer::PrecomputeColorLUT() {
-    Palette& palette = Screen::GetInstance().GetPalette();
+    Palette& palette = Screen::GetInst().GetPalette();
     if (_colorLUTComputed) return;
     // Precompute all possible RGB combinations
     for (int r = 0; r < _rgbLUTDepth; ++r) {
@@ -1329,7 +1510,7 @@ void Renderer::PrecomputeColorLUT() {
 }
 
 void Renderer::TestRenderColorDiscrete() {
-    Screen& screen = Screen::GetInstance();
+    Screen& screen = Screen::GetInst();
     int screenWidth = screen.GetVisibleWidth();
     int screenHeight = screen.GetHeight();
 
@@ -1369,5 +1550,96 @@ void Renderer::TestRenderColorDiscrete() {
                 screen.PlotPixel(glm::vec2(x, y), charInfo);
             }
         }
+    }
+}
+
+void Renderer::ClearBuffers() {
+    std::fill(_depth_buffer.begin(), _depth_buffer.end(), -FLT_MAX);
+    std::fill(_color_buffer.begin(), _color_buffer.end(), glm::vec4(_background_col, 1.0f));
+}
+
+glm::vec3 Renderer::GetBackgroundCol() const {
+    return _background_col;
+}
+
+void Renderer::SetBackgroundCol(const glm::vec3& col) {
+    _background_col = glm::clamp(col, glm::vec3(0.0f), glm::vec3(1.0f));
+}
+
+void Renderer::OverwritePxBuffWithColBuff() {
+    for (size_t i = 0; i < _color_buffer.size(); ++i) {
+        Screen::GetInst().PlotPixel(i, GetCharInfo(_color_buffer[i]));
+    }
+}
+
+void Renderer::PlotColor(int x, int y, const glm::vec3& color) {
+    const int screenWidth = Screen::GetInst().GetVisibleWidth();
+    const int screenHeight = Screen::GetInst().GetHeight();
+    
+    if (x < 0 || x >= screenWidth || y < 0 || y >= screenHeight) {
+        return;
+    }
+
+    _color_buffer[y * screenWidth + x] = glm::vec4(color, 1.0f);
+}
+
+void Renderer::PlotColor(int x, int y, const glm::vec4& color) {
+    const int screenWidth = Screen::GetInst().GetVisibleWidth();
+    const int screenHeight = Screen::GetInst().GetHeight();
+    
+    if (x < 0 || x >= screenWidth || y < 0 || y >= screenHeight) {
+        return;
+    }
+
+    _color_buffer[y * screenWidth + x] = color;
+}
+
+void Renderer::PlotColor(int x, int y, const glm::vec4& color, float depth) {
+    const int screenWidth = Screen::GetInst().GetVisibleWidth();
+    const int screenHeight = Screen::GetInst().GetHeight();
+    
+    if (x < 0 || x >= screenWidth || y < 0 || y >= screenHeight) {
+        return;
+    }
+
+    const int idx = y * screenWidth + x;
+    if (depth > _depth_buffer[idx]) {
+        _color_buffer[idx] = color;
+        _depth_buffer[idx] = depth;
+    }
+}
+
+void Renderer::PlotColorBlend(int x, int y, const glm::vec4& color, float depth) {
+    const int screenWidth = Screen::GetInst().GetVisibleWidth();
+    const int screenHeight = Screen::GetInst().GetHeight();
+    
+    if (x < 0 || x >= screenWidth || y < 0 || y >= screenHeight) {
+        return;
+    }
+
+    const int idx = y * screenWidth + x;
+    
+    // for now since we don't have depth ordering, it just assumes everything is opaque
+    if (depth > _depth_buffer[idx]) {
+        _color_buffer[idx] = color;
+        _depth_buffer[idx] = depth;
+    }
+}
+
+void Renderer::PerspectiveAndViewportTransformHelper(std::vector<VERTEX>& vertices) {
+    // Better: Batch processing if vertices < 1000, otherwise parallel
+    if (vertices.size() < 1000) {
+        // Sequential for small batches (avoids thread overhead)
+        for (auto& v : vertices) {
+            PerspectiveDivision(v);
+            ViewPortTransform(v);
+        }
+    } else {
+        // Parallel only for large batches
+        std::for_each(std::execution::par_unseq, vertices.begin(), vertices.end(), 
+            [this](VERTEX& v) {
+                PerspectiveDivision(v);
+                ViewPortTransform(v);
+            });
     }
 }

@@ -11,6 +11,7 @@
 #include <memory>
 #include <chrono>
 #include <deque>
+#include <vector>
 
 // Platform-specific includes
 #ifdef _WIN32
@@ -48,16 +49,14 @@ private:
 #else
     // std::unique_ptr<GenericImpl> genericImpl;
 #endif
+    bool _initialized = false;
+
     // Platform-agnostic member variables (now instance members)
     unsigned int _true_screen_width = 0;
     unsigned int _visible_screen_width = 0;
     unsigned int _screen_height = 0;
     std::wstring _title = L"";
     unsigned int _fontSize = 0;
-    unsigned short _backgroundCol = 0x0;
-
-    // Buffers
-    float* depthBuffer = nullptr;
 
     // Color palette that the terminal uses
     Palette _palette;
@@ -85,22 +84,22 @@ private:
     Screen& operator=(const Screen&) = delete;
 
 public:
-    static Screen& GetInstance() {
+    static Screen& GetInst() {
         static Screen instance;
         return instance;
     }
 
     // Construction
-    int InitializeScreen(
+    int Initialize(
         const unsigned int visible_width, 
         const unsigned int height, 
         const std::wstring title, 
         const unsigned int fontSize, 
         const unsigned int fpsCap, 
         const float fpsWindowSec,
-        const unsigned short backgroundCol,
         const Palette palette = Palette()
     );
+    bool IsInitialized() const;
 
     // Fps management
     void StartFPSClock();
@@ -109,12 +108,13 @@ public:
 
     // Rendering and buffer management
     void RenderTitle(const bool showFps);
-    void ClearBuffer();
+    void ClearPixelBuffer();
     void OutputBuffer();
     void PlotPixel(const glm::vec2& p, const WCHAR character, const unsigned short Colour);
     void PlotPixel(const glm::vec2& p, const CHAR_INFO charCol);
     void PlotPixel(int x, int y, const WCHAR character, const unsigned short Colour);
     void PlotPixel(int x, int y, const CHAR_INFO charCol);
+    void PlotPixel(int idx, const CHAR_INFO charCol); // Overload for 1D index
 
     // title font and screen properties
     std::wstring GetTitle();
@@ -132,19 +132,11 @@ public:
     void SetTileSize(const unsigned int x, const unsigned int y);
     void CalculateTileCounts();
 
-    // background color
-    unsigned short GetBackgroundColor();
-    void SetBackgroundColor(const unsigned short color);
-
     // palette
     Palette& GetPalette();
 
     // Public buffer access (needed for renderer)
-    CHAR_INFO* GetPixelBuffer();
-    float* GetDepthBuffer();
-
-    // Cleanup
-    void Cleanup();
+    std::vector<CHAR_INFO>& GetPixelBuffer();
 
 private:
     // FPS management methods (now instance methods)

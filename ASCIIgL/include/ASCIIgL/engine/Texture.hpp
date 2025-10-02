@@ -31,6 +31,7 @@ public:
 	
 	// returns RGB color as vec3 with values between 0 and 1
 	glm::vec3 GetPixelRGB(int x, int y) const;
+	glm::vec4 GetPixelRGBA(int x, int y) const;
 private:
 	// Forward declaration for PIMPL pattern
 	class Impl;

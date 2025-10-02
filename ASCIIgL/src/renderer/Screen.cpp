@@ -41,6 +41,9 @@
     class Screen::WindowsImpl {
     private:
         Screen& screen;  // Reference to the Screen instance
+
+        // Buffers for Windows console output
+        std::vector<CHAR_INFO> _pixelBuffer;
     
     public:
         // Console handles and coordinate structures
@@ -49,30 +52,26 @@
         COORD dwBufferCoord = {0, 0};
         SMALL_RECT rcRegion = {0, 0, 0, 0};
 
-        // Buffers for Windows console output
-        CHAR_INFO* pixelBuffer = nullptr;
 
         // Constructor takes Screen reference
         WindowsImpl(Screen& screenRef) : screen(screenRef) {}
 
         // Destructor
         ~WindowsImpl() {
-            if (pixelBuffer) {
-                delete[] pixelBuffer;
-                pixelBuffer = nullptr;
-            }
+            _pixelBuffer.clear();
         }
 
         // Implementation methods
         int Initialize(const unsigned int true_width, const unsigned int height, const unsigned int fontSize, const Palette& palette);
-        void ClearBuffer();
+        void ClearPixelBuffer();
         void OutputBuffer();
         void RenderTitle(const bool showFps);
         void PlotPixel(const glm::vec2& p, const WCHAR character, const unsigned short Colour);
         void PlotPixel(const glm::vec2& p, const CHAR_INFO charCol);
         void PlotPixel(int x, int y, const WCHAR character, const unsigned short Colour);
         void PlotPixel(int x, int y, const CHAR_INFO charCol);
-        CHAR_INFO* GetPixelBuffer();
+        void PlotPixel(int idx, const CHAR_INFO charCol); // Overload for 1D index
+        std::vector<CHAR_INFO>& GetPixelBuffer();
 
         // Windows terminal font stuff
         void SetFontTerminal(HANDLE currentHandle, unsigned int fontSize);
@@ -204,18 +203,17 @@ int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigne
     SetConsoleActiveScreenBuffer(_hOutput);
 
     Logger::Debug(L"Deleting old buffers and creating new ones.");
-	if (pixelBuffer) { delete[] pixelBuffer; pixelBuffer = nullptr; }
-	pixelBuffer = new CHAR_INFO[adjustedWidth * adjustedHeight];
+	_pixelBuffer.resize(adjustedWidth * adjustedHeight);
 
     return SCREEN_NOERROR;
 }
 
-void Screen::WindowsImpl::ClearBuffer() {
-    std::fill(pixelBuffer, pixelBuffer + screen._true_screen_width * screen._screen_height, CHAR_INFO{L' ', static_cast<WORD>(screen._backgroundCol << 4)});
+void Screen::WindowsImpl::ClearPixelBuffer() {
+    std::fill(_pixelBuffer.begin(), _pixelBuffer.end(), CHAR_INFO{L' ', 0x00});
 }
 
 void Screen::WindowsImpl::OutputBuffer() {
-    WriteConsoleOutputW(_hOutput, pixelBuffer, dwBufferSize, dwBufferCoord, &rcRegion);
+    WriteConsoleOutputW(_hOutput, _pixelBuffer.data(), dwBufferSize, dwBufferCoord, &rcRegion);
 }
 
 void Screen::WindowsImpl::RenderTitle(const bool showFps) {
@@ -243,10 +241,10 @@ void Screen::WindowsImpl::PlotPixel(const glm::vec2& p, const WCHAR character, c
     int y = static_cast<int>(p.y);
     if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot the pixel twice horizontally
-        pixelBuffer[y * screen._true_screen_width + x].Char.UnicodeChar = character;
-        pixelBuffer[y * screen._true_screen_width + x].Attributes = static_cast<WORD>(Colour);
-        pixelBuffer[y * screen._true_screen_width + x + 1].Char.UnicodeChar = character;
-        pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = static_cast<WORD>(Colour);
+        _pixelBuffer[y * screen._true_screen_width + x].Char.UnicodeChar = character;
+        _pixelBuffer[y * screen._true_screen_width + x].Attributes = static_cast<WORD>(Colour);
+        _pixelBuffer[y * screen._true_screen_width + x + 1].Char.UnicodeChar = character;
+        _pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = static_cast<WORD>(Colour);
     }
 }
 
@@ -255,8 +253,8 @@ void Screen::WindowsImpl::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol)
     int y = static_cast<int>(p.y);
     if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot the pixel twice horizontally
-        pixelBuffer[y * screen._true_screen_width + x] = charCol;
-        pixelBuffer[y * screen._true_screen_width + x + 1] = charCol;
+        _pixelBuffer[y * screen._true_screen_width + x] = charCol;
+        _pixelBuffer[y * screen._true_screen_width + x + 1] = charCol;
     }
 }
 
@@ -264,10 +262,10 @@ void Screen::WindowsImpl::PlotPixel(int x, int y, WCHAR character, const unsigne
     x *= 2; // Double the x coordinate for wide buffer
     if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot the pixel twice horizontally
-        pixelBuffer[y * screen._true_screen_width + x].Char.UnicodeChar = character;
-        pixelBuffer[y * screen._true_screen_width + x].Attributes = static_cast<WORD>(Colour);
-        pixelBuffer[y * screen._true_screen_width + x + 1].Char.UnicodeChar = character;
-        pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = static_cast<WORD>(Colour);
+        _pixelBuffer[y * screen._true_screen_width + x].Char.UnicodeChar = character;
+        _pixelBuffer[y * screen._true_screen_width + x].Attributes = static_cast<WORD>(Colour);
+        _pixelBuffer[y * screen._true_screen_width + x + 1].Char.UnicodeChar = character;
+        _pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = static_cast<WORD>(Colour);
     }
 }
 
@@ -275,13 +273,21 @@ void Screen::WindowsImpl::PlotPixel(int x, int y, CHAR_INFO charCol) {
     x *= 2; // Double the x coordinate for wide buffer
     if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot the pixel twice horizontally
-        pixelBuffer[y * screen._true_screen_width + x] = charCol;
-        pixelBuffer[y * screen._true_screen_width + x + 1] = charCol;
+        _pixelBuffer[y * screen._true_screen_width + x] = charCol;
+        _pixelBuffer[y * screen._true_screen_width + x + 1] = charCol;
     }
 }
 
-CHAR_INFO* Screen::WindowsImpl::GetPixelBuffer() {
-    return pixelBuffer;
+void Screen::WindowsImpl::PlotPixel(int idx, const CHAR_INFO charCol) {
+    idx *= 2; // Adjust index for wide buffer
+    if (idx >= 0 && idx < static_cast<int>(screen._true_screen_width * screen._screen_height)) {
+        _pixelBuffer[idx] = charCol;
+        _pixelBuffer[idx + 1] = charCol; // Plot the pixel twice horizontally
+    }
+}
+
+std::vector<CHAR_INFO>& Screen::WindowsImpl::GetPixelBuffer() {
+    return _pixelBuffer;
 }
 
 bool Screen::WindowsImpl::IsTerminal() {
@@ -314,16 +320,17 @@ bool Screen::WindowsImpl::IsTerminal() {
 
 // Custom constructor and destructor for PIMPL pattern - must be defined where WindowsImpl is complete
 Screen::Screen() = default;
-Screen::~Screen() = default;
+Screen::~Screen() {
+    _impl.reset();
+}
 
-int Screen::InitializeScreen(
+int Screen::Initialize(
     const unsigned int visible_width, 
     const unsigned int height, 
     const std::wstring title, 
     const unsigned int fontSize, 
     const unsigned int fpsCap, 
     const float fpsWindowSec, 
-    const unsigned short backgroundCol,
     const Palette palette
 ) {
     Logger::Debug(L"CPU has max " + std::to_wstring(std::thread::hardware_concurrency()) + L" threads.");
@@ -379,18 +386,16 @@ int Screen::InitializeScreen(
 
     Logger::Debug(L"Deleting old buffers and creating new ones.");
     // Note: Windows pixel buffer is handled in WindowsImpl::Initialize
-    
-    if (depthBuffer) { delete[] depthBuffer; depthBuffer = nullptr; }
-    depthBuffer = new float[_visible_screen_width * height];
 
     Logger::Debug(L"Clearing buffers for first draw.");
-    _backgroundCol = backgroundCol;
-    ClearBuffer();
+    ClearPixelBuffer();
 
     Logger::Debug(L"Setting console title.");
     RenderTitle(true);
 
     Logger::Debug(L"Screen initialization complete.");
+    
+    _initialized = true;
     return SCREEN_NOERROR;
 }
 
@@ -398,10 +403,9 @@ void Screen::RenderTitle(const bool showFps) {
     _impl->RenderTitle(showFps);
 }
 
-void Screen::ClearBuffer() {
+void Screen::ClearPixelBuffer() {
 	// clears the buffer by setting the entire buffer to spaces (ascii code 32)
-    _impl->ClearBuffer();
-	std::fill(depthBuffer, depthBuffer + _visible_screen_width * _screen_height, -1.0f);
+    _impl->ClearPixelBuffer();
 }
 
 void Screen::OutputBuffer() {
@@ -422,6 +426,10 @@ void Screen::PlotPixel(int x, int y, const WCHAR character, const unsigned short
 
 void Screen::PlotPixel(int x, int y, const CHAR_INFO charCol) {
     _impl->PlotPixel(x, y, charCol);
+}
+
+void Screen::PlotPixel(int idx, const CHAR_INFO charCol) {
+    _impl->PlotPixel(idx, charCol); // Divide x by 2 for wide buffer
 }
 
 float Screen::GetDeltaTime() {
@@ -480,20 +488,8 @@ void Screen::CalculateTileCounts() {
     TILE_COUNT_Y = (_screen_height + TILE_SIZE_Y - 1) / TILE_SIZE_Y;
 }
 
-unsigned short Screen::GetBackgroundColor() {
-    return _backgroundCol;
-}
-
-void Screen::SetBackgroundColor(const unsigned short color) {
-    _backgroundCol = color;
-}
-
-CHAR_INFO* Screen::GetPixelBuffer() {
+std::vector<CHAR_INFO>& Screen::GetPixelBuffer() {
     return _impl->GetPixelBuffer();
-}
-
-float* Screen::GetDepthBuffer() {
-    return depthBuffer;
 }
 
 void Screen::StartFPSClock() {
@@ -537,10 +533,6 @@ void Screen::FPSSampleCalculate(const double currentDeltaTime) {
 
     double calculatedFps = _frameTimes.size() * (1 / _currDeltaSum);
     _fps = calculatedFps;
-}
-
-void Screen::Cleanup() {
-    _impl.reset();
 }
 
 void Screen::WindowsImpl::SetFontConsole(HANDLE currentHandle, unsigned int fontSize) {
@@ -921,4 +913,8 @@ void Screen::WindowsImpl::SetPaletteConsole(const Palette& palette, HANDLE& hOut
     }
     
     Logger::Info(L"Successfully set console palette for legacy Command Prompt.");
+}
+
+bool Screen::IsInitialized() const {
+    return _initialized;
 }

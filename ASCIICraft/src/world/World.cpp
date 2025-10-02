@@ -229,7 +229,7 @@ void World::GenerateGrassLayerChunk(const ChunkCoord& coord) {
 void World::GenerateOneBlockGrassChunk(const ChunkCoord& coord) {
     Chunk* chunk = GetChunk(coord);
     if (chunk) {
-        chunk->SetBlock(0, 0, 0, Block(BlockType::Diamond_Ore));
+        chunk->SetBlock(0, 0, 0, Block(BlockType::Grass));
         chunk->SetGenerated(true);
         chunk->GenerateMesh();
     }

@@ -44,7 +44,7 @@ Game::~Game() {
 	delete Instance, player, LevelModel, Level, PresentModel, MariahModel, Mariah2Model;
 }
 
-Game* Game::GetInstance() {
+Game* Game::GetInst() {
 	if (Instance == nullptr)
 	{
 		Instance = new Game();
@@ -80,28 +80,32 @@ void Game::Run() {
     }};
     Palette gamePalette = Palette(paletteEntries); // Default palette
 
-    const int screenInitResult = Screen::GetInstance().InitializeScreen(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 3, 60, 1.0f, 0x0, gamePalette);
-	SCR_WIDTH = Screen::GetInstance().GetVisibleWidth();
-	SCR_HEIGHT = Screen::GetInstance().GetHeight();
-	guiCamera.setScreenDimensions(SCR_WIDTH, SCR_HEIGHT);
-    Renderer::SetWireframe(false);
-    Renderer::SetBackfaceCulling(true);
-    Renderer::SetCCW(true);
-	Renderer::SetAntialiasingsamples(8);
-	Renderer::SetAntialiasing(true);
+	Screen::GetInst().Initialize(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 3, 60, 1.0f, gamePalette);
+	Renderer::GetInst().Initialize();
 
-    Logger::Info("Playing background music.");
-	BOOL soundResult = PlaySound(TEXT(".\\res\\audio\\Man.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
-	if (soundResult)
-		Logger::Info("Background music started successfully.");
-	else
-		Logger::Error("Failed to start background music.");
+	Logger::Info("Loading level...");
+	SCR_WIDTH = Screen::GetInst().GetVisibleWidth();
+	SCR_HEIGHT = Screen::GetInst().GetHeight();
+	guiCamera.setScreenDimensions(SCR_WIDTH, SCR_HEIGHT);
+    Renderer::GetInst().SetWireframe(false);
+    Renderer::GetInst().SetBackfaceCulling(true);
+    Renderer::GetInst().SetCCW(true);
+	Renderer::GetInst().SetAntialiasingsamples(4);
+	Renderer::GetInst().SetAntialiasing(true);
+
+    // Logger::Info("Playing background music.");
+	// BOOL soundResult = PlaySound(TEXT(".\\res\\audio\\Man.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
+	// if (soundResult)
+	// 	Logger::Info("Background music started successfully.");
+	// else
+	// 	Logger::Error("Failed to start background music.");
 
     // main gameloop
     while (running == true)
     {
-        Screen::GetInstance().StartFPSClock();
-        Screen::GetInstance().ClearBuffer();
+        Screen::GetInst().StartFPSClock();
+        Screen::GetInst().ClearPixelBuffer();
+		Renderer::GetInst().ClearBuffers();
 
         // // do game logic here
         switch (gameState) {
@@ -127,12 +131,13 @@ void Game::Run() {
                 Logger::Warning("[WARN] Unknown game state: " + std::to_string(gameState));
                 break;
         }
-        Renderer::DrawScreenBorder(0xF);
 
-        Screen::GetInstance().OutputBuffer();
+		Renderer::GetInst().OverwritePxBuffWithColBuff();
+        Renderer::GetInst().DrawScreenBorderPxBuff(0xF);
+        Screen::GetInst().OutputBuffer();
 
-		Screen::GetInstance().EndFPSClock();
-        Screen::GetInstance().RenderTitle(true);
+		Screen::GetInst().EndFPSClock();
+        Screen::GetInst().RenderTitle(true);
     }
     Logger::Info("Game loop ended.");
 }
@@ -147,8 +152,8 @@ void Game::LoadLevel() {
 }
 
 void Game::RunMainMenu() {
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Title"], glm::vec2(0.489f, 0.267f), 0.0f, glm::vec2(0.289f, 0.167f), guiCamera, 0);
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Select_Btn"], glm::vec2(0.233f, 0.9f), 0.0f, glm::vec2(0.222f, 0.05f), guiCamera, 0);
+	Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["Title"], glm::vec2(0.489f, 0.267f), 0.0f, glm::vec2(0.289f, 0.167f), guiCamera, 0);
+	Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["Select_Btn"], glm::vec2(0.233f, 0.9f), 0.0f, glm::vec2(0.222f, 0.05f), guiCamera, 0);
 
 	if (GetKeyState(VK_UP) & 0x8000)
 	{
@@ -176,16 +181,16 @@ void Game::RunMainMenu() {
 	if (BtnSelected != 0)
 	{
 		// How to Play Selected: position (215, 150) -> (215/450, 150/300) = (0.478, 0.5), size (75, 30) -> (75/450, 30/300) = (0.167, 0.1)
-		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["How_To_Play_Sel"], glm::vec2(0.478f, 0.5f), 0.0f, glm::vec2(0.167f, 0.1f), guiCamera, 0);
+		Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["How_To_Play_Sel"], glm::vec2(0.478f, 0.5f), 0.0f, glm::vec2(0.167f, 0.1f), guiCamera, 0);
 		// Start Unselected: position (217, 200) -> (217/450, 200/300) = (0.482, 0.667), size (60, 30) -> (60/450, 30/300) = (0.133, 0.1)
-		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Start_Unsel"], glm::vec2(0.482f, 0.667f), 0.0f, glm::vec2(0.133f, 0.1f), guiCamera, 0);
+		Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["Start_Unsel"], glm::vec2(0.482f, 0.667f), 0.0f, glm::vec2(0.133f, 0.1f), guiCamera, 0);
 	}
 	else
 	{
 		// How to Play Unselected: position (215, 150) -> (215/450, 150/300) = (0.478, 0.5), size (75, 30) -> (75/450, 30/300) = (0.167, 0.1)
-		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["How_To_Play_Unsel"], glm::vec2(0.478f, 0.5f), 0.0f, glm::vec2(0.167f, 0.1f), guiCamera, 0);
+		Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["How_To_Play_Unsel"], glm::vec2(0.478f, 0.5f), 0.0f, glm::vec2(0.167, 0.1), guiCamera, 0);
 		// Start Selected: position (217, 200) -> (217/450, 200/300) = (0.482, 0.667), size (60, 30) -> (60/450, 30/300) = (0.133, 0.1)
-		Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Start_Sel"], glm::vec2(0.482f, 0.667f), 0.0f, glm::vec2(0.133f, 0.1f), guiCamera, 0);
+		Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["Start_Sel"], glm::vec2(0.482f, 0.667f), 0.0f, glm::vec2(0.133f, 0.1f), guiCamera, 0);
 	}
 	
 }
@@ -200,18 +205,18 @@ void Game::RunHowToPlay() {
 	}
 
 	// Game Info 2: position (215, 120) -> (215/450, 120/300) = (0.478, 0.4), size (175, 100) -> (175/450, 100/300) = (0.389, 0.333)
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["GameInfo2"], glm::vec2(0.478f, 0.4f), 0.0f, glm::vec2(0.389f, 0.333f), guiCamera, 0);
+	Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["GameInfo2"], glm::vec2(0.478f, 0.4f), 0.0f, glm::vec2(0.389f, 0.333f), guiCamera, 0);
 	// Back Info: position (217, 250) -> (217/450, 250/300) = (0.482, 0.833), size (100, 15) -> (100/450, 15/300) = (0.222, 0.05)
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["BackInfo"], glm::vec2(0.482f, 0.833f), 0.0f, glm::vec2(0.222f, 0.05f), guiCamera, 0);
+	Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["BackInfo"], glm::vec2(0.482f, 0.833f), 0.0f, glm::vec2(0.222f, 0.05f), guiCamera, 0);
 
 }
 
 void Game::RunLore() {
 	// Game Info 1: position (225, 150) -> (225/450, 150/300) = (0.5, 0.5), size (200, 125) -> (200/450, 125/300) = (0.444, 0.417)
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["GameInfo1"], glm::vec2(0.5f, 0.5f), 0.0f, glm::vec2(0.444f, 0.417f), guiCamera, 0);
-	Screen::GetInstance().OutputBuffer();
+	Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["GameInfo1"], glm::vec2(0.5f, 0.5f), 0.0f, glm::vec2(0.444f, 0.417f), guiCamera, 0);
+	Screen::GetInst().OutputBuffer();
 	Sleep(7500);
-	Screen::GetInstance().StartFPSClock();
+	Screen::GetInst().StartFPSClock();
 	gameState = MAZE;
 	LoadLevel();
 }
@@ -226,7 +231,7 @@ void Game::RunMaze() {
 			glm::vec3(player->GetPlayerPos().x, enemies[i]->position.y, player->GetPlayerPos().z), glm::vec3(0, 1, 0)));
 		model = glm::scale(model, glm::vec3(-enemies[i]->size.x, enemies[i]->size.y, enemies[i]->size.z));
 
-		Renderer::DrawModel(vertexShader, *enemies[i]->model, model, player->GetCamera());
+		Renderer::GetInst().DrawModel(vertexShader, *enemies[i]->model, model, player->GetCamera());
 
 		bool hit = Collision::DoesPointCircleCol(glm::vec2(enemies[i]->position.x, enemies[i]->position.z), glm::vec2(player->GetPlayerPos().x, player->GetPlayerPos().z), player->GetPlayerHitBoxRad());
 		if (hit == true)
@@ -243,7 +248,7 @@ void Game::RunMaze() {
 				glm::vec3(player->GetPlayerPos().x, presents[i]->position.y, player->GetPlayerPos().z), glm::vec3(0, 1, 0)));
 			model = glm::scale(model, glm::vec3(-presents[i]->size.x, presents[i]->size.y, presents[i]->size.z));
 
-			Renderer::DrawModel(vertexShader, *presents[i]->model, model, player->GetCamera());
+			Renderer::GetInst().DrawModel(vertexShader, *presents[i]->model, model, player->GetCamera());
 
 			bool hit = Collision::DoesPointCircleCol(glm::vec2(presents[i]->position.x, presents[i]->position.z), glm::vec2(player->GetPlayerPos().x, player->GetPlayerPos().z), player->GetPlayerHitBoxRad());
 			if (hit == true)
@@ -262,25 +267,25 @@ void Game::RunMaze() {
 	unsigned int chunk = player->GetStaminaChunk(6, 0.05);
 	switch (chunk) {
 		case 6:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina6"], barPos, 0.0f, barSize, guiCamera, 0);
+			Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["Stamina6"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 		case 5:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina5"], barPos, 0.0f, barSize, guiCamera, 0);
+			Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["Stamina5"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 		case 4:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina4"], barPos, 0.0f, barSize, guiCamera, 0);
+			Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["Stamina4"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 		case 3:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina3"], barPos, 0.0f, barSize, guiCamera, 0);
+			Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["Stamina3"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 		case 2:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina2"], barPos, 0.0f, barSize, guiCamera, 0);
+			Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["Stamina2"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 		case 1:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Stamina1"], barPos, 0.0f, barSize, guiCamera, 0);
+			Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["Stamina1"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 		default:
-			Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Tired"], barPos, 0.0f, barSize, guiCamera, 0);
+			Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["Tired"], barPos, 0.0f, barSize, guiCamera, 0);
 			break;
 	}
 
@@ -289,11 +294,11 @@ void Game::RunMaze() {
 		gameState = WIN;
 	}
 
-	Renderer::DrawModel(vertexShader, *Level->model, Level->position, Level->rotation, Level->size, player->GetCamera());
+	Renderer::GetInst().DrawModel(vertexShader, *Level->model, Level->position, Level->rotation, Level->size, player->GetCamera());
 }
 
 void Game::RunLost() {
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Lost"], glm::vec2(0.5, 0.5), 0.0f, glm::vec2(0.444, 0.417), guiCamera, 0);
+	Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["Lost"], glm::vec2(0.5, 0.5), 0.0f, glm::vec2(0.444, 0.417), guiCamera, 0);
 
 	if (GetKeyState('R') & 0x8000)
 	{
@@ -331,7 +336,7 @@ void Game::MariahAI() {
 	{
 		if (enemies[i]->aiState == Enemy::CHASE)
 		{
-			glm::vec3 move = glm::normalize(player->GetPlayerPos() - enemies[i]->position) * Screen::GetInstance().GetDeltaTime() * chaseSpeed;
+			glm::vec3 move = glm::normalize(player->GetPlayerPos() - enemies[i]->position) * Screen::GetInst().GetDeltaTime() * chaseSpeed;
 			enemies[i]->position += glm::vec3(move.x, 0, move.z);
 		}
 
@@ -347,7 +352,7 @@ void Game::MariahAI() {
 				else
 					enemies[i]->patrolDest = enemies[i]->patrolEnd;
 			}
-			glm::vec3 move = glm::normalize(enemies[i]->patrolDest - enemies[i]->position) * Screen::GetInstance().GetDeltaTime() * patrolSpeed;
+			glm::vec3 move = glm::normalize(enemies[i]->patrolDest - enemies[i]->position) * Screen::GetInst().GetDeltaTime() * patrolSpeed;
 			enemies[i]->position += glm::vec3(move.x, 0, move.z);
 		}
 	}
@@ -365,7 +370,7 @@ int Game::GetPresentsCollected() {
 }
 
 void Game::RunWin() {
-	Renderer::Draw2DQuadPercSpace(vertexShader, *Textures["Win"], glm::vec2(0.5, 0.5), 0.0f, glm::vec2(0.444, 0.417), guiCamera, 0);
+	Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["Win"], glm::vec2(0.5, 0.5), 0.0f, glm::vec2(0.444, 0.417), guiCamera, 0);
 }
 
 void Game::initLevel() {

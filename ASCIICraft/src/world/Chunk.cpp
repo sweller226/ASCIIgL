@@ -215,8 +215,8 @@ void Chunk::GenerateMesh() {
                         );
                         vertex.SetUV(textureUV);
                         
-                        // Normal vector
-                        vertex.SetNXYZ(faceNormals[face]);
+                        // Note: Normals are not stored in Vertex struct
+                        // If needed, they can be calculated in the shader
                         
                         vertices.push_back(vertex);
                     }
@@ -328,7 +328,7 @@ void Chunk::Render(VERTEX_SHADER& vertex_shader, const Camera3D& camera) {
 
     // Check if mesh has valid texture before rendering
     if (this->mesh->texture) {
-        Renderer::DrawMesh(vertex_shader, this->mesh.get(), camera);
+        Renderer::GetInst().DrawMesh(vertex_shader, this->mesh.get(), camera);
     } else {
         Logger::Warning("Chunk mesh has no texture - skipping render");
     }

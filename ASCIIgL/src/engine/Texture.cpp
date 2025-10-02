@@ -8,64 +8,86 @@
 class Texture::Impl
 {
 public:
-    float* _RGBBuffer;       // buffer that holds RGB color data (3 channels)
+    float* _RGBABuffer;       // buffer that holds RGBA color data (4 channels)
     int _width, _height, _bpp;
     std::string FilePath;
 
     Impl(const std::string& path);
     ~Impl();
     glm::vec3 GetPixelRGB(int x, int y) const;
+    glm::vec4 GetPixelRGBA(int x, int y) const;
 };
 
 Texture::Impl::Impl(const std::string& path)
-    : FilePath(path), _RGBBuffer(nullptr), _width(0), _height(0), _bpp(0)
+    : FilePath(path), _RGBABuffer(nullptr), _width(0), _height(0), _bpp(0)
 {
     Logger::Info("TEXTURE: Attempting to load texture: " + path);
 
     stbi_set_flip_vertically_on_load(0);
 
-    // Load RGB version (3 channels)
-    stbi_uc* tempRGBBuffer = stbi_load(path.c_str(), &_width, &_height, &_bpp, 3);
+    // Load RGBA version (4 channels)
+    stbi_uc* tempRGBABuffer = stbi_load(path.c_str(), &_width, &_height, &_bpp, 4);
 
-    if (!tempRGBBuffer) {
+    if (!tempRGBABuffer) {
         const char* stbi_error = stbi_failure_reason();
         Logger::Error("TEXTURE: Failed to load '" + path + "'");
         Logger::Error("TEXTURE: STB Error: " + std::string(stbi_error ? stbi_error : "Unknown error"));
         Logger::Error("TEXTURE: Check if file exists and is a valid image format");
         _width = _height = _bpp = 0;
-        _RGBBuffer = nullptr;
+        _RGBABuffer = nullptr;
         return;
     }
 
-    _RGBBuffer = new float[_width * _height * 3];
-    for (int i = 0; i < _width * _height * 3; ++i) {
-        _RGBBuffer[i] = tempRGBBuffer[i] / 255.0f;
+    _RGBABuffer = new float[_width * _height * 4];
+    for (int i = 0; i < _width * _height * 4; ++i) {
+        _RGBABuffer[i] = tempRGBABuffer[i] / 255.0f;
     }
-    stbi_image_free(tempRGBBuffer);
+    stbi_image_free(tempRGBABuffer);
 
     Logger::Info("TEXTURE: Successfully loaded '" + path + "'");
     Logger::Debug("TEXTURE: Dimensions: " + std::to_string(_width) + "x" + std::to_string(_height));
     Logger::Debug("TEXTURE: Original channels: " + std::to_string(_bpp));
-    Logger::Debug("TEXTURE: RGB buffer size: " + std::to_string(_width * _height * 3) + " bytes");
+    Logger::Debug("TEXTURE: RGBA buffer size: " + std::to_string(_width * _height * 4) + " bytes");
 }
 
 Texture::Impl::~Impl()
 {
     // deletes the buffers
-    if (_RGBBuffer) {
-        delete[] _RGBBuffer;
+    if (_RGBABuffer) {
+        delete[] _RGBABuffer;
     }
 }
 
 glm::vec3 Texture::Impl::GetPixelRGB(int x, int y) const
 {
-    if (!_RGBBuffer) return glm::vec3(0.0f);
+    if (!_RGBABuffer) return glm::vec3(0.0f);
+    
+    // Clamp coordinates to valid range
+    x = std::clamp(x, 0, _width - 1);
+    y = std::clamp(y, 0, _height - 1);
 
-    const size_t offset = (static_cast<size_t>(y) * static_cast<size_t>(_width) + static_cast<size_t>(x)) * 3;
+    const size_t offset = (static_cast<size_t>(y) * static_cast<size_t>(_width) + static_cast<size_t>(x)) * 4;
     return glm::vec3(
-        _RGBBuffer[offset],     // Red
-        _RGBBuffer[offset + 1], // Green
-        _RGBBuffer[offset + 2]  // Blue
+        _RGBABuffer[offset],     // Red
+        _RGBABuffer[offset + 1], // Green
+        _RGBABuffer[offset + 2]  // Blue
+    );
+}
+
+glm::vec4 Texture::Impl::GetPixelRGBA(int x, int y) const
+{
+    if (!_RGBABuffer) return glm::vec4(0.0f);
+    
+    // Clamp coordinates to valid range
+    x = std::clamp(x, 0, _width - 1);
+    y = std::clamp(y, 0, _height - 1);
+
+    const size_t offset = (static_cast<size_t>(y) * static_cast<size_t>(_width) + static_cast<size_t>(x)) * 4;
+    return glm::vec4(
+        _RGBABuffer[offset],     // Red
+        _RGBABuffer[offset + 1], // Green
+        _RGBABuffer[offset + 2], // Blue
+        _RGBABuffer[offset + 3]  // Alpha
     );
 }
 
@@ -110,4 +132,9 @@ std::string Texture::GetFilePath() const
 glm::vec3 Texture::GetPixelRGB(int x, int y) const
 {
     return pImpl->GetPixelRGB(x, y);
+}
+
+glm::vec4 Texture::GetPixelRGBA(int x, int y) const
+{
+    return pImpl->GetPixelRGBA(x, y);
 }

@@ -104,15 +104,6 @@ Mesh* Model::Impl::processMesh(const tinyobj::attrib_t& attrib, const tinyobj::s
                 ));
             }
 
-            // Normal
-            if (idx.normal_index >= 0) {
-                vertex.SetNXYZ(glm::vec3(
-                    attrib.normals[3 * idx.normal_index + 0],
-                    attrib.normals[3 * idx.normal_index + 1],
-                    attrib.normals[3 * idx.normal_index + 2]
-                ));
-            }
-
             // Texture coordinates
             if (idx.texcoord_index >= 0) {
                 vertex.SetUV(glm::vec2(

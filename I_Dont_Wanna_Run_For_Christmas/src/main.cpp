@@ -11,7 +11,7 @@ int main()
 
 	Logger::Info("Game started!");
 
-	Game::GetInstance()->Run();
+	Game::GetInst()->Run();
 
 	Logger::Close();
 }

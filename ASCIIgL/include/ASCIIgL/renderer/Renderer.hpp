@@ -1,7 +1,7 @@
 #pragma once
 
 #include <vector>
-
+#include <array>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -10,7 +10,6 @@
 #include <ASCIIgL/engine/Texture.hpp>
 #include <ASCIIgL/engine/Camera3D.hpp>
 #include <ASCIIgL/engine/Camera2D.hpp>
-
 #include <ASCIIgL/renderer/VertexShader.hpp>
 #include <ASCIIgL/renderer/Screen.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
@@ -18,7 +17,6 @@
 struct Tile {
     glm::vec2 position;
     glm::vec2 size;
-
     std::vector<int> tri_indices_encapsulated;
     std::vector<int> tri_indices_partial;
 };
@@ -26,125 +24,147 @@ struct Tile {
 class Renderer
 {
 private:
-    Renderer() = delete;
+    Renderer() = default;
+    ~Renderer();
     Renderer(const Renderer&) = delete;
     Renderer& operator=(const Renderer&) = delete;
 
     // general rendering settings
-    static inline bool _wireframe = false;
-    static inline bool _backface_culling = true;
-    static inline bool _ccw = false;
-    static inline float _contrast = 1.2f;
-    
-    // antialaising
-    static inline int _antialiasing_samples = 4;
-    static inline bool _antialiasing = true;
-    static inline std::vector<std::pair<float, float>> _subpixel_offsets;
-    static std::vector<std::pair<float, float>> GenerateSubPixelOffsets(int sampleCount); // this is for antialiasing samples
-    static std::vector<std::pair<float, float>> GetSubpixelOffsets();
+    bool _wireframe = false;
+    bool _backface_culling = true;
+    bool _ccw = false;
+    float _contrast = 1.2f;
+    glm::vec3 _background_col = glm::vec3(0.0f, 0.0f, 0.0f);
+
+    // buffers for rendering
+    std::vector<glm::vec4> _color_buffer;
+    std::vector<float> _depth_buffer;
+
+    void PlotColor(int x, int y, const glm::vec4& color, float depth);
+    void PlotColorBlend(int x, int y, const glm::vec4& color, float depth);
+
+    // antialiasing
+    int _antialiasing_samples = 4;
+    bool _antialiasing = false;
+    std::vector<std::pair<float, float>> _subpixel_offsets;
+    void GenerateSubPixelOffsets(int sampleCount);
+    const std::vector<std::pair<float, float>>& GetSubpixelOffsets();
 
     // Pre-allocated buffers for performance (avoid per-frame allocations)
-    static inline std::vector<VERTEX> _vertexBuffer;
-    static inline std::vector<VERTEX> _clippedBuffer;
-    static inline std::vector<VERTEX> _rasterBuffer;
-    static inline std::vector<Tile> _tileBuffer;
-    static inline bool _tilesInitialized = false;
+    std::vector<VERTEX> _vertexBuffer;
+    std::vector<VERTEX> _clippedBuffer;
+    std::vector<Tile> _tileBuffer;
+    bool _tilesInitialized = false;
 
     // clipping stage
-    static VERTEX HomogenousPlaneIntersect(const VERTEX& vert2, const VERTEX& vert1, const int component, const bool Near);
-    static std::vector<VERTEX> Clipping(const std::vector<VERTEX>& vertices, const int component, const bool Near);
-    static void ClippingHelper(const std::vector<VERTEX>& vertices, std::vector<VERTEX>& clipped);
+    VERTEX HomogenousPlaneIntersect(const VERTEX& vert2, const VERTEX& vert1, const int component, const bool Near);
+    std::vector<VERTEX> Clipping(const std::vector<VERTEX>& vertices, const int component, const bool Near);
+    void ClippingHelper(const std::vector<VERTEX>& vertices, std::vector<VERTEX>& clipped);
 
     // backface culling
-    static bool BackFaceCull(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const bool CCW);
-    static void BackFaceCullHelper(const std::vector<VERTEX>& vertices, std::vector<VERTEX>& raster_triangles);
+    bool BackFaceCull(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const bool CCW);
+    void BackFaceCullHelper(std::vector<VERTEX>& vertices);
 
     // viewport and perspective transform
-    static void PerspectiveDivision(VERTEX& clipCoord);
-    static void ViewPortTransform(VERTEX& vertice);
+    void PerspectiveDivision(VERTEX& clipCoord);
+    void ViewPortTransform(VERTEX& vertice);
+    void PerspectiveAndViewportTransformHelper(std::vector<VERTEX>& raster_triangles);
 
     // Tile setup
-    static void InitializeTiles(); // One-time tile setup
-    static void ClearTileTriangleLists(); // Clear triangle lists but keep tile structure
-    static void BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles);
-    static bool DoesTileEncapsulate(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3);
-    static void InvalidateTiles();
-    
-    static void DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
-    static void DrawTriangleWireframePartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const WCHAR pixel_type, const unsigned short col);
+    void InitializeTiles();
+    void ClearTileTriangleLists();
+    void BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles);
+    bool DoesTileEncapsulate(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3);
+    void InvalidateTiles();
 
-    static void DrawTriangleTexturedAntialiased(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
-    static void DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
-    
-    static void DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& raster_triangles, const Texture* tex);
-    static void DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles);
+    void DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
+    void DrawTriangleWireframeColBuffPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::vec4& col);
+    void DrawTriangleTexturedPartialAntialiased(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
+
+    void DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& raster_triangles, const Texture* tex);
+    void DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles);
+
+    // Line drawing with tile clipping
+    void DrawClippedLinePxBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, WCHAR pixel_type, unsigned short col);
+    void DrawClippedLineColBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, const glm::vec4& col);
 
     // Glyphs
-    static inline const std::array<wchar_t, 9> _charRamp = {
+    static constexpr std::array<wchar_t, 9> _charRamp = {
         L' ', L'-', 0x2591, L'o', L'@', 0x2592, L'#', 0x2593, 0x2588
     };
 
-    static inline const std::array<float, 9> _charCoverage = {
-        0.00f,  // ' ' (space)
-        0.18f,  // '-'
-        0.28f,  // ░ (176)
-        0.32f,  // 'o'
-        0.60f,  // '@'
-        0.70f,  // ▒ (177)
-        0.76f,  // '#'
-        0.86f,  // ▓ (178)
-        1.00f   // █ (219)
+    static constexpr std::array<float, 9> _charCoverage = {
+        0.00f, 0.18f, 0.28f, 0.32f, 0.60f, 0.70f, 0.76f, 0.86f, 1.00f
     };
 
-    // Colored lookup
-    static CHAR_INFO GetCharInfo(const glm::vec3& rgb);
-
-    // Precompute a full LUT for all combinations of fg, bg, and char for super fast rendering
-    static void PrecomputeColorLUT();
-    static inline bool _colorLUTComputed = false;
-    static inline constexpr unsigned int _rgbLUTDepth = 16; // 16*16*16
-    static inline std::array<CHAR_INFO, _rgbLUTDepth*_rgbLUTDepth*_rgbLUTDepth> _colorLUT;
+    void PrecomputeColorLUT();
+    bool _colorLUTComputed = false;
+    static constexpr unsigned int _rgbLUTDepth = 16;
+    std::array<CHAR_INFO, _rgbLUTDepth*_rgbLUTDepth*_rgbLUTDepth> _colorLUT;
 
 public:
-    static void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh);
-    static void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera);
-    static void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const Camera3D& camera);
-    static void DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera);
-    static void DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::mat4& model, const Camera3D& camera);
-    static void Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2& position, const float rotation, const glm::vec2& size, const Camera2D& camera, const int layer);
-    static void Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer);
-    static void DrawScreenBorder(const unsigned short col);
-    
-    static void RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex);
+    static Renderer& GetInst() {
+        static Renderer instance;
+        return instance;
+    }
 
-    // NOT THREAD SAFE, NOT TILE BASED
-    static void DrawLine(int x1, int y1, int x2, int y2, WCHAR pixel_type, const unsigned short col);
-    static void DrawTriangleWireframe(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, WCHAR pixel_type, const unsigned short col);
-    static void DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
+    void Initialize();
 
-    static glm::mat4 CalcModelMatrix(const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size);
-    static glm::mat4 CalcModelMatrix(const glm::vec3& position, const float rotation, const glm::vec3& size);
+    CHAR_INFO GetCharInfo(const glm::vec3& rgb);
 
-    // Antialiasing configuration
-    static void SetAntialiasingsamples(const int samples);
-    static int GetAntialiasingsamples();
+    void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh);
+    void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera);
+    void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const Camera3D& camera);
+    void DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera);
+    void DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::mat4& model, const Camera3D& camera);
+    void Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2& position, const float rotation, const glm::vec2& size, const Camera2D& camera, const int layer);
+    void Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer);
+    void DrawScreenBorderPxBuff(const unsigned short col);
+    void DrawScreenBorderColBuff(const glm::vec3& col);
 
-    // Rendering configuration getters and setters
-    static void SetWireframe(const bool wireframe);
-    static bool GetWireframe();
-    
-    static void SetBackfaceCulling(const bool backfaceCulling);
-    static bool GetBackfaceCulling();
+    void RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex);
 
-    static void SetCCW(const bool ccw);
-    static bool GetCCW();
+    void DrawLinePxBuff(int x1, int y1, int x2, int y2, WCHAR pixel_type, const unsigned short col);
+    void DrawLineColBuff(int x1, int y1, int x2, int y2, const glm::vec4& col);
+    void DrawLineColBuff(int x1, int y1, int x2, int y2, const glm::vec3& col);
 
-    static void SetAntialiasing(const bool antialiasing);
-    static bool GetAntialiasing();
+    void DrawTriangleWireframePxBuff(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, WCHAR pixel_type, const unsigned short col);
+    void DrawTriangleWireframeColBuff(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::vec4& col);
+    void DrawTriangleWireframeColBuff(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::vec3& col);
 
-    static void SetContrast(const float contrast);
-    static float GetContrast();
+    void DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
+    void DrawTriangleTexturedAntialiased(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
 
-    static void TestRenderFont();
-    static void TestRenderColorDiscrete();
+    glm::mat4 CalcModelMatrix(const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size);
+    glm::mat4 CalcModelMatrix(const glm::vec3& position, const float rotation, const glm::vec3& size);
+
+    void PlotColor(int x, int y, const glm::vec3& color);
+    void PlotColor(int x, int y, const glm::vec4& color);
+
+    void SetAntialiasingsamples(const int samples);
+    int GetAntialiasingsamples() const;
+
+    void SetWireframe(const bool wireframe);
+    bool GetWireframe() const;
+
+    void SetBackfaceCulling(const bool backfaceCulling);
+    bool GetBackfaceCulling() const;
+
+    void SetCCW(const bool ccw);
+    bool GetCCW() const;
+
+    void SetAntialiasing(const bool antialiasing);
+    bool GetAntialiasing() const;
+
+    void SetContrast(const float contrast);
+    float GetContrast() const;
+
+    glm::vec3 GetBackgroundCol() const;
+    void SetBackgroundCol(const glm::vec3& color);
+
+    void OverwritePxBuffWithColBuff();
+    void ClearBuffers();
+
+    void TestRenderFont();
+    void TestRenderColorDiscrete();
 };

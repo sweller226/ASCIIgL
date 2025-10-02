@@ -1,4 +1,5 @@
 #include <math.h>
+#include <algorithm>
 
 #include <ASCIIgL/engine/Camera3D.hpp>
 
@@ -81,28 +82,41 @@ void Camera3D::setCamPos(glm::vec3 Pposition)
 	recalculateViewMat();
 }
 
-void Camera3D::setCamDir(float Pyaw, float Ppitch, float Ppitch_clamp, bool Penable_pitch_clamping)
-{
+void Camera3D::setCamDir(float Pyaw, float Ppitch, float Ppitch_clamp) {
+	Ppitch_clamp = std::min(fabs(Ppitch_clamp), 89.9f); // clamp pitch clamp to avoid gimbal lock
+
 	// this function takes in a yaw and pitch (no roll cus I didn't code that in (really should)) and sets the yaw in pitch to the new yaw and pitch
 	yaw = Pyaw;
 	pitch = Ppitch;
 
-	if (Penable_pitch_clamping) {
-		if (pitch > Ppitch_clamp) // pitch limiting
-			pitch = Ppitch_clamp;
-		if (pitch < -Ppitch_clamp)
-			pitch = -Ppitch_clamp;
-	}
+	if (pitch > Ppitch_clamp)
+		pitch = Ppitch_clamp;
+	if (pitch < -Ppitch_clamp)
+		pitch = -Ppitch_clamp;
 
 	recalculateViewMat();
 }
 
-void Camera3D::setCamDir(glm::vec3 dir)
-{
-	yaw = acos(dir.x / (-dir.y));
-	pitch = sqrt(pow(dir.x, 2) + pow(dir.y, 2)) / dir.z;
-
-	recalculateViewMat();
+void Camera3D::setCamDir(glm::vec3 dir, float Ppitch_clamp) {
+    // Normalize the direction vector first
+    dir = glm::normalize(dir);
+    
+    // Clamp pitch clamp to avoid gimbal lock
+    Ppitch_clamp = std::min(fabs(Ppitch_clamp), 89.9f);
+    
+    // Calculate pitch from the y component
+    // pitch = arcsin(y) where y is the normalized direction's y component
+    pitch = glm::degrees(asin(dir.y));
+    
+    // Clamp pitch to prevent gimbal lock
+    if (pitch > Ppitch_clamp)
+        pitch = Ppitch_clamp;
+    if (pitch < -Ppitch_clamp)
+        pitch = -Ppitch_clamp;
+    
+    yaw = glm::degrees(atan2(dir.z, dir.x));
+    
+    recalculateViewMat();
 }
 
 void Camera3D::recalculateViewMat()
