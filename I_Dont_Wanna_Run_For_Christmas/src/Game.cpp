@@ -61,23 +61,23 @@ void Game::Run() {
 
     Logger::Info("Setting up palette and screen...");
 	std::array<PaletteEntry, Palette::COLOR_COUNT> paletteEntries = {{
-        { {0.0000f, 0.0000f, 0.0000f}, 0x0 },  // Black
-        { {0.0667f, 0.0667f, 0.0667f}, 0x1 },  // Very Dark Gray
-        { {0.1333f, 0.1333f, 0.1333f}, 0x2 },  // Darker Gray
-        { {0.2000f, 0.2000f, 0.2000f}, 0x3 },  // Dark Gray
-        { {0.2667f, 0.2667f, 0.2667f}, 0x4 },  // Charcoal Gray
-        { {0.3333f, 0.3333f, 0.3333f}, 0x5 },  // Medium Dark Gray
-        { {0.4000f, 0.4000f, 0.4000f}, 0x6 },  // Mid Gray
-        { {0.4667f, 0.4667f, 0.4667f}, 0x7 },  // Soft Gray
-        { {0.5333f, 0.5333f, 0.5333f}, 0x8 },  // Neutral Gray
-        { {0.6000f, 0.6000f, 0.6000f}, 0x9 },  // Light Neutral Gray
-        { {0.6667f, 0.6667f, 0.6667f}, 0xA }, // Light Gray
-        { {0.7333f, 0.7333f, 0.7333f}, 0xB }, // Brighter Gray
-        { {0.8000f, 0.8000f, 0.8000f}, 0xC }, // Pale Gray
-        { {0.8667f, 0.8667f, 0.8667f}, 0xD }, // Very Pale Gray
-        { {0.9333f, 0.9333f, 0.9333f}, 0xE }, // Near White
-        { {1.0000f, 1.0000f, 1.0000f}, 0xF }  // White
-    }};
+		{ {0, 0, 0}, 0x0 },        // Black
+		{ {1, 1, 1}, 0x1 },        // Very Dark Gray
+		{ {2, 2, 2}, 0x2 },        // Darker Gray
+		{ {3, 3, 3}, 0x3 },        // Dark Gray
+		{ {0, 0, 12}, 0x4 },       // Blue (was Charcoal Gray)
+		{ {0, 12, 0}, 0x5 },       // Green
+		{ {12, 0, 0}, 0x6 },       // Red
+		{ {14, 12, 10}, 0x7 },     // Skin Tone 1 (light)
+		{ {12, 9, 6}, 0x8 },       // Skin Tone 2 (medium)
+		{ {9, 9, 9}, 0x9 },        // Light Neutral Gray
+		{ {10, 10, 10}, 0xA },     // Light Gray
+		{ {11, 11, 11}, 0xB },     // Brighter Gray
+		{ {12, 12, 12}, 0xC },     // Pale Gray
+		{ {13, 13, 13}, 0xD },     // Very Pale Gray
+		{ {14, 14, 14}, 0xE },     // Near White
+		{ {15, 15, 15}, 0xF }      // White
+	}};
     Palette gamePalette = Palette(paletteEntries); // Default palette
 
 	Screen::GetInst().Initialize(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 3, 60, 1.0f, gamePalette);
@@ -90,7 +90,7 @@ void Game::Run() {
     Renderer::GetInst().SetWireframe(false);
     Renderer::GetInst().SetBackfaceCulling(true);
     Renderer::GetInst().SetCCW(true);
-	Renderer::GetInst().SetAntialiasingsamples(4);
+	Renderer::GetInst().SetAntialiasingsamples(8);
 	Renderer::GetInst().SetAntialiasing(true);
 
     // Logger::Info("Playing background music.");
@@ -214,8 +214,9 @@ void Game::RunHowToPlay() {
 void Game::RunLore() {
 	// Game Info 1: position (225, 150) -> (225/450, 150/300) = (0.5, 0.5), size (200, 125) -> (200/450, 125/300) = (0.444, 0.417)
 	Renderer::GetInst().Draw2DQuadPercSpace(vertexShader, *Textures["GameInfo1"], glm::vec2(0.5f, 0.5f), 0.0f, glm::vec2(0.444f, 0.417f), guiCamera, 0);
+	Renderer::GetInst().OverwritePxBuffWithColBuff();
 	Screen::GetInst().OutputBuffer();
-	Sleep(7500);
+	Sleep(7500); // this is me being super lazy, instead of implementing a timer that lets the main loop run I just pause the whole thing for 7.5 seconds :p
 	Screen::GetInst().StartFPSClock();
 	gameState = MAZE;
 	LoadLevel();
@@ -329,9 +330,6 @@ void Game::MariahAI() {
 	float chaseSpeed = 40.0f;
 	float patrolSpeed = 130.0f;
 
-	// float chaseSpeed = 0.0f;
-	// float patrolSpeed = 0.0f;
-	
 	for (int i = 0; i < enemies.size(); i++)
 	{
 		if (enemies[i]->aiState == Enemy::CHASE)

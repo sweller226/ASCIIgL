@@ -151,6 +151,23 @@ void World::LoadChunk(const ChunkCoord& coord) {
 void World::UnloadChunk(const ChunkCoord& coord) {
     auto it = loadedChunks.find(coord);
     if (it != loadedChunks.end()) {
+        Chunk* chunkToUnload = it->second.get();
+        
+        // CRITICAL: Clear neighbor pointers in all adjacent chunks BEFORE unloading
+        for (int i = 0; i < 6; ++i) {
+            ChunkCoord neighborCoord = coord + NEIGHBOR_OFFSETS[i];
+            Chunk* neighborChunk = GetChunk(neighborCoord);
+            if (neighborChunk) {
+                // Calculate reverse direction and clear the pointer
+                int reverseDir = (i % 2 == 0) ? i + 1 : i - 1;
+                neighborChunk->SetNeighbor(reverseDir, nullptr);
+                
+                // Mark neighbor as dirty since it lost a neighbor
+                neighborChunk->SetDirty(true);
+            }
+        }
+        
+        // Now safe to unload the chunk
         loadedChunks.erase(it);
         Logger::Debug("Unloaded chunk at (" + std::to_string(coord.x) + ", " + 
                       std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
@@ -238,8 +255,16 @@ void World::GenerateOneBlockGrassChunk(const ChunkCoord& coord) {
 std::vector<Chunk*> World::GetVisibleChunks(const glm::vec3& playerPos, const glm::vec3& viewDir) const {
     std::vector<Chunk*> visibleChunks;
     
-    // Simple frustum culling - for now just return all loaded chunks within render distance
+    // Frustum culling with field of view consideration
     ChunkCoord playerChunk = WorldPosToChunkCoord(WorldPos(playerPos));
+    
+    // Normalize view direction
+    glm::vec3 forward = glm::normalize(viewDir);
+    
+    // Use camera FOV but add extra margin to avoid over-culling
+    float fov = player->GetCamera().fov;
+    float extendedFov = fov + 30.0f; // Add 30° margin for safety
+    const float fovCosine = cos(glm::radians(extendedFov * 0.5f));
     
     for (const auto& pair : loadedChunks) {
         const ChunkCoord& coord = pair.first;
@@ -250,7 +275,42 @@ std::vector<Chunk*> World::GetVisibleChunks(const glm::vec3& playerPos, const gl
         int dz = coord.z - playerChunk.z;
         int distance = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
         
-        if (distance <= renderDistance) {
+        // Skip chunks outside render distance
+        if (distance > renderDistance) {
+            continue;
+        }
+        
+        // Always include very close chunks (no frustum culling for immediate area)
+        if (distance <= 2) {
+            visibleChunks.push_back(chunk);
+            continue;
+        }
+        
+        // Calculate chunk center in world coordinates
+        glm::vec3 chunkCenter = glm::vec3(
+            coord.x * Chunk::SIZE + Chunk::SIZE * 0.5f,
+            coord.y * Chunk::SIZE + Chunk::SIZE * 0.5f,
+            coord.z * Chunk::SIZE + Chunk::SIZE * 0.5f
+        );
+        
+        // Vector from player to chunk center
+        glm::vec3 toChunk = chunkCenter - playerPos;
+        float chunkDistance = glm::length(toChunk);
+        
+        // Skip chunks that are too close (avoid division by zero)
+        if (chunkDistance < 0.1f) {
+            visibleChunks.push_back(chunk);
+            continue;
+        }
+        
+        // Normalize direction to chunk
+        glm::vec3 toChunkNorm = toChunk / chunkDistance;
+        
+        // Calculate dot product for frustum test
+        float dotProduct = glm::dot(forward, toChunkNorm);
+        
+        // Include chunks that are within extended FOV
+        if (dotProduct >= fovCosine) {
             visibleChunks.push_back(chunk);
         }
     }

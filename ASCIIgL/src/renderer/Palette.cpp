@@ -2,24 +2,24 @@
 
 Palette::Palette() {
     entries = {{
-        //   rgb                      hex
-        { {0.0f, 0.0f, 0.0f},           0x0 }, // black
-        { {0.5f, 0.0f, 0.0f},           0x1 }, // red
-        { {0.0f, 0.5f, 0.0f},           0x2 }, // green
-        { {0.5f, 0.5f, 0.0f},           0x3 }, // yellow
-        { {0.0f, 0.0f, 0.5f},           0x4 }, // blue
-        { {0.5f, 0.0f, 0.5f},           0x5 }, // purple (magenta)
-        { {0.0f, 0.5f, 0.5f},           0x6 }, // cyan
-        { {0.75f, 0.75f, 0.75f},       0x7 }, // white (light gray)
+        //   rgb                  hex
+        { {0, 0, 0},             0x0 }, // black
+        { {8, 0, 0},           0x1 }, // red
+        { {0, 8, 0},           0x2 }, // green
+        { {8, 8, 0},         0x3 }, // yellow
+        { {0, 0, 8},           0x4 }, // blue
+        { {8, 0, 8},         0x5 }, // purple (magenta)
+        { {0, 8, 8},         0x6 }, // cyan
+        { {11, 11, 11},       0x7 }, // white (light gray)
         // bright variants (8..15)
-        { {0.5f, 0.5f, 0.5f},           0x8 }, // brightBlack / dark gray
-        { {1.0f, 0.0f, 0.0f},           0x9 }, // brightRed
-        { {0.0f, 1.0f, 0.0f},           0xA }, // brightGreen
-        { {1.0f, 1.0f, 0.0f},           0xB }, // brightYellow
-        { {0.0f, 0.0f, 1.0f},           0xC }, // brightBlue
-        { {1.0f, 0.0f, 1.0f},           0xD }, // brightPurple
-        { {0.0f, 1.0f, 1.0f},           0xE }, // brightCyan
-        { {1.0f, 1.0f, 1.0f},           0xF }  // brightWhite
+        { {8, 8, 8},       0x8 }, // brightBlack / dark gray
+        { {15, 0, 0},           0x9 }, // brightRed
+        { {0, 15, 0},           0xA }, // brightGreen
+        { {15, 15, 0},         0xB }, // brightYellow
+        { {0, 0, 15},           0xC }, // brightBlue
+        { {15, 0, 15},         0xD }, // brightPurple
+        { {0, 15, 15},         0xE }, // brightCyan
+        { {15, 15, 15},       0xF }  // brightWhite
     }};
 }
 
@@ -27,8 +27,8 @@ Palette::Palette(std::array<PaletteEntry, COLOR_COUNT> customEntries) : entries(
     // No additional logic needed; entries are initialized via member initializer list
 }
 
-glm::vec3 Palette::GetRGB(unsigned int idx) const {
-    if (idx >= entries.size()) return glm::vec3(0.0f);
+glm::ivec3 Palette::GetRGB(unsigned int idx) const {
+    if (idx >= entries.size()) return glm::ivec3(0);
     return entries[idx].rgb;
 }
 

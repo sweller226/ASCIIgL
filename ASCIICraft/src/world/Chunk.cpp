@@ -51,8 +51,6 @@ void Chunk::GenerateMesh() {
         return; // Can't generate mesh for ungenerated chunk
     }
 
-
-    
     std::vector<VERTEX> vertices;
 
     // Get the block texture atlas
@@ -227,7 +225,6 @@ void Chunk::GenerateMesh() {
     
     // Create the mesh
     if (!vertices.empty()) {
-        Logger::Debug("Creating mesh with " + std::to_string(vertices.size()) + " vertices");
         if (blockAtlas) {
             int width = 0;
             try {

@@ -8,7 +8,7 @@
 class Texture::Impl
 {
 public:
-    float* _RGBABuffer;       // buffer that holds RGBA color data (4 channels)
+    uint8_t* _RGBABuffer;     // buffer that holds RGBA color data (4 channels)
     int _width, _height, _bpp;
     std::string FilePath;
 
@@ -16,6 +16,7 @@ public:
     ~Impl();
     glm::vec3 GetPixelRGB(int x, int y) const;
     glm::vec4 GetPixelRGBA(int x, int y) const;
+    inline const uint8_t* GetPixelRGBAPtr(int x, int y) const;
 };
 
 Texture::Impl::Impl(const std::string& path)
@@ -38,16 +39,23 @@ Texture::Impl::Impl(const std::string& path)
         return;
     }
 
-    _RGBABuffer = new float[_width * _height * 4];
-    for (int i = 0; i < _width * _height * 4; ++i) {
-        _RGBABuffer[i] = tempRGBABuffer[i] / 255.0f;
+    // Convert from 0-255 to 0-15 range and store
+    const size_t bufferSize = _width * _height * 4;
+    _RGBABuffer = new uint8_t[bufferSize];
+    
+    for (size_t i = 0; i < bufferSize; ++i) {
+        // Convert 0-255 to 0-15: (value * 15) / 255
+        // Add 8 for better rounding: (value * 15 + 127) / 255
+        _RGBABuffer[i] = (tempRGBABuffer[i] * 15 + 127) / 255;
     }
+    
+    // Free the temporary buffer
     stbi_image_free(tempRGBABuffer);
 
     Logger::Info("TEXTURE: Successfully loaded '" + path + "'");
     Logger::Debug("TEXTURE: Dimensions: " + std::to_string(_width) + "x" + std::to_string(_height));
     Logger::Debug("TEXTURE: Original channels: " + std::to_string(_bpp));
-    Logger::Debug("TEXTURE: RGBA buffer size: " + std::to_string(_width * _height * 4) + " bytes");
+    Logger::Debug("TEXTURE: RGBA buffer size: " + std::to_string(_width * _height * 4) + " bytes (0-15 range)");
 }
 
 Texture::Impl::~Impl()
@@ -60,12 +68,6 @@ Texture::Impl::~Impl()
 
 glm::vec3 Texture::Impl::GetPixelRGB(int x, int y) const
 {
-    if (!_RGBABuffer) return glm::vec3(0.0f);
-    
-    // Clamp coordinates to valid range
-    x = std::clamp(x, 0, _width - 1);
-    y = std::clamp(y, 0, _height - 1);
-
     const size_t offset = (static_cast<size_t>(y) * static_cast<size_t>(_width) + static_cast<size_t>(x)) * 4;
     return glm::vec3(
         _RGBABuffer[offset],     // Red
@@ -76,12 +78,6 @@ glm::vec3 Texture::Impl::GetPixelRGB(int x, int y) const
 
 glm::vec4 Texture::Impl::GetPixelRGBA(int x, int y) const
 {
-    if (!_RGBABuffer) return glm::vec4(0.0f);
-    
-    // Clamp coordinates to valid range
-    x = std::clamp(x, 0, _width - 1);
-    y = std::clamp(y, 0, _height - 1);
-
     const size_t offset = (static_cast<size_t>(y) * static_cast<size_t>(_width) + static_cast<size_t>(x)) * 4;
     return glm::vec4(
         _RGBABuffer[offset],     // Red
@@ -89,6 +85,12 @@ glm::vec4 Texture::Impl::GetPixelRGBA(int x, int y) const
         _RGBABuffer[offset + 2], // Blue
         _RGBABuffer[offset + 3]  // Alpha
     );
+}
+
+inline const uint8_t* Texture::Impl::GetPixelRGBAPtr(int x, int y) const
+{
+    const size_t offset = (static_cast<size_t>(y) * static_cast<size_t>(_width) + static_cast<size_t>(x)) * 4;
+    return &_RGBABuffer[offset];
 }
 
 // Texture public interface implementation
@@ -137,4 +139,9 @@ glm::vec3 Texture::GetPixelRGB(int x, int y) const
 glm::vec4 Texture::GetPixelRGBA(int x, int y) const
 {
     return pImpl->GetPixelRGBA(x, y);
+}
+
+const uint8_t* Texture::GetPixelRGBAPtr(int x, int y) const
+{
+    return pImpl->GetPixelRGBAPtr(x, y);
 }

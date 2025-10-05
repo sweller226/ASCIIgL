@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ASCIIgL/renderer/Palette.hpp>
+#include <ASCIIgL/engine/Clock.hpp>
 
 // External libraries
 #include <glm/glm.hpp>
@@ -68,12 +69,10 @@ private:
     unsigned int TILE_SIZE_Y = 64;
     
     // FPS and timing (now instance members)
-    std::chrono::system_clock::time_point startTimeFps = std::chrono::system_clock::now();
-    std::chrono::system_clock::time_point endTimeFps = std::chrono::system_clock::now();
+    Clock _fpsClock;
     double _fpsWindowSec = 1.0f;
     double _fps = 0.0f;
     double _currDeltaSum = 0.0f;
-    double _deltaTime = 0.0f;
     std::deque<double> _frameTimes = {};
     unsigned int _fpsCap = 60;
 
@@ -140,8 +139,6 @@ public:
 
 private:
     // FPS management methods (now instance methods)
-    void StartFPSSample();
-    void EndFPSSample();
     void CapFPS();
     void FPSSampleCalculate(const double currentDeltaTime);
 };

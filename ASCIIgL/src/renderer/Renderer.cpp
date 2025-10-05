@@ -627,7 +627,13 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
                 if (tu < 0.f || tu >= 1.f || tv < 0.f || tv >= 1.f) continue;
                 const float sX = tu * texWidthF;
                 const float sY = tv * texHeightF;
-                rgbAccum += tex->GetPixelRGBA(sX, sY);
+
+                const uint8_t* pixel = tex->GetPixelRGBAPtr(sX, sY);
+                rgbAccum.r += pixel[0];
+                rgbAccum.g += pixel[1];
+                rgbAccum.b += pixel[2];
+                rgbAccum.a += pixel[3];
+                
                 depthAccum += perspW;
                 ++insideSamples;
             }
@@ -635,7 +641,7 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
             if (insideSamples) {
                 const float inv_inside_samples = 1.0f / insideSamples;
                 const float avgDepth = depthAccum * inv_inside_samples;
-                const glm::vec4 c = rgbAccum * inv_inside_samples;
+                const glm::ivec4 c = glm::ivec4(rgbAccum * inv_inside_samples + 0.5f);
                 PlotColorBlend(x, y, c, avgDepth);
             }
             
@@ -753,7 +759,13 @@ void Renderer::DrawTriangleTextured(const VERTEX& v1, const VERTEX& v2, const VE
                 if (tu < 0.f || tu >= 1.f || tv < 0.f || tv >= 1.f) continue;
                 const float sX = tu * texWidthF;
                 const float sY = tv * texHeightF;
-                rgbAccum += tex->GetPixelRGBA(sX, sY);
+
+                const uint8_t* pixel = tex->GetPixelRGBAPtr(sX, sY);
+                rgbAccum.r += pixel[0];
+                rgbAccum.g += pixel[1];
+                rgbAccum.b += pixel[2];
+                rgbAccum.a += pixel[3];
+
                 depthAccum += perspW;
                 ++insideSamples;
             }
@@ -761,7 +773,7 @@ void Renderer::DrawTriangleTextured(const VERTEX& v1, const VERTEX& v2, const VE
             if (insideSamples) {
                 const float inv_inside_samples = 1.0f / insideSamples;
                 const float avgDepth = depthAccum * inv_inside_samples;
-                const glm::vec4 c = rgbAccum * inv_inside_samples;
+                const glm::ivec4 c = glm::ivec4(rgbAccum * inv_inside_samples + 0.5f);
                 PlotColorBlend(x, y, c, avgDepth);
             }
             
@@ -1063,56 +1075,14 @@ glm::mat4 Renderer::CalcModelMatrix(const glm::vec3& position, const float rotat
 	return model;
 }
 
-CHAR_INFO Renderer::GetCharInfo(const glm::vec3& rgb) {
-    Palette& palette = Screen::GetInst().GetPalette();
-    // Use precomputed LUT if available
-    if (_colorLUTComputed) {
-        // Convert RGB to discrete indices for LUT lookup
-        int maxIndex = static_cast<int>(_rgbLUTDepth - 1);
-        int r = std::max(0, std::min(static_cast<int>(rgb.r * maxIndex + 0.5f), maxIndex));
-        int g = std::max(0, std::min(static_cast<int>(rgb.g * maxIndex + 0.5f), maxIndex));
-        int b = std::max(0, std::min(static_cast<int>(rgb.b * maxIndex + 0.5f), maxIndex));
-
-        int index = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
-        return _colorLUT[index];
+CHAR_INFO Renderer::GetCharInfo(const glm::ivec3& rgb) {
+    if (!_colorLUTComputed) {
+        PrecomputeColorLUT();
     }
 
-    // Fallback to exhaustive search if LUT not computed
-    float minError = FLT_MAX;
-    int bestFgIndex = 0;
-    int bestBgIndex = 0;
-    int bestCharIndex = 0;
-
-    // Try all combinations of foreground, background, and character
-    for (int fgIdx = 0; fgIdx < 16; ++fgIdx) {
-        for (int bgIdx = 0; bgIdx < 16; ++bgIdx) {
-            for (int charIdx = 0; charIdx < _charRamp.size(); ++charIdx) {
-                float coverage = _charCoverage[charIdx];
-                
-                // Simulate the blended color: coverage * fg + (1-coverage) * bg
-                glm::vec3 simulatedColor = coverage * palette.GetRGB(fgIdx) + (1.0f - coverage) * palette.GetRGB(bgIdx);
-                
-                // Calculate color distance
-                glm::vec3 diff = rgb - simulatedColor;
-                float error = glm::dot(diff, diff);
-                
-                if (error < minError) {
-                    minError = error;
-                    bestFgIndex = fgIdx;
-                    bestBgIndex = bgIdx;
-                    bestCharIndex = charIdx;
-                }
-            }
-        }
-    }
-
-    // Combine foreground and background color codes using arrays
-    wchar_t glyph = _charRamp[bestCharIndex];
-    unsigned short fgColor = static_cast<unsigned short>(palette.GetFgColor(bestFgIndex));
-    unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
-    unsigned short combinedColor = fgColor | bgColor;
-    
-    return CHAR_INFO{glyph, combinedColor};
+    // Pre-computed _rgbLUTDepth squared for faster indexing
+    const int index = (rgb.r * _rgbLUTDepth * _rgbLUTDepth) + (rgb.g * _rgbLUTDepth) + rgb.b;
+    return _colorLUT[index];
 }
 
 void Renderer::SetAntialiasingsamples(int samples) {
@@ -1257,11 +1227,14 @@ void Renderer::TestRenderFont() {
 void Renderer::PrecomputeColorLUT() {
     Palette& palette = Screen::GetInst().GetPalette();
     if (_colorLUTComputed) return;
+    
+    constexpr float inv16 = 1.0f / 16.0f;
+    
     // Precompute all possible RGB combinations
     for (int r = 0; r < _rgbLUTDepth; ++r) {
         for (int g = 0; g < _rgbLUTDepth; ++g) {
             for (int b = 0; b < _rgbLUTDepth; ++b) {
-                // Convert discrete RGB to normalized [0,1] range
+                // Convert discrete RGB to normalized [0,1] range for contrast adjustment
                 glm::vec3 rgb(
                     r / float(_rgbLUTDepth - 1),
                     g / float(_rgbLUTDepth - 1),
@@ -1280,7 +1253,12 @@ void Renderer::PrecomputeColorLUT() {
                     for (int bgIdx = 0; bgIdx < 16; ++bgIdx) {
                         for (int charIdx = 0; charIdx < _charRamp.size(); ++charIdx) {
                             float coverage = _charCoverage[charIdx];
-                            glm::vec3 simulatedColor = coverage * palette.GetRGB(fgIdx) + (1.0f - coverage) * palette.GetRGB(bgIdx);
+                            
+                            // Convert palette colors from 0-15 to 0.0-1.0 for comparison
+                            glm::vec3 fgColor = glm::vec3(palette.GetRGB(fgIdx)) * inv16;
+                            glm::vec3 bgColor = glm::vec3(palette.GetRGB(bgIdx)) * inv16;
+                            
+                            glm::vec3 simulatedColor = coverage * fgColor + (1.0f - coverage) * bgColor;
                             glm::vec3 diff = rgb - simulatedColor;
                             float error = glm::dot(diff, diff);
 
@@ -1355,15 +1333,15 @@ void Renderer::TestRenderColorDiscrete() {
 
 void Renderer::ClearBuffers() {
     std::fill(_depth_buffer.begin(), _depth_buffer.end(), -FLT_MAX);
-    std::fill(_color_buffer.begin(), _color_buffer.end(), glm::vec4(_background_col, 1.0f));
+    std::fill(_color_buffer.begin(), _color_buffer.end(), glm::ivec4(_background_col, 1));
 }
 
-glm::vec3 Renderer::GetBackgroundCol() const {
+glm::ivec3 Renderer::GetBackgroundCol() const {
     return _background_col;
 }
 
-void Renderer::SetBackgroundCol(const glm::vec3& col) {
-    _background_col = glm::clamp(col, glm::vec3(0.0f), glm::vec3(1.0f));
+void Renderer::SetBackgroundCol(const glm::ivec3& col) {
+    _background_col = glm::clamp(col, glm::ivec3(0), glm::ivec3(15));
 }
 
 void Renderer::OverwritePxBuffWithColBuff() {
@@ -1372,7 +1350,7 @@ void Renderer::OverwritePxBuffWithColBuff() {
     }
 }
 
-void Renderer::PlotColor(int x, int y, const glm::vec3& color) {
+void Renderer::PlotColor(int x, int y, const glm::ivec3& color) {
     const int screenWidth = Screen::GetInst().GetVisibleWidth();
     const int screenHeight = Screen::GetInst().GetHeight();
     
@@ -1380,10 +1358,10 @@ void Renderer::PlotColor(int x, int y, const glm::vec3& color) {
         return;
     }
 
-    _color_buffer[y * screenWidth + x] = glm::vec4(color, 1.0f);
+    _color_buffer[y * screenWidth + x] = glm::ivec4(color, 1);
 }
 
-void Renderer::PlotColor(int x, int y, const glm::vec4& color) {
+void Renderer::PlotColor(int x, int y, const glm::ivec4& color) {
     const int screenWidth = Screen::GetInst().GetVisibleWidth();
     const int screenHeight = Screen::GetInst().GetHeight();
     
@@ -1394,7 +1372,7 @@ void Renderer::PlotColor(int x, int y, const glm::vec4& color) {
     _color_buffer[y * screenWidth + x] = color;
 }
 
-void Renderer::PlotColor(int x, int y, const glm::vec4& color, float depth) {
+void Renderer::PlotColor(int x, int y, const glm::ivec4& color, float depth) {
     const int screenWidth = Screen::GetInst().GetVisibleWidth();
     const int screenHeight = Screen::GetInst().GetHeight();
     
@@ -1409,7 +1387,7 @@ void Renderer::PlotColor(int x, int y, const glm::vec4& color, float depth) {
     }
 }
 
-void Renderer::PlotColorBlend(int x, int y, const glm::vec4& color, float depth) {
+void Renderer::PlotColorBlend(int x, int y, const glm::ivec4& color, float depth) {
     const int screenWidth = Screen::GetInst().GetVisibleWidth();
     const int screenHeight = Screen::GetInst().GetHeight();
     

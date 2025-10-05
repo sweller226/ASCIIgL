@@ -23,27 +23,26 @@ bool Game::Initialize() {
     Logger::Info("Setting up palette and screen...");
 
     std::array<PaletteEntry, Palette::COLOR_COUNT> paletteEntries = {{
-        { {0.0f, 0.0f, 0.0f}, 0x0 },           // Black
-        { {0.5882f, 0.5882f, 0.5882f}, 0x1 },  // Smooth Stone Gray
-        { {0.4902f, 0.4902f, 0.4902f}, 0x2 },  // Cobblestone Gray
-        { {0.3451f, 0.3451f, 0.3451f}, 0x3 },  // Shady Rock Gray
-        { {0.2353f, 0.2353f, 0.2353f}, 0x4 },  // Deep Rock Gray
+        { {0, 0, 0}, 0x0 },           // Black
+        { {9, 9, 9}, 0x1 },           // Smooth Stone Gray
+        { {7, 7, 7}, 0x2 },           // Cobblestone Gray
+        { {5, 5, 5}, 0x3 },           // Shady Rock Gray
+        { {4, 4, 4}, 0x4 },           // Deep Rock Gray
 
-        { {0.4196f, 0.6510f, 1.0000f}, 0x5 },  // Sky Blue
+        { {6, 10, 15}, 0x5 },         // Sky Blue
 
-        { {0.3725f, 0.6235f, 0.2078f}, 0x6 },  // Grass Green
-        { {0.2510f, 0.4275f, 0.1255f}, 0x7 },  // Leaf Green
-        { {0.1569f, 0.2745f, 0.0784f}, 0x8 },  // Dark Foliage Green
-        { {0.4941f, 0.7843f, 0.3137f}, 0x9 },  // Bright Grass Tip Green
-        { {0.50f, 0.980f, 0.400f}, 0xA },      // Light Grass Green
+        { {6, 9, 3}, 0x6 },           // Grass Green
+        { {4, 6, 2}, 0x7 },           // Leaf Green
+        { {2, 4, 1}, 0x8 },           // Dark Foliage Green
+        { {7, 12, 5}, 0x9 },          // Bright Grass Tip Green
+        { {7, 15, 6}, 0xA },          // Light Grass Green
 
-        { {0.4000f, 0.3020f, 0.1804f},  0xB }, // Oak Log Brown
-        { {0.6353f, 0.5098f, 0.3098f},  0xC }, // Plank Brown
-        { {0.5216f, 0.3765f, 0.2588f},  0xD }, // Dirt Brown
-        { {0.3137f, 0.2039f, 0.1294f},  0xE }, // Dark Wood Brown
-        { {0.2000f, 0.1200f, 0.0600f},  0xF }  // Deep Brown
+        { {6, 5, 3}, 0xB },           // Oak Log Brown
+        { {10, 8, 5}, 0xC },          // Plank Brown
+        { {8, 6, 4}, 0xD },           // Dirt Brown
+        { {5, 3, 2}, 0xE },           // Dark Wood Brown
+        { {3, 2, 1}, 0xF }            // Deep Brown
     }};
-
 
     Palette gamePalette = Palette(paletteEntries); // Default palette
 

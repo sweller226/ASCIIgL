@@ -34,14 +34,14 @@ private:
     bool _backface_culling = true;
     bool _ccw = false;
     float _contrast = 1.2f;
-    glm::vec3 _background_col = glm::vec3(0.0f, 0.0f, 0.0f);
+    glm::ivec3 _background_col = glm::ivec3(0, 0, 0);
 
     // buffers for rendering
-    std::vector<glm::vec4> _color_buffer;
+    std::vector<glm::ivec4> _color_buffer;
     std::vector<float> _depth_buffer;
 
-    void PlotColor(int x, int y, const glm::vec4& color, float depth);
-    void PlotColorBlend(int x, int y, const glm::vec4& color, float depth);
+    void PlotColor(int x, int y, const glm::ivec4& color, float depth);
+    void PlotColorBlend(int x, int y, const glm::ivec4& color, float depth);
 
     // antialiasing
     int _antialiasing_samples = 4;
@@ -109,7 +109,7 @@ public:
 
     void Initialize();
 
-    CHAR_INFO GetCharInfo(const glm::vec3& rgb);
+    CHAR_INFO GetCharInfo(const glm::ivec3& rgb);
 
     void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh);
     void DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera);
@@ -136,8 +136,8 @@ public:
     glm::mat4 CalcModelMatrix(const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size);
     glm::mat4 CalcModelMatrix(const glm::vec3& position, const float rotation, const glm::vec3& size);
 
-    void PlotColor(int x, int y, const glm::vec3& color);
-    void PlotColor(int x, int y, const glm::vec4& color);
+    void PlotColor(int x, int y, const glm::ivec3& color);
+    void PlotColor(int x, int y, const glm::ivec4& color);
 
     void SetAntialiasingsamples(const int samples);
     int GetAntialiasingsamples() const;
@@ -157,8 +157,8 @@ public:
     void SetContrast(const float contrast);
     float GetContrast() const;
 
-    glm::vec3 GetBackgroundCol() const;
-    void SetBackgroundCol(const glm::vec3& color);
+    glm::ivec3 GetBackgroundCol() const;
+    void SetBackgroundCol(const glm::ivec3& color);
 
     void OverwritePxBuffWithColBuff();
     void ClearBuffers();

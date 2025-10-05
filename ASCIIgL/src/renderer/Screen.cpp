@@ -433,7 +433,7 @@ void Screen::PlotPixel(int idx, const CHAR_INFO charCol) {
 }
 
 float Screen::GetDeltaTime() {
-	return _deltaTime;
+	return _fpsClock.GetDeltaTime();
 }
     
 std::wstring Screen::GetTitle() {
@@ -493,31 +493,21 @@ std::vector<CHAR_INFO>& Screen::GetPixelBuffer() {
 }
 
 void Screen::StartFPSClock() {
-    StartFPSSample();
+    _fpsClock.StartClock();
 }
 
 void Screen::EndFPSClock() {
-    EndFPSSample();
-    FPSSampleCalculate(GetDeltaTime());
+    _fpsClock.EndClock();
+    FPSSampleCalculate(_fpsClock.GetDeltaTime());
     CapFPS();
-}
-
-void Screen::StartFPSSample() {
-    startTimeFps = std::chrono::system_clock::now();
-}
-
-void Screen::EndFPSSample() {
-    endTimeFps = std::chrono::system_clock::now();
-    std::chrono::duration<float> deltaTimeTemp = endTimeFps - startTimeFps;
-    _deltaTime = deltaTimeTemp.count();
 }
 
 void Screen::CapFPS() {
     const float inverseFrameCap = (1.0f / _fpsCap);
 
-    if (_deltaTime < inverseFrameCap) {
-        std::this_thread::sleep_for(std::chrono::duration<double>(inverseFrameCap - _deltaTime));
-        _deltaTime = inverseFrameCap; // Ensure _deltaTime is at least the frame cap
+    if (_fpsClock.GetDeltaTime() < inverseFrameCap) {
+        std::this_thread::sleep_for(std::chrono::duration<double>(inverseFrameCap - _fpsClock.GetDeltaTime()));
+        _fpsClock.SetDeltaTime(inverseFrameCap); // Ensure _deltaTime is at least the frame cap
     }
 }
 
@@ -837,10 +827,11 @@ void Screen::WindowsImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOu
             "brightBlack", "brightBlue", "brightGreen", "brightCyan", "brightRed", "brightPurple", "brightYellow", "brightWhite"
         };
         for (size_t i = 0; i < std::min(static_cast<size_t>(Palette::COLOR_COUNT), colorNames.size()); ++i) {
-            glm::vec3 rgb = palette.GetRGB(static_cast<uint8_t>(i));
-            int r = static_cast<int>(rgb.r * 255.0f + 0.5f);
-            int g = static_cast<int>(rgb.g * 255.0f + 0.5f);
-            int b = static_cast<int>(rgb.b * 255.0f + 0.5f);
+            glm::ivec3 rgb = palette.GetRGB(static_cast<uint8_t>(i));
+            // Convert from 0-15 to 0-255 range: (value * 255) / 15
+            int r = (rgb.r * 255) / 15;
+            int g = (rgb.g * 255) / 15;
+            int b = (rgb.b * 255) / 15;
             char hexColor[8];
             snprintf(hexColor, sizeof(hexColor), "#%02X%02X%02X", r, g, b);
             customScheme[colorNames[i]] = hexColor;
@@ -895,12 +886,12 @@ void Screen::WindowsImpl::SetPaletteConsole(const Palette& palette, HANDLE& hOut
     
     // Map the 16 palette colors to the console color table
     for (uint8_t i = 0; i < Palette::COLOR_COUNT; ++i) {
-        glm::vec3 rgb = palette.GetRGB(i);
+        glm::ivec3 rgb = palette.GetRGB(i);
         
-        // Convert RGB [0,1] to [0,255] range
-        BYTE r = static_cast<BYTE>(rgb.r * 255.0f + 0.5f);
-        BYTE g = static_cast<BYTE>(rgb.g * 255.0f + 0.5f);
-        BYTE b = static_cast<BYTE>(rgb.b * 255.0f + 0.5f);
+        // Convert RGB from 0-15 to 0-255 range: (value * 255) / 15
+        BYTE r = static_cast<BYTE>((rgb.r * 255) / 15);
+        BYTE g = static_cast<BYTE>((rgb.g * 255) / 15);
+        BYTE b = static_cast<BYTE>((rgb.b * 255) / 15);
         
         // Set the color in the console color table
         csbi.ColorTable[i] = RGB(r, g, b);
