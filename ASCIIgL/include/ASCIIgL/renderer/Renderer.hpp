@@ -59,16 +59,14 @@ private:
     // clipping stage
     VERTEX HomogenousPlaneIntersect(const VERTEX& vert2, const VERTEX& vert1, const int component, const bool Near);
     std::vector<VERTEX> Clipping(const std::vector<VERTEX>& vertices, const int component, const bool Near);
-    void ClippingHelper(const std::vector<VERTEX>& vertices, std::vector<VERTEX>& clipped);
+    void ClippingHelper(std::vector<VERTEX>& vertices, std::vector<VERTEX>& clipped);
 
     // backface culling
     bool BackFaceCull(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const bool CCW);
     void BackFaceCullHelper(std::vector<VERTEX>& vertices);
 
     // viewport and perspective transform
-    void PerspectiveDivision(VERTEX& clipCoord);
-    void ViewPortTransform(VERTEX& vertice);
-    void PerspectiveAndViewportTransformHelper(std::vector<VERTEX>& raster_triangles);
+    void PerspectiveAndViewportTransform(std::vector<VERTEX>& raster_triangles);
 
     // Tile setup
     void InitializeTiles();

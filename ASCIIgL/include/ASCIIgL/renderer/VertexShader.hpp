@@ -43,18 +43,15 @@ typedef struct Vertex_Shader {
         UpdateMVP();
     }
 
-    // Original single vertex transformation (SIMD-optimized by GLM)
     void GLUse(VERTEX& vertice) const {
         vertice.SetXYZW(GLmvp * vertice.GetXYZW());
     }
 
-    // SIMD-optimized batch vertex processing for maximum performance
     void GLUseBatch(std::vector<VERTEX>& vertices) const {
         if (vertices.empty()) return;
         
         const size_t vertex_count = vertices.size();
         
-        // For small batches, sequential processing is faster due to threading overhead
         if (vertex_count < 128) {
             for (VERTEX& vertex : vertices) {
                 GLUse(vertex);
@@ -62,10 +59,8 @@ typedef struct Vertex_Shader {
             return;
         }
         
-        // Parallel SIMD processing for larger batches
         std::for_each(std::execution::par_unseq, vertices.begin(), vertices.end(),
             [this](VERTEX& vertex) {
-                // GLM automatically uses SIMD instructions (AVX2) when available
                 vertex.SetXYZW(GLmvp * vertex.GetXYZW());
             });
     }

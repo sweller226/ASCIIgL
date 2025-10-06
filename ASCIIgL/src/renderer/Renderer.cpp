@@ -162,55 +162,46 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
     }
 
     if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) {
-        return; // Fast fail only
+        return;
     }
 
     if (_vertexBuffer.capacity() < vertices.size()) {
-        _vertexBuffer.reserve(vertices.size() * 1.5f);  // Reserve 50% extra for growth
+        _vertexBuffer.reserve(vertices.size() * 1.5f);
     }
-    _vertexBuffer = vertices;
+    _vertexBuffer.assign(vertices.begin(), vertices.end()); 
 
     const_cast<VERTEX_SHADER&>(VSHADER).GLUseBatch(_vertexBuffer);
 
     ClippingHelper(_vertexBuffer, _clippedBuffer);
+    std::swap(_vertexBuffer, _clippedBuffer);
 
-    PerspectiveAndViewportTransformHelper(_clippedBuffer);
+    PerspectiveAndViewportTransform(_vertexBuffer);
 
-    // Remove back-face culled triangles in-place (if enabled)
     if (_backface_culling) {
-        BackFaceCullHelper(_clippedBuffer);
+        BackFaceCullHelper(_vertexBuffer);
     }
 
+    // tile management
     if (!_tilesInitialized) {
         InitializeTiles();
         _tilesInitialized = true;
-    } else {
-        ClearTileTriangleLists();
     }
+    BinTrianglesToTiles(_vertexBuffer); // Now includes clearing
 
-    // Initialize color LUT if not already done (one-time precomputation)
     if (!_colorLUTComputed) {
         PrecomputeColorLUT();
     }
 
-    BinTrianglesToTiles(_clippedBuffer);
-
-    // Better: Only process tiles with triangles
-    std::vector<Tile*> activeTiles;
-    activeTiles.reserve(_tileBuffer.size());
-    for (auto& tile : _tileBuffer) {
-        if (!tile.tri_indices_encapsulated.empty() || !tile.tri_indices_partial.empty()) {
-            activeTiles.push_back(&tile);
-        }
-    }
-
-    // Parallel over active tiles only
-    std::for_each(std::execution::par, activeTiles.begin(), activeTiles.end(), 
-        [&](Tile* tile) {
+    std::for_each(std::execution::par, _tileBuffer.begin(), _tileBuffer.end(), 
+        [&](Tile& tile) {
+            if (tile.tri_indices_encapsulated.empty() && tile.tri_indices_partial.empty()) {
+                return;
+            }
+            
             if (_wireframe || tex == nullptr) {
-                DrawTileWireframe(*tile, _clippedBuffer);
+                DrawTileWireframe(tile, _vertexBuffer);
             } else {
-                DrawTileTextured(*tile, _clippedBuffer, tex);
+                DrawTileTextured(tile, _vertexBuffer, tex);
             }
         });
 }
@@ -313,7 +304,14 @@ void Renderer::ClearTileTriangleLists() {
 }
 
 void Renderer::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles) {
-    // Optimized version that works directly with pre-allocated tile buffer
+    for (auto& tile : _tileBuffer) {
+        tile.tri_indices_encapsulated.clear();
+        tile.tri_indices_partial.clear();
+    }
+
+    // Early exit if no triangles
+    if (raster_triangles.empty()) return;
+
     auto& screen = Screen::GetInst();
     const int tileSizeX = screen.GetTileSizeX();
     const int tileSizeY = screen.GetTileSizeY();
@@ -323,21 +321,18 @@ void Renderer::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles) 
     const float invTileSizeY = 1.0f / tileSizeY;
 
     for (int i = 0; i < static_cast<int>(raster_triangles.size()); i += 3) {
-        const auto [minTriPt, maxTriPt] = MathUtil::ComputeBoundingBox(
-            raster_triangles[i].GetXY(),
-            raster_triangles[i + 1].GetXY(),
-            raster_triangles[i + 2].GetXY()
-        );
-        
-        int minTileX = std::max(0, static_cast<int>(minTriPt.x * invTileSizeX));
-        int maxTileX = std::min(tileCountX - 1, static_cast<int>(std::ceil(maxTriPt.x * invTileSizeX)));
-        int minTileY = std::max(0, static_cast<int>(minTriPt.y * invTileSizeY));
-        int maxTileY = std::min(tileCountY - 1, static_cast<int>(std::ceil(maxTriPt.y * invTileSizeY)));
-
-        // Cache triangle vertices for encapsulation test
         const VERTEX& v1 = raster_triangles[i];
         const VERTEX& v2 = raster_triangles[i + 1];
         const VERTEX& v3 = raster_triangles[i + 2];
+        
+        const auto [minTriPt, maxTriPt] = MathUtil::ComputeBoundingBox(
+            v1.GetXY(), v2.GetXY(), v3.GetXY()
+        );
+        
+        int minTileX = std::max(0, static_cast<int>(minTriPt.x * invTileSizeX));
+        int maxTileX = std::min(tileCountX - 1, static_cast<int>(maxTriPt.x * invTileSizeX + 0.999f));
+        int minTileY = std::max(0, static_cast<int>(minTriPt.y * invTileSizeY));
+        int maxTileY = std::min(tileCountY - 1, static_cast<int>(maxTriPt.y * invTileSizeY + 0.999f));
 
         for (int ty = minTileY; ty <= maxTileY; ++ty) {
             const int rowOffset = ty * tileCountX;
@@ -345,7 +340,6 @@ void Renderer::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles) 
                 const int tileIndex = rowOffset + tx;
                 Tile& tile = _tileBuffer[tileIndex];
 
-                // Check if tile fully encapsulates the triangle
                 if (DoesTileEncapsulate(tile, v1, v2, v3)) {
                     tile.tri_indices_encapsulated.push_back(i);
                 } else {
@@ -886,34 +880,6 @@ void Renderer::DrawTriangleWireframeColBuff(const VERTEX& vert1, const VERTEX& v
     DrawTriangleWireframeColBuff(vert1, vert2, vert3, glm::vec4(col, 1.0f));
 }
 
-// =============================================================================
-// COORDINATE TRANSFORMATION FUNCTIONS
-// =============================================================================
-
-void Renderer::ViewPortTransform(VERTEX& vertice) {
-	// transforms vertice from [-1 to 1] to [0 to scr_dim]
-	// Flip Y to match screen coordinates where Y=0 is at top
-	glm::vec4 newPos = glm::vec4(
-		((vertice.X() + 1.0f) / 2.0f) * Screen::GetInst().GetWidth(), 
-		((1.0f - vertice.Y()) / 2.0f) * Screen::GetInst().GetHeight(),  // Flipped Y
-		vertice.Z(), 
-		vertice.W()
-	);
-	vertice.SetXYZW(newPos);
-}
-
-void Renderer::PerspectiveDivision(VERTEX& clipCoord) {
-    // Divide position and UVW by w for perspective correction
-    float w = clipCoord.W();
-    clipCoord.data[0] /= w; // x
-    clipCoord.data[1] /= w; // y
-    clipCoord.data[2] /= w; // z
-    clipCoord.data[3] = w;  // w stays the same
-
-    glm::vec3 uvw = clipCoord.GetUVW();
-    clipCoord.SetUVW(glm::vec3(uvw.x / w, uvw.y / w, 1.0f / w));
-}
-
 bool Renderer::BackFaceCull(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, bool CCW) { // determines if the triangle is in the correct winding order or not
 
 	// it calculates it based on glm cross because if the perpendicular z is less than 0, the triangle is pointing away
@@ -934,18 +900,32 @@ bool Renderer::BackFaceCull(const VERTEX& vert1, const VERTEX& vert2, const VERT
 // CLIPPING FUNCTIONS
 // =============================================================================
 
-void Renderer::ClippingHelper(const std::vector<VERTEX>& vertices, std::vector<VERTEX>& clipped) {
+void Renderer::ClippingHelper(std::vector<VERTEX>& vertices, std::vector<VERTEX>& clipped) {
     static const int components[6] = {2, 2, 1, 1, 0, 0};
     static const bool nears[6]     = {true, false, true, false, true, false};
 
-    std::vector<VERTEX> tempA = vertices;
+    // Start by writing directly from vertices to clipped (no initial copy)
+    std::vector<VERTEX>* currentInput = &vertices;
+    std::vector<VERTEX>* currentOutput = &clipped;
     std::vector<VERTEX> tempB;
 
     for (int i = 0; i < 6; ++i) {
-        tempB = Clipping(tempA, components[i], nears[i]);
-        tempA = std::move(tempB);
+        *currentOutput = Clipping(*currentInput, components[i], nears[i]);
+        
+        // Set up for next iteration (ping-pong between clipped and tempB)
+        if (i < 5) { // Not the last iteration
+            if (currentInput == &vertices) {
+                // After first iteration: input becomes clipped, output becomes tempB
+                currentInput = &clipped;
+                currentOutput = &tempB;
+            } else {
+                // Subsequent iterations: swap between clipped and tempB
+                std::swap(currentInput, currentOutput);
+            }
+        }
     }
-    clipped = std::move(tempA);
+
+    // Final result is guaranteed to be in clipped after 6 iterations
 }
 
 std::vector<VERTEX> Renderer::Clipping(const std::vector<VERTEX>& vertices, const int component, const bool Near) {
@@ -1352,8 +1332,41 @@ void Renderer::SetBackgroundCol(const glm::ivec3& col) {
 }
 
 void Renderer::OverwritePxBuffWithColBuff() {
-    for (size_t i = 0; i < _color_buffer.size(); ++i) {
-        Screen::GetInst().PlotPixel(i, GetCharInfo(_color_buffer[i]));
+    // **OPTIMIZATION 1**: Cache frequently accessed references
+    auto& screen = Screen::GetInst();
+    auto& pixelBuffer = screen.GetPixelBuffer();
+    const size_t bufferSize = _color_buffer.size();
+    
+    if (!_colorLUTComputed) {
+        PrecomputeColorLUT();
+    }
+    
+    const size_t unrollFactor = 4;
+    const size_t unrolledEnd = (bufferSize / unrollFactor) * unrollFactor;
+    
+    size_t i = 0;
+    for (; i < unrolledEnd; i += unrollFactor) {
+        const auto& color0 = _color_buffer[i];
+        const auto& color1 = _color_buffer[i + 1];
+        const auto& color2 = _color_buffer[i + 2];
+        const auto& color3 = _color_buffer[i + 3];
+        
+
+        const int index0 = (color0.r * _rgbLUTDepth * _rgbLUTDepth) + (color0.g * _rgbLUTDepth) + color0.b;
+        const int index1 = (color1.r * _rgbLUTDepth * _rgbLUTDepth) + (color1.g * _rgbLUTDepth) + color1.b;
+        const int index2 = (color2.r * _rgbLUTDepth * _rgbLUTDepth) + (color2.g * _rgbLUTDepth) + color2.b;
+        const int index3 = (color3.r * _rgbLUTDepth * _rgbLUTDepth) + (color3.g * _rgbLUTDepth) + color3.b;
+        
+        pixelBuffer[i] = _colorLUT[index0];
+        pixelBuffer[i + 1] = _colorLUT[index1];
+        pixelBuffer[i + 2] = _colorLUT[index2];
+        pixelBuffer[i + 3] = _colorLUT[index3];
+    }
+    
+    for (; i < bufferSize; ++i) {
+        const auto& color = _color_buffer[i];
+        const int index = (color.r * _rgbLUTDepth * _rgbLUTDepth) + (color.g * _rgbLUTDepth) + color.b;
+        pixelBuffer[i] = _colorLUT[index];
     }
 }
 
@@ -1411,20 +1424,24 @@ void Renderer::PlotColorBlend(int x, int y, const glm::ivec4& color, float depth
     }
 }
 
-void Renderer::PerspectiveAndViewportTransformHelper(std::vector<VERTEX>& vertices) {
-    // Better: Batch processing if vertices < 1000, otherwise parallel
-    if (vertices.size() < 1000) {
-        // Sequential for small batches (avoids thread overhead)
-        for (auto& v : vertices) {
-            PerspectiveDivision(v);
-            ViewPortTransform(v);
-        }
-    } else {
-        // Parallel only for large batches
-        std::for_each(std::execution::par_unseq, vertices.begin(), vertices.end(), 
-            [this](VERTEX& v) {
-                PerspectiveDivision(v);
-                ViewPortTransform(v);
-            });
+void Renderer::PerspectiveAndViewportTransform(std::vector<VERTEX>& vertices) {
+    // **OPTIMIZATION 1**: Cache screen dimensions once (expensive getter calls)
+    const float screenWidth = static_cast<float>(Screen::GetInst().GetWidth());
+    const float screenHeight = static_cast<float>(Screen::GetInst().GetHeight());
+    const float halfWidth = screenWidth * 0.5f;
+    const float halfHeight = screenHeight * 0.5f;
+
+    for (auto& v : vertices) {
+        const float w = v.W();
+        const float invW = 1.0f / w;
+        
+        // Combined perspective division + viewport transform
+        v.data[0] = ((v.data[0] * invW) + 1.0f) * halfWidth;   // x: perspective + viewport
+        v.data[1] = (1.0f - (v.data[1] * invW)) * halfHeight;  // y: perspective + viewport + flip
+        v.data[2] *= invW;
+        
+        v.data[4] *= invW; // u
+        v.data[5] *= invW; // v  
+        v.data[6] = invW;  // w becomes 1/w
     }
 }
