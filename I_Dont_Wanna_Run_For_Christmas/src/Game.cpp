@@ -60,8 +60,7 @@ void Game::Run() {
     Logger::Info("Game loop starting.");
 
     Logger::Info("Setting up palette and screen...");
-	std::array<PaletteEntry, Palette::COLOR_COUNT> paletteEntries = {{
-		{ {0, 0, 0}, 0x0 },        // Black
+	std::array<PaletteEntry, 15> paletteEntries = {{
 		{ {1, 1, 1}, 0x1 },        // Very Dark Gray
 		{ {2, 2, 2}, 0x2 },        // Darker Gray
 		{ {3, 3, 3}, 0x3 },        // Dark Gray
@@ -84,7 +83,7 @@ void Game::Run() {
 	Renderer::GetInst().Initialize();
 
 	Logger::Info("Loading level...");
-	SCR_WIDTH = Screen::GetInst().GetVisibleWidth();
+	SCR_WIDTH = Screen::GetInst().GetWidth();
 	SCR_HEIGHT = Screen::GetInst().GetHeight();
 	guiCamera.setScreenDimensions(SCR_WIDTH, SCR_HEIGHT);
     Renderer::GetInst().SetWireframe(false);

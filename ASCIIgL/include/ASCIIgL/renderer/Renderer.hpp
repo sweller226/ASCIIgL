@@ -89,11 +89,11 @@ private:
 
     // Glyphs
     static constexpr std::array<wchar_t, 9> _charRamp = {
-        L' ', L'-', 0x2591, L'o', L'@', 0x2592, L'#', 0x2593, 0x2588
+        L' ', L'-', L':', L'o', L'O', L'A', L'E', L'0', L'B'
     };
 
     static constexpr std::array<float, 9> _charCoverage = {
-        0.00f, 0.18f, 0.28f, 0.32f, 0.60f, 0.70f, 0.76f, 0.86f, 1.00f
+        0.00f, 0.12f, 0.20f, 0.35f, 0.50f, 0.65f, 0.75f, 0.85f, 1.00f
     };
 
     void PrecomputeColorLUT();

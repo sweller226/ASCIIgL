@@ -16,7 +16,7 @@ public:
     std::array<PaletteEntry, COLOR_COUNT> entries;
 
     Palette();
-    Palette(std::array<PaletteEntry, COLOR_COUNT> customEntries);
+    Palette(std::array<PaletteEntry, 15> customEntries);
 
     glm::ivec3 GetRGB(unsigned int idx) const;
     unsigned short GetHex(unsigned int idx) const;

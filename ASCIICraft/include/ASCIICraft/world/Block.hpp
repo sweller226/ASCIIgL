@@ -17,10 +17,12 @@ enum class BlockType : uint8_t {
     Gravel = 8,
     Coal_Ore = 9,
     Iron_Ore = 10,
-    Gold_Ore = 11,
     Diamond_Ore = 12,
     Cobblestone = 13,
-    Bedrock = 255
+    Crafting_Table = 14,
+    Wood_Planks = 15,
+    Furnace = 16,
+    Bedrock = 17,
 };
 
 // Individual block data

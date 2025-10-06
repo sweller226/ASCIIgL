@@ -22,42 +22,40 @@ bool Game::Initialize() {
 
     Logger::Info("Setting up palette and screen...");
 
-    std::array<PaletteEntry, Palette::COLOR_COUNT> paletteEntries = {{
-        { {0, 0, 0}, 0x0 },           // Black
-        { {9, 9, 9}, 0x1 },           // Smooth Stone Gray
-        { {7, 7, 7}, 0x2 },           // Cobblestone Gray
-        { {5, 5, 5}, 0x3 },           // Shady Rock Gray
-        { {4, 4, 4}, 0x4 },           // Deep Rock Gray
-
-        { {6, 10, 15}, 0x5 },         // Sky Blue
-
-        { {6, 9, 3}, 0x6 },           // Grass Green
-        { {4, 6, 2}, 0x7 },           // Leaf Green
-        { {2, 4, 1}, 0x8 },           // Dark Foliage Green
-        { {7, 12, 5}, 0x9 },          // Bright Grass Tip Green
-        { {7, 15, 6}, 0xA },          // Light Grass Green
-
-        { {6, 5, 3}, 0xB },           // Oak Log Brown
-        { {10, 8, 5}, 0xC },          // Plank Brown
-        { {8, 6, 4}, 0xD },           // Dirt Brown
-        { {5, 3, 2}, 0xE },           // Dark Wood Brown
-        { {3, 2, 1}, 0xF }            // Deep Brown
+    std::array<PaletteEntry, 15> paletteEntries = {{
+        { {15, 15, 15}, 0x1 },        // White (#FFFFFF)
+        { {3, 4, 3}, 0x2 },           // Dark Gray Green (#323C39)
+        { {6, 6, 6}, 0x3 },           // Medium Gray (#696A6A)
+        { {8, 7, 8}, 0x4 },           // Light Gray Purple (#847E87)
+        { {6, 3, 3}, 0x5 },           // Dark Brown Red (#663931)
+        { {8, 5, 3}, 0x6 },           // Medium Brown (#8F563B)
+        { {13, 10, 6}, 0x7 },         // Light Brown (#D9A066)
+        { {8, 6, 3}, 0x8 },           // Dark Yellow Brown (#8A6F30)
+        { {8, 9, 4}, 0x9 },           // Olive Green (#8F974A)
+        { {15, 15, 3}, 0xA },         // Bright Yellow (#FBF236)
+        { {4, 6, 2}, 0xB },           // Dark Forest Green (#4B692F)
+        { {6, 11, 3}, 0xC },          // Medium Green (#6ABE30)
+        { {9, 14, 5}, 0xD },          // Bright Green (#99E550)
+        { {5, 12, 14}, 0xE },         // Light Blue (#5FCDE4)
+        { {9, 10, 11}, 0xF }          // Light Gray Blue (#9BADB7)
     }};
-
-    Palette gamePalette = Palette(paletteEntries); // Default palette
+    Palette gamePalette = Palette(paletteEntries); // Custom palette with black auto-added at 0
 
     // Initialize screen
     if (Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, static_cast<unsigned int>(TARGET_FPS), 1.0f, gamePalette) != SCREEN_NOERROR) {
         Logger::Error("Failed to initialize screen");
         return false;
     }
+    SCREEN_WIDTH = Screen::GetInst().GetWidth();
+    SCREEN_HEIGHT = Screen::GetInst().GetHeight();
+    
     Renderer::GetInst().Initialize();
-    Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(5));
+    Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(14));
     
     Renderer::GetInst().SetWireframe(false);
     Renderer::GetInst().SetBackfaceCulling(true);
     Renderer::GetInst().SetCCW(true);
-    Renderer::GetInst().SetContrast(0.9f);
+    Renderer::GetInst().SetContrast(1.1f);
 	Renderer::GetInst().SetAntialiasingsamples(4);
 	Renderer::GetInst().SetAntialiasing(true);
 

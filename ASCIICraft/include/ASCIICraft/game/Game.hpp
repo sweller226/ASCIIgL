@@ -51,8 +51,8 @@ private:
     void RenderPlaying();
     
     // Constants
-    static constexpr int SCREEN_WIDTH = 600;
-    static constexpr int SCREEN_HEIGHT = 400;
+    static inline int SCREEN_WIDTH = 700;
+    static inline int SCREEN_HEIGHT = 400;
     static constexpr int FONT_SIZE = 3;
     static constexpr float TARGET_FPS = 60.0f;
 };

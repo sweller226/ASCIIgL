@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <vector>
 
 #include <ASCIIgL/engine/Logger.hpp>
 
@@ -139,7 +141,8 @@ void World::LoadChunk(const ChunkCoord& coord) {
     
     // Now generate terrain (GetChunk will find the stored chunk)
     // GenerateOneBlockGrassChunk(coord);
-    GenerateGrassLayerChunk(coord);
+    // GenerateGrassLayerChunk(coord);
+    GenerateRandomBlockChunk(coord);
     
     // Update neighbors
     UpdateChunkNeighbors(coord);
@@ -233,6 +236,71 @@ void World::GenerateGrassLayerChunk(const ChunkCoord& coord) {
             for (int x = 0; x < Chunk::SIZE; ++x) {
                 for (int z = 0; z < Chunk::SIZE; ++z) {
                     chunk->SetBlock(x, 0, z, Block(BlockType::Grass));
+                }
+            }
+        }
+        
+        // Mark chunk as generated and generate its mesh
+        chunk->SetGenerated(true);
+        chunk->GenerateMesh();
+    }
+}
+
+void World::GenerateRandomBlockChunk(const ChunkCoord& coord) {
+    // Generate chunks with random blocks for testing
+    Chunk* chunk = GetChunk(coord);
+    if (chunk) {
+        // Define available block types (excluding Air and Bedrock for now)
+        static const std::vector<BlockType> blockTypes = {
+            BlockType::Stone,
+            BlockType::Dirt,
+            BlockType::Grass,
+            BlockType::Wood,
+            BlockType::Leaves,
+            BlockType::Gravel,
+            BlockType::Coal_Ore,
+            BlockType::Iron_Ore,
+            BlockType::Diamond_Ore,
+            BlockType::Cobblestone,
+            BlockType::Crafting_Table,
+            BlockType::Wood_Planks,
+            BlockType::Furnace,
+            BlockType::Bedrock,
+        };
+        
+        // Use chunk coordinates as seed for consistent generation
+        std::srand(coord.x * 1000 + coord.y * 100 + coord.z * 10);
+        
+        if (coord.y == 0) {
+            // Generate random blocks at y=0 chunks with some structure
+            for (int x = 0; x < Chunk::SIZE; ++x) {
+                for (int z = 0; z < Chunk::SIZE; ++z) {
+                    // Create some variation: 80% chance of blocks, 20% air
+                    if (std::rand() % 100 < 80) {
+                        // Pick a random block type
+                        BlockType randomBlock = blockTypes[std::rand() % blockTypes.size()];
+                        chunk->SetBlock(x, 0, z, Block(randomBlock));
+                        
+                        // Sometimes add a second layer for variety
+                        if (std::rand() % 100 < 30) {
+                            BlockType secondBlock = blockTypes[std::rand() % blockTypes.size()];
+                            chunk->SetBlock(x, 1, z, Block(secondBlock));
+                        }
+                    }
+                    // 20% chance remains Air (empty space)
+                }
+            }
+        } else if (coord.y > 0) {
+            // Upper chunks: more sparse, mostly air with occasional blocks
+            for (int x = 0; x < Chunk::SIZE; ++x) {
+                for (int z = 0; z < Chunk::SIZE; ++z) {
+                    for (int y = 0; y < Chunk::SIZE; ++y) {
+                        // Only 10% chance of blocks in upper chunks
+                        if (std::rand() % 100 < 10) {
+                            BlockType randomBlock = blockTypes[std::rand() % blockTypes.size()];
+                            chunk->SetBlock(x, y, z, Block(randomBlock));
+                        }
+                    }
                 }
             }
         }

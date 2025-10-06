@@ -9,7 +9,7 @@
 
 
 Player::Player(glm::vec2 xz, glm::vec2 yawPitch)
-	: camera(glm::vec3(xz.x, playerHeight, xz.y), fov, (float)Screen::GetInst().GetVisibleWidth() / (float)Screen::GetInst().GetHeight(), yawPitch, nearClip, farClip)
+	: camera(glm::vec3(xz.x, playerHeight, xz.y), fov, (float)Screen::GetInst().GetWidth() / (float)Screen::GetInst().GetHeight(), yawPitch, nearClip, farClip)
 {
 
 }

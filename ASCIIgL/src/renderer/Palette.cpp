@@ -23,26 +23,32 @@ Palette::Palette() {
     }};
 }
 
-Palette::Palette(std::array<PaletteEntry, COLOR_COUNT> customEntries) : entries(customEntries) {
-    // No additional logic needed; entries are initialized via member initializer list
+Palette::Palette(std::array<PaletteEntry, 15> customEntries) {
+    // Black is always required at color 0
+    entries[0] = { {0, 0, 0}, 0x0 };
+    
+    // Copy the 15 custom entries to positions 1-15
+    for (int i = 0; i < 15; ++i) {
+        entries[i + 1] = customEntries[i];
+    }
 }
 
 glm::ivec3 Palette::GetRGB(unsigned int idx) const {
-    if (idx >= entries.size()) return glm::ivec3(0);
+    if (idx >= COLOR_COUNT) return glm::ivec3(0);
     return entries[idx].rgb;
 }
 
 unsigned short Palette::GetHex(unsigned int idx) const {
-    if (idx >= entries.size()) return 0x0;
+    if (idx >= COLOR_COUNT) return 0x0;
     return static_cast<unsigned short>(entries[idx].hex & 0xF);
 }
 
 unsigned short Palette::GetFgColor(unsigned int idx) const {
-    if (idx >= entries.size()) return 0x0;
+    if (idx >= COLOR_COUNT) return 0x0;
     return static_cast<unsigned short>(entries[idx].hex & 0xF);
 }
 
 unsigned short Palette::GetBgColor(unsigned int idx) const {
-    if (idx >= entries.size()) return 0x0;
+    if (idx >= COLOR_COUNT) return 0x0;
     return static_cast<unsigned short>((entries[idx].hex & 0xF) << 4);
 }

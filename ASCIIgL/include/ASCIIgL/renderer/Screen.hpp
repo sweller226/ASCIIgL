@@ -53,8 +53,7 @@ private:
     bool _initialized = false;
 
     // Platform-agnostic member variables (now instance members)
-    unsigned int _true_screen_width = 0;
-    unsigned int _visible_screen_width = 0;
+    unsigned int _screen_width = 0;  // Single width for square fonts
     unsigned int _screen_height = 0;
     std::wstring _title = L"";
     unsigned int _fontSize = 0;
@@ -65,8 +64,8 @@ private:
     // Tile properties
     unsigned int TILE_COUNT_X = 0;
     unsigned int TILE_COUNT_Y = 0;
-    unsigned int TILE_SIZE_X = 64;
-    unsigned int TILE_SIZE_Y = 64;
+    unsigned int TILE_SIZE_X = 32;
+    unsigned int TILE_SIZE_Y = 32;
     
     // FPS and timing (now instance members)
     Clock _fpsClock;
@@ -90,7 +89,7 @@ public:
 
     // Construction
     int Initialize(
-        const unsigned int visible_width, 
+        const unsigned int width, 
         const unsigned int height, 
         const std::wstring title, 
         const unsigned int fontSize, 
@@ -119,9 +118,8 @@ public:
     std::wstring GetTitle();
     void SetTitle(const std::wstring& title);
     unsigned int GetFontSize();
-    unsigned int GetVisibleWidth();
-    unsigned int GetTrueWidth();
     unsigned int GetHeight();
+    unsigned int GetWidth();
 
     // tile properties
     unsigned int GetTileCountX();

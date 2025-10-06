@@ -38,7 +38,7 @@ private:
 	// game starts at the main menu
 	unsigned int gameState = MAIN_MENU;
 
-	unsigned int SCR_WIDTH = 600; 
+	unsigned int SCR_WIDTH = 750; 
 	unsigned int SCR_HEIGHT = 400;
 
 	bool running = true;

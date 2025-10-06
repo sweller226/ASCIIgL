@@ -51,6 +51,7 @@ public:
     
     // Manual chunk generation (for now - no automatic terrain)
     void GenerateGrassLayerChunk(const ChunkCoord& coord);
+    void GenerateRandomBlockChunk(const ChunkCoord& coord);
     void GenerateOneBlockGrassChunk(const ChunkCoord& coord);
     
     // Rendering support

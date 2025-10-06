@@ -62,7 +62,7 @@
         }
 
         // Implementation methods
-        int Initialize(const unsigned int true_width, const unsigned int height, const unsigned int fontSize, const Palette& palette);
+        int Initialize(const unsigned int width, const unsigned int height, const unsigned int fontSize, const Palette& palette);
         void ClearPixelBuffer();
         void OutputBuffer();
         void RenderTitle(const bool showFps);
@@ -104,7 +104,7 @@
 #ifdef _WIN32
 
 // WindowsImpl method implementations (Unified Windows console implementation)
-int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigned int height, const unsigned int fontSize, const Palette& palette) {
+int Screen::WindowsImpl::Initialize(const unsigned int width, const unsigned int height, const unsigned int fontSize, const Palette& palette) {
     // First, get current console handle to check maximum window size with proper font
     HANDLE currentHandle = GetStdHandle(STD_OUTPUT_HANDLE);
     if (currentHandle == INVALID_HANDLE_VALUE) {
@@ -131,7 +131,7 @@ int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigne
     Logger::Debug(L"Max console window size: " + std::to_wstring(csbi.dwMaximumWindowSize.X) + L"x" + std::to_wstring(csbi.dwMaximumWindowSize.Y));
 
     // Adjust dimensions to fit within maximum window size
-    unsigned int adjustedWidth = true_width;
+    unsigned int adjustedWidth = width;
     unsigned int adjustedHeight = height;
     bool dimensionsAdjusted = false;
 
@@ -141,17 +141,16 @@ int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigne
         Logger::Info(L"Requested height " + std::to_wstring(height) + 
                        L" exceeds maximum, adjusting to " + std::to_wstring(adjustedHeight));
     }
-    if (true_width > csbi.dwMaximumWindowSize.X) {
+    if (width > csbi.dwMaximumWindowSize.X) {
         adjustedWidth = csbi.dwMaximumWindowSize.X;
         dimensionsAdjusted = true;
-        Logger::Info(L"Requested true width " + std::to_wstring(true_width) +
+        Logger::Info(L"Requested screen width " + std::to_wstring(width) +
                        L" exceeds maximum, adjusting to " + std::to_wstring(adjustedWidth));
     }
 
     if (dimensionsAdjusted) {
         // Update instance screen dimensions
-        screen._true_screen_width = MathUtil::FloorToEven(adjustedWidth);
-        screen._visible_screen_width = adjustedWidth / 2;
+        screen._screen_width = adjustedWidth;
         screen._screen_height = adjustedHeight;
         Logger::Info(L"Screen dimensions automatically adjusted to " + 
                     std::to_wstring(adjustedWidth) + L"x" + std::to_wstring(adjustedHeight));
@@ -162,7 +161,7 @@ int Screen::WindowsImpl::Initialize(const unsigned int true_width, const unsigne
     dwBufferCoord = COORD{ 0, 0 };
     rcRegion = SMALL_RECT{ 0, 0, SHORT(adjustedWidth - 1), SHORT(adjustedHeight - 1) };
 
-    Logger::Debug(L"Creating front and back console screen buffers for double buffering.");
+    Logger::Debug(L"Creating console screen buffers.");
     _hOutput = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
     if (_hOutput == INVALID_HANDLE_VALUE) {
         Logger::Error(L"Failed to create console screen buffers.");
@@ -237,52 +236,45 @@ void Screen::WindowsImpl::RenderTitle(const bool showFps) {
 }
 
 void Screen::WindowsImpl::PlotPixel(const glm::vec2& p, const WCHAR character, const unsigned short Colour) {
-    int x = static_cast<int>(p.x) * 2; // Double the x coordinate for wide buffer
+    int x = static_cast<int>(p.x);  // No doubling for square fonts
     int y = static_cast<int>(p.y);
-    if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
-        // Plot the pixel twice horizontally
-        _pixelBuffer[y * screen._true_screen_width + x].Char.UnicodeChar = character;
-        _pixelBuffer[y * screen._true_screen_width + x].Attributes = static_cast<WORD>(Colour);
-        _pixelBuffer[y * screen._true_screen_width + x + 1].Char.UnicodeChar = character;
-        _pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = static_cast<WORD>(Colour);
+    if (x >= 0 && x < static_cast<int>(screen._screen_width) && y >= 0 && y < static_cast<int>(screen._screen_height)) {
+        // Plot single pixel for square fonts
+        _pixelBuffer[y * screen._screen_width + x].Char.UnicodeChar = character;
+        _pixelBuffer[y * screen._screen_width + x].Attributes = static_cast<WORD>(Colour);
     }
 }
 
 void Screen::WindowsImpl::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol) {
-    int x = static_cast<int>(p.x) * 2; // Double the x coordinate for wide buffer
+    int x = static_cast<int>(p.x);  // No doubling for square fonts
     int y = static_cast<int>(p.y);
-    if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
-        // Plot the pixel twice horizontally
-        _pixelBuffer[y * screen._true_screen_width + x] = charCol;
-        _pixelBuffer[y * screen._true_screen_width + x + 1] = charCol;
+    if (x >= 0 && x < static_cast<int>(screen._screen_width) && y >= 0 && y < static_cast<int>(screen._screen_height)) {
+        // Plot single pixel for square fonts
+        _pixelBuffer[y * screen._screen_width + x] = charCol;
     }
 }
 
 void Screen::WindowsImpl::PlotPixel(int x, int y, WCHAR character, const unsigned short Colour) {
-    x *= 2; // Double the x coordinate for wide buffer
-    if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
-        // Plot the pixel twice horizontally
-        _pixelBuffer[y * screen._true_screen_width + x].Char.UnicodeChar = character;
-        _pixelBuffer[y * screen._true_screen_width + x].Attributes = static_cast<WORD>(Colour);
-        _pixelBuffer[y * screen._true_screen_width + x + 1].Char.UnicodeChar = character;
-        _pixelBuffer[y * screen._true_screen_width + x + 1].Attributes = static_cast<WORD>(Colour);
+    // No doubling for square fonts
+    if (x >= 0 && x < static_cast<int>(screen._screen_width) && y >= 0 && y < static_cast<int>(screen._screen_height)) {
+        // Plot single pixel for square fonts
+        _pixelBuffer[y * screen._screen_width + x].Char.UnicodeChar = character;
+        _pixelBuffer[y * screen._screen_width + x].Attributes = static_cast<WORD>(Colour);
     }
 }
 
 void Screen::WindowsImpl::PlotPixel(int x, int y, CHAR_INFO charCol) {
-    x *= 2; // Double the x coordinate for wide buffer
-    if (x >= 0 && x < static_cast<int>(screen._true_screen_width) - 1 && y >= 0 && y < static_cast<int>(screen._screen_height)) {
-        // Plot the pixel twice horizontally
-        _pixelBuffer[y * screen._true_screen_width + x] = charCol;
-        _pixelBuffer[y * screen._true_screen_width + x + 1] = charCol;
+    // No doubling for square fonts
+    if (x >= 0 && x < static_cast<int>(screen._screen_width) && y >= 0 && y < static_cast<int>(screen._screen_height)) {
+        // Plot single pixel for square fonts
+        _pixelBuffer[y * screen._screen_width + x] = charCol;
     }
 }
 
 void Screen::WindowsImpl::PlotPixel(int idx, const CHAR_INFO charCol) {
-    idx *= 2; // Adjust index for wide buffer
-    if (idx >= 0 && idx < static_cast<int>(screen._true_screen_width * screen._screen_height)) {
+    // No doubling for square fonts
+    if (idx >= 0 && idx < static_cast<int>(screen._screen_width * screen._screen_height)) {
         _pixelBuffer[idx] = charCol;
-        _pixelBuffer[idx + 1] = charCol; // Plot the pixel twice horizontally
     }
 }
 
@@ -325,7 +317,7 @@ Screen::~Screen() {
 }
 
 int Screen::Initialize(
-    const unsigned int visible_width, 
+    const unsigned int width, 
     const unsigned int height, 
     const std::wstring title, 
     const unsigned int fontSize, 
@@ -339,10 +331,9 @@ int Screen::Initialize(
     _fpsCap = fpsCap;
     _fpsWindowSec = fpsWindowSec;
 
-    Logger::Debug(L"Initializing screen with width=" + std::to_wstring(visible_width) + L", height=" + std::to_wstring(height) + L", title=" + title);
-    Logger::Debug(L"Requested true width is " + std::to_wstring(visible_width * 2));
-    _true_screen_width = visible_width * 2;
-    _visible_screen_width = visible_width;
+    Logger::Debug(L"Initializing screen with width=" + std::to_wstring(width) + L", height=" + std::to_wstring(height) + L", title=" + title);
+    Logger::Debug(L"Screen now using square font - single width variable");
+    _screen_width = width;  // Single width for square fonts
     _screen_height = height;
     _title = title;
 
@@ -374,7 +365,7 @@ int Screen::Initialize(
     _impl = std::make_unique<WindowsImpl>(*this);
     
     // Windows-specific initialization through delegation
-    int initResult = _impl->Initialize(_true_screen_width, height, adjustedFontSize, palette);
+    int initResult = _impl->Initialize(width, height, adjustedFontSize, palette);
     if (initResult != SCREEN_NOERROR) {
         return initResult;
     }
@@ -448,12 +439,8 @@ unsigned int Screen::GetFontSize() {
     return _fontSize;
 }
 
-unsigned int Screen::GetVisibleWidth() {
-    return _visible_screen_width;
-}
-
-unsigned int Screen::GetTrueWidth() {
-    return _true_screen_width;
+unsigned int Screen::GetWidth() {
+    return _screen_width;
 }
 
 unsigned int Screen::GetHeight() {
@@ -484,7 +471,7 @@ void Screen::SetTileSize(const unsigned int x, const unsigned int y) {
 
 void Screen::CalculateTileCounts() {
     // Use ceiling division to ensure all pixels are covered by tiles
-    TILE_COUNT_X = (_true_screen_width + TILE_SIZE_X - 1) / TILE_SIZE_X;
+    TILE_COUNT_X = (_screen_width + TILE_SIZE_X - 1) / TILE_SIZE_X;
     TILE_COUNT_Y = (_screen_height + TILE_SIZE_Y - 1) / TILE_SIZE_Y;
 }
 
@@ -650,12 +637,12 @@ bool Screen::WindowsImpl::ModifyTerminalFont(const std::wstring& settingsPath, f
         }
 
         // Ensure font is installed
-        if (!IsFontInstalled(L"Perfect DOS VGA 437")) {
-            std::wstring fontPath = L"res\\ASCIIgL\\fonts\\perfect_dos_vga_437\\Perfect DOS VGA 437.ttf";
+        if (!IsFontInstalled(L"Square")) {
+            std::wstring fontPath = L"res\\ASCIIgL\\fonts\\square\\square.ttf";
             if (InstallFontFromFile(fontPath)) {
-                Logger::Info(L"Successfully installed 'Perfect DOS VGA 437' font.");
+                Logger::Info(L"Successfully installed 'Square' font.");
             } else {
-                Logger::Warning(L"Failed to install 'Perfect DOS VGA 437' font. Font face setting may not apply correctly.");
+                Logger::Warning(L"Failed to install 'Square' font. Font face setting may not apply correctly.");
             }
         }
 
@@ -671,7 +658,7 @@ bool Screen::WindowsImpl::ModifyTerminalFont(const std::wstring& settingsPath, f
             }
             nlohmann::json& fontObj = defaults["font"];
             fontObj["size"] = fontSize;
-            fontObj["face"] = "Perfect DOS VGA 437";
+            fontObj["face"] = "Square Modern";
             fontObj["lineHeight"] = 1.0;
         } else {
             Logger::Error(L"Could not find 'profiles' object in settings.json.");
@@ -751,11 +738,11 @@ bool Screen::WindowsImpl::InstallFontFromFile(const std::wstring& fontPath) {
     Sleep(200); // Give system time to process font registration
     
     // Verify font installation by checking if it's now available
-    bool isInstalled = IsFontInstalled(L"Perfect DOS VGA 437");
+    bool isInstalled = IsFontInstalled(L"Square");
     if (isInstalled) {
-        Logger::Info(L"Font verification successful: Perfect DOS VGA 437 is now available");
+        Logger::Info(L"Font verification successful: Square is now available");
     } else {
-        Logger::Warning(L"Font verification failed: Perfect DOS VGA 437 may not be properly registered");
+        Logger::Warning(L"Font verification failed: Square may not be properly registered");
         Logger::Info(L"Suggestion: Restart the application or Windows Terminal, or install the font manually");
     }
     

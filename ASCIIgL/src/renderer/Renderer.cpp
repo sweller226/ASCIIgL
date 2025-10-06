@@ -27,8 +27,8 @@ void Renderer::Initialize() {
         throw std::runtime_error("Renderer: Screen must be initialized before creating Renderer.");
     }
     auto& screen = Screen::GetInst();
-    _depth_buffer.resize(screen.GetVisibleWidth() * screen.GetHeight());
-    _color_buffer.resize(screen.GetVisibleWidth() * screen.GetHeight());
+    _depth_buffer.resize(screen.GetWidth() * screen.GetHeight());
+    _color_buffer.resize(screen.GetWidth() * screen.GetHeight());
 
     _vertexBuffer.reserve(100000);  // Enough for ~33k triangles
     _clippedBuffer.reserve(200000); // Clipping can double vertices
@@ -111,7 +111,7 @@ void Renderer::Draw2DQuadPixelSpace(VERTEX_SHADER& VSHADER, const Texture& tex, 
 void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer)
 {
     // Convert percentage coordinates to pixel coordinates
-    float screenWidth = static_cast<float>(Screen::GetInst().GetVisibleWidth());
+    float screenWidth = static_cast<float>(Screen::GetInst().GetWidth());
     float screenHeight = static_cast<float>(Screen::GetInst().GetHeight());
     
     glm::vec2 pixelPosition = glm::vec2(positionPerc.x * screenWidth, positionPerc.y * screenHeight);
@@ -138,17 +138,17 @@ void Renderer::Draw2DQuadPercSpace(VERTEX_SHADER& VSHADER, const Texture& tex, c
 
 void Renderer::DrawScreenBorderPxBuff(const unsigned short col) {
 	// DRAWING BORDERS
-	DrawLinePxBuff(0, 0, Screen::GetInst().GetVisibleWidth() - 1, 0, static_cast<WCHAR>(219), col);
-	DrawLinePxBuff(Screen::GetInst().GetVisibleWidth() - 1, 0, Screen::GetInst().GetVisibleWidth() - 1, Screen::GetInst().GetHeight() - 1, static_cast<WCHAR>(219), col);
-	DrawLinePxBuff(Screen::GetInst().GetVisibleWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, static_cast<WCHAR>(219), col);
-	DrawLinePxBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, static_cast<WCHAR>(219), col);
+	DrawLinePxBuff(0, 0, Screen::GetInst().GetWidth() - 1, 0, _charRamp[8], col);
+	DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, 0, Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, _charRamp[8], col);
+	DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, _charRamp[8], col);
+	DrawLinePxBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, _charRamp[8], col);
 }
 
 void Renderer::DrawScreenBorderColBuff(const glm::vec3& col) {
     // DRAWING BORDERS
-    DrawLineColBuff(0, 0, Screen::GetInst().GetVisibleWidth() - 1, 0, col);
-    DrawLineColBuff(Screen::GetInst().GetVisibleWidth() - 1, 0, Screen::GetInst().GetVisibleWidth() - 1, Screen::GetInst().GetHeight() - 1, col);
-    DrawLineColBuff(Screen::GetInst().GetVisibleWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, col);
+    DrawLineColBuff(0, 0, Screen::GetInst().GetWidth() - 1, 0, col);
+    DrawLineColBuff(Screen::GetInst().GetWidth() - 1, 0, Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, col);
+    DrawLineColBuff(Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, col);
     DrawLineColBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, col);
 }
 
@@ -291,7 +291,7 @@ void Renderer::InitializeTiles() {
             int posY = ty * Screen::GetInst().GetTileSizeY();
 
             // Clamp tile size if it would overflow the screen
-            int sizeX = std::min(Screen::GetInst().GetTileSizeX(), Screen::GetInst().GetVisibleWidth() - posX);
+            int sizeX = std::min(Screen::GetInst().GetTileSizeX(), Screen::GetInst().GetWidth() - posX);
             int sizeY = std::min(Screen::GetInst().GetTileSizeY(), Screen::GetInst().GetHeight() - posY);
 
             _tileBuffer[tileIndex].position = glm::ivec2(posX, posY);
@@ -319,7 +319,7 @@ void Renderer::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles) 
     const int tileSizeY = screen.GetTileSizeY();
     const int tileCountX = screen.GetTileCountX();
     const int tileCountY = screen.GetTileCountY();
-    const float invTileSizeX = 1.0f / tileSizeX; // Avoid divisions in hot loop
+    const float invTileSizeX = 1.0f / tileSizeX;
     const float invTileSizeY = 1.0f / tileSizeY;
 
     for (int i = 0; i < static_cast<int>(raster_triangles.size()); i += 3) {
@@ -328,8 +328,7 @@ void Renderer::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles) 
             raster_triangles[i + 1].GetXY(),
             raster_triangles[i + 2].GetXY()
         );
-
-        // Optimized tile range calculation using pre-computed inverse
+        
         int minTileX = std::max(0, static_cast<int>(minTriPt.x * invTileSizeX));
         int maxTileX = std::min(tileCountX - 1, static_cast<int>(std::ceil(maxTriPt.x * invTileSizeX)));
         int minTileY = std::max(0, static_cast<int>(minTriPt.y * invTileSizeY));
@@ -519,7 +518,7 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
     if (texWidth == 0 || texHeight == 0) { Logger::Error("  Invalid texture dimensions!"); return; }
 
     // Cache screen dimensions and texture size as floats
-    const int screenWidth = Screen::GetInst().GetVisibleWidth();
+    const int screenWidth = Screen::GetInst().GetWidth();
     const int screenHeight = Screen::GetInst().GetHeight();
     const float texWidthF = static_cast<float>(texWidth);
     const float texHeightF = static_cast<float>(texHeight);
@@ -615,6 +614,8 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
                 const float wA = e23 * invSignedArea;
                 const float wB = e31 * invSignedArea;
                 const float wC = 1.0f - wA - wB;
+                
+                if (wA < -0.001f || wB < -0.001f || wC < -0.001f) continue;
                 const float perspW = wA*w1p + wB*w2p + wC*w3p;
                 
                 // Early depth test BEFORE expensive texture sampling
@@ -624,11 +625,13 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
                 const float invPerspW = 1.0f / perspW;
                 const float tu = (wA*u1 + wB*u2 + wC*u3) * invPerspW;
                 const float tv = (wA*v1t + wB*v2t + wC*v3t) * invPerspW;
-                if (tu < 0.f || tu >= 1.f || tv < 0.f || tv >= 1.f) continue;
-                const float sX = tu * texWidthF;
-                const float sY = tv * texHeightF;
+                
+                // Use integer math where possible (Optimization 5)
+                const int texelX = (int)(tu * texWidth);
+                const int texelY = (int)(tv * texHeight);
+                if (texelX < 0 || texelX >= texWidth || texelY < 0 || texelY >= texHeight) continue;
 
-                const uint8_t* pixel = tex->GetPixelRGBAPtr(sX, sY);
+                const uint8_t* pixel = tex->GetPixelRGBAPtr(texelX, texelY);
                 rgbAccum.r += pixel[0];
                 rgbAccum.g += pixel[1];
                 rgbAccum.b += pixel[2];
@@ -659,7 +662,7 @@ void Renderer::DrawTriangleTextured(const VERTEX& v1, const VERTEX& v2, const VE
     if (texWidth == 0 || texHeight == 0) { Logger::Error("  Invalid texture dimensions!"); return; }
 
     // Cache screen dimensions and texture size as floats
-    const int screenWidth = Screen::GetInst().GetVisibleWidth();
+    const int screenWidth = Screen::GetInst().GetWidth();
     const int screenHeight = Screen::GetInst().GetHeight();
     const float texWidthF = static_cast<float>(texWidth);
     const float texHeightF = static_cast<float>(texHeight);
@@ -747,6 +750,8 @@ void Renderer::DrawTriangleTextured(const VERTEX& v1, const VERTEX& v2, const VE
                 const float wA = e23 * invSignedArea;
                 const float wB = e31 * invSignedArea;
                 const float wC = 1.0f - wA - wB;
+                
+                if (wA < -0.001f || wB < -0.001f || wC < -0.001f) continue;
                 const float perspW = wA*w1p + wB*w2p + wC*w3p;
                 
                 // Early depth test BEFORE expensive texture sampling
@@ -756,11 +761,13 @@ void Renderer::DrawTriangleTextured(const VERTEX& v1, const VERTEX& v2, const VE
                 const float invPerspW = 1.0f / perspW;
                 const float tu = (wA*u1 + wB*u2 + wC*u3) * invPerspW;
                 const float tv = (wA*v1t + wB*v2t + wC*v3t) * invPerspW;
-                if (tu < 0.f || tu >= 1.f || tv < 0.f || tv >= 1.f) continue;
-                const float sX = tu * texWidthF;
-                const float sY = tv * texHeightF;
+                
+                // Use integer math where possible (Optimization 5)
+                const int texelX = (int)(tu * texWidth);
+                const int texelY = (int)(tv * texHeight);
+                if (texelX < 0 || texelX >= texWidth || texelY < 0 || texelY >= texHeight) continue;
 
-                const uint8_t* pixel = tex->GetPixelRGBAPtr(sX, sY);
+                const uint8_t* pixel = tex->GetPixelRGBAPtr(texelX, texelY);
                 rgbAccum.r += pixel[0];
                 rgbAccum.g += pixel[1];
                 rgbAccum.b += pixel[2];
@@ -887,7 +894,7 @@ void Renderer::ViewPortTransform(VERTEX& vertice) {
 	// transforms vertice from [-1 to 1] to [0 to scr_dim]
 	// Flip Y to match screen coordinates where Y=0 is at top
 	glm::vec4 newPos = glm::vec4(
-		((vertice.X() + 1.0f) / 2.0f) * Screen::GetInst().GetVisibleWidth(), 
+		((vertice.X() + 1.0f) / 2.0f) * Screen::GetInst().GetWidth(), 
 		((1.0f - vertice.Y()) / 2.0f) * Screen::GetInst().GetHeight(),  // Flipped Y
 		vertice.Z(), 
 		vertice.W()
@@ -1179,7 +1186,7 @@ const std::vector<std::pair<float, float>>& Renderer::GetSubpixelOffsets() {
 
 void Renderer::TestRenderFont() {
     Screen& screen = Screen::GetInst();
-    int screenWidth = screen.GetVisibleWidth();
+    int screenWidth = screen.GetWidth();
     int screenHeight = screen.GetHeight();
     
     // Get the number of characters in the ramp
@@ -1289,7 +1296,7 @@ void Renderer::PrecomputeColorLUT() {
 
 void Renderer::TestRenderColorDiscrete() {
     Screen& screen = Screen::GetInst();
-    int screenWidth = screen.GetVisibleWidth();
+    int screenWidth = screen.GetWidth();
     int screenHeight = screen.GetHeight();
 
     // 16 colors, arrange in a 4x4 grid
@@ -1313,7 +1320,7 @@ void Renderer::TestRenderColorDiscrete() {
 
         // Use a solid block character for visibility
         CHAR_INFO charInfo;
-        charInfo.Char.UnicodeChar = 0x2588;
+        charInfo.Char.UnicodeChar = 'B';
         charInfo.Attributes = palette.GetFgColor(colorIdx) | palette.GetBgColor(colorIdx);
         std::wstringstream ss;
         ss << L"Color " << colorIdx << L" RGB: ("
@@ -1351,7 +1358,7 @@ void Renderer::OverwritePxBuffWithColBuff() {
 }
 
 void Renderer::PlotColor(int x, int y, const glm::ivec3& color) {
-    const int screenWidth = Screen::GetInst().GetVisibleWidth();
+    const int screenWidth = Screen::GetInst().GetWidth();
     const int screenHeight = Screen::GetInst().GetHeight();
     
     if (x < 0 || x >= screenWidth || y < 0 || y >= screenHeight) {
@@ -1362,7 +1369,7 @@ void Renderer::PlotColor(int x, int y, const glm::ivec3& color) {
 }
 
 void Renderer::PlotColor(int x, int y, const glm::ivec4& color) {
-    const int screenWidth = Screen::GetInst().GetVisibleWidth();
+    const int screenWidth = Screen::GetInst().GetWidth();
     const int screenHeight = Screen::GetInst().GetHeight();
     
     if (x < 0 || x >= screenWidth || y < 0 || y >= screenHeight) {
@@ -1373,7 +1380,7 @@ void Renderer::PlotColor(int x, int y, const glm::ivec4& color) {
 }
 
 void Renderer::PlotColor(int x, int y, const glm::ivec4& color, float depth) {
-    const int screenWidth = Screen::GetInst().GetVisibleWidth();
+    const int screenWidth = Screen::GetInst().GetWidth();
     const int screenHeight = Screen::GetInst().GetHeight();
     
     if (x < 0 || x >= screenWidth || y < 0 || y >= screenHeight) {
@@ -1388,7 +1395,7 @@ void Renderer::PlotColor(int x, int y, const glm::ivec4& color, float depth) {
 }
 
 void Renderer::PlotColorBlend(int x, int y, const glm::ivec4& color, float depth) {
-    const int screenWidth = Screen::GetInst().GetVisibleWidth();
+    const int screenWidth = Screen::GetInst().GetWidth();
     const int screenHeight = Screen::GetInst().GetHeight();
     
     if (x < 0 || x >= screenWidth || y < 0 || y >= screenHeight) {
