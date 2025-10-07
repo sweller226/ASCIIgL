@@ -10,16 +10,12 @@
 #include <ASCIIgL/engine/Texture.hpp>
 #include <ASCIIgL/engine/Camera3D.hpp>
 #include <ASCIIgL/engine/Camera2D.hpp>
+
 #include <ASCIIgL/renderer/VertexShader.hpp>
 #include <ASCIIgL/renderer/Screen.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
+#include <ASCIIgL/renderer/TileManager.hpp>
 
-struct Tile {
-    glm::vec2 position;
-    glm::vec2 size;
-    std::vector<int> tri_indices_encapsulated;
-    std::vector<int> tri_indices_partial;
-};
 
 class Renderer
 {
@@ -53,8 +49,6 @@ private:
     // Pre-allocated buffers for performance (avoid per-frame allocations)
     std::vector<VERTEX> _vertexBuffer;
     std::vector<VERTEX> _clippedBuffer;
-    std::vector<Tile> _tileBuffer;
-    bool _tilesInitialized = false;
 
     // clipping stage
     VERTEX HomogenousPlaneIntersect(const VERTEX& vert2, const VERTEX& vert1, const int component, const bool Near);
@@ -67,13 +61,6 @@ private:
 
     // viewport and perspective transform
     void PerspectiveAndViewportTransform(std::vector<VERTEX>& raster_triangles);
-
-    // Tile setup
-    void InitializeTiles();
-    void ClearTileTriangleLists();
-    void BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles);
-    bool DoesTileEncapsulate(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3);
-    void InvalidateTiles();
 
     void DrawTriangleWireframeColBuffPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::vec4& col);
     void DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);

@@ -4,6 +4,7 @@
 #include <ASCIIgL/renderer/Screen.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
+#include <ASCIIgL/engine/FPSClock.hpp>
 
 #include <ASCIICraft/world/Block.hpp>
 #include <ASCIICraft/gui/GuiManager.hpp>
@@ -42,13 +43,15 @@ bool Game::Initialize() {
     Palette gamePalette = Palette(paletteEntries); // Custom palette with black auto-added at 0
 
     // Initialize screen
-    if (Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, static_cast<unsigned int>(TARGET_FPS), 1.0f, gamePalette) != SCREEN_NOERROR) {
+    if (Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != SCREEN_NOERROR) {
         Logger::Error("Failed to initialize screen");
         return false;
     }
     SCREEN_WIDTH = Screen::GetInst().GetWidth();
     SCREEN_HEIGHT = Screen::GetInst().GetHeight();
-    
+
+    FPSClock::GetInst().Initialize(static_cast<unsigned int>(TARGET_FPS), 1.0f);
+
     Renderer::GetInst().Initialize();
     Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(14));
     
@@ -95,7 +98,7 @@ void Game::Run() {
 
     // Main game loop
     while (isRunning) {
-        Screen::GetInst().StartFPSClock();
+        FPSClock::GetInst().StartFPSClock();
         Screen::GetInst().ClearPixelBuffer();
         Renderer::GetInst().ClearBuffers();
         
@@ -110,7 +113,7 @@ void Game::Run() {
         Renderer::GetInst().DrawScreenBorderPxBuff(0xF);
         Screen::GetInst().OutputBuffer();
 
-        Screen::GetInst().EndFPSClock();
+        FPSClock::GetInst().EndFPSClock();
         Screen::GetInst().RenderTitle(true);
     }
     

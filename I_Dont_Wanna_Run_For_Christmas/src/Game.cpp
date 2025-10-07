@@ -2,6 +2,7 @@
 
 #include <ASCIIgL/engine/Logger.hpp>
 #include <ASCIIgL/engine/Collision.hpp>
+#include <ASCIIgL/engine/FPSClock.hpp>
 
 Game::Game()
 	: guiCamera(glm::vec2(0, 0), SCR_WIDTH, SCR_HEIGHT)
@@ -79,7 +80,8 @@ void Game::Run() {
 	}};
     Palette gamePalette = Palette(paletteEntries); // Default palette
 
-	Screen::GetInst().Initialize(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 3, 60, 1.0f, gamePalette);
+	Screen::GetInst().Initialize(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 3, gamePalette);
+	FPSClock::GetInst().Initialize(60, 1.0f);
 	Renderer::GetInst().Initialize();
 
 	Logger::Info("Loading level...");
@@ -102,7 +104,7 @@ void Game::Run() {
     // main gameloop
     while (running == true)
     {
-        Screen::GetInst().StartFPSClock();
+        FPSClock::GetInst().StartFPSClock();
         Screen::GetInst().ClearPixelBuffer();
 		Renderer::GetInst().ClearBuffers();
 
@@ -135,7 +137,7 @@ void Game::Run() {
         Renderer::GetInst().DrawScreenBorderPxBuff(0xF);
         Screen::GetInst().OutputBuffer();
 
-		Screen::GetInst().EndFPSClock();
+		FPSClock::GetInst().EndFPSClock();
         Screen::GetInst().RenderTitle(true);
     }
     Logger::Info("Game loop ended.");
@@ -216,7 +218,7 @@ void Game::RunLore() {
 	Renderer::GetInst().OverwritePxBuffWithColBuff();
 	Screen::GetInst().OutputBuffer();
 	Sleep(7500); // this is me being super lazy, instead of implementing a timer that lets the main loop run I just pause the whole thing for 7.5 seconds :p
-	Screen::GetInst().StartFPSClock();
+	FPSClock::GetInst().StartFPSClock();
 	gameState = MAZE;
 	LoadLevel();
 }
@@ -333,7 +335,7 @@ void Game::MariahAI() {
 	{
 		if (enemies[i]->aiState == Enemy::CHASE)
 		{
-			glm::vec3 move = glm::normalize(player->GetPlayerPos() - enemies[i]->position) * Screen::GetInst().GetDeltaTime() * chaseSpeed;
+			glm::vec3 move = glm::normalize(player->GetPlayerPos() - enemies[i]->position) * FPSClock::GetInst().GetDeltaTime() * chaseSpeed;
 			enemies[i]->position += glm::vec3(move.x, 0, move.z);
 		}
 
@@ -349,7 +351,7 @@ void Game::MariahAI() {
 				else
 					enemies[i]->patrolDest = enemies[i]->patrolEnd;
 			}
-			glm::vec3 move = glm::normalize(enemies[i]->patrolDest - enemies[i]->position) * Screen::GetInst().GetDeltaTime() * patrolSpeed;
+			glm::vec3 move = glm::normalize(enemies[i]->patrolDest - enemies[i]->position) * FPSClock::GetInst().GetDeltaTime() * patrolSpeed;
 			enemies[i]->position += glm::vec3(move.x, 0, move.z);
 		}
 	}

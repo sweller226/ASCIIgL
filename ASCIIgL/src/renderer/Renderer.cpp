@@ -182,28 +182,28 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
     }
 
     // tile management
-    if (!_tilesInitialized) {
-        InitializeTiles();
-        _tilesInitialized = true;
+    auto& tile_manager = TileManager::GetInst();
+    if (!tile_manager.IsInitialized()) {
+        tile_manager.InitializeTiles(Screen::GetInst().GetWidth(), Screen::GetInst().GetHeight());
     }
-    BinTrianglesToTiles(_vertexBuffer); // Now includes clearing
+    tile_manager.BinTrianglesToTiles(_vertexBuffer); // Now includes clearing
 
     if (!_colorLUTComputed) {
         PrecomputeColorLUT();
     }
 
-    std::for_each(std::execution::par, _tileBuffer.begin(), _tileBuffer.end(), 
-        [&](Tile& tile) {
-            if (tile.tri_indices_encapsulated.empty() && tile.tri_indices_partial.empty()) {
-                return;
-            }
-            
-            if (_wireframe || tex == nullptr) {
-                DrawTileWireframe(tile, _vertexBuffer);
-            } else {
-                DrawTileTextured(tile, _vertexBuffer, tex);
-            }
-        });
+    // tile rendering
+    tile_manager.UpdateActiveTiles();
+    if (!tile_manager.activeTiles.empty()) {
+        std::for_each(std::execution::par, tile_manager.activeTiles.begin(), tile_manager.activeTiles.end(),
+            [&](Tile* tile) {
+                if (_wireframe || tex == nullptr) {
+                    DrawTileWireframe(*tile, _vertexBuffer);
+                } else {
+                    DrawTileTextured(*tile, _vertexBuffer, tex);
+                }
+            });
+    }
 }
 
 void Renderer::BackFaceCullHelper(std::vector<VERTEX>& vertices) {
@@ -268,108 +268,6 @@ void Renderer::BackFaceCullHelper(std::vector<VERTEX>& vertices) {
 // =============================================================================
 // TILE-BASED RENDERING FUNCTIONS
 // =============================================================================
-
-void Renderer::InitializeTiles() {
-    // One-time initialization of tile structure - much faster than recreating every frame
-    int tileCount = Screen::GetInst().GetTileCountX() * Screen::GetInst().GetTileCountY();
-    _tileBuffer.clear();
-    _tileBuffer.resize(tileCount);
-    
-    for (int ty = 0; ty < Screen::GetInst().GetTileCountY(); ++ty) {
-        for (int tx = 0; tx < Screen::GetInst().GetTileCountX(); ++tx) {
-            int tileIndex = ty * Screen::GetInst().GetTileCountX() + tx;
-            int posX = tx * Screen::GetInst().GetTileSizeX();
-            int posY = ty * Screen::GetInst().GetTileSizeY();
-
-            // Clamp tile size if it would overflow the screen
-            int sizeX = std::min(Screen::GetInst().GetTileSizeX(), Screen::GetInst().GetWidth() - posX);
-            int sizeY = std::min(Screen::GetInst().GetTileSizeY(), Screen::GetInst().GetHeight() - posY);
-
-            _tileBuffer[tileIndex].position = glm::ivec2(posX, posY);
-            _tileBuffer[tileIndex].size = glm::ivec2(sizeX, sizeY);
-            
-            // Pre-reserve space to avoid frequent reallocations
-            _tileBuffer[tileIndex].tri_indices_encapsulated.reserve(64);
-            _tileBuffer[tileIndex].tri_indices_partial.reserve(64);
-        }
-    }
-}
-
-void Renderer::ClearTileTriangleLists() {
-    // Much faster than recreating tiles - just clear the triangle lists
-    for (auto& tile : _tileBuffer) {
-        tile.tri_indices_encapsulated.clear();
-        tile.tri_indices_partial.clear();
-    }
-}
-
-void Renderer::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles) {
-    for (auto& tile : _tileBuffer) {
-        tile.tri_indices_encapsulated.clear();
-        tile.tri_indices_partial.clear();
-    }
-
-    // Early exit if no triangles
-    if (raster_triangles.empty()) return;
-
-    auto& screen = Screen::GetInst();
-    const int tileSizeX = screen.GetTileSizeX();
-    const int tileSizeY = screen.GetTileSizeY();
-    const int tileCountX = screen.GetTileCountX();
-    const int tileCountY = screen.GetTileCountY();
-    const float invTileSizeX = 1.0f / tileSizeX;
-    const float invTileSizeY = 1.0f / tileSizeY;
-
-    for (int i = 0; i < static_cast<int>(raster_triangles.size()); i += 3) {
-        const VERTEX& v1 = raster_triangles[i];
-        const VERTEX& v2 = raster_triangles[i + 1];
-        const VERTEX& v3 = raster_triangles[i + 2];
-        
-        const auto [minTriPt, maxTriPt] = MathUtil::ComputeBoundingBox(
-            v1.GetXY(), v2.GetXY(), v3.GetXY()
-        );
-        
-        int minTileX = std::max(0, static_cast<int>(minTriPt.x * invTileSizeX));
-        int maxTileX = std::min(tileCountX - 1, static_cast<int>(maxTriPt.x * invTileSizeX + 0.999f));
-        int minTileY = std::max(0, static_cast<int>(minTriPt.y * invTileSizeY));
-        int maxTileY = std::min(tileCountY - 1, static_cast<int>(maxTriPt.y * invTileSizeY + 0.999f));
-
-        for (int ty = minTileY; ty <= maxTileY; ++ty) {
-            const int rowOffset = ty * tileCountX;
-            for (int tx = minTileX; tx <= maxTileX; ++tx) {
-                const int tileIndex = rowOffset + tx;
-                Tile& tile = _tileBuffer[tileIndex];
-
-                if (DoesTileEncapsulate(tile, v1, v2, v3)) {
-                    tile.tri_indices_encapsulated.push_back(i);
-                } else {
-                    tile.tri_indices_partial.push_back(i);
-                }
-            }
-        }
-    }
-}
-
-bool Renderer::DoesTileEncapsulate(const Tile& tile, const VERTEX& v1, const VERTEX& v2, const VERTEX& v3)
-{
-    // Get triangle bounding box
-    const auto [minTriPt, maxTriPt] = MathUtil::ComputeBoundingBox(
-        v1.GetXY(),
-        v2.GetXY(),
-        v3.GetXY()
-    );
-
-    // Get tile bounding box
-    glm::vec2 tileMin = tile.position;
-    glm::vec2 tileMax = tile.position + tile.size;
-
-    // Check if triangle bounding box is fully inside tile bounding box
-    bool fullyInside =
-        (minTriPt.x >= tileMin.x) && (maxTriPt.x <= tileMax.x) &&
-        (minTriPt.y >= tileMin.y) && (maxTriPt.y <= tileMax.y);
-
-    return fullyInside;
-}
 
 void Renderer::DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& raster_triangles, const Texture* tex) {
     for (int triIndex : tile.tri_indices_encapsulated) {
@@ -511,11 +409,9 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
     const int texWidth = tex->GetWidth(), texHeight = tex->GetHeight();
     if (texWidth == 0 || texHeight == 0) { Logger::Error("  Invalid texture dimensions!"); return; }
 
-    // Cache screen dimensions and texture size as floats
+    // Cache screen dimensions
     const int screenWidth = Screen::GetInst().GetWidth();
     const int screenHeight = Screen::GetInst().GetHeight();
-    const float texWidthF = static_cast<float>(texWidth);
-    const float texHeightF = static_cast<float>(texHeight);
 
     // Hoist tile bounds
     const int tileMinX = static_cast<int>(tile.position.x);
@@ -523,11 +419,11 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
     const int tileMinY = static_cast<int>(tile.position.y);
     const int tileMaxY = static_cast<int>(tile.position.y + tile.size.y) - 1;
 
-    // Get triangle bounding box clipped to tile
-    int minX = std::max(tileMinX, static_cast<int>(std::min({vert1.X(), vert2.X(), vert3.X()})));
-    int maxX = std::min(tileMaxX, static_cast<int>(std::max({vert1.X(), vert2.X(), vert3.X()})));
-    int minY = std::max(tileMinY, static_cast<int>(std::min({vert1.Y(), vert2.Y(), vert3.Y()})));
-    int maxY = std::min(tileMaxY, static_cast<int>(std::max({vert1.Y(), vert2.Y(), vert3.Y()})));
+    // Get triangle bounding box clipped to tile (use floor/ceil for consistency)
+    int minX = std::max(tileMinX, static_cast<int>(std::floor(std::min({vert1.X(), vert2.X(), vert3.X()}))));
+    int maxX = std::min(tileMaxX, static_cast<int>(std::ceil(std::max({vert1.X(), vert2.X(), vert3.X()}))));
+    int minY = std::max(tileMinY, static_cast<int>(std::floor(std::min({vert1.Y(), vert2.Y(), vert3.Y()}))));
+    int maxY = std::min(tileMaxY, static_cast<int>(std::ceil(std::max({vert1.Y(), vert2.Y(), vert3.Y()}))));
     minX = std::max(0, minX);
     maxX = std::min(screenWidth - 1, maxX);
     minY = std::max(0, minY);
@@ -562,6 +458,16 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
     float signedArea = flip ? -area2 : area2;
     orient(A12,B12,C12); orient(A23,B23,C23); orient(A31,B31,C31);
     const float invSignedArea = 1.0f / signedArea;
+    
+    const float u1_invArea = u1 * invSignedArea;
+    const float u2_invArea = u2 * invSignedArea;
+    const float u3_invArea = u3 * invSignedArea;
+    const float v1t_invArea = v1t * invSignedArea;
+    const float v2t_invArea = v2t * invSignedArea;
+    const float v3t_invArea = v3t * invSignedArea;
+    const float w1p_invArea = w1p * invSignedArea;
+    const float w2p_invArea = w2p * invSignedArea;
+    const float w3p_invArea = w3p * invSignedArea;
 
     // Choose sampling pattern based on antialiasing setting
     // When AA is off, use single sample at pixel center (0.0, 0.0 offset)
@@ -581,11 +487,7 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
         
         for (int x = minX; x <= maxX; ++x) {
             const float baseX = x + 0.5f;
-            glm::vec4 rgbAccum(0.0f); float depthAccum = 0.0f; int insideSamples = 0;
 
-            // Use current edge function values (already computed incrementally)
-
-            // If clearly outside (all negative beyond margin) skip
             if (e12c < -1.1f && e23c < -1.1f && e31c < -1.1f) {
                 // Increment edge functions for next pixel
                 e12c += A12;
@@ -598,6 +500,10 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
             const size_t depthIndex = rowOffset + x;
             const float currentDepth = _depth_buffer[depthIndex];
 
+            glm::vec4 rgbAccum(0.0f); 
+            float depthAccum = 0.0f; 
+            int insideSamples = 0;
+
             for (int si = 0; si < sampleCount; ++si) {
                 const float sx = baseX + subPixelOffsets[si].first;
                 const float sy = baseY + subPixelOffsets[si].second;
@@ -605,25 +511,26 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
                 const float e23 = A23 * sx + B23 * sy + C23;
                 const float e31 = A31 * sx + B31 * sy + C31;
                 if (e12 < 0.f || e23 < 0.f || e31 < 0.f) continue;
-                const float wA = e23 * invSignedArea;
-                const float wB = e31 * invSignedArea;
-                const float wC = 1.0f - wA - wB;
                 
-                if (wA < -0.001f || wB < -0.001f || wC < -0.001f) continue;
-                const float perspW = wA*w1p + wB*w2p + wC*w3p;
+                const float wA_times_area = e23;
+                const float wB_times_area = e31;
+                const float wC_times_area = signedArea - e23 - e31;
+                
+                const float perspW = wA_times_area * w1p_invArea + wB_times_area * w2p_invArea + wC_times_area * w3p_invArea;
                 
                 // Early depth test BEFORE expensive texture sampling
-                // Note: Uses reverse depth (larger = closer), so reject if perspW <= currentDepth
                 if (perspW <= currentDepth) continue;
                 
                 const float invPerspW = 1.0f / perspW;
-                const float tu = (wA*u1 + wB*u2 + wC*u3) * invPerspW;
-                const float tv = (wA*v1t + wB*v2t + wC*v3t) * invPerspW;
                 
-                // Use integer math where possible (Optimization 5)
-                const int texelX = (int)(tu * texWidth);
-                const int texelY = (int)(tv * texHeight);
-                if (texelX < 0 || texelX >= texWidth || texelY < 0 || texelY >= texHeight) continue;
+                const float tu = (wA_times_area * u1_invArea + wB_times_area * u2_invArea + wC_times_area * u3_invArea) * invPerspW;
+                const float tv = (wA_times_area * v1t_invArea + wB_times_area * v2t_invArea + wC_times_area * v3t_invArea) * invPerspW;
+                
+                const int texelX = static_cast<int>(tu * texWidth);
+                const int texelY = static_cast<int>(tv * texHeight);
+                
+                if (static_cast<unsigned>(texelX) >= static_cast<unsigned>(texWidth) || 
+                    static_cast<unsigned>(texelY) >= static_cast<unsigned>(texHeight)) continue;
 
                 const uint8_t* pixel = tex->GetPixelRGBAPtr(texelX, texelY);
                 rgbAccum.r += pixel[0];
@@ -655,11 +562,9 @@ void Renderer::DrawTriangleTextured(const VERTEX& v1, const VERTEX& v2, const VE
     const int texWidth = tex->GetWidth(), texHeight = tex->GetHeight();
     if (texWidth == 0 || texHeight == 0) { Logger::Error("  Invalid texture dimensions!"); return; }
 
-    // Cache screen dimensions and texture size as floats
+    // Cache screen dimensions
     const int screenWidth = Screen::GetInst().GetWidth();
     const int screenHeight = Screen::GetInst().GetHeight();
-    const float texWidthF = static_cast<float>(texWidth);
-    const float texHeightF = static_cast<float>(texHeight);
 
     // Triangle bounding box (clamped)
     int minX = std::max(0, (int)std::floor(std::min({ v1.X(), v2.X(), v3.X() })));
@@ -696,6 +601,16 @@ void Renderer::DrawTriangleTextured(const VERTEX& v1, const VERTEX& v2, const VE
     float signedArea = flip ? -area2 : area2;
     orient(A12,B12,C12); orient(A23,B23,C23); orient(A31,B31,C31);
     const float invSignedArea = 1.0f / signedArea;
+    
+    const float u1_invArea = u1 * invSignedArea;
+    const float u2_invArea = u2 * invSignedArea;
+    const float u3_invArea = u3 * invSignedArea;
+    const float v1t_invArea = v1t * invSignedArea;
+    const float v2t_invArea = v2t * invSignedArea;
+    const float v3t_invArea = v3t * invSignedArea;
+    const float w1p_invArea = w1p * invSignedArea;
+    const float w2p_invArea = w2p * invSignedArea;
+    const float w3p_invArea = w3p * invSignedArea;
 
     // Choose sampling pattern based on antialiasing setting
     // When AA is off, use single sample at pixel center (0.0, 0.0 offset)
@@ -716,13 +631,8 @@ void Renderer::DrawTriangleTextured(const VERTEX& v1, const VERTEX& v2, const VE
         for (int x = minX; x <= maxX; ++x) {
             const float baseX = x + 0.5f;
 
-            glm::vec4 rgbAccum(0.0f); float depthAccum = 0.0f; int insideSamples = 0;
 
-            // Use current edge function values (already computed incrementally)
-
-            // If clearly outside (all negative beyond margin) skip
             if (e12c < -1.1f && e23c < -1.1f && e31c < -1.1f) {
-                // Increment edge functions for next pixel
                 e12c += A12;
                 e23c += A23;
                 e31c += A31;
@@ -733,7 +643,10 @@ void Renderer::DrawTriangleTextured(const VERTEX& v1, const VERTEX& v2, const VE
             const size_t depthIndex = rowOffset + x;
             const float currentDepth = _depth_buffer[depthIndex];
 
-            // Multisample path
+            glm::vec4 rgbAccum(0.0f); 
+            float depthAccum = 0.0f; 
+            int insideSamples = 0;
+
             for (int si = 0; si < sampleCount; ++si) {
                 const float sx = baseX + subPixelOffsets[si].first;
                 const float sy = baseY + subPixelOffsets[si].second;
@@ -741,25 +654,26 @@ void Renderer::DrawTriangleTextured(const VERTEX& v1, const VERTEX& v2, const VE
                 const float e23 = A23 * sx + B23 * sy + C23;
                 const float e31 = A31 * sx + B31 * sy + C31;
                 if (e12 < 0.f || e23 < 0.f || e31 < 0.f) continue;
-                const float wA = e23 * invSignedArea;
-                const float wB = e31 * invSignedArea;
-                const float wC = 1.0f - wA - wB;
                 
-                if (wA < -0.001f || wB < -0.001f || wC < -0.001f) continue;
-                const float perspW = wA*w1p + wB*w2p + wC*w3p;
+                const float wA_times_area = e23;
+                const float wB_times_area = e31;
+                const float wC_times_area = signedArea - e23 - e31;
+                
+                const float perspW = wA_times_area * w1p_invArea + wB_times_area * w2p_invArea + wC_times_area * w3p_invArea;
                 
                 // Early depth test BEFORE expensive texture sampling
-                // Note: Uses reverse depth (larger = closer), so reject if perspW <= currentDepth
                 if (perspW <= currentDepth) continue;
                 
                 const float invPerspW = 1.0f / perspW;
-                const float tu = (wA*u1 + wB*u2 + wC*u3) * invPerspW;
-                const float tv = (wA*v1t + wB*v2t + wC*v3t) * invPerspW;
                 
-                // Use integer math where possible (Optimization 5)
-                const int texelX = (int)(tu * texWidth);
-                const int texelY = (int)(tv * texHeight);
-                if (texelX < 0 || texelX >= texWidth || texelY < 0 || texelY >= texHeight) continue;
+                const float tu = (wA_times_area * u1_invArea + wB_times_area * u2_invArea + wC_times_area * u3_invArea) * invPerspW;
+                const float tv = (wA_times_area * v1t_invArea + wB_times_area * v2t_invArea + wC_times_area * v3t_invArea) * invPerspW;
+                
+                const int texelX = static_cast<int>(tu * texWidth);
+                const int texelY = static_cast<int>(tv * texHeight);
+                
+                if (static_cast<unsigned>(texelX) >= static_cast<unsigned>(texWidth) || 
+                    static_cast<unsigned>(texelY) >= static_cast<unsigned>(texHeight)) continue;
 
                 const uint8_t* pixel = tex->GetPixelRGBAPtr(texelX, texelY);
                 rgbAccum.r += pixel[0];
@@ -1120,10 +1034,6 @@ void Renderer::SetContrast(const float contrast) {
 
 float Renderer::GetContrast() const {
     return _contrast;
-}
-
-void Renderer::InvalidateTiles() {
-    _tilesInitialized = false;
 }
 
 void Renderer::GenerateSubPixelOffsets(int sampleCount) {

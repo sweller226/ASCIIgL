@@ -20,6 +20,7 @@
 // ASCIIgL includes
 #include <ASCIIgL/engine/Logger.hpp>
 #include <ASCIIgL/util/MathUtil.hpp>
+#include <ASCIIgL/engine/FPSClock.hpp>
 
 // vendor
 #include <nlohmann/json.hpp>
@@ -222,7 +223,7 @@ void Screen::WindowsImpl::RenderTitle(const bool showFps) {
         sprintf_s(
             titleBuffer, sizeof(titleBuffer),
             "%ls - FPS: %.2f",
-            screen._title.c_str(), std::min(screen._fps, static_cast<double>(screen._fpsCap))
+            screen._title.c_str(), std::min(FPSClock::GetInst().GetFPS(), static_cast<double>(FPSClock::GetInst().GetFPSCap()))
         );
     } else {
         sprintf_s(
@@ -321,23 +322,15 @@ int Screen::Initialize(
     const unsigned int height, 
     const std::wstring title, 
     const unsigned int fontSize, 
-    const unsigned int fpsCap, 
-    const float fpsWindowSec, 
     const Palette palette
 ) {
     Logger::Debug(L"CPU has max " + std::to_wstring(std::thread::hardware_concurrency()) + L" threads.");
-
-    Logger::Debug(L"Setting _fpsCap= " + std::to_wstring(fpsCap) + L" and fpsWindow=" + std::to_wstring(fpsWindowSec));
-    _fpsCap = fpsCap;
-    _fpsWindowSec = fpsWindowSec;
 
     Logger::Debug(L"Initializing screen with width=" + std::to_wstring(width) + L", height=" + std::to_wstring(height) + L", title=" + title);
     Logger::Debug(L"Screen now using square font - single width variable");
     _screen_width = width;  // Single width for square fonts
     _screen_height = height;
     _title = title;
-
-    CalculateTileCounts();
 
     // Enforce minimum font size
     const unsigned int MIN_FONT_SIZE = 2;
@@ -423,10 +416,6 @@ void Screen::PlotPixel(int idx, const CHAR_INFO charCol) {
     _impl->PlotPixel(idx, charCol); // Divide x by 2 for wide buffer
 }
 
-float Screen::GetDeltaTime() {
-	return _fpsClock.GetDeltaTime();
-}
-    
 std::wstring Screen::GetTitle() {
     return _title;
 }
@@ -447,69 +436,9 @@ unsigned int Screen::GetHeight() {
     return _screen_height;
 }
 
-unsigned int Screen::GetTileCountX() {
-    return TILE_COUNT_X;
-}
-
-unsigned int Screen::GetTileCountY() {
-    return TILE_COUNT_Y;
-}
-
-unsigned int Screen::GetTileSizeX() {
-    return TILE_SIZE_X;
-}
-
-unsigned int Screen::GetTileSizeY() {
-    return TILE_SIZE_Y;
-}
-
-void Screen::SetTileSize(const unsigned int x, const unsigned int y) {
-    TILE_SIZE_X = x;
-    TILE_SIZE_Y = y;
-    CalculateTileCounts();
-}
-
-void Screen::CalculateTileCounts() {
-    // Use ceiling division to ensure all pixels are covered by tiles
-    TILE_COUNT_X = (_screen_width + TILE_SIZE_X - 1) / TILE_SIZE_X;
-    TILE_COUNT_Y = (_screen_height + TILE_SIZE_Y - 1) / TILE_SIZE_Y;
-}
 
 std::vector<CHAR_INFO>& Screen::GetPixelBuffer() {
     return _impl->GetPixelBuffer();
-}
-
-void Screen::StartFPSClock() {
-    _fpsClock.StartClock();
-}
-
-void Screen::EndFPSClock() {
-    _fpsClock.EndClock();
-    FPSSampleCalculate(_fpsClock.GetDeltaTime());
-    CapFPS();
-}
-
-void Screen::CapFPS() {
-    const float inverseFrameCap = (1.0f / _fpsCap);
-
-    if (_fpsClock.GetDeltaTime() < inverseFrameCap) {
-        std::this_thread::sleep_for(std::chrono::duration<double>(inverseFrameCap - _fpsClock.GetDeltaTime()));
-        _fpsClock.SetDeltaTime(inverseFrameCap); // Ensure _deltaTime is at least the frame cap
-    }
-}
-
-void Screen::FPSSampleCalculate(const double currentDeltaTime) {
-    _frameTimes.push_back(currentDeltaTime);
-    _currDeltaSum += currentDeltaTime;
-
-    while (!_frameTimes.empty() && _currDeltaSum > _fpsWindowSec) {
-        const double popped_front = _frameTimes.front();
-        _frameTimes.pop_front();
-        _currDeltaSum -= popped_front;
-    }
-
-    double calculatedFps = _frameTimes.size() * (1 / _currDeltaSum);
-    _fps = calculatedFps;
 }
 
 void Screen::WindowsImpl::SetFontConsole(HANDLE currentHandle, unsigned int fontSize) {

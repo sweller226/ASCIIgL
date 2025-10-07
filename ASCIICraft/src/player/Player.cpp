@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/engine/FPSClock.hpp>
 
 Player::Player(const glm::vec3& startPosition, GameMode mode)
     : position(startPosition)
@@ -48,8 +49,8 @@ void Player::Update() {
     UpdateCamera();
     
     // Update timers
-    jumpCooldown = std::max(0.0f, jumpCooldown - Screen::GetInst().GetDeltaTime());
-    lastOnGround += Screen::GetInst().GetDeltaTime();
+    jumpCooldown = std::max(0.0f, jumpCooldown - FPSClock::GetInst().GetDeltaTime());
+    lastOnGround += FPSClock::GetInst().GetDeltaTime();
 
     // Reset jump pressed flag
     jumpPressed = false;
@@ -92,7 +93,7 @@ void Player::Move(const glm::vec3& direction) {
     }
     
     // Apply movement
-    glm::vec3 movement = direction * currentSpeed * Screen::GetInst().GetDeltaTime();
+    glm::vec3 movement = direction * currentSpeed * FPSClock::GetInst().GetDeltaTime();
     
     if (flying || gameMode == GameMode::Spectator) {
         // Free flight movement (spectator noclip)
@@ -107,7 +108,7 @@ void Player::Move(const glm::vec3& direction) {
     RecalculateCameraPosition();
 
     // Update velocity for other systems
-    velocity = movement / Screen::GetInst().GetDeltaTime();
+    velocity = movement / FPSClock::GetInst().GetDeltaTime();
 }
 
 void Player::RecalculateCameraPosition() {
@@ -232,16 +233,16 @@ void Player::ProcessCameraInput(const InputManager& input) {
     
     // Arrow keys for camera rotation
     if (input.IsActionHeld("camera_left")) {
-        yawDelta -= input.GetMouseSensitivity() * Screen::GetInst().GetDeltaTime();
+        yawDelta -= input.GetMouseSensitivity() * FPSClock::GetInst().GetDeltaTime();
     }
     if (input.IsActionHeld("camera_right")) {
-        yawDelta += input.GetMouseSensitivity() * Screen::GetInst().GetDeltaTime();
+        yawDelta += input.GetMouseSensitivity() * FPSClock::GetInst().GetDeltaTime();
     }
     if (input.IsActionHeld("camera_up")) {
-        pitchDelta += input.GetMouseSensitivity() * Screen::GetInst().GetDeltaTime();
+        pitchDelta += input.GetMouseSensitivity() * FPSClock::GetInst().GetDeltaTime();
     }
     if (input.IsActionHeld("camera_down")) {
-        pitchDelta -= input.GetMouseSensitivity() * Screen::GetInst().GetDeltaTime();
+        pitchDelta -= input.GetMouseSensitivity() * FPSClock::GetInst().GetDeltaTime();
     }
     
     // Update camera direction

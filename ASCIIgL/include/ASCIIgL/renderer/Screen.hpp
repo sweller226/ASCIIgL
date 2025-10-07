@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ASCIIgL/renderer/Palette.hpp>
-#include <ASCIIgL/engine/Clock.hpp>
+#include <ASCIIgL/util/Clock.hpp>
 
 // External libraries
 #include <glm/glm.hpp>
@@ -11,7 +11,6 @@
 #include <string>
 #include <memory>
 #include <chrono>
-#include <deque>
 #include <vector>
 
 // Platform-specific includes
@@ -61,20 +60,6 @@ private:
     // Color palette that the terminal uses
     Palette _palette;
 
-    // Tile properties
-    unsigned int TILE_COUNT_X = 0;
-    unsigned int TILE_COUNT_Y = 0;
-    unsigned int TILE_SIZE_X = 32;
-    unsigned int TILE_SIZE_Y = 32;
-    
-    // FPS and timing (now instance members)
-    Clock _fpsClock;
-    double _fpsWindowSec = 1.0f;
-    double _fps = 0.0f;
-    double _currDeltaSum = 0.0f;
-    std::deque<double> _frameTimes = {};
-    unsigned int _fpsCap = 60;
-
     // Singleton constructor/destructor
     Screen(); // Custom constructor defined in .cpp for PIMPL
     ~Screen(); // Custom destructor defined in .cpp for PIMPL
@@ -93,16 +78,9 @@ public:
         const unsigned int height, 
         const std::wstring title, 
         const unsigned int fontSize, 
-        const unsigned int fpsCap, 
-        const float fpsWindowSec,
         const Palette palette = Palette()
     );
     bool IsInitialized() const;
-
-    // Fps management
-    void StartFPSClock();
-    void EndFPSClock();
-    float GetDeltaTime();
 
     // Rendering and buffer management
     void RenderTitle(const bool showFps);
@@ -121,22 +99,10 @@ public:
     unsigned int GetHeight();
     unsigned int GetWidth();
 
-    // tile properties
-    unsigned int GetTileCountX();
-    unsigned int GetTileCountY();
-    unsigned int GetTileSizeX();
-    unsigned int GetTileSizeY();
-    void SetTileSize(const unsigned int x, const unsigned int y);
-    void CalculateTileCounts();
-
     // palette
     Palette& GetPalette();
 
     // Public buffer access (needed for renderer)
     std::vector<CHAR_INFO>& GetPixelBuffer();
 
-private:
-    // FPS management methods (now instance methods)
-    void CapFPS();
-    void FPSSampleCalculate(const double currentDeltaTime);
 };
