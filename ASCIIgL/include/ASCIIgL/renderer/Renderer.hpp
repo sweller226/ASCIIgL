@@ -86,6 +86,9 @@ private:
     static constexpr unsigned int _rgbLUTDepth = 16;
     std::array<CHAR_INFO, _rgbLUTDepth*_rgbLUTDepth*_rgbLUTDepth> _colorLUT;
 
+    void ResetDiagnostics();
+    void LogDiagnostics() const;
+
 public:
     static Renderer& GetInst() {
         static Renderer instance;
@@ -150,4 +153,9 @@ public:
 
     void TestRenderFont();
     void TestRenderColorDiscrete();
+
+    // diagnostics
+    unsigned int _triangles_inputted = 0;
+    unsigned int _triangles_past_clipping = 0;
+    unsigned int _triangles_past_backface_culling = 0;
 };

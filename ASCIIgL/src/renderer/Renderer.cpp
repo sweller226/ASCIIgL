@@ -160,6 +160,7 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
     if (vertices.size() < 3 || vertices.size() % 3 != 0) {
         return;
     }
+    _triangles_inputted += static_cast<unsigned int>(vertices.size() / 3);
 
     if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) {
         return;
@@ -174,12 +175,14 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
 
     ClippingHelper(_vertexBuffer, _clippedBuffer);
     std::swap(_vertexBuffer, _clippedBuffer);
+    _triangles_past_clipping += static_cast<unsigned int>(_vertexBuffer.size() / 3);
 
     PerspectiveAndViewportTransform(_vertexBuffer);
 
     if (_backface_culling) {
         BackFaceCullHelper(_vertexBuffer);
     }
+    _triangles_past_backface_culling += static_cast<unsigned int>(_vertexBuffer.size() / 3);
 
     // tile management
     auto& tile_manager = TileManager::GetInst();
@@ -826,20 +829,15 @@ void Renderer::ClippingHelper(std::vector<VERTEX>& vertices, std::vector<VERTEX>
     for (int i = 0; i < 6; ++i) {
         *currentOutput = Clipping(*currentInput, components[i], nears[i]);
         
-        // Set up for next iteration (ping-pong between clipped and tempB)
-        if (i < 5) { // Not the last iteration
+        if (i < 5) {
             if (currentInput == &vertices) {
-                // After first iteration: input becomes clipped, output becomes tempB
                 currentInput = &clipped;
                 currentOutput = &tempB;
             } else {
-                // Subsequent iterations: swap between clipped and tempB
                 std::swap(currentInput, currentOutput);
             }
         }
     }
-
-    // Final result is guaranteed to be in clipped after 6 iterations
 }
 
 std::vector<VERTEX> Renderer::Clipping(const std::vector<VERTEX>& vertices, const int component, const bool Near) {
@@ -1242,7 +1240,9 @@ void Renderer::SetBackgroundCol(const glm::ivec3& col) {
 }
 
 void Renderer::OverwritePxBuffWithColBuff() {
-    // **OPTIMIZATION 1**: Cache frequently accessed references
+    LogDiagnostics();
+    ResetDiagnostics();
+
     auto& screen = Screen::GetInst();
     auto& pixelBuffer = screen.GetPixelBuffer();
     const size_t bufferSize = _color_buffer.size();
@@ -1354,4 +1354,17 @@ void Renderer::PerspectiveAndViewportTransform(std::vector<VERTEX>& vertices) {
         v.data[5] *= invW; // v  
         v.data[6] = invW;  // w becomes 1/w
     }
+}
+
+void Renderer::ResetDiagnostics() {
+    _triangles_inputted = 0;
+    _triangles_past_clipping = 0;
+    _triangles_past_backface_culling = 0;
+}
+
+void Renderer::LogDiagnostics() const {
+    Logger::Info("Renderer Diagnostics:");
+    Logger::Info("  Triangles Inputted: " + std::to_string(_triangles_inputted));
+    Logger::Info("  Triangles Past Clipping: " + std::to_string(_triangles_past_clipping));
+    Logger::Info("  Triangles Past Backface Culling: " + std::to_string(_triangles_past_backface_culling));
 }
