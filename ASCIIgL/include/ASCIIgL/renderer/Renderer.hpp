@@ -52,7 +52,7 @@ private:
 
     // clipping stage
     VERTEX HomogenousPlaneIntersect(const VERTEX& vert2, const VERTEX& vert1, const int component, const bool Near);
-    std::vector<VERTEX> Clipping(const std::vector<VERTEX>& vertices, const int component, const bool Near);
+    void ClipAgainstPlane(const std::vector<VERTEX>& input, std::vector<VERTEX>& output, const int component, const bool Near);
     void ClippingHelper(std::vector<VERTEX>& vertices, std::vector<VERTEX>& clipped);
 
     // backface culling
@@ -86,8 +86,14 @@ private:
     static constexpr unsigned int _rgbLUTDepth = 16;
     std::array<CHAR_INFO, _rgbLUTDepth*_rgbLUTDepth*_rgbLUTDepth> _colorLUT;
 
+
+    // diagnostics
     void ResetDiagnostics();
     void LogDiagnostics() const;
+    bool _diagnostics_enabled = false;
+    unsigned int _triangles_inputted = 0;
+    unsigned int _triangles_past_clipping = 0;
+    unsigned int _triangles_past_backface_culling = 0;
 
 public:
     static Renderer& GetInst() {
@@ -154,8 +160,5 @@ public:
     void TestRenderFont();
     void TestRenderColorDiscrete();
 
-    // diagnostics
-    unsigned int _triangles_inputted = 0;
-    unsigned int _triangles_past_clipping = 0;
-    unsigned int _triangles_past_backface_culling = 0;
+    void SetDiagnosticsEnabled(const bool enabled);
 };

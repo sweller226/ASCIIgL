@@ -28,6 +28,8 @@ void TileManager::InitializeTiles(unsigned int screen_width, unsigned int screen
             _tileBuffer[tileIndex].tri_indices_partial.reserve(64);
         }
     }
+
+    _tilesInitialized = true;
 }
 
 void TileManager::ClearTileTriangleLists() {

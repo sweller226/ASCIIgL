@@ -1,10 +1,13 @@
 #include <ASCIICraft/game/Game.hpp>
 
-#include <ASCIIgL/engine/Logger.hpp>
 #include <ASCIIgL/renderer/Screen.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
+
+#include <ASCIIgL/engine/Logger.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
+
+#include <ASCIIgL/util/Profiler.hpp>
 
 #include <ASCIICraft/world/Block.hpp>
 #include <ASCIICraft/gui/GuiManager.hpp>
@@ -61,6 +64,7 @@ bool Game::Initialize() {
     Renderer::GetInst().SetContrast(1.1f);
 	Renderer::GetInst().SetAntialiasingsamples(4);
 	Renderer::GetInst().SetAntialiasing(true);
+    Renderer::GetInst().SetDiagnosticsEnabled(false);
 
     // Load resources
     if (!LoadResources()) {
@@ -94,27 +98,60 @@ void Game::Run() {
     
     Logger::Info("Starting game loop...");
 
-    GuiManager guiManager = GuiManager(SCREEN_WIDTH, SCREEN_HEIGHT);
-
     // Main game loop
+    int frameCounter = 0;
     while (isRunning) {
+        Profiler::GetInst().BeginFrame();
+
         FPSClock::GetInst().StartFPSClock();
-        Screen::GetInst().ClearPixelBuffer();
-        Renderer::GetInst().ClearBuffers();
         
-        HandleInput();
-        Update();
-        Render();
+        {
+            PROFILE_SCOPE("ClearBuffers");
+            Screen::GetInst().ClearPixelBuffer();
+            Renderer::GetInst().ClearBuffers();
+        }
+        
+        {
+            PROFILE_SCOPE("HandleInput");
+            HandleInput();
+        }
+        
+        {
+            PROFILE_SCOPE("Update");
+            Update();
+        }
+        
+        {
+            PROFILE_SCOPE("RenderGame");
+            Render();
+        }
 
         // color buffer draws ending
-        Renderer::GetInst().OverwritePxBuffWithColBuff();
+        {
+            PROFILE_SCOPE("ColorBufferOverwrite");
+            Renderer::GetInst().OverwritePxBuffWithColBuff();
+        }
         
         // pixel buffer draws
-        Renderer::GetInst().DrawScreenBorderPxBuff(0xF);
-        Screen::GetInst().OutputBuffer();
+        {
+            PROFILE_SCOPE("PixelBufferBorderDraw");
+            Renderer::GetInst().DrawScreenBorderPxBuff(0xF);
+        }
+        {
+            PROFILE_SCOPE("PixelBufferOutput");
+            Screen::GetInst().OutputBuffer();
+        }
 
         FPSClock::GetInst().EndFPSClock();
-        Screen::GetInst().RenderTitle(true);
+        
+        // profiling work
+        Profiler::GetInst().EndFrame();
+        frameCounter++;
+        if (frameCounter % 60 == 0) { 
+            frameCounter = 0;
+            Profiler::GetInst().LogReport();
+            Profiler::GetInst().Reset();  // Reset profiler data after logging
+        }
     }
     
     Shutdown();

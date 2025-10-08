@@ -66,7 +66,7 @@
         int Initialize(const unsigned int width, const unsigned int height, const unsigned int fontSize, const Palette& palette);
         void ClearPixelBuffer();
         void OutputBuffer();
-        void RenderTitle(const bool showFps);
+        void RenderTabTitle();
         void PlotPixel(const glm::vec2& p, const WCHAR character, const unsigned short Colour);
         void PlotPixel(const glm::vec2& p, const CHAR_INFO charCol);
         void PlotPixel(int x, int y, const WCHAR character, const unsigned short Colour);
@@ -216,22 +216,14 @@ void Screen::WindowsImpl::OutputBuffer() {
     WriteConsoleOutputW(_hOutput, _pixelBuffer.data(), dwBufferSize, dwBufferCoord, &rcRegion);
 }
 
-void Screen::WindowsImpl::RenderTitle(const bool showFps) {
+void Screen::WindowsImpl::RenderTabTitle() {
     char titleBuffer[256];
 
-    if (showFps) {
-        sprintf_s(
-            titleBuffer, sizeof(titleBuffer),
-            "%ls - FPS: %.2f",
-            screen._title.c_str(), std::min(FPSClock::GetInst().GetFPS(), static_cast<double>(FPSClock::GetInst().GetFPSCap()))
-        );
-    } else {
-        sprintf_s(
-            titleBuffer, sizeof(titleBuffer),
-            "%ls",
-            screen._title.c_str()
-        );
-    }
+    sprintf_s(
+        titleBuffer, sizeof(titleBuffer),
+        "%ls",
+        screen._title.c_str()
+    );
 
     SetConsoleTitleA(titleBuffer);
 }
@@ -375,7 +367,7 @@ int Screen::Initialize(
     ClearPixelBuffer();
 
     Logger::Debug(L"Setting console title.");
-    RenderTitle(true);
+    RenderTabTitle();
 
     Logger::Debug(L"Screen initialization complete.");
     
@@ -383,8 +375,8 @@ int Screen::Initialize(
     return SCREEN_NOERROR;
 }
 
-void Screen::RenderTitle(const bool showFps) {
-    _impl->RenderTitle(showFps);
+void Screen::RenderTabTitle() {
+    _impl->RenderTabTitle();
 }
 
 void Screen::ClearPixelBuffer() {

@@ -9,6 +9,7 @@
 #include <ASCIIgL/engine/Collision.hpp>
 
 #include <ASCIIgL/util/MathUtil.hpp>
+#include <ASCIIgL/util/Profiler.hpp>
 
 #include <ASCIIgL/renderer/Screen.hpp>
 
@@ -157,55 +158,84 @@ void Renderer::DrawScreenBorderColBuff(const glm::vec3& col) {
 // =============================================================================
 
 void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex) {
-    if (vertices.size() < 3 || vertices.size() % 3 != 0) {
-        return;
-    }
+    PROFILE_SCOPE("RenderTriangles");
+    
+    // basic validation
+    if (vertices.size() < 3 || vertices.size() % 3 != 0) return;
+    if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) return;
     _triangles_inputted += static_cast<unsigned int>(vertices.size() / 3);
 
-    if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) {
-        return;
+    // copy input vertices to internal buffer (with capacity check)
+    {
+        PROFILE_SCOPE("RenderTriangles.VertexBufferSetup");
+        if (_vertexBuffer.capacity() < vertices.size()) {
+            _vertexBuffer.reserve(vertices.size() * 1.5f);
+        }
+        _vertexBuffer.assign(vertices.begin(), vertices.end()); 
     }
 
-    if (_vertexBuffer.capacity() < vertices.size()) {
-        _vertexBuffer.reserve(vertices.size() * 1.5f);
+    // vertex shader stage
+    {
+        PROFILE_SCOPE("RenderTriangles.VertexShader");
+        const_cast<VERTEX_SHADER&>(VSHADER).GLUseBatch(_vertexBuffer);
     }
-    _vertexBuffer.assign(vertices.begin(), vertices.end()); 
 
-    const_cast<VERTEX_SHADER&>(VSHADER).GLUseBatch(_vertexBuffer);
+    // clipping against frustum planes
+    {
+        PROFILE_SCOPE("RenderTriangles.Clipping");
+        ClippingHelper(_vertexBuffer, _clippedBuffer);
+        std::swap(_vertexBuffer, _clippedBuffer);
+        _triangles_past_clipping += static_cast<unsigned int>(_vertexBuffer.size() / 3);
+    }
 
-    ClippingHelper(_vertexBuffer, _clippedBuffer);
-    std::swap(_vertexBuffer, _clippedBuffer);
-    _triangles_past_clipping += static_cast<unsigned int>(_vertexBuffer.size() / 3);
+    // perspective divide + viewport transform
+    {
+        PROFILE_SCOPE("RenderTriangles.PerspectiveTransform");
+        PerspectiveAndViewportTransform(_vertexBuffer);
+    }
 
-    PerspectiveAndViewportTransform(_vertexBuffer);
-
+    // backface culling
     if (_backface_culling) {
+        PROFILE_SCOPE("RenderTriangles.BackfaceCulling");
         BackFaceCullHelper(_vertexBuffer);
     }
     _triangles_past_backface_culling += static_cast<unsigned int>(_vertexBuffer.size() / 3);
 
     // tile management
     auto& tile_manager = TileManager::GetInst();
-    if (!tile_manager.IsInitialized()) {
-        tile_manager.InitializeTiles(Screen::GetInst().GetWidth(), Screen::GetInst().GetHeight());
+    {
+        PROFILE_SCOPE("RenderTriangles.TileBinning.Setup");
+        if (!tile_manager.IsInitialized()) {
+            tile_manager.InitializeTiles(Screen::GetInst().GetWidth(), Screen::GetInst().GetHeight());
+        }
+        
     }
-    tile_manager.BinTrianglesToTiles(_vertexBuffer); // Now includes clearing
+    {
+        PROFILE_SCOPE("RenderTriangles.TileBinning.Binning");
+        tile_manager.BinTrianglesToTiles(_vertexBuffer);
+    }
 
+    // Precompute color LUT if not done yet
     if (!_colorLUTComputed) {
+        PROFILE_SCOPE("RenderTriangles.PrecomputeColorLUT");
         PrecomputeColorLUT();
     }
 
     // tile rendering
-    tile_manager.UpdateActiveTiles();
-    if (!tile_manager.activeTiles.empty()) {
-        std::for_each(std::execution::par, tile_manager.activeTiles.begin(), tile_manager.activeTiles.end(),
-            [&](Tile* tile) {
-                if (_wireframe || tex == nullptr) {
-                    DrawTileWireframe(*tile, _vertexBuffer);
-                } else {
-                    DrawTileTextured(*tile, _vertexBuffer, tex);
-                }
-            });
+    {
+        PROFILE_SCOPE("RenderTriangles.TileRasterization");
+        auto& tile_manager = TileManager::GetInst();
+        tile_manager.UpdateActiveTiles();
+        if (!tile_manager.activeTiles.empty()) {
+            std::for_each(std::execution::par, tile_manager.activeTiles.begin(), tile_manager.activeTiles.end(),
+                [&](Tile* tile) {
+                    if (_wireframe || tex == nullptr) {
+                        DrawTileWireframe(*tile, _vertexBuffer);
+                    } else {
+                        DrawTileTextured(*tile, _vertexBuffer, tex);
+                    }
+                });
+        }
     }
 }
 
@@ -821,72 +851,76 @@ void Renderer::ClippingHelper(std::vector<VERTEX>& vertices, std::vector<VERTEX>
     static const int components[6] = {2, 2, 1, 1, 0, 0};
     static const bool nears[6]     = {true, false, true, false, true, false};
 
-    // Start by writing directly from vertices to clipped (no initial copy)
-    std::vector<VERTEX>* currentInput = &vertices;
-    std::vector<VERTEX>* currentOutput = &clipped;
-    std::vector<VERTEX> tempB;
-
+    // Use ping-pong buffering to avoid returns by value
+    std::vector<VERTEX>* readBuffer = &vertices;
+    std::vector<VERTEX>* writeBuffer = &clipped;
+    
+    // Temp buffer for ping-ponging (reuse across frames via static)
+    static thread_local std::vector<VERTEX> tempBuffer;
+    
     for (int i = 0; i < 6; ++i) {
-        *currentOutput = Clipping(*currentInput, components[i], nears[i]);
+        writeBuffer->clear();
+    
+        ClipAgainstPlane(*readBuffer, *writeBuffer, components[i], nears[i]);
         
+        // Early exit if everything was clipped
+        if (writeBuffer->empty()) {
+            if (writeBuffer != &clipped) {
+                clipped.clear();
+            }
+            return;
+        }
+        
+        // Ping-pong buffers for next iteration
         if (i < 5) {
-            if (currentInput == &vertices) {
-                currentInput = &clipped;
-                currentOutput = &tempB;
+            if (i == 0) {
+                readBuffer = &clipped;
+                writeBuffer = &tempBuffer;
             } else {
-                std::swap(currentInput, currentOutput);
+                std::swap(readBuffer, writeBuffer);
             }
         }
     }
+    
+    // Make sure result ends up in 'clipped'
+    if (writeBuffer != &clipped) {
+        clipped = std::move(*writeBuffer);
+    }
 }
 
-std::vector<VERTEX> Renderer::Clipping(const std::vector<VERTEX>& vertices, const int component, const bool Near) {
-    std::vector<VERTEX> clipped;
-    clipped.reserve(vertices.size() * 2); // Clipping can double triangle count
+// Optimized in-place clipping against a single plane
+void Renderer::ClipAgainstPlane(const std::vector<VERTEX>& input, std::vector<VERTEX>& output, 
+                                const int component, const bool Near) {
+    output.reserve(input.size() * 2); // Clipping can double triangle count
 
-    for (int i = 0; i < static_cast<int>(vertices.size()); i += 3)
+    const size_t triangleCount = input.size() / 3;
+    
+    for (size_t tri = 0; tri < triangleCount; ++tri)
     {
-        const VERTEX& v0 = vertices[i];
-        const VERTEX& v1 = vertices[i + 1];
-        const VERTEX& v2 = vertices[i + 2];
+        const size_t baseIdx = tri * 3;
+        const VERTEX& v0 = input[baseIdx];
+        const VERTEX& v1 = input[baseIdx + 1];
+        const VERTEX& v2 = input[baseIdx + 2];
 
-        // Classify vertices
-        auto isInside = [&](const VERTEX& v) {
-            float w = v.W();
-            float val = v.data[component];
-            return Near ? (val > -w) : (val < w);
-        };
+        // Classify vertices inline (avoid lambda overhead)
+        const float w0 = v0.W();
+        const float w1 = v1.W();
+        const float w2 = v2.W();
+        const float val0 = v0.data[component];
+        const float val1 = v1.data[component];
+        const float val2 = v2.data[component];
+        
+        const bool in0 = Near ? (val0 > -w0) : (val0 < w0);
+        const bool in1 = Near ? (val1 > -w1) : (val1 < w1);
+        const bool in2 = Near ? (val2 > -w2) : (val2 < w2);
+        
+        const int insideCount = (in0 ? 1 : 0) + (in1 ? 1 : 0) + (in2 ? 1 : 0);
 
-        bool in0 = isInside(v0);
-        bool in1 = isInside(v1);
-        bool in2 = isInside(v2);
-        int insideCount = (in0 ? 1 : 0) + (in1 ? 1 : 0) + (in2 ? 1 : 0);
-
-        // All vertices inside - keep triangle as-is
+        // All vertices inside - keep triangle as-is (most common case first)
         if (insideCount == 3) {
-            clipped.push_back(v0);
-            clipped.push_back(v1);
-            clipped.push_back(v2);
-        }
-        // One vertex inside - create 1 smaller triangle
-        else if (insideCount == 1) {
-            VERTEX insideVert, outsideVert0, outsideVert1;
-            
-            if (in0) {
-                insideVert = v0; outsideVert0 = v1; outsideVert1 = v2;
-            } else if (in1) {
-                insideVert = v1; outsideVert0 = v2; outsideVert1 = v0;
-            } else { // in2
-                insideVert = v2; outsideVert0 = v0; outsideVert1 = v1;
-            }
-            
-            VERTEX newVert0 = HomogenousPlaneIntersect(insideVert, outsideVert0, component, Near);
-            VERTEX newVert1 = HomogenousPlaneIntersect(insideVert, outsideVert1, component, Near);
-            
-            // Output triangle with correct winding
-            clipped.push_back(insideVert);
-            clipped.push_back(newVert0);
-            clipped.push_back(newVert1);
+            output.push_back(v0);
+            output.push_back(v1);
+            output.push_back(v2);
         }
         // Two vertices inside - create 2 triangles (quad split)
         else if (insideCount == 2) {
@@ -900,23 +934,40 @@ std::vector<VERTEX> Renderer::Clipping(const std::vector<VERTEX>& vertices, cons
                 outsideVert = v2; insideVert0 = v0; insideVert1 = v1;
             }
             
-            VERTEX newVert0 = HomogenousPlaneIntersect(insideVert0, outsideVert, component, Near);
-            VERTEX newVert1 = HomogenousPlaneIntersect(insideVert1, outsideVert, component, Near);
+            const VERTEX newVert0 = HomogenousPlaneIntersect(insideVert0, outsideVert, component, Near);
+            const VERTEX newVert1 = HomogenousPlaneIntersect(insideVert1, outsideVert, component, Near);
             
-            // Triangle 1: insideVert0, insideVert1, newVert0
-            clipped.push_back(insideVert0);
-            clipped.push_back(insideVert1);
-            clipped.push_back(newVert0);
+            // Triangle 1
+            output.push_back(insideVert0);
+            output.push_back(insideVert1);
+            output.push_back(newVert0);
             
-            // Triangle 2: insideVert1, newVert1, newVert0
-            clipped.push_back(insideVert1);
-            clipped.push_back(newVert1);
-            clipped.push_back(newVert0);
+            // Triangle 2
+            output.push_back(insideVert1);
+            output.push_back(newVert1);
+            output.push_back(newVert0);
+        }
+        // One vertex inside - create 1 smaller triangle
+        else if (insideCount == 1) {
+            VERTEX insideVert, outsideVert0, outsideVert1;
+            
+            if (in0) {
+                insideVert = v0; outsideVert0 = v1; outsideVert1 = v2;
+            } else if (in1) {
+                insideVert = v1; outsideVert0 = v2; outsideVert1 = v0;
+            } else { // in2
+                insideVert = v2; outsideVert0 = v0; outsideVert1 = v1;
+            }
+            
+            const VERTEX newVert0 = HomogenousPlaneIntersect(insideVert, outsideVert0, component, Near);
+            const VERTEX newVert1 = HomogenousPlaneIntersect(insideVert, outsideVert1, component, Near);
+            
+            output.push_back(insideVert);
+            output.push_back(newVert0);
+            output.push_back(newVert1);
         }
         // else insideCount == 0: triangle completely outside, discard
     }
-    
-    return clipped;
 }
 
 VERTEX Renderer::HomogenousPlaneIntersect(const VERTEX& vert2, const VERTEX& vert1, const int component, const bool Near) {
@@ -1357,14 +1408,20 @@ void Renderer::PerspectiveAndViewportTransform(std::vector<VERTEX>& vertices) {
 }
 
 void Renderer::ResetDiagnostics() {
+    if (!_diagnostics_enabled) return;
     _triangles_inputted = 0;
     _triangles_past_clipping = 0;
     _triangles_past_backface_culling = 0;
 }
 
 void Renderer::LogDiagnostics() const {
+    if (!_diagnostics_enabled) return;
     Logger::Info("Renderer Diagnostics:");
     Logger::Info("  Triangles Inputted: " + std::to_string(_triangles_inputted));
     Logger::Info("  Triangles Past Clipping: " + std::to_string(_triangles_past_clipping));
     Logger::Info("  Triangles Past Backface Culling: " + std::to_string(_triangles_past_backface_culling));
+}
+
+void Renderer::SetDiagnosticsEnabled(bool enabled) {
+    _diagnostics_enabled = enabled;
 }

@@ -138,7 +138,6 @@ void Game::Run() {
         Screen::GetInst().OutputBuffer();
 
 		FPSClock::GetInst().EndFPSClock();
-        Screen::GetInst().RenderTitle(true);
     }
     Logger::Info("Game loop ended.");
 }

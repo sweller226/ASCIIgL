@@ -83,7 +83,7 @@ public:
     bool IsInitialized() const;
 
     // Rendering and buffer management
-    void RenderTitle(const bool showFps);
+    void RenderTabTitle();
     void ClearPixelBuffer();
     void OutputBuffer();
     void PlotPixel(const glm::vec2& p, const WCHAR character, const unsigned short Colour);
