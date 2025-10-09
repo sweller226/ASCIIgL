@@ -2,6 +2,7 @@
 
 #include <ASCIICraft/world/Block.hpp>
 #include <ASCIICraft/world/Chunk.hpp>
+#include <ASCIICraft/world/TerrainGenerator.hpp>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -17,7 +18,7 @@ class Player;
 // Main World class
 class World {
 public:
-    World(unsigned int renderDistance = 2, const WorldPos& spawnPoint = WorldPos(0, 10, 0), unsigned int maxWorldChunkRadius = 2);
+    World(unsigned int renderDistance = 1, const WorldPos& spawnPoint = WorldPos(0, 10, 0), unsigned int maxWorldChunkRadius = 6);
     ~World();
     
     // Core world operations
@@ -49,11 +50,6 @@ public:
     Player* GetPlayer() const { return player; }
     void UpdateChunkLoading();
     
-    // Manual chunk generation (for now - no automatic terrain)
-    void GenerateGrassLayerChunk(const ChunkCoord& coord);
-    void GenerateRandomBlockChunk(const ChunkCoord& coord);
-    void GenerateOneBlockGrassChunk(const ChunkCoord& coord);
-    
     // Rendering support
     std::vector<Chunk*> GetVisibleChunks(const glm::vec3& playerPos, const glm::vec3& viewDir) const;
     void BatchInvalidateChunkMeshes(const ChunkCoord& coord);  // Prevents chain reactions
@@ -67,6 +63,9 @@ private:
     // Chunk storage
     std::unordered_map<ChunkCoord, std::unique_ptr<Chunk>> loadedChunks;
     
+    // Terrain generation
+    std::unique_ptr<TerrainGenerator> terrainGenerator;
+    
     // World settings
     unsigned int renderDistance;
     WorldPos spawnPoint;
@@ -77,12 +76,16 @@ private:
     VERTEX_SHADER vertex_shader;
     
     // Internal methods
-    void UpdateChunkNeighbors(const ChunkCoord& coord);
+    void UpdateChunkNeighbors(const ChunkCoord& coord, bool markNeighborsDirty = true);
     ChunkCoord WorldPosToChunkCoord(const WorldPos& pos) const;
     glm::ivec3 WorldPosToLocalChunkPos(const WorldPos& pos) const;
     std::vector<ChunkCoord> GetChunksInRadius(const ChunkCoord& center, unsigned int radius) const;
     bool IsChunkOutsideWorld(const ChunkCoord& coord) const;
+    void GenerateTree(int worldX, int worldY, int worldZ); // Tree generation helper
+    void SetBlockQuiet(int x, int y, int z, const Block& block, std::unordered_set<ChunkCoord>& affectedChunks); // Set block without triggering invalidation
 
     // Constants for neighbor directions (indices into NEIGHBOR_OFFSETS)
     static const ChunkCoord NEIGHBOR_OFFSETS[6];
+
+    static constexpr int MAX_REGENERATIONS_PER_FRAME = 200;
 };

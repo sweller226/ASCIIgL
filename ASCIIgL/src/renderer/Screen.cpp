@@ -129,7 +129,7 @@ int Screen::WindowsImpl::Initialize(const unsigned int width, const unsigned int
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     GetConsoleScreenBufferInfo(currentHandle, &csbi);
 
-    Logger::Debug(L"Max console window size: " + std::to_wstring(csbi.dwMaximumWindowSize.X) + L"x" + std::to_wstring(csbi.dwMaximumWindowSize.Y));
+    Logger::Info(L"Max console window size: " + std::to_wstring(csbi.dwMaximumWindowSize.X) + L"x" + std::to_wstring(csbi.dwMaximumWindowSize.Y));
 
     // Adjust dimensions to fit within maximum window size
     unsigned int adjustedWidth = width;

@@ -21,6 +21,12 @@ void Profiler::EndFrame()
     auto frameEndTime = Clock::now();
     _totalFrameTime_ms = Duration(frameEndTime - _frameStartTime).count();
     
+    // Track frame times for averaging
+    _frameTimes.push_back(_totalFrameTime_ms);
+    if (_frameTimes.size() > _maxFramesToAverage) {
+        _frameTimes.erase(_frameTimes.begin());
+    }
+    
     // Accumulate current frame data into historical data
     for (const auto& [name, entry] : _currentFrameData) {
         auto& historical = _historicalData[name];
@@ -82,20 +88,16 @@ std::vector<Profiler::SectionStats> Profiler::GetStats() const
 {
     std::vector<SectionStats> stats;
     
-    if (_historicalData.empty() || _totalFrameTime_ms <= 0.0) {
+    if (_historicalData.empty() || _frameTimes.empty()) {
         return stats;
     }
     
-    // Calculate average frame time across samples
+    // Calculate average total frame time across all stored frames
     double avgTotalFrameTime = 0.0;
-    for (const auto& [name, data] : _historicalData) {
-        avgTotalFrameTime = std::max(avgTotalFrameTime, data.totalTime_ms);
+    for (double frameTime : _frameTimes) {
+        avgTotalFrameTime += frameTime;
     }
-    
-    // Use actual total frame time if we have it
-    if (_totalFrameTime_ms > 0.0) {
-        avgTotalFrameTime = _totalFrameTime_ms;
-    }
+    avgTotalFrameTime /= static_cast<double>(_frameTimes.size());
     
     // Build statistics for each section
     for (const auto& [name, data] : _historicalData) {
@@ -112,9 +114,8 @@ std::vector<Profiler::SectionStats> Profiler::GetStats() const
         section.maxTime_ms = *std::max_element(data.samples.begin(), data.samples.end());
         
         // Calculate percentage of frame time
-        // Use total time divided by actual frame count, not sample count
-        // This gives accurate percentage even for sections called infrequently
-        double avgTimePerFrame = data.totalTime_ms / static_cast<double>(_maxFramesToAverage);
+        // Use average time per frame for the section divided by average total frame time
+        double avgTimePerFrame = data.totalTime_ms / static_cast<double>(data.samples.size());
         section.percentage = (avgTimePerFrame / avgTotalFrameTime) * 100.0;
         
         stats.push_back(section);
@@ -144,13 +145,22 @@ std::string Profiler::GetReport(bool sortByPercentage) const
             });
     }
     
+    // Calculate average total frame time for display
+    double avgTotalFrameTime = 0.0;
+    if (!_frameTimes.empty()) {
+        for (double frameTime : _frameTimes) {
+            avgTotalFrameTime += frameTime;
+        }
+        avgTotalFrameTime /= static_cast<double>(_frameTimes.size());
+    }
+    
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(2);
     
     // Header
     oss << "\n==================== PROFILER REPORT ====================\n";
     oss << "Frames Averaged: " << _frameCount << " (max: " << _maxFramesToAverage << ")\n";
-    oss << "Total Frame Time: " << _totalFrameTime_ms << " ms\n";
+    oss << "Average Frame Time: " << avgTotalFrameTime << " ms\n";
     oss << "-------------------------------------------------------------\n";
     oss << std::left << std::setw(40) << "Section"
         << std::right << std::setw(10) << "Avg (ms)"
@@ -188,6 +198,7 @@ void Profiler::Reset()
     _historicalData.clear();
     _currentFrameData.clear();
     _activeTimings.clear();
+    _frameTimes.clear();
     _frameCount = 0;
     _totalFrameTime_ms = 0.0;
     _inFrame = false;

@@ -177,11 +177,13 @@ void Chunk::GenerateMesh() {
                         // Check the neighboring chunk if it exists and is generated
                         if (neighborChunkDir >= 0) {
                             Chunk* neighborChunk = GetNeighbor(neighborChunkDir);
-                            if (neighborChunk && neighborChunk->IsGenerated()) {
+                            // CRITICAL: Check for null pointer before accessing neighbor
+                            if (neighborChunk != nullptr && neighborChunk->IsGenerated()) {
                                 // Check if the neighbor block in adjacent chunk is solid
                                 const Block& neighborBlock = neighborChunk->GetBlock(localX, localY, localZ);
                                 shouldRenderFace = !neighborBlock.IsSolid();
                             }
+                            // If neighbor is null or not generated, render the face (conservative approach)
                         }
                     }
                     
@@ -259,7 +261,6 @@ void Chunk::GenerateMesh() {
                 SetDirty(false);
                 return;
             }
-            Logger::Debug("  Block atlas dimensions: " + std::to_string(width) + "x" + std::to_string(height));
         } else {
             Logger::Error("  Block atlas is nullptr!");
             mesh.reset();

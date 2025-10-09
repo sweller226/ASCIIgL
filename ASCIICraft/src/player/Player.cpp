@@ -9,7 +9,7 @@
 Player::Player(const glm::vec3& startPosition, GameMode mode)
     : position(startPosition)
     , velocity(0.0f)
-    , camera(startPosition + glm::vec3(0.0f, PLAYER_EYE_HEIGHT, 0.0f), 70.0f, 16.0f/9.0f, glm::vec2(0.0f, 0.0f), 0.1f, 1000.0f)
+    , camera(startPosition + glm::vec3(0.0f, PLAYER_EYE_HEIGHT, 0.0f), FOV, 16.0f/9.0f, glm::vec2(0.0f, 0.0f), CAMERA_NEAR_PLANE, CAMERA_FAR_PLANE)
     , walkSpeed(DEFAULT_WALK_SPEED)
     , runSpeed(DEFAULT_RUN_SPEED)
     , sneakSpeed(DEFAULT_SNEAK_SPEED)

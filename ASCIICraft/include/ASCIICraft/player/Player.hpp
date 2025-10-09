@@ -143,4 +143,8 @@ private:
     static constexpr float PLAYER_WIDTH = 0.6f;              // Blocks
     static constexpr float PLAYER_HEIGHT = 1.8f;             // Blocks
     static constexpr float PLAYER_EYE_HEIGHT = 1.62f;        // Blocks from feet to eyes
+
+    static constexpr float CAMERA_NEAR_PLANE = 0.1f;
+    static constexpr float CAMERA_FAR_PLANE = 100.0f;
+    static constexpr float FOV = 70.0f;                      // Field of view in degrees
 };

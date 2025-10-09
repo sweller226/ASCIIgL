@@ -94,6 +94,7 @@ add_executable(ASCIICraft
 # Add ASCIICraft's own include directory
 target_include_directories(ASCIICraft PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/vendor"
 )
 
 # ============================================================================

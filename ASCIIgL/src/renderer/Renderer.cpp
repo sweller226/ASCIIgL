@@ -463,6 +463,15 @@ void Renderer::DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1
     maxY = std::min(screenHeight - 1, maxY);
     if (minX > maxX || minY > maxY) return;
 
+    // Call shared implementation
+    DrawTriangleTexturedImpl(vert1, vert2, vert3, tex, minX, maxX, minY, maxY);
+}
+
+void Renderer::DrawTriangleTexturedImpl(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex, int minX, int maxX, int minY, int maxY) {
+    const int texWidth = tex->GetWidth(), texHeight = tex->GetHeight();
+    const int screenWidth = Screen::GetInst().GetWidth();
+    const int screenHeight = Screen::GetInst().GetHeight();
+
     // Vertex positions
     const float x1 = vert1.X(), y1 = vert1.Y();
     const float x2 = vert2.X(), y2 = vert2.Y();
@@ -606,131 +615,8 @@ void Renderer::DrawTriangleTextured(const VERTEX& v1, const VERTEX& v2, const VE
     int maxY = std::min(screenHeight - 1, (int)std::ceil (std::max({ v1.Y(), v2.Y(), v3.Y() })));
     if (minX > maxX || minY > maxY) return;
 
-    // Vertex positions
-    const float x1 = v1.X(), y1 = v1.Y();
-    const float x2 = v2.X(), y2 = v2.Y();
-    const float x3 = v3.X(), y3 = v3.Y();
-
-    // Signed doubled area
-    const float area2 = (x2 - x1)*(y3 - y1) - (x3 - x1)*(y2 - y1);
-    if (fabsf(area2) < 1e-7f) return;
-
-    // Perspective-correct attributes
-    const float w1p = v1.UVW(), w2p = v2.UVW(), w3p = v3.UVW();
-    const float u1 = v1.U(),   u2 = v2.U(),   u3 = v3.U();
-    const float v1t = v1.V(),  v2t = v2.V(),  v3t = v3.V();
-
-    // Edge function coefficients (A x + B y + C)
-    auto edgeCoeff = [](float xA, float yA, float xB, float yB, float& A, float& B, float& C){
-        A = yA - yB; B = xB - xA; C = xA * yB - xB * yA; };
-    float A12,B12,C12, A23,B23,C23, A31,B31,C31;
-    edgeCoeff(x1,y1,x2,y2,A12,B12,C12);
-    edgeCoeff(x2,y2,x3,y3,A23,B23,C23);
-    edgeCoeff(x3,y3,x1,y1,A31,B31,C31);
-
-    // Make winding consistent (inside = all edges >= 0)
-    const bool flip = (area2 < 0.0f);
-    auto orient = [&](float& A,float& B,float& C){ if (flip){ A=-A; B=-B; C=-C; } };
-    float signedArea = flip ? -area2 : area2;
-    orient(A12,B12,C12); orient(A23,B23,C23); orient(A31,B31,C31);
-    const float invSignedArea = 1.0f / signedArea;
-    
-    const float u1_invArea = u1 * invSignedArea;
-    const float u2_invArea = u2 * invSignedArea;
-    const float u3_invArea = u3 * invSignedArea;
-    const float v1t_invArea = v1t * invSignedArea;
-    const float v2t_invArea = v2t * invSignedArea;
-    const float v3t_invArea = v3t * invSignedArea;
-    const float w1p_invArea = w1p * invSignedArea;
-    const float w2p_invArea = w2p * invSignedArea;
-    const float w3p_invArea = w3p * invSignedArea;
-
-    // Choose sampling pattern based on antialiasing setting
-    // When AA is off, use single sample at pixel center (0.0, 0.0 offset)
-    static const std::vector<std::pair<float, float>> centerSample = {{0.0f, 0.0f}};
-    const auto& subPixelOffsets = _antialiasing ? GetSubpixelOffsets() : centerSample;
-    const int sampleCount = (int)subPixelOffsets.size();
-
-    for (int y = minY; y <= maxY; ++y) {
-        const float baseY = y + 0.5f;
-        const size_t rowOffset = y * screenWidth;
-        
-        // Initialize edge functions at start of row (x = minX + 0.5)
-        const float startX = minX + 0.5f;
-        float e12c = A12 * startX + B12 * baseY + C12;
-        float e23c = A23 * startX + B23 * baseY + C23;
-        float e31c = A31 * startX + B31 * baseY + C31;
-        
-        for (int x = minX; x <= maxX; ++x) {
-            const float baseX = x + 0.5f;
-
-
-            if (e12c < -1.1f && e23c < -1.1f && e31c < -1.1f) {
-                e12c += A12;
-                e23c += A23;
-                e31c += A31;
-                continue;
-            }
-
-            // Pre-fetch current depth for early rejection
-            const size_t depthIndex = rowOffset + x;
-            const float currentDepth = _depth_buffer[depthIndex];
-
-            glm::vec4 rgbAccum(0.0f); 
-            float depthAccum = 0.0f; 
-            int insideSamples = 0;
-
-            for (int si = 0; si < sampleCount; ++si) {
-                const float sx = baseX + subPixelOffsets[si].first;
-                const float sy = baseY + subPixelOffsets[si].second;
-                const float e12 = A12 * sx + B12 * sy + C12;
-                const float e23 = A23 * sx + B23 * sy + C23;
-                const float e31 = A31 * sx + B31 * sy + C31;
-                if (e12 < 0.f || e23 < 0.f || e31 < 0.f) continue;
-                
-                const float wA_times_area = e23;
-                const float wB_times_area = e31;
-                const float wC_times_area = signedArea - e23 - e31;
-                
-                const float perspW = wA_times_area * w1p_invArea + wB_times_area * w2p_invArea + wC_times_area * w3p_invArea;
-                
-                // Early depth test BEFORE expensive texture sampling
-                if (perspW <= currentDepth) continue;
-                
-                const float invPerspW = 1.0f / perspW;
-                
-                const float tu = (wA_times_area * u1_invArea + wB_times_area * u2_invArea + wC_times_area * u3_invArea) * invPerspW;
-                const float tv = (wA_times_area * v1t_invArea + wB_times_area * v2t_invArea + wC_times_area * v3t_invArea) * invPerspW;
-                
-                const int texelX = static_cast<int>(tu * texWidth);
-                const int texelY = static_cast<int>(tv * texHeight);
-                
-                if (static_cast<unsigned>(texelX) >= static_cast<unsigned>(texWidth) || 
-                    static_cast<unsigned>(texelY) >= static_cast<unsigned>(texHeight)) continue;
-
-                const uint8_t* pixel = tex->GetPixelRGBAPtr(texelX, texelY);
-                rgbAccum.r += pixel[0];
-                rgbAccum.g += pixel[1];
-                rgbAccum.b += pixel[2];
-                rgbAccum.a += pixel[3];
-
-                depthAccum += perspW;
-                ++insideSamples;
-            }
-
-            if (insideSamples) {
-                const float inv_inside_samples = 1.0f / insideSamples;
-                const float avgDepth = depthAccum * inv_inside_samples;
-                const glm::ivec4 c = glm::ivec4(rgbAccum * inv_inside_samples + 0.5f);
-                PlotColorBlend(x, y, c, avgDepth);
-            }
-            
-            // Increment edge functions for next pixel (moving right by 1.0)
-            e12c += A12;
-            e23c += A23;
-            e31c += A31;
-        }
-    }
+    // Call shared implementation
+    DrawTriangleTexturedImpl(v1, v2, v3, tex, minX, maxX, minY, maxY);
 }
 
 void Renderer::DrawLinePxBuff(const int x1, const int y1, const int x2, const int y2, const WCHAR pixel_type, const unsigned short col) {
@@ -851,48 +737,54 @@ void Renderer::ClippingHelper(std::vector<VERTEX>& vertices, std::vector<VERTEX>
     static const int components[6] = {2, 2, 1, 1, 0, 0};
     static const bool nears[6]     = {true, false, true, false, true, false};
 
-    // Use ping-pong buffering to avoid returns by value
+    // Pre-reserve buffers to avoid reallocations during clipping
+    clipped.clear();
+    clipped.reserve(vertices.size() * 2); // Worst case: clipping can double vertex count
+    
+    // Temp buffer for ping-ponging (reuse across frames via static thread_local)
+    static thread_local std::vector<VERTEX> tempBuffer;
+    tempBuffer.clear();
+    tempBuffer.reserve(vertices.size() * 2);
+    
+    // Use ping-pong buffering: alternate between clipped and tempBuffer
     std::vector<VERTEX>* readBuffer = &vertices;
     std::vector<VERTEX>* writeBuffer = &clipped;
     
-    // Temp buffer for ping-ponging (reuse across frames via static)
-    static thread_local std::vector<VERTEX> tempBuffer;
-    
-    for (int i = 0; i < 6; ++i) {
+    for (int planeIdx = 0; planeIdx < 6; ++planeIdx) {
         writeBuffer->clear();
-    
-        ClipAgainstPlane(*readBuffer, *writeBuffer, components[i], nears[i]);
+        
+        ClipAgainstPlane(*readBuffer, *writeBuffer, components[planeIdx], nears[planeIdx]);
         
         // Early exit if everything was clipped
         if (writeBuffer->empty()) {
-            if (writeBuffer != &clipped) {
-                clipped.clear();
-            }
+            clipped.clear();
             return;
         }
         
-        // Ping-pong buffers for next iteration
-        if (i < 5) {
-            if (i == 0) {
+        // Ping-pong: swap read/write for next iteration (except last)
+        if (planeIdx < 5) {
+            // Alternate between clipped and tempBuffer
+            if (writeBuffer == &clipped) {
                 readBuffer = &clipped;
                 writeBuffer = &tempBuffer;
             } else {
-                std::swap(readBuffer, writeBuffer);
+                readBuffer = &tempBuffer;
+                writeBuffer = &clipped;
             }
         }
     }
     
-    // Make sure result ends up in 'clipped'
-    if (writeBuffer != &clipped) {
-        clipped = std::move(*writeBuffer);
+    // Ensure final result is in 'clipped'
+    if (writeBuffer == &tempBuffer) {
+        clipped.swap(tempBuffer);
     }
 }
 
 // Optimized in-place clipping against a single plane
 void Renderer::ClipAgainstPlane(const std::vector<VERTEX>& input, std::vector<VERTEX>& output, 
                                 const int component, const bool Near) {
-    output.reserve(input.size() * 2); // Clipping can double triangle count
-
+    // Note: output is already reserved in ClippingHelper
+    
     const size_t triangleCount = input.size() / 3;
     
     for (size_t tri = 0; tri < triangleCount; ++tri)
@@ -1424,4 +1316,8 @@ void Renderer::LogDiagnostics() const {
 
 void Renderer::SetDiagnosticsEnabled(bool enabled) {
     _diagnostics_enabled = enabled;
+}
+
+const std::vector<glm::ivec4>& Renderer::GetColorBuffer() const {
+    return _color_buffer;
 }

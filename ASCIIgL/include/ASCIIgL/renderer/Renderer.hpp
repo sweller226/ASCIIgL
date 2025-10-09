@@ -64,6 +64,9 @@ private:
 
     void DrawTriangleWireframeColBuffPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::vec4& col);
     void DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
+    
+    // Helper function for rasterization (shared by DrawTriangleTextured and DrawTriangleTexturedPartial)
+    void DrawTriangleTexturedImpl(const VERTEX& v1, const VERTEX& v2, const VERTEX& v3, const Texture* tex, int minX, int maxX, int minY, int maxY);
 
     void DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& raster_triangles, const Texture* tex);
     void DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles);
@@ -159,6 +162,8 @@ public:
 
     void TestRenderFont();
     void TestRenderColorDiscrete();
+
+    const std::vector<glm::ivec4>& GetColorBuffer() const;
 
     void SetDiagnosticsEnabled(const bool enabled);
 };

@@ -73,7 +73,7 @@ bool Game::Initialize() {
     }
     
     // Initialize game systems
-    world = std::make_unique<World>(2, WorldPos(0, 5, 0), 2);
+    world = std::make_unique<World>(3, WorldPos(0, 80, 0), 16);
     inputManager = std::make_unique<InputManager>();
     
     // Create player at spawn point
@@ -97,6 +97,8 @@ void Game::Run() {
     }
     
     Logger::Info("Starting game loop...");
+
+    Profiler::GetInst().SetEnabled(true);
 
     // Main game loop
     int frameCounter = 0;
@@ -141,7 +143,7 @@ void Game::Run() {
             PROFILE_SCOPE("PixelBufferOutput");
             Screen::GetInst().OutputBuffer();
         }
-
+        
         FPSClock::GetInst().EndFPSClock();
         
         // profiling work
@@ -149,6 +151,7 @@ void Game::Run() {
         frameCounter++;
         if (frameCounter % 60 == 0) { 
             frameCounter = 0;
+            Logger::Info("FPS: " + std::to_string(FPSClock::GetInst().GetFPS()));
             Profiler::GetInst().LogReport();
             Profiler::GetInst().Reset();  // Reset profiler data after logging
         }

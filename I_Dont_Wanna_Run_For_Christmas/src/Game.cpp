@@ -93,6 +93,7 @@ void Game::Run() {
     Renderer::GetInst().SetCCW(true);
 	Renderer::GetInst().SetAntialiasingsamples(8);
 	Renderer::GetInst().SetAntialiasing(true);
+	Renderer::GetInst().SetDiagnosticsEnabled(false); // set to true to see how long rendering takes
 
     // Logger::Info("Playing background music.");
 	// BOOL soundResult = PlaySound(TEXT(".\\res\\audio\\Man.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
@@ -138,8 +139,9 @@ void Game::Run() {
         Screen::GetInst().OutputBuffer();
 
 		FPSClock::GetInst().EndFPSClock();
-    }
-    Logger::Info("Game loop ended.");
+		Logger::Info("FPS: " + std::to_string(FPSClock::GetInst().GetFPS()));
+	}
+	Logger::Info("Game loop ended.");
 }
 
 void Game::LoadLevel() {

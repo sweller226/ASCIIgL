@@ -57,6 +57,7 @@ private:
     // Frame tracking
     TimePoint _frameStartTime;
     double _totalFrameTime_ms = 0.0;
+    std::vector<double> _frameTimes; // Store individual frame times for averaging
     unsigned int _frameCount = 0;
     unsigned int _maxFramesToAverage = 60; // Default: average over 60 frames
     
