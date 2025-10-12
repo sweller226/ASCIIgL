@@ -52,7 +52,7 @@ typedef struct Vertex_Shader {
         
         const size_t vertex_count = vertices.size();
         
-        if (vertex_count < 128) {
+        if (vertex_count < 2000) {
             for (VERTEX& vertex : vertices) {
                 GLUse(vertex);
             }

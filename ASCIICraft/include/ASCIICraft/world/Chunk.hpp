@@ -87,6 +87,7 @@ public:
     // Mesh generation for rendering
     void GenerateMesh();
     bool HasMesh() const { return hasMesh; }
+    Mesh* GetMesh() const { return mesh.get(); }
     void InvalidateMesh() { hasMesh = false; dirty = true; }
     
     // Neighbor access for mesh generation

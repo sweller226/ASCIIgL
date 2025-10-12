@@ -57,8 +57,8 @@ void Logger::Debug(const std::string& message) { LogInternal(LogLevel::Debug, me
 void Logger::Debug(const std::wstring& message) { LogInternal(LogLevel::Debug, message); }
 
 void Logger::LogInternal(LogLevel level, const std::string& message) {
-    std::lock_guard<std::mutex> lock(logMutex);
     if (static_cast<int>(level) > static_cast<int>(currentLevel)) return;
+    std::lock_guard<std::mutex> lock(logMutex);
     if (logFile.is_open()) {
         auto now = std::chrono::system_clock::now();
         auto time_t = std::chrono::system_clock::to_time_t(now);
@@ -75,8 +75,8 @@ void Logger::LogInternal(LogLevel level, const std::string& message) {
 }
 
 void Logger::LogInternal(LogLevel level, const std::wstring& message) {
-    std::lock_guard<std::mutex> lock(logMutex);
     if (static_cast<int>(level) > static_cast<int>(currentLevel)) return;
+    std::lock_guard<std::mutex> lock(logMutex);
     if (logFile.is_open()) {
         auto now = std::chrono::system_clock::now();
         auto time_t = std::chrono::system_clock::to_time_t(now);

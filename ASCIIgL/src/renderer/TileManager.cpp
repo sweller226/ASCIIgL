@@ -62,6 +62,102 @@ bool TileManager::DoesTileEncapsulate(const Tile& tile, const VERTEX& v1, const 
 }
 
 void TileManager::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles) {
+    if (raster_triangles.size() >= 6000) {
+        BinTrianglesToTilesMultiThreaded(raster_triangles);
+    }
+    else {
+        BinTrianglesToTilesSingleThreaded(raster_triangles);
+    }
+}
+
+void TileManager::BinTrianglesToTilesMultiThreaded(const std::vector<VERTEX>& raster_triangles) {
+    for (auto& tile : _tileBuffer) {
+        tile.tri_indices_encapsulated.clear();
+        tile.tri_indices_partial.clear();
+        tile.dirty = false;
+    }
+
+    if (raster_triangles.empty()) return;
+
+    const int tileSizeX  = GetTileSizeX();
+    const int tileSizeY  = GetTileSizeY();
+    const int tileCountX = GetTileCountX();
+    const int tileCountY = GetTileCountY();
+    const float invTileSizeX = 1.0f / tileSizeX;
+    const float invTileSizeY = 1.0f / tileSizeY;
+
+    const size_t numThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
+    const size_t triCount   = raster_triangles.size() / 3;
+    const size_t batchSize  = (triCount + numThreads - 1) / numThreads;
+
+    // Each thread gets its own local bins to avoid contention
+    std::vector<std::vector<int>> threadEncapsulated(numThreads * _tileBuffer.size());
+    std::vector<std::vector<int>> threadPartial(numThreads * _tileBuffer.size());
+
+    std::vector<std::thread> threads;
+    threads.reserve(numThreads);
+
+    for (size_t t = 0; t < numThreads; ++t) {
+        threads.emplace_back([&, t]() {
+            const size_t startTri = t * batchSize;
+            const size_t endTri   = std::min(triCount, startTri + batchSize);
+
+            for (size_t triIdx = startTri; triIdx < endTri; ++triIdx) {
+                const int i = static_cast<int>(triIdx * 3);
+                const VERTEX& v1 = raster_triangles[i];
+                const VERTEX& v2 = raster_triangles[i + 1];
+                const VERTEX& v3 = raster_triangles[i + 2];
+
+                const auto [minTriPt, maxTriPt] = MathUtil::ComputeBoundingBox(
+                    v1.GetXY(), v2.GetXY(), v3.GetXY()
+                );
+
+                int minTileX = std::max(0, static_cast<int>(minTriPt.x * invTileSizeX));
+                int maxTileX = std::min(tileCountX - 1, static_cast<int>(maxTriPt.x * invTileSizeX + 0.999f));
+                int minTileY = std::max(0, static_cast<int>(minTriPt.y * invTileSizeY));
+                int maxTileY = std::min(tileCountY - 1, static_cast<int>(maxTriPt.y * invTileSizeY + 0.999f));
+
+                for (int ty = minTileY; ty <= maxTileY; ++ty) {
+                    const int rowOffset = ty * tileCountX;
+                    for (int tx = minTileX; tx <= maxTileX; ++tx) {
+                        const int tileIndex = rowOffset + tx;
+                        const int threadTileIndex = t * _tileBuffer.size() + tileIndex;
+
+                        if (DoesTileEncapsulate(_tileBuffer[tileIndex], v1, v2, v3)) {
+                            threadEncapsulated[threadTileIndex].push_back(i);
+                        } else {
+                            threadPartial[threadTileIndex].push_back(i);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Wait for all threads
+    for (auto& t : threads) t.join();
+
+    // --- Merge thread-local results ---
+    for (size_t tileIndex = 0; tileIndex < _tileBuffer.size(); ++tileIndex) {
+        Tile& tile = _tileBuffer[tileIndex];
+        for (size_t t = 0; t < numThreads; ++t) {
+            const size_t idx = t * _tileBuffer.size() + tileIndex;
+            auto& enc = threadEncapsulated[idx];
+            auto& par = threadPartial[idx];
+
+            if (!enc.empty()) {
+                tile.tri_indices_encapsulated.insert(tile.tri_indices_encapsulated.end(), enc.begin(), enc.end());
+                tile.dirty = true;
+            }
+            if (!par.empty()) {
+                tile.tri_indices_partial.insert(tile.tri_indices_partial.end(), par.begin(), par.end());
+                tile.dirty = true;
+            }
+        }
+    }
+}
+
+void TileManager::BinTrianglesToTilesSingleThreaded(const std::vector<VERTEX>& raster_triangles) {
     for (auto& tile : _tileBuffer) {
         tile.tri_indices_encapsulated.clear();
         tile.tri_indices_partial.clear();

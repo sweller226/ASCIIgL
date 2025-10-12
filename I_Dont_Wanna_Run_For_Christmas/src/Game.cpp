@@ -94,6 +94,7 @@ void Game::Run() {
 	Renderer::GetInst().SetAntialiasingsamples(8);
 	Renderer::GetInst().SetAntialiasing(true);
 	Renderer::GetInst().SetDiagnosticsEnabled(false); // set to true to see how long rendering takes
+	Renderer::GetInst().SetCpuOnly(true);
 
     // Logger::Info("Playing background music.");
 	// BOOL soundResult = PlaySound(TEXT(".\\res\\audio\\Man.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);

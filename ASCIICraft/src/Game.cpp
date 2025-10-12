@@ -65,6 +65,7 @@ bool Game::Initialize() {
 	Renderer::GetInst().SetAntialiasingsamples(4);
 	Renderer::GetInst().SetAntialiasing(true);
     Renderer::GetInst().SetDiagnosticsEnabled(false);
+    Renderer::GetInst().SetCpuOnly(true);
 
     // Load resources
     if (!LoadResources()) {

@@ -320,13 +320,14 @@ void Chunk::Render(VERTEX_SHADER& vertex_shader, const Camera3D& camera) {
         GenerateMesh();
     }
     
-    if (!this->HasMesh() || !this->mesh) {
+    if (!this->HasMesh() || !this->mesh || !generated) {
         return; // No mesh to render
     }
 
     // Check if mesh has valid texture before rendering
     if (this->mesh->texture) {
-        Renderer::GetInst().DrawMesh(vertex_shader, this->mesh.get(), camera);
+        vertex_shader.SetMatrices(glm::mat4(1.0f), camera.view, camera.proj);
+        Renderer::GetInst().DrawMesh(vertex_shader, this->mesh.get());
     } else {
         Logger::Warning("Chunk mesh has no texture - skipping render");
     }

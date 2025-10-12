@@ -4,6 +4,7 @@
 #include <execution>
 #include <numeric>
 #include <sstream>
+#include <mutex>
 
 #include <ASCIIgL/engine/Logger.hpp>
 #include <ASCIIgL/engine/Collision.hpp>
@@ -40,19 +41,10 @@ void Renderer::Initialize() {
 // =============================================================================
 
 void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh) {
-    if (mesh->texture) {
-        RenderTriangles(VSHADER, mesh->vertices, mesh->texture);
-    }
-}
-
-void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const Camera3D& camera) {
     if (!mesh) {
         Logger::Error("DrawMesh: mesh is nullptr!");
         return;
     }
-
-    VSHADER.SetMatrices(glm::mat4(1.0f), camera.view, camera.proj);
-
     if (mesh->texture) {
         RenderTriangles(VSHADER, mesh->vertices, mesh->texture);
     } else {
@@ -69,7 +61,6 @@ void Renderer::DrawMesh(VERTEX_SHADER& VSHADER, const Mesh* mesh, const glm::vec
         RenderTriangles(VSHADER, mesh->vertices, mesh->texture);
     }
 }
-
 
 
 void Renderer::DrawModel(VERTEX_SHADER& VSHADER, const Model& ModelObj, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera) {
@@ -158,7 +149,15 @@ void Renderer::DrawScreenBorderColBuff(const glm::vec3& col) {
 // =============================================================================
 
 void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex) {
-    PROFILE_SCOPE("RenderTriangles");
+    if (_cpu_only) {
+        RenderTrianglesCPU(VSHADER, vertices, tex);
+    } else {
+        RenderTrianglesGPU(VSHADER, vertices, tex);
+    }
+}
+
+void Renderer::RenderTrianglesGPU(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex) {
+    PROFILE_SCOPE("RenderTrianglesGPU");
     
     // basic validation
     if (vertices.size() < 3 || vertices.size() % 3 != 0) return;
@@ -167,7 +166,7 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
 
     // copy input vertices to internal buffer (with capacity check)
     {
-        PROFILE_SCOPE("RenderTriangles.VertexBufferSetup");
+        PROFILE_SCOPE("RenderTrianglesGPU.VertexBufferSetup");
         if (_vertexBuffer.capacity() < vertices.size()) {
             _vertexBuffer.reserve(vertices.size() * 1.5f);
         }
@@ -176,13 +175,13 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
 
     // vertex shader stage
     {
-        PROFILE_SCOPE("RenderTriangles.VertexShader");
+        PROFILE_SCOPE("RenderTrianglesGPU.VertexShader");
         const_cast<VERTEX_SHADER&>(VSHADER).GLUseBatch(_vertexBuffer);
     }
 
     // clipping against frustum planes
     {
-        PROFILE_SCOPE("RenderTriangles.Clipping");
+        PROFILE_SCOPE("RenderTrianglesGPU.Clipping");
         ClippingHelper(_vertexBuffer, _clippedBuffer);
         std::swap(_vertexBuffer, _clippedBuffer);
         _triangles_past_clipping += static_cast<unsigned int>(_vertexBuffer.size() / 3);
@@ -190,40 +189,112 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
 
     // perspective divide + viewport transform
     {
-        PROFILE_SCOPE("RenderTriangles.PerspectiveTransform");
+        PROFILE_SCOPE("RenderTrianglesGPU.PerspectiveTransform");
         PerspectiveAndViewportTransform(_vertexBuffer);
     }
 
     // backface culling
     if (_backface_culling) {
-        PROFILE_SCOPE("RenderTriangles.BackfaceCulling");
+        PROFILE_SCOPE("RenderTrianglesGPU.BackfaceCulling");
         BackFaceCullHelper(_vertexBuffer);
+    }
+    _triangles_past_backface_culling += static_cast<unsigned int>(_vertexBuffer.size() / 3);
+
+    // Precompute color LUT if not done yet
+    if (!_colorLUTComputed) {
+        PROFILE_SCOPE("RenderTrianglesGPU.PrecomputeColorLUT");
+        PrecomputeColorLUT();
+    }
+
+
+}
+
+void Renderer::RenderTrianglesCPU(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex) {
+    PROFILE_SCOPE("RenderTrianglesCPU");
+
+    Logger::Debug("RenderTrianglesCPU: Starting validation");
+    // basic validation
+    if (vertices.size() < 3 || vertices.size() % 3 != 0) return;
+    if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) return;
+    if (!tex) { return; }
+    _triangles_inputted += static_cast<unsigned int>(vertices.size() / 3);
+    Logger::Debug("RenderTrianglesCPU: Validation passed");
+
+    // copy input vertices to internal buffer (with capacity check)
+    {
+        Logger::Debug("RenderTrianglesCPU: VertexBufferSetup started");
+        PROFILE_SCOPE("RenderTrianglesCPU.VertexBufferSetup");
+        if (_vertexBuffer.capacity() < vertices.size()) {
+            _vertexBuffer.reserve(vertices.size() * 1.5f);
+        }
+        _vertexBuffer.assign(vertices.begin(), vertices.end());
+        Logger::Debug("RenderTrianglesCPU: VertexBufferSetup passed");
+    }
+
+    // vertex shader stage
+    {
+        Logger::Debug("RenderTrianglesCPU: VertexShader started");
+        PROFILE_SCOPE("RenderTrianglesCPU.VertexShader");
+        const_cast<VERTEX_SHADER&>(VSHADER).GLUseBatch(_vertexBuffer);
+        Logger::Debug("RenderTrianglesCPU: VertexShader passed");
+    }
+
+    // clipping against frustum planes
+    {
+        Logger::Debug("RenderTrianglesCPU: Clipping started");
+        PROFILE_SCOPE("RenderTrianglesCPU.Clipping");
+        ClippingHelper(_vertexBuffer, _clippedBuffer);
+        std::swap(_vertexBuffer, _clippedBuffer);
+        _triangles_past_clipping += static_cast<unsigned int>(_vertexBuffer.size() / 3);
+        Logger::Debug("RenderTrianglesCPU: Clipping passed");
+    }
+
+    // perspective divide + viewport transform
+    {
+        Logger::Debug("RenderTrianglesCPU: PerspectiveTransform started");
+        PROFILE_SCOPE("RenderTrianglesCPU.PerspectiveTransform");
+        PerspectiveAndViewportTransform(_vertexBuffer);
+        Logger::Debug("RenderTrianglesCPU: PerspectiveTransform passed");
+    }
+
+    // backface culling
+    if (_backface_culling) {
+        Logger::Debug("RenderTrianglesCPU: BackfaceCulling started");
+        PROFILE_SCOPE("RenderTrianglesCPU.BackfaceCulling");
+        BackFaceCullHelper(_vertexBuffer);
+        Logger::Debug("RenderTrianglesCPU: BackfaceCulling passed");
     }
     _triangles_past_backface_culling += static_cast<unsigned int>(_vertexBuffer.size() / 3);
 
     // tile management
     auto& tile_manager = TileManager::GetInst();
     {
-        PROFILE_SCOPE("RenderTriangles.TileBinning.Setup");
+        Logger::Debug("RenderTrianglesCPU: TileBinning.Setup started");
+        PROFILE_SCOPE("RenderTrianglesCPU.TileBinning.Setup");
         if (!tile_manager.IsInitialized()) {
             tile_manager.InitializeTiles(Screen::GetInst().GetWidth(), Screen::GetInst().GetHeight());
         }
-        
+        Logger::Debug("RenderTrianglesCPU: TileBinning.Setup passed");
     }
     {
-        PROFILE_SCOPE("RenderTriangles.TileBinning.Binning");
+        Logger::Debug("RenderTrianglesCPU: TileBinning.Binning started");
+        PROFILE_SCOPE("RenderTrianglesCPU.TileBinning.Binning");
         tile_manager.BinTrianglesToTiles(_vertexBuffer);
+        Logger::Debug("RenderTrianglesCPU: TileBinning.Binning passed");
     }
 
     // Precompute color LUT if not done yet
     if (!_colorLUTComputed) {
-        PROFILE_SCOPE("RenderTriangles.PrecomputeColorLUT");
+        Logger::Debug("RenderTrianglesCPU: PrecomputeColorLUT started");
+        PROFILE_SCOPE("RenderTrianglesCPU.PrecomputeColorLUT");
         PrecomputeColorLUT();
+        Logger::Debug("RenderTrianglesCPU: PrecomputeColorLUT passed");
     }
 
     // tile rendering
     {
-        PROFILE_SCOPE("RenderTriangles.TileRasterization");
+        Logger::Debug("RenderTrianglesCPU: TileRasterization started");
+        PROFILE_SCOPE("RenderTrianglesCPU.TileRasterization");
         auto& tile_manager = TileManager::GetInst();
         tile_manager.UpdateActiveTiles();
         if (!tile_manager.activeTiles.empty()) {
@@ -236,6 +307,7 @@ void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<V
                     }
                 });
         }
+        Logger::Debug("RenderTrianglesCPU: TileRasterization passed");
     }
 }
 
@@ -734,157 +806,222 @@ bool Renderer::BackFaceCull(const VERTEX& vert1, const VERTEX& vert2, const VERT
 // =============================================================================
 
 void Renderer::ClippingHelper(std::vector<VERTEX>& vertices, std::vector<VERTEX>& clipped) {
-    static const int components[6] = {2, 2, 1, 1, 0, 0};
-    static const bool nears[6]     = {true, false, true, false, true, false};
+    if (vertices.size() < 3) return;
 
-    // Pre-reserve buffers to avoid reallocations during clipping
-    clipped.clear();
-    clipped.reserve(vertices.size() * 2); // Worst case: clipping can double vertex count
-    
-    // Temp buffer for ping-ponging (reuse across frames via static thread_local)
-    static thread_local std::vector<VERTEX> tempBuffer;
-    tempBuffer.clear();
-    tempBuffer.reserve(vertices.size() * 2);
-    
-    // Use ping-pong buffering: alternate between clipped and tempBuffer
-    std::vector<VERTEX>* readBuffer = &vertices;
-    std::vector<VERTEX>* writeBuffer = &clipped;
-    
-    for (int planeIdx = 0; planeIdx < 6; ++planeIdx) {
-        writeBuffer->clear();
-        
-        ClipAgainstPlane(*readBuffer, *writeBuffer, components[planeIdx], nears[planeIdx]);
-        
-        // Early exit if everything was clipped
-        if (writeBuffer->empty()) {
-            clipped.clear();
-            return;
-        }
-        
-        // Ping-pong: swap read/write for next iteration (except last)
-        if (planeIdx < 5) {
-            // Alternate between clipped and tempBuffer
-            if (writeBuffer == &clipped) {
-                readBuffer = &clipped;
-                writeBuffer = &tempBuffer;
-            } else {
-                readBuffer = &tempBuffer;
-                writeBuffer = &clipped;
-            }
-        }
-    }
-    
-    // Ensure final result is in 'clipped'
-    if (writeBuffer == &tempBuffer) {
-        clipped.swap(tempBuffer);
+    // Adaptive clipping: use multithreading for large meshes, single-threaded for small meshes
+    if (vertices.size() >= 6000) {
+        Logger::Debug("ClippingHelper: Using multithreaded clipping for large mesh");
+        Renderer::ClippingHelperThreaded(vertices, clipped);
+    } else {
+        Logger::Debug("ClippingHelper: Using single-threaded clipping for small mesh");
+        Renderer::ClippingHelperSingleThreaded(vertices, clipped);
     }
 }
 
-// Optimized in-place clipping against a single plane
-void Renderer::ClipAgainstPlane(const std::vector<VERTEX>& input, std::vector<VERTEX>& output, 
+void Renderer::ClippingHelperThreaded(std::vector<VERTEX>& vertices, std::vector<VERTEX>& clipped) {
+    constexpr int NUM_PLANES = 6;
+    static const int components[NUM_PLANES] = {2, 2, 1, 1, 0, 0};
+    static const bool nears[NUM_PLANES]     = {true, false, true, false, true, false};
+
+    clipped.clear();
+    const size_t triangleCount = vertices.size() / 3;
+    if (triangleCount == 0) return;
+
+    // --- Thread setup ---
+    const size_t numThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
+    const size_t batchSize  = (triangleCount + numThreads - 1) / numThreads;
+
+    std::vector<std::thread> threads;
+    threads.reserve(numThreads);
+    std::vector<std::vector<VERTEX>> threadResults(numThreads);
+
+    // --- Parallel work ---
+    for (size_t t = 0; t < numThreads; ++t) {
+        threads.emplace_back([&, t]() {
+            std::vector<VERTEX>& out = threadResults[t];
+            out.clear();
+            out.reserve(batchSize * 3); // heuristic: ~3 verts per tri
+
+            std::vector<VERTEX> tri;
+            std::vector<VERTEX> temp;
+            tri.reserve(12);
+            temp.reserve(12);
+
+            const size_t start = t * batchSize;
+            const size_t end   = std::min(triangleCount, start + batchSize);
+
+            for (size_t triIdx = start; triIdx < end; ++triIdx) {
+                tri.clear();
+                tri.push_back(vertices[triIdx * 3 + 0]);
+                tri.push_back(vertices[triIdx * 3 + 1]);
+                tri.push_back(vertices[triIdx * 3 + 2]);
+
+                for (int planeIdx = 0; planeIdx < NUM_PLANES; ++planeIdx) {
+                    temp.clear();
+                    for (size_t i = 0; i + 2 < tri.size(); i += 3) {
+                        ClipTriAgainstPlane(
+                            tri[i], tri[i + 1], tri[i + 2],
+                            temp, components[planeIdx], nears[planeIdx]
+                        );
+                    }
+                    if (temp.empty()) { tri.clear(); break; }
+                    tri.swap(temp);
+                }
+
+                if (!tri.empty()) {
+                    out.insert(out.end(), tri.begin(), tri.end());
+                }
+            }
+        });
+    }
+
+    // --- Merge results ---
+    for (auto& t : threads) t.join();
+
+    size_t total = 0;
+    for (auto& buf : threadResults) total += buf.size();
+    clipped.reserve(total);
+    for (auto& buf : threadResults) {
+        clipped.insert(clipped.end(), buf.begin(), buf.end());
+    }
+}
+
+void Renderer::ClippingHelperSingleThreaded(std::vector<VERTEX>& vertices, std::vector<VERTEX>& clipped) {
+    constexpr int NUM_PLANES = 6;
+    static const int components[NUM_PLANES] = {2, 2, 1, 1, 0, 0};
+    static const bool nears[NUM_PLANES]     = {true, false, true, false, true, false};
+
+    clipped.clear();
+    const size_t triangleCount = vertices.size() / 3;
+    if (triangleCount == 0) return;
+
+    std::vector<VERTEX> tri;
+    std::vector<VERTEX> temp;
+    tri.reserve(12);
+    temp.reserve(12);
+
+    for (size_t triIdx = 0; triIdx < triangleCount; ++triIdx) {
+        tri.clear();
+        temp.clear();
+
+        // Copy triangle
+        tri.push_back(vertices[triIdx * 3 + 0]);
+        tri.push_back(vertices[triIdx * 3 + 1]);
+        tri.push_back(vertices[triIdx * 3 + 2]);
+
+        // Clip against each plane
+        for (int planeIdx = 0; planeIdx < NUM_PLANES; ++planeIdx) {
+            temp.clear();
+            for (size_t i = 0; i + 2 < tri.size(); i += 3) {
+                ClipTriAgainstPlane(tri[i], tri[i + 1], tri[i + 2],
+                                    temp, components[planeIdx], nears[planeIdx]);
+            }
+            if (temp.empty()) { tri.clear(); break; }
+            tri.swap(temp);
+        }
+
+        if (!tri.empty()) {
+            clipped.insert(clipped.end(), tri.begin(), tri.end());
+        }
+    }
+}
+
+void Renderer::ClipTriAgainstPlane(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, std::vector<VERTEX>& output, 
                                 const int component, const bool Near) {
-    // Note: output is already reserved in ClippingHelper
-    
-    const size_t triangleCount = input.size() / 3;
-    
-    for (size_t tri = 0; tri < triangleCount; ++tri)
-    {
-        const size_t baseIdx = tri * 3;
-        const VERTEX& v0 = input[baseIdx];
-        const VERTEX& v1 = input[baseIdx + 1];
-        const VERTEX& v2 = input[baseIdx + 2];
 
-        // Classify vertices inline (avoid lambda overhead)
-        const float w0 = v0.W();
-        const float w1 = v1.W();
-        const float w2 = v2.W();
-        const float val0 = v0.data[component];
-        const float val1 = v1.data[component];
-        const float val2 = v2.data[component];
-        
-        const bool in0 = Near ? (val0 > -w0) : (val0 < w0);
-        const bool in1 = Near ? (val1 > -w1) : (val1 < w1);
-        const bool in2 = Near ? (val2 > -w2) : (val2 < w2);
-        
-        const int insideCount = (in0 ? 1 : 0) + (in1 ? 1 : 0) + (in2 ? 1 : 0);
+    const float w0 = vert1.W();
+    const float w1 = vert2.W();
+    const float w2 = vert3.W();
+    const float val0 = vert1.data[component];
+    const float val1 = vert2.data[component];
+    const float val2 = vert3.data[component];
 
-        // All vertices inside - keep triangle as-is (most common case first)
-        if (insideCount == 3) {
-            output.push_back(v0);
-            output.push_back(v1);
-            output.push_back(v2);
+    const bool in0 = Near ? (val0 > -w0) : (val0 < w0);
+    const bool in1 = Near ? (val1 > -w1) : (val1 < w1);
+    const bool in2 = Near ? (val2 > -w2) : (val2 < w2);
+
+    const int insideCount = (in0 ? 1 : 0) + (in1 ? 1 : 0) + (in2 ? 1 : 0);
+
+    // All vertices inside - keep triangle as-is (most common case first)
+    if (insideCount == 3) {
+        output.push_back(vert1);
+        output.push_back(vert2);
+        output.push_back(vert3);
+    }
+    // Two vertices inside - create 2 triangles (quad split)
+    else if (insideCount == 2) {
+        VERTEX insideVert0, insideVert1, outsideVert;
+
+        if (!in0) {
+            outsideVert = vert1; insideVert0 = vert2; insideVert1 = vert3;
+        } else if (!in1) {
+            outsideVert = vert2; insideVert0 = vert3; insideVert1 = vert1;
+        } else { // !in2
+            outsideVert = vert3; insideVert0 = vert1; insideVert1 = vert2;
         }
-        // Two vertices inside - create 2 triangles (quad split)
-        else if (insideCount == 2) {
-            VERTEX insideVert0, insideVert1, outsideVert;
-            
-            if (!in0) {
-                outsideVert = v0; insideVert0 = v1; insideVert1 = v2;
-            } else if (!in1) {
-                outsideVert = v1; insideVert0 = v2; insideVert1 = v0;
-            } else { // !in2
-                outsideVert = v2; insideVert0 = v0; insideVert1 = v1;
-            }
-            
-            const VERTEX newVert0 = HomogenousPlaneIntersect(insideVert0, outsideVert, component, Near);
-            const VERTEX newVert1 = HomogenousPlaneIntersect(insideVert1, outsideVert, component, Near);
-            
-            // Triangle 1
-            output.push_back(insideVert0);
-            output.push_back(insideVert1);
-            output.push_back(newVert0);
-            
-            // Triangle 2
-            output.push_back(insideVert1);
-            output.push_back(newVert1);
-            output.push_back(newVert0);
+
+        const VERTEX newVert0 = HomogenousPlaneIntersect(insideVert0, outsideVert, component, Near);
+        const VERTEX newVert1 = HomogenousPlaneIntersect(insideVert1, outsideVert, component, Near);
+
+        // Triangle 1
+        output.push_back(insideVert0);
+        output.push_back(insideVert1);
+        output.push_back(newVert0);
+
+        // Triangle 2
+        output.push_back(insideVert1);
+        output.push_back(newVert1);
+        output.push_back(newVert0);
+    }
+    // One vertex inside - create 1 smaller triangle
+    else if (insideCount == 1) {
+        VERTEX insideVert, outsideVert0, outsideVert1;
+
+        if (in0) {
+            insideVert = vert1; outsideVert0 = vert2; outsideVert1 = vert3;
+        } else if (in1) {
+            insideVert = vert2; outsideVert0 = vert3; outsideVert1 = vert1;
+        } else { // in2
+            insideVert = vert3; outsideVert0 = vert1; outsideVert1 = vert2;
         }
-        // One vertex inside - create 1 smaller triangle
-        else if (insideCount == 1) {
-            VERTEX insideVert, outsideVert0, outsideVert1;
-            
-            if (in0) {
-                insideVert = v0; outsideVert0 = v1; outsideVert1 = v2;
-            } else if (in1) {
-                insideVert = v1; outsideVert0 = v2; outsideVert1 = v0;
-            } else { // in2
-                insideVert = v2; outsideVert0 = v0; outsideVert1 = v1;
-            }
-            
-            const VERTEX newVert0 = HomogenousPlaneIntersect(insideVert, outsideVert0, component, Near);
-            const VERTEX newVert1 = HomogenousPlaneIntersect(insideVert, outsideVert1, component, Near);
-            
-            output.push_back(insideVert);
-            output.push_back(newVert0);
-            output.push_back(newVert1);
-        }
-        // else insideCount == 0: triangle completely outside, discard
+
+        const VERTEX newVert0 = HomogenousPlaneIntersect(insideVert, outsideVert0, component, Near);
+        const VERTEX newVert1 = HomogenousPlaneIntersect(insideVert, outsideVert1, component, Near);
+
+        output.push_back(insideVert);
+        output.push_back(newVert0);
+        output.push_back(newVert1);
     }
 }
 
 VERTEX Renderer::HomogenousPlaneIntersect(const VERTEX& vert2, const VERTEX& vert1, const int component, const bool Near) {
-    // Interpolates on the line between both vertices to get a new point on the line between them
-    // v2 is the vertex that is actually visible, v1 is behind the near plane
-
-    VERTEX newVert = vert1;
-    VERTEX v = vert1;
-
-    v.SetXYZW(vert1.GetXYZW() - vert2.GetXYZW());
-
+    // Compute difference directly
     float i0 = vert1.data[component];
-    float w0 = vert1.data[3]; // w is at index 3
+    float w0 = vert1.data[3];
+    float vi = vert1.data[component] - vert2.data[component];
+    float vw = vert1.data[3] - vert2.data[3];
 
-    float vi = v.data[component];
-    float vw = v.data[3];
+    float denom;
+    if (Near)
+        denom = vw + vi;
+    else
+        denom = vi - vw;
+
+    // Safety for divide by zero
+    if (fabsf(denom) < 1e-7f) {
+        Logger::Debug("HomogenousPlaneIntersect: Divide by zero detected, returning vert1.");
+        return vert1;
+    }
 
     float t;
     if (Near)
-        t = (i0 + w0) / (vw + vi); // near clipping
+        t = (i0 + w0) / denom;
     else
-        t = (i0 - w0) / (vi - vw); // far clipping
+        t = (i0 - w0) / denom;
 
-    for (int i = 0; i < 7; i++)
-        newVert.data[i] = glm::mix(vert1.data[i], vert2.data[i], t); // interpolate attributes
+    VERTEX newVert;
+    for (int i = 0; i < 7; ++i)
+        newVert.data[i] = glm::mix(vert1.data[i], vert2.data[i], t);
 
     return newVert;
 }
@@ -1314,10 +1451,22 @@ void Renderer::LogDiagnostics() const {
     Logger::Info("  Triangles Past Backface Culling: " + std::to_string(_triangles_past_backface_culling));
 }
 
+bool Renderer::GetDiagnosticsEnabled() const {
+    return _diagnostics_enabled;
+}
+
 void Renderer::SetDiagnosticsEnabled(bool enabled) {
     _diagnostics_enabled = enabled;
 }
 
 const std::vector<glm::ivec4>& Renderer::GetColorBuffer() const {
     return _color_buffer;
+}
+
+void Renderer::SetCpuOnly(bool cpuOnly) {
+    _cpu_only = cpuOnly;
+}
+
+bool Renderer::GetCpuOnly() const {
+    return _cpu_only;
 }

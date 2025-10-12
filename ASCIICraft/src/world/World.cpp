@@ -7,6 +7,7 @@
 
 #include <ASCIIgL/engine/Logger.hpp>
 #include <ASCIIgL/util/Profiler.hpp>
+#include <ASCIIgL/renderer/Renderer.hpp>
 
 #include <ASCIICraft/player/Player.hpp>
 
@@ -61,20 +62,40 @@ void World::Render() {
     glm::vec3 viewDir = player->GetCamera().getCamFront();
 
     std::vector<Chunk*> visibleChunks = GetVisibleChunks(playerPos, viewDir);
-    
-    int renderedChunks = 0;
-    
-    for (Chunk* chunk : visibleChunks) {
-        // Safety: skip null pointers
-        if (!chunk || !chunk->IsGenerated()) {
-            continue;
+
+    Mesh combinedChunks = Mesh({}, nullptr);
+
+    {
+        PROFILE_SCOPE("Render.CombineChunks");
+        size_t totalVertexCount = 0;
+        Texture* batchTexture = nullptr;
+        for (Chunk* chunk : visibleChunks) {
+            if (!chunk || !chunk->IsGenerated() || !chunk->HasMesh()) continue;
+            auto* mesh = chunk->GetMesh();
+            if (mesh && mesh->texture) {
+                totalVertexCount += mesh->vertices.size();
+                if (!batchTexture) batchTexture = mesh->texture;
+            }
         }
-    
-        if (!chunk->HasMesh()) continue;
-        
-        // Render the chunk
-        chunk->Render(vertex_shader, player->GetCamera());
-        renderedChunks++;
+
+        combinedChunks.texture = batchTexture;
+        combinedChunks.vertices.reserve(totalVertexCount);
+
+        for (Chunk* chunk : visibleChunks) {
+            if (!chunk || !chunk->IsGenerated() || !chunk->HasMesh()) continue;
+            auto* mesh = chunk->GetMesh();
+            if (mesh && mesh->texture) {
+                combinedChunks.vertices.insert(combinedChunks.vertices.end(),
+                                            mesh->vertices.begin(),
+                                            mesh->vertices.end());
+            }
+        }
+
+    }
+
+    if (!combinedChunks.vertices.empty() && combinedChunks.texture) {
+        vertex_shader.SetMatrices(glm::mat4(1.0f), player->GetCamera().view, player->GetCamera().proj);
+        Renderer::GetInst().DrawMesh(vertex_shader, &combinedChunks);
     }
 }
 
@@ -100,7 +121,7 @@ void World::GenerateWorld() {
     
     Logger::Debug("Updating neighbors for " + std::to_string(generatedChunks.size()) + " chunks");
     for (const ChunkCoord& coord : generatedChunks) {
-        UpdateChunkNeighbors(coord, false);
+        UpdateChunkNeighbors(coord, true);
     }
 }
 
@@ -251,7 +272,7 @@ void World::UpdateChunkLoading() {
     }
     
     for (const ChunkCoord& coord : newlyLoadedChunks) {
-        UpdateChunkNeighbors(coord, false);
+        UpdateChunkNeighbors(coord, true);
     }
 
     // === STEP 2: UNLOAD DISTANT CHUNKS ===
