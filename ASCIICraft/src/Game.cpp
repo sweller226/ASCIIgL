@@ -62,7 +62,7 @@ bool Game::Initialize() {
     Renderer::GetInst().SetBackfaceCulling(true);
     Renderer::GetInst().SetCCW(true);
     Renderer::GetInst().SetContrast(1.1f);
-	Renderer::GetInst().SetAntialiasingsamples(4);
+	Renderer::GetInst().SetAntialiasingsamples(8);
 	Renderer::GetInst().SetAntialiasing(true);
     Renderer::GetInst().SetDiagnosticsEnabled(false);
     Renderer::GetInst().SetCpuOnly(true);

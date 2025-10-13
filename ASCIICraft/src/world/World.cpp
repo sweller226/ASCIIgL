@@ -58,44 +58,32 @@ void World::Render() {
         return;
     }
 
-    glm::vec3 playerPos = player->GetPosition();
-    glm::vec3 viewDir = player->GetCamera().getCamFront();
+    std::vector<Chunk*> visibleChunks = GetVisibleChunks(player->GetPosition(), player->GetCamera().getCamFront());
+    Logger::Debug("Render: visibleChunks = " + std::to_string(visibleChunks.size()));
 
-    std::vector<Chunk*> visibleChunks = GetVisibleChunks(playerPos, viewDir);
+    Texture* batchTexture = nullptr;
+    std::vector<std::vector<VERTEX>*> chunkVertexBatches;
+    chunkVertexBatches.reserve(visibleChunks.size());
 
-    Mesh combinedChunks = Mesh({}, nullptr);
-
-    {
-        PROFILE_SCOPE("Render.CombineChunks");
-        size_t totalVertexCount = 0;
-        Texture* batchTexture = nullptr;
-        for (Chunk* chunk : visibleChunks) {
-            if (!chunk || !chunk->IsGenerated() || !chunk->HasMesh()) continue;
-            auto* mesh = chunk->GetMesh();
-            if (mesh && mesh->texture) {
-                totalVertexCount += mesh->vertices.size();
-                if (!batchTexture) batchTexture = mesh->texture;
-            }
+    for (Chunk* chunk : visibleChunks) {
+        if (!chunk || !chunk->IsGenerated() || !chunk->HasMesh()) {
+            Logger::Debug("Render: Skipping invalid chunk");
+            continue;
         }
-
-        combinedChunks.texture = batchTexture;
-        combinedChunks.vertices.reserve(totalVertexCount);
-
-        for (Chunk* chunk : visibleChunks) {
-            if (!chunk || !chunk->IsGenerated() || !chunk->HasMesh()) continue;
-            auto* mesh = chunk->GetMesh();
-            if (mesh && mesh->texture) {
-                combinedChunks.vertices.insert(combinedChunks.vertices.end(),
-                                            mesh->vertices.begin(),
-                                            mesh->vertices.end());
-            }
+        auto* mesh = chunk->GetMesh();
+        if (!mesh || !mesh->texture || mesh->vertices.empty()) {
+            Logger::Debug("Render: Skipping chunk with invalid mesh/texture/vertices");
+            continue;
         }
-
+        if (!batchTexture) batchTexture = mesh->texture;
+        chunkVertexBatches.push_back(&mesh->vertices);
     }
 
-    if (!combinedChunks.vertices.empty() && combinedChunks.texture) {
+    if (!chunkVertexBatches.empty() && batchTexture) {
         vertex_shader.SetMatrices(glm::mat4(1.0f), player->GetCamera().view, player->GetCamera().proj);
-        Renderer::GetInst().DrawMesh(vertex_shader, &combinedChunks);
+        Renderer::GetInst().RenderTriangles(vertex_shader, chunkVertexBatches, batchTexture);
+    } else {
+        Logger::Debug("Render: Skipping RenderTriangles, no valid batches or texture.");
     }
 }
 

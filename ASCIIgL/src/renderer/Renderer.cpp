@@ -149,30 +149,84 @@ void Renderer::DrawScreenBorderColBuff(const glm::vec3& col) {
 // =============================================================================
 
 void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex) {
-    if (_cpu_only) {
-        RenderTrianglesCPU(VSHADER, vertices, tex);
-    } else {
-        RenderTrianglesGPU(VSHADER, vertices, tex);
-    }
-}
-
-void Renderer::RenderTrianglesGPU(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex) {
-    PROFILE_SCOPE("RenderTrianglesGPU");
-    
     // basic validation
-    if (vertices.size() < 3 || vertices.size() % 3 != 0) return;
-    if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) return;
+    if (vertices.size() < 3) {
+        Logger::Warning("RenderTriangles: Not enough vertices (" + std::to_string(vertices.size()) + ") to form a triangle.");
+        return;
+    }
+    if (vertices.size() % 3 != 0) {
+        Logger::Warning("RenderTriangles: Vertex count (" + std::to_string(vertices.size()) + ") is not a multiple of 3.");
+        return;
+    }
+    if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) {
+        Logger::Warning("RenderTriangles: Texture is invalid or has zero dimensions.");
+        return;
+    }
     _triangles_inputted += static_cast<unsigned int>(vertices.size() / 3);
-
+    
     // copy input vertices to internal buffer (with capacity check)
     {
-        PROFILE_SCOPE("RenderTrianglesGPU.VertexBufferSetup");
+        PROFILE_SCOPE("RenderTriangles.VertexBufferSetup");
         if (_vertexBuffer.capacity() < vertices.size()) {
             _vertexBuffer.reserve(vertices.size() * 1.5f);
         }
-        _vertexBuffer.assign(vertices.begin(), vertices.end()); 
+        _vertexBuffer.assign(vertices.begin(), vertices.end());
     }
 
+    if (_cpu_only) {
+        RenderTrianglesCPU(VSHADER, tex);
+    } else {
+        RenderTrianglesGPU(VSHADER, tex);
+    }
+}
+
+void Renderer::RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex) {
+    // Compute total number of vertices
+    size_t totalVerts = 0;
+    for (const auto* vvec : vertices) {
+        if (!vvec) {
+            Logger::Warning("RenderTriangles: Null vertex vector encountered in input.");
+            continue;
+        }
+        totalVerts += vvec->size();
+    }
+
+    if (totalVerts < 3) {
+        Logger::Warning("RenderTriangles: Not enough vertices (" + std::to_string(totalVerts) + ") to form a triangle.");
+        return;
+    }
+    if (totalVerts % 3 != 0) {
+        Logger::Warning("RenderTriangles: Vertex count (" + std::to_string(totalVerts) + ") is not a multiple of 3.");
+        return;
+    }
+    if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) {
+        Logger::Warning("RenderTriangles: Texture is invalid or has zero dimensions.");
+        return;
+    }
+    _triangles_inputted += static_cast<unsigned int>(totalVerts / 3);
+
+    // Combine all vertices into _vertexBuffer
+    {
+        PROFILE_SCOPE("RenderTriangles.VertexBufferSetup");
+        if (_vertexBuffer.capacity() < totalVerts) {
+            _vertexBuffer.reserve(totalVerts * 1.5f);
+        }
+        _vertexBuffer.clear();
+        for (const auto* vvec : vertices) {
+            if (vvec) _vertexBuffer.insert(_vertexBuffer.end(), vvec->begin(), vvec->end());
+        }
+    }
+
+    if (_cpu_only) {
+        RenderTrianglesCPU(VSHADER, tex);
+    } else {
+        RenderTrianglesGPU(VSHADER, tex);
+    }
+}
+
+void Renderer::RenderTrianglesGPU(const VERTEX_SHADER& VSHADER, const Texture* tex) {
+    PROFILE_SCOPE("RenderTrianglesGPU");
+    
     // vertex shader stage
     {
         PROFILE_SCOPE("RenderTrianglesGPU.VertexShader");
@@ -209,28 +263,8 @@ void Renderer::RenderTrianglesGPU(const VERTEX_SHADER& VSHADER, const std::vecto
 
 }
 
-void Renderer::RenderTrianglesCPU(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex) {
+void Renderer::RenderTrianglesCPU(const VERTEX_SHADER& VSHADER, const Texture* tex) {
     PROFILE_SCOPE("RenderTrianglesCPU");
-
-    Logger::Debug("RenderTrianglesCPU: Starting validation");
-    // basic validation
-    if (vertices.size() < 3 || vertices.size() % 3 != 0) return;
-    if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) return;
-    if (!tex) { return; }
-    _triangles_inputted += static_cast<unsigned int>(vertices.size() / 3);
-    Logger::Debug("RenderTrianglesCPU: Validation passed");
-
-    // copy input vertices to internal buffer (with capacity check)
-    {
-        Logger::Debug("RenderTrianglesCPU: VertexBufferSetup started");
-        PROFILE_SCOPE("RenderTrianglesCPU.VertexBufferSetup");
-        if (_vertexBuffer.capacity() < vertices.size()) {
-            _vertexBuffer.reserve(vertices.size() * 1.5f);
-        }
-        _vertexBuffer.assign(vertices.begin(), vertices.end());
-        Logger::Debug("RenderTrianglesCPU: VertexBufferSetup passed");
-    }
-
     // vertex shader stage
     {
         Logger::Debug("RenderTrianglesCPU: VertexShader started");

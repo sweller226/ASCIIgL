@@ -81,8 +81,8 @@ private:
     // =========================================================================
     // Core Private Rendering Functions
     // =========================================================================
-    void RenderTrianglesGPU(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex);
-    void RenderTrianglesCPU(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex);
+    void RenderTrianglesGPU(const VERTEX_SHADER& VSHADER, const Texture* tex);
+    void RenderTrianglesCPU(const VERTEX_SHADER& VSHADER, const Texture* tex);
 
     // =========================================================================
     // Clipping
@@ -127,6 +127,7 @@ public:
     // =========================================================================
     void Initialize();
     void RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<VERTEX>& vertices, const Texture* tex);
+    void RenderTriangles(const VERTEX_SHADER& VSHADER, const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex);
 
     // =========================================================================
     // Drawing API
