@@ -1,9 +1,12 @@
 #include <ASCIIgL/renderer/TileManager.hpp>
+
+#include <thread>
+
 #include <ASCIIgL/renderer/Screen.hpp>
 #include <ASCIIgL/util/MathUtil.hpp>
 
-void TileManager::InitializeTiles(unsigned int screen_width, unsigned int screen_height) {
-    CalculateTileCounts(screen_width, screen_height);
+void TileManager::InitializeTiles() {
+    CalculateTileCounts();
     int tileCount = GetTileCountX() * GetTileCountY();
     activeTiles.clear();
     activeTiles.reserve(tileCount);
@@ -17,8 +20,8 @@ void TileManager::InitializeTiles(unsigned int screen_width, unsigned int screen
             int posY = ty * GetTileSizeY();
 
             // Clamp tile size if it would overflow the screen
-            int sizeX = std::min(GetTileSizeX(), screen_width - posX);
-            int sizeY = std::min(GetTileSizeY(), screen_height - posY);
+            int sizeX = std::min(GetTileSizeX(), Screen::GetInst().GetWidth() - posX);
+            int sizeY = std::min(GetTileSizeY(), Screen::GetInst().GetHeight() - posY);
 
             _tileBuffer[tileIndex].position = glm::ivec2(posX, posY);
             _tileBuffer[tileIndex].size = glm::ivec2(sizeX, sizeY);
@@ -226,10 +229,10 @@ void TileManager::SetTileSize(const unsigned int x, const unsigned int y) {
     InvalidateTiles();
 }
 
-void TileManager::CalculateTileCounts(unsigned int screen_width, unsigned int screen_height) {
+void TileManager::CalculateTileCounts() {
     // Use ceiling division to ensure all pixels are covered by tiles
-    TILE_COUNT_X = (screen_width + TILE_SIZE_X - 1) / TILE_SIZE_X;
-    TILE_COUNT_Y = (screen_height + TILE_SIZE_Y - 1) / TILE_SIZE_Y;
+    TILE_COUNT_X = (Screen::GetInst().GetWidth() + TILE_SIZE_X - 1) / TILE_SIZE_X;
+    TILE_COUNT_Y = (Screen::GetInst().GetHeight() + TILE_SIZE_Y - 1) / TILE_SIZE_Y;
 }
 
 void TileManager::InvalidateTiles() {

@@ -1,6 +1,6 @@
 #include "Game.hpp"
 
-#include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/Collision.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
 

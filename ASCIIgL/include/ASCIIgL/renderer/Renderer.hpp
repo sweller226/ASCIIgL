@@ -60,9 +60,11 @@ private:
     static constexpr std::array<wchar_t, 9> _charRamp = {
         L' ', L'-', L':', L'o', L'O', L'A', L'E', L'0', L'B'
     };
+    
     static constexpr std::array<float, 9> _charCoverage = {
-        0.00f, 0.12f, 0.20f, 0.35f, 0.50f, 0.65f, 0.75f, 0.85f, 1.00f
+        0.00f, 0.12f, 0.20f, 0.35f, 0.50f, 0.65f, 0.75f, 0.85f, 0.90f
     };
+
     void PrecomputeColorLUT();
     bool _colorLUTComputed = false;
     static constexpr unsigned int _rgbLUTDepth = 16;

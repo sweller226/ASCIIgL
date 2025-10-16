@@ -4,7 +4,7 @@
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
 
-#include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
 
 #include <ASCIIgL/util/Profiler.hpp>
@@ -46,7 +46,7 @@ bool Game::Initialize() {
     Palette gamePalette = Palette(paletteEntries); // Custom palette with black auto-added at 0
 
     // Initialize screen
-    if (Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != SCREEN_NOERROR) {
+    if (Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
         Logger::Error("Failed to initialize screen");
         return false;
     }

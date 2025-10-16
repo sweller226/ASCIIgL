@@ -5,7 +5,7 @@
 
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/VertexShader.hpp>
-#include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 
 // Chunk constructor
 Chunk::Chunk(const ChunkCoord& coord) 

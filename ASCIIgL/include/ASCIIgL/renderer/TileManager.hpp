@@ -33,7 +33,7 @@ public:
     unsigned int GetTileSizeY();
     
     void SetTileSize(unsigned int size_x, unsigned int size_y);
-    void InitializeTiles(unsigned int screen_width, unsigned int screen_height);
+    void InitializeTiles();
     void BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles);
     
     void UpdateActiveTiles();
@@ -51,7 +51,7 @@ public:
     void ClearTileTriangleLists();
     bool DoesTileEncapsulate(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3);
     void InvalidateTiles();
-    void CalculateTileCounts(const unsigned int screen_width, const unsigned int screen_height);
+    void CalculateTileCounts();
     void BinTrianglesToTilesSingleThreaded(const std::vector<VERTEX>& raster_triangles);
     void BinTrianglesToTilesMultiThreaded(const std::vector<VERTEX>& raster_triangles);
 

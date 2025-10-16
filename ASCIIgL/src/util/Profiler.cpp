@@ -1,5 +1,5 @@
 #include <ASCIIgL/util/Profiler.hpp>
-#include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 #include <iostream>
 #include <iomanip>
 

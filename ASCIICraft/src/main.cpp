@@ -1,4 +1,4 @@
-#include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 #include <ASCIICraft/game/Game.hpp>
 
 int main() {

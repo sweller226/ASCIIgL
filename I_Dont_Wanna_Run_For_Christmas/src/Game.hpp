@@ -13,7 +13,7 @@
 
 // Built In Libraries
 #include <map>
-#include <Windows.h>
+#include <windows.h>
 #include "MMSystem.h"
 
 class Game // This class represents the game itself, it is a singleton as there only needs to be one "game"

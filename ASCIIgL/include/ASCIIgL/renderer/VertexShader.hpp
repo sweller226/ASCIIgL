@@ -12,7 +12,7 @@
 #include <execution>
 
 #include <ASCIIgL/renderer/Vertex.hpp>
-#include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 
 typedef struct Vertex_Shader {
     glm::mat4 GLmodel = glm::mat4(1.0f);

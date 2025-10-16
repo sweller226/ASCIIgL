@@ -1,6 +1,6 @@
 #include <ASCIIgL/engine/Texture.hpp>
 
-#include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 #include <stb_image/stb_image.h>
 #include <algorithm>
 

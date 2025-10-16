@@ -5,8 +5,9 @@
 #include <numeric>
 #include <sstream>
 #include <mutex>
+#include <thread>
 
-#include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/Collision.hpp>
 
 #include <ASCIIgL/util/MathUtil.hpp>
@@ -306,7 +307,7 @@ void Renderer::RenderTrianglesCPU(const VERTEX_SHADER& VSHADER, const Texture* t
         Logger::Debug("RenderTrianglesCPU: TileBinning.Setup started");
         PROFILE_SCOPE("RenderTrianglesCPU.TileBinning.Setup");
         if (!tile_manager.IsInitialized()) {
-            tile_manager.InitializeTiles(Screen::GetInst().GetWidth(), Screen::GetInst().GetHeight());
+            tile_manager.InitializeTiles();
         }
         Logger::Debug("RenderTrianglesCPU: TileBinning.Setup passed");
     }

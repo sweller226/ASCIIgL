@@ -5,7 +5,7 @@
 #include <string>
 #include <set>
 
-#include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 
 // PIMPL Implementation class that contains all tinyobjloader-related code
 class Model::Impl

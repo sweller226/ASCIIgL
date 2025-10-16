@@ -1,5 +1,5 @@
 #include "Game.hpp"
-#include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 
 int main()
 {

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
 
 Player::Player(const glm::vec3& startPosition, GameMode mode)

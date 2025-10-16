@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <vector>
 
-#include <ASCIIgL/engine/Logger.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/util/Profiler.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 
