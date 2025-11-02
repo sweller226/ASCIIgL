@@ -8,3 +8,6 @@
 
 # Distribution in different projects
 **/libs/ASCIIgL-*
+
+#libs
+ASCIIgL/lib/oneTBB/
