@@ -55,6 +55,11 @@ endif()
 # Implementation is included in vendor/tinyobjloader/tiny_obj_loader.cpp
 # No external dependencies needed!
 
+# oneTBB (Intel Threading Building Blocks)
+set(TBB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/lib/oneTBB/oneapi-tbb-2022.3.0-win/oneapi-tbb-2022.3.0")
+set(TBB_INCLUDE_DIR "${TBB_ROOT}/include")
+set(TBB_LIB_DIR "${TBB_ROOT}/lib/intel64/vc14")
+
 # ============================================================================
 # Source Files
 # ============================================================================
@@ -88,6 +93,7 @@ target_include_directories(ASCIIgL PUBLIC
 # Private includes (internal use only)
 target_include_directories(ASCIIgL PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/vendor
+    ${TBB_INCLUDE_DIR}
 )
 
 # ============================================================================
@@ -101,6 +107,12 @@ target_link_libraries(ASCIIgL PUBLIC
 
 # Private dependencies (internal use only - hidden from consumers)
 # tinyobjloader is compiled directly into ASCIIgL.lib - no external linking needed!
+# oneTBB is linked privately - consumers don't need to know about it
+target_link_directories(ASCIIgL PRIVATE ${TBB_LIB_DIR})
+target_link_libraries(ASCIIgL PRIVATE
+    optimized tbb12
+    debug tbb12_debug
+)
 
 # Platform-specific libraries
 if(WIN32)

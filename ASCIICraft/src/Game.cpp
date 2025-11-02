@@ -26,23 +26,42 @@ bool Game::Initialize() {
 
     Logger::Info("Setting up palette and screen...");
 
+    // std::array<PaletteEntry, 15> paletteEntries = {{
+    //     { {15, 15, 15}, 0x1 },        // White (#FFFFFF)
+    //     { {3, 4, 3}, 0x2 },           // Dark Gray Green (#323C39)
+    //     { {6, 6, 6}, 0x3 },           // Medium Gray (#696A6A)
+    //     { {8, 7, 8}, 0x4 },           // Light Gray Purple (#847E87)
+    //     { {6, 3, 3}, 0x5 },           // Dark Brown Red (#663931)
+    //     { {8, 5, 3}, 0x6 },           // Medium Brown (#8F563B)
+    //     { {13, 10, 6}, 0x7 },         // Light Brown (#D9A066)
+    //     { {8, 6, 3}, 0x8 },           // Dark Yellow Brown (#8A6F30)
+    //     { {8, 9, 4}, 0x9 },           // Olive Green (#8F974A)
+    //     { {15, 15, 3}, 0xA },         // Bright Yellow (#FBF236)
+    //     { {4, 6, 2}, 0xB },           // Dark Forest Green (#4B692F)
+    //     { {6, 11, 3}, 0xC },          // Medium Green (#6ABE30)
+    //     { {9, 14, 5}, 0xD },          // Bright Green (#99E550)
+    //     { {5, 12, 14}, 0xE },         // Light Blue (#5FCDE4)
+    //     { {9, 10, 11}, 0xF }          // Light Gray Blue (#9BADB7)
+    // }};
+
     std::array<PaletteEntry, 15> paletteEntries = {{
-        { {15, 15, 15}, 0x1 },        // White (#FFFFFF)
-        { {3, 4, 3}, 0x2 },           // Dark Gray Green (#323C39)
-        { {6, 6, 6}, 0x3 },           // Medium Gray (#696A6A)
-        { {8, 7, 8}, 0x4 },           // Light Gray Purple (#847E87)
-        { {6, 3, 3}, 0x5 },           // Dark Brown Red (#663931)
-        { {8, 5, 3}, 0x6 },           // Medium Brown (#8F563B)
-        { {13, 10, 6}, 0x7 },         // Light Brown (#D9A066)
-        { {8, 6, 3}, 0x8 },           // Dark Yellow Brown (#8A6F30)
-        { {8, 9, 4}, 0x9 },           // Olive Green (#8F974A)
-        { {15, 15, 3}, 0xA },         // Bright Yellow (#FBF236)
-        { {4, 6, 2}, 0xB },           // Dark Forest Green (#4B692F)
-        { {6, 11, 3}, 0xC },          // Medium Green (#6ABE30)
-        { {9, 14, 5}, 0xD },          // Bright Green (#99E550)
-        { {5, 12, 14}, 0xE },         // Light Blue (#5FCDE4)
-        { {9, 10, 11}, 0xF }          // Light Gray Blue (#9BADB7)
+        { {3, 0, 0}, 0x1 },        // #330701
+        { {4, 0, 0}, 0x2 },        // #490902
+        { {5, 0, 0}, 0x3 },        // #5E0C03
+        { {7, 0, 0}, 0x4 },        // #730E03
+        { {8, 1, 0}, 0x5 },        // #881104
+        { {9, 1, 0}, 0x6 },        // #9D1405
+        { {11, 1, 0}, 0x7 },       // #B31705
+        { {12, 1, 0}, 0x8 },       // #C51906
+        { {13, 1, 0}, 0x9 },       // #D81B06
+        { {15, 1, 0}, 0xA },       // #F01E08
+        { {15, 2, 1}, 0xB },       // #F72811
+        { {15, 3, 2}, 0xC },       // #F73B26
+        { {15, 4, 3}, 0xD },       // #F84734
+        { {15, 6, 5}, 0xE },       // #F96352
+        { {15, 7, 7}, 0xF }        // #FA7F70
     }};
+
     Palette gamePalette = Palette(paletteEntries); // Custom palette with black auto-added at 0
 
     // Initialize screen
@@ -56,12 +75,11 @@ bool Game::Initialize() {
     FPSClock::GetInst().Initialize(static_cast<unsigned int>(TARGET_FPS), 1.0f);
 
     Renderer::GetInst().Initialize();
-    Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(14));
+    Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(0));
     
     Renderer::GetInst().SetWireframe(false);
     Renderer::GetInst().SetBackfaceCulling(true);
     Renderer::GetInst().SetCCW(true);
-    Renderer::GetInst().SetContrast(1.1f);
 	Renderer::GetInst().SetAntialiasingsamples(8);
 	Renderer::GetInst().SetAntialiasing(true);
     Renderer::GetInst().SetDiagnosticsEnabled(true);
@@ -134,7 +152,7 @@ void Game::Run() {
             PROFILE_SCOPE("ColorBufferOverwrite");
             Renderer::GetInst().OverwritePxBuffWithColBuff();
         }
-        
+
         // pixel buffer draws
         {
             PROFILE_SCOPE("PixelBufferBorderDraw");

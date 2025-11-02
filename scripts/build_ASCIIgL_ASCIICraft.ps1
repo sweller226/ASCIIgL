@@ -88,6 +88,38 @@ try {
     Write-Host "Copying new distribution..." -ForegroundColor Yellow
     Copy-Item -Path $SourceDistribution -Destination $TargetLibrary -Recurse -Force
     
+    # Copy oneTBB library files
+    Write-Host "Copying oneTBB library files..." -ForegroundColor Yellow
+    $TBBSourceLibDir = Join-Path $ASCIIgLDir "lib\oneTBB\oneapi-tbb-2022.3.0-win\oneapi-tbb-2022.3.0\lib\intel64\vc14"
+    $TBBSourceDllDir = Join-Path $ASCIIgLDir "lib\oneTBB\oneapi-tbb-2022.3.0-win\oneapi-tbb-2022.3.0\redist\intel64\vc14"
+    $TBBTargetLibDir = Join-Path $TargetLibrary "lib"
+    $TBBTargetBinDir = Join-Path $TargetLibrary "bin"
+    
+    if (Test-Path $TBBSourceLibDir) {
+        # Copy release and debug TBB import libraries
+        Copy-Item -Path (Join-Path $TBBSourceLibDir "tbb12.lib") -Destination $TBBTargetLibDir -Force
+        Copy-Item -Path (Join-Path $TBBSourceLibDir "tbb12_debug.lib") -Destination $TBBTargetLibDir -Force
+        Write-Host "  - Copied tbb12.lib" -ForegroundColor Cyan
+        Write-Host "  - Copied tbb12_debug.lib" -ForegroundColor Cyan
+    } else {
+        Write-Host "  Warning: oneTBB lib directory not found, skipping TBB library copy" -ForegroundColor Yellow
+    }
+    
+    if (Test-Path $TBBSourceDllDir) {
+        # Create bin directory if it doesn't exist
+        if (-not (Test-Path $TBBTargetBinDir)) {
+            New-Item -ItemType Directory -Path $TBBTargetBinDir -Force | Out-Null
+        }
+        
+        # Copy release and debug TBB DLLs
+        Copy-Item -Path (Join-Path $TBBSourceDllDir "tbb12.dll") -Destination $TBBTargetBinDir -Force
+        Copy-Item -Path (Join-Path $TBBSourceDllDir "tbb12_debug.dll") -Destination $TBBTargetBinDir -Force
+        Write-Host "  - Copied tbb12.dll" -ForegroundColor Cyan
+        Write-Host "  - Copied tbb12_debug.dll" -ForegroundColor Cyan
+    } else {
+        Write-Host "  Warning: oneTBB DLL directory not found, skipping TBB DLL copy" -ForegroundColor Yellow
+    }
+    
     # Verify the copy was successful
     if (Test-Path $TargetLibrary) {
         Write-Host "Library updated successfully!" -ForegroundColor Green

@@ -7,6 +7,8 @@
 #include <mutex>
 #include <thread>
 
+#include <tbb/parallel_for_each.h>
+
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/Collision.hpp>
 
@@ -330,18 +332,7 @@ void Renderer::RenderTrianglesCPU(const VERTEX_SHADER& VSHADER, const Texture* t
     {
         Logger::Debug("RenderTrianglesCPU: TileRasterization started");
         PROFILE_SCOPE("RenderTrianglesCPU.TileRasterization");
-        auto& tile_manager = TileManager::GetInst();
-        tile_manager.UpdateActiveTiles();
-        if (!tile_manager.activeTiles.empty()) {
-            std::for_each(std::execution::par, tile_manager.activeTiles.begin(), tile_manager.activeTiles.end(),
-                [&](Tile* tile) {
-                    if (_wireframe || tex == nullptr) {
-                        DrawTileWireframe(*tile, _vertexBuffer);
-                    } else {
-                        DrawTileTextured(*tile, _vertexBuffer, tex);
-                    }
-                });
-        }
+        DrawTiles(_vertexBuffer, tex);
         Logger::Debug("RenderTrianglesCPU: TileRasterization passed");
     }
 }
@@ -361,7 +352,7 @@ void Renderer::BackFaceCullHelper(std::vector<VERTEX>& vertices) {
     // Adaptive culling: parallel for large meshes, sequential for small meshes
     if (triangleCount >= 1000) {
         // Parallel pass for large meshes (thread overhead is worth it)
-        std::for_each(std::execution::par, 
+        tbb::parallel_for_each(
             triangleIndices.begin(), 
             triangleIndices.end(),
             [this, &keepTriangle, &vertices, ccw = _ccw](size_t triIndex) {
@@ -408,6 +399,36 @@ void Renderer::BackFaceCullHelper(std::vector<VERTEX>& vertices) {
 // =============================================================================
 // TILE-BASED RENDERING FUNCTIONS
 // =============================================================================
+
+void Renderer::DrawTiles(const std::vector<VERTEX>& raster_triangles, const Texture* tex) {
+    auto& tile_manager = TileManager::GetInst();
+    tile_manager.UpdateActiveTiles();
+    
+    if (!tile_manager.activeTiles.empty()) {
+        const size_t tileCount = tile_manager.activeTiles.size();
+        
+        // Adaptive: parallel for many tiles (16+), sequential for few tiles
+        if (tileCount >= 16) {
+            tbb::parallel_for_each(tile_manager.activeTiles.begin(), tile_manager.activeTiles.end(),
+                [&](Tile* tile) {
+                    if (_wireframe || tex == nullptr) {
+                        DrawTileWireframe(*tile, _vertexBuffer);
+                    } else {
+                        DrawTileTextured(*tile, _vertexBuffer, tex);
+                    }
+                });
+        } else {
+            // Sequential for small tile counts (avoid thread overhead)
+            for (Tile* tile : tile_manager.activeTiles) {
+                if (_wireframe || tex == nullptr) {
+                    DrawTileWireframe(*tile, _vertexBuffer);
+                } else {
+                    DrawTileTextured(*tile, _vertexBuffer, tex);
+                }
+            }
+        }
+    }
+}
 
 void Renderer::DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& raster_triangles, const Texture* tex) {
     for (int triIndex : tile.tri_indices_encapsulated) {
@@ -862,57 +883,51 @@ void Renderer::ClippingHelperThreaded(std::vector<VERTEX>& vertices, std::vector
     const size_t triangleCount = vertices.size() / 3;
     if (triangleCount == 0) return;
 
-    // --- Thread setup ---
-    const size_t numThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
+    // --- TBB parallel setup ---
+    const size_t numThreads = tbb::this_task_arena::max_concurrency();
     const size_t batchSize  = (triangleCount + numThreads - 1) / numThreads;
 
-    std::vector<std::thread> threads;
-    threads.reserve(numThreads);
     std::vector<std::vector<VERTEX>> threadResults(numThreads);
 
-    // --- Parallel work ---
-    for (size_t t = 0; t < numThreads; ++t) {
-        threads.emplace_back([&, t]() {
-            std::vector<VERTEX>& out = threadResults[t];
-            out.clear();
-            out.reserve(batchSize * 3); // heuristic: ~3 verts per tri
+    // --- Parallel work using TBB ---
+    tbb::parallel_for(size_t(0), numThreads, [&](size_t t) {
+        std::vector<VERTEX>& out = threadResults[t];
+        out.clear();
+        out.reserve(batchSize * 3); // heuristic: ~3 verts per tri
 
-            std::vector<VERTEX> tri;
-            std::vector<VERTEX> temp;
-            tri.reserve(12);
-            temp.reserve(12);
+        std::vector<VERTEX> tri;
+        std::vector<VERTEX> temp;
+        tri.reserve(12);
+        temp.reserve(12);
 
-            const size_t start = t * batchSize;
-            const size_t end   = std::min(triangleCount, start + batchSize);
+        const size_t start = t * batchSize;
+        const size_t end   = std::min(triangleCount, start + batchSize);
 
-            for (size_t triIdx = start; triIdx < end; ++triIdx) {
-                tri.clear();
-                tri.push_back(vertices[triIdx * 3 + 0]);
-                tri.push_back(vertices[triIdx * 3 + 1]);
-                tri.push_back(vertices[triIdx * 3 + 2]);
+        for (size_t triIdx = start; triIdx < end; ++triIdx) {
+            tri.clear();
+            tri.push_back(vertices[triIdx * 3 + 0]);
+            tri.push_back(vertices[triIdx * 3 + 1]);
+            tri.push_back(vertices[triIdx * 3 + 2]);
 
-                for (int planeIdx = 0; planeIdx < NUM_PLANES; ++planeIdx) {
-                    temp.clear();
-                    for (size_t i = 0; i + 2 < tri.size(); i += 3) {
-                        ClipTriAgainstPlane(
-                            tri[i], tri[i + 1], tri[i + 2],
-                            temp, components[planeIdx], nears[planeIdx]
-                        );
-                    }
-                    if (temp.empty()) { tri.clear(); break; }
-                    tri.swap(temp);
+            for (int planeIdx = 0; planeIdx < NUM_PLANES; ++planeIdx) {
+                temp.clear();
+                for (size_t i = 0; i + 2 < tri.size(); i += 3) {
+                    ClipTriAgainstPlane(
+                        tri[i], tri[i + 1], tri[i + 2],
+                        temp, components[planeIdx], nears[planeIdx]
+                    );
                 }
-
-                if (!tri.empty()) {
-                    out.insert(out.end(), tri.begin(), tri.end());
-                }
+                if (temp.empty()) { tri.clear(); break; }
+                tri.swap(temp);
             }
-        });
-    }
+
+            if (!tri.empty()) {
+                out.insert(out.end(), tri.begin(), tri.end());
+            }
+        }
+    });
 
     // --- Merge results ---
-    for (auto& t : threads) t.join();
-
     size_t total = 0;
     for (auto& buf : threadResults) total += buf.size();
     clipped.reserve(total);
@@ -1096,6 +1111,7 @@ CHAR_INFO Renderer::GetCharInfo(const glm::ivec3& rgb) {
 
     // Pre-computed _rgbLUTDepth squared for faster indexing
     const int index = (rgb.r * _rgbLUTDepth * _rgbLUTDepth) + (rgb.g * _rgbLUTDepth) + rgb.b;
+
     return _colorLUT[index];
 }
 
@@ -1238,17 +1254,17 @@ void Renderer::PrecomputeColorLUT() {
     Palette& palette = Screen::GetInst().GetPalette();
     if (_colorLUTComputed) return;
     
-    constexpr float inv16 = 1.0f / 16.0f;
+    const float invPaletteDepth = 1.0f / 15.0f;
     
     // Precompute all possible RGB combinations
-    for (int r = 0; r < _rgbLUTDepth; ++r) {
-        for (int g = 0; g < _rgbLUTDepth; ++g) {
-            for (int b = 0; b < _rgbLUTDepth; ++b) {
+    for (int r = 0; r < static_cast<int>(_rgbLUTDepth); ++r) {
+        for (int g = 0; g < static_cast<int>(_rgbLUTDepth); ++g) {
+            for (int b = 0; b < static_cast<int>(_rgbLUTDepth); ++b) {
                 // Convert discrete RGB to normalized [0,1] range for contrast adjustment
                 glm::vec3 rgb(
-                    r / float(_rgbLUTDepth - 1),
-                    g / float(_rgbLUTDepth - 1),
-                    b / float(_rgbLUTDepth - 1)
+                    r*invPaletteDepth,
+                    g*invPaletteDepth,
+                    b*invPaletteDepth
                 );
 
                 // Apply contrast adjustment
@@ -1259,14 +1275,14 @@ void Renderer::PrecomputeColorLUT() {
                 float minError = FLT_MAX;
                 int bestFgIndex = 0, bestBgIndex = 0, bestCharIndex = 0;
 
-                for (int fgIdx = 0; fgIdx < 16; ++fgIdx) {
-                    for (int bgIdx = 0; bgIdx < 16; ++bgIdx) {
-                        for (int charIdx = 0; charIdx < _charRamp.size(); ++charIdx) {
+                for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
+                    for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
+                        for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
                             float coverage = _charCoverage[charIdx];
                             
                             // Convert palette colors from 0-15 to 0.0-1.0 for comparison
-                            glm::vec3 fgColor = glm::vec3(palette.GetRGB(fgIdx)) * inv16;
-                            glm::vec3 bgColor = glm::vec3(palette.GetRGB(bgIdx)) * inv16;
+                            glm::vec3 fgColor = glm::vec3(palette.GetRGB(fgIdx)) * invPaletteDepth;
+                            glm::vec3 bgColor = glm::vec3(palette.GetRGB(bgIdx)) * invPaletteDepth;
                             
                             glm::vec3 simulatedColor = coverage * fgColor + (1.0f - coverage) * bgColor;
                             glm::vec3 diff = rgb - simulatedColor;
@@ -1288,6 +1304,23 @@ void Renderer::PrecomputeColorLUT() {
                 unsigned short fgColor = static_cast<unsigned short>(palette.GetFgColor(bestFgIndex));
                 unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
                 unsigned short combinedColor = fgColor | bgColor;
+
+
+                if (fgColor > 0xF || bgColor > 0xF0) {
+                    std::wstringstream ss;
+                    ss << L"PrecomputeColorLUT: Invalid color at index " << index 
+                       << L" RGB(" << r << L"," << g << L"," << b << L")"
+                       << L" FG:0x" << std::hex << fgColor 
+                       << L" BG:0x" << bgColor
+                       << L" fgIdx:" << std::dec << bestFgIndex 
+                       << L" bgIdx:" << bestBgIndex;
+                    Logger::Error(ss.str());
+                    
+                    // Clamp to valid range
+                    fgColor = fgColor & 0xF;
+                    bgColor = bgColor & 0xF0;
+                    combinedColor = fgColor | bgColor;
+                }
 
                 _colorLUT[index] = {glyph, combinedColor};
             }
@@ -1337,6 +1370,31 @@ void Renderer::TestRenderColorDiscrete() {
             for (int x = startX; x < endX; ++x) {
                 screen.PlotPixel(glm::vec2(x, y), charInfo);
             }
+        }
+    }
+}
+
+void Renderer::TestRenderColorContinuous() {
+    Screen& screen = Screen::GetInst();
+    
+    // Display all 4096 colors in a 64x64 grid
+    // Each position (x,y) maps directly to a unique RGB combination
+    for (int y = 0; y < 64; y++) {
+        for (int x = 0; x < 64; x++) {
+            // Linear index from 0 to 4095
+            int linearIndex = y * 64 + x;
+            
+            // Reverse the 3D indexing to get RGB values
+            // index = (r * 16 * 16) + (g * 16) + b
+            int r = linearIndex / (_rgbLUTDepth * _rgbLUTDepth);  // High order
+            int g = (linearIndex / _rgbLUTDepth) % _rgbLUTDepth;  // Middle order
+            int b = linearIndex % _rgbLUTDepth;                    // Low order
+            
+            // Reconstruct the LUT index
+            int lutIndex = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
+            CHAR_INFO charInfo = _colorLUT[lutIndex];
+
+            screen.PlotPixel(glm::vec2(x + 10 + int(x/16), y + 10 + int(y/16)), charInfo);
         }
     }
 }

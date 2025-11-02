@@ -58,27 +58,27 @@ namespace BlockTextures {
                 return GetTileUV(0, 0);  // Transparent/empty
                 
             case BlockType::Stone:
-                return GetTileUV(2, 0);  // Stone texture (all faces same)
+                return GetTileUV(1, 0);  // Stone texture (all faces same)
                 
             case BlockType::Dirt:
-                return GetTileUV(3, 0);  // Dirt texture (all faces same)
+                return GetTileUV(2, 0);  // Dirt texture (all faces same)
                 
             case BlockType::Grass:
                 switch (face) {
-                    case BlockFace::Top:    return GetTileUV(1, 0);  // Grass top
-                    case BlockFace::Bottom: return GetTileUV(3, 0);  // Dirt bottom
-                    default:                return GetTileUV(4, 0);  // Grass side
+                    case BlockFace::Top:    return GetTileUV(0, 0);  // Grass top
+                    case BlockFace::Bottom: return GetTileUV(2, 0);  // Dirt bottom
+                    default:                return GetTileUV(3, 0);  // Grass side
                 }
                 
             case BlockType::Wood:
                 switch (face) {
-                    case BlockFace::Top:    return GetTileUV(4, 1);
-                    case BlockFace::Bottom: return GetTileUV(4, 1);  // Wood top/bottom (rings)
-                    default:                return GetTileUV(0, 2);  // Wood side (bark)
+                    case BlockFace::Top:    return GetTileUV(5, 1);
+                    case BlockFace::Bottom: return GetTileUV(5, 1);  // Wood top/bottom (rings)
+                    default:                return GetTileUV(4, 1);  // Wood side (bark)
                 }
                 
             case BlockType::Leaves:
-                return GetTileUV(0, 4);  // Leaves texture (all faces same)
+                return GetTileUV(4, 3);  // Leaves texture (all faces same)
                 
             case BlockType::Gravel:
                 return GetTileUV(3, 1);  // Gravel texture (all faces same)
@@ -90,34 +90,34 @@ namespace BlockTextures {
                 return GetTileUV(1, 2);  // Iron ore texture (all faces same)
 
             case BlockType::Diamond_Ore:
-                return GetTileUV(3, 2);  // Diamond ore texture (all faces same)
+                return GetTileUV(0, 2);  // Diamond ore texture (all faces same)
                 
             case BlockType::Bedrock:
-                return GetTileUV(2, 1);  // Bedrock texture (all faces same)
+                return GetTileUV(1, 1);  // Bedrock texture (all faces same)
 
             case BlockType::Cobblestone:
-                return GetTileUV(1, 1);  // Cobblestone texture (all faces same)
+                return GetTileUV(0, 1);  // Cobblestone texture (all faces same)
 
             case BlockType::Crafting_Table:
                 switch (face) {
-                    case BlockFace::Top:    return GetTileUV(4, 3);
-                    case BlockFace::Bottom: return GetTileUV(0, 1);
-                    case BlockFace::North:  return GetTileUV(2, 3);
-                    case BlockFace::South:  return GetTileUV(2, 3);
-                    case BlockFace::East:   return GetTileUV(3, 3);
-                    case BlockFace::West:   return GetTileUV(3, 3);
+                    case BlockFace::Top:    return GetTileUV(11, 2);
+                    case BlockFace::Bottom: return GetTileUV(4, 0);
+                    case BlockFace::North:  return GetTileUV(11, 3);
+                    case BlockFace::South:  return GetTileUV(11, 3);
+                    case BlockFace::East:   return GetTileUV(12, 3);
+                    case BlockFace::West:   return GetTileUV(12, 3);
                 }
             case BlockType::Furnace:
                 switch (face) {
-                    case BlockFace::Top:    return GetTileUV(1, 3); 
-                    case BlockFace::Bottom: return GetTileUV(1, 3); 
-                    case BlockFace::North:  return GetTileUV(4, 2); 
-                    case BlockFace::South:  return GetTileUV(1, 3); 
-                    case BlockFace::East:   return GetTileUV(1, 3); 
-                    case BlockFace::West:   return GetTileUV(1, 3); 
+                    case BlockFace::Top:    return GetTileUV(14, 3); 
+                    case BlockFace::Bottom: return GetTileUV(14, 3); 
+                    case BlockFace::North:  return GetTileUV(12, 2); 
+                    case BlockFace::South:  return GetTileUV(13, 2); 
+                    case BlockFace::East:   return GetTileUV(13, 2); 
+                    case BlockFace::West:   return GetTileUV(13, 2); 
                 }
             case BlockType::Wood_Planks:
-                return GetTileUV(0, 1);
+                return GetTileUV(4, 0);
 
             default:
                 return GetTileUV(0, 0);  // Default to empty/air

@@ -7,7 +7,18 @@
 // A palette entry: RGB color and its console enum hex mapping
 struct PaletteEntry {
     glm::ivec3 rgb;      // RGB in [0,255] range
-    unsigned short  hex;      // Hex value used in COLOR enum
+    unsigned short hex;  // Hex value used in COLOR enum
+
+    // Default constructor
+    PaletteEntry() : rgb(0, 0, 0), hex(0) {}
+
+    // Constructor with separate RGB values
+    PaletteEntry(int r, int g, int b, unsigned short hexVal)
+        : rgb(r, g, b), hex(hexVal) {}
+
+    // Constructor with glm::ivec3
+    PaletteEntry(const glm::ivec3& rgbVal, unsigned short hexVal)
+        : rgb(rgbVal), hex(hexVal) {}
 };
 
 class Palette {

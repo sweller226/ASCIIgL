@@ -534,6 +534,18 @@ void ScreenWinImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOutput) 
         // Build custom color scheme JSON object
         nlohmann::json customScheme;
         customScheme["name"] = "ASCIIgL Custom";
+        
+        // Set foreground, background, and cursor overrides to black (palette index 0)
+        glm::ivec3 blackRGB = palette.GetRGB(0);
+        int blackR = (blackRGB.r * 255) / 15;
+        int blackG = (blackRGB.g * 255) / 15;
+        int blackB = (blackRGB.b * 255) / 15;
+        char blackHex[8];
+        snprintf(blackHex, sizeof(blackHex), "#%02X%02X%02X", blackR, blackG, blackB);
+        customScheme["foreground"] = blackHex;
+        customScheme["background"] = blackHex;
+        customScheme["cursorColor"] = blackHex;
+        
         std::vector<std::string> colorNames = {
             "black", "blue", "green", "cyan", "red", "purple", "yellow", "white",
             "brightBlack", "brightBlue", "brightGreen", "brightCyan", "brightRed", "brightPurple", "brightYellow", "brightWhite"

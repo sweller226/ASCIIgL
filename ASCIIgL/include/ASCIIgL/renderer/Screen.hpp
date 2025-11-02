@@ -3,7 +3,9 @@
 #include <string>
 #include <vector>
 #include <memory>
+
 #include <ASCIIgL/renderer/Palette.hpp>
+
 #include <glm/glm.hpp>
 
 #ifdef _WIN32

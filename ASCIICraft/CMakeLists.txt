@@ -60,7 +60,8 @@ set_target_properties(ASCIIgL PROPERTIES
     IMPORTED_LOCATION_RELEASE "${ASCIIgL_LIBRARY_RELEASE}"
     IMPORTED_LOCATION_DEBUG "${ASCIIgL_LIBRARY_DEBUG}"
     INTERFACE_INCLUDE_DIRECTORIES "${ASCIIgL_INCLUDE_DIR}"
-    INTERFACE_LINK_LIBRARIES "glm"
+    INTERFACE_LINK_DIRECTORIES "${ASCIIgL_LIB_DIR}"
+    INTERFACE_LINK_LIBRARIES "glm;$<$<CONFIG:Debug>:tbb12_debug>;$<$<NOT:$<CONFIG:Debug>>:tbb12>"
 )
 
 # ============================================================================
@@ -101,7 +102,7 @@ target_include_directories(ASCIICraft PRIVATE
 # Linking
 # ============================================================================
 
-# Link to ASCIIgL engine (automatically provides all dependencies)
+# Link to ASCIIgL engine (automatically provides all dependencies including TBB)
 target_link_libraries(ASCIICraft PRIVATE ASCIIgL)
 
 # Platform-specific libraries (required by ASCIIgL)
@@ -133,5 +134,12 @@ add_custom_command(TARGET ASCIICraft POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${ASCIIgL_ROOT}/res"
         "$<TARGET_FILE_DIR:ASCIICraft>/res/ASCIIgL"
+    COMMAND ${CMAKE_COMMAND} -E echo "Copying oneTBB DLLs"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${ASCIIgL_ROOT}/bin/tbb12.dll"
+        "$<TARGET_FILE_DIR:ASCIICraft>/tbb12.dll"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${ASCIIgL_ROOT}/bin/tbb12_debug.dll"
+        "$<TARGET_FILE_DIR:ASCIICraft>/tbb12_debug.dll"
     COMMENT "Copying game and library resources"
 )

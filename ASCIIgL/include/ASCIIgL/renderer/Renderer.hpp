@@ -33,7 +33,7 @@ private:
     bool _wireframe = false;
     bool _backface_culling = true;
     bool _ccw = false;
-    float _contrast = 1.2f;
+    float _contrast = 1.0f;
     glm::ivec3 _background_col = glm::ivec3(0, 0, 0);
     bool _cpu_only = false;
 
@@ -102,14 +102,20 @@ private:
     void BackFaceCullHelper(std::vector<VERTEX>& vertices);
 
     // =========================================================================
+    void PerspectiveAndViewportTransform(std::vector<VERTEX>& raster_triangles);
+
+    // =========================================================================
     // Rasterization and Drawing Helpers
     // =========================================================================
-    void PerspectiveAndViewportTransform(std::vector<VERTEX>& raster_triangles);
+
     void DrawTriangleWireframeColBuffPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::vec4& col);
     void DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
     void DrawTriangleTexturedImpl(const VERTEX& v1, const VERTEX& v2, const VERTEX& v3, const Texture* tex, int minX, int maxX, int minY, int maxY);
+
+    void DrawTiles(const std::vector<VERTEX>& raster_triangles, const Texture* tex);
     void DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& raster_triangles, const Texture* tex);
     void DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles);
+
     void DrawClippedLinePxBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, WCHAR pixel_type, unsigned short col);
     void DrawClippedLineColBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, const glm::vec4& col);
     void PlotColor(int x, int y, const glm::ivec4& color, float depth);
@@ -201,5 +207,6 @@ public:
     void ClearBuffers();
     void TestRenderFont();
     void TestRenderColorDiscrete();
+    void TestRenderColorContinuous();
     const std::vector<glm::ivec4>& GetColorBuffer() const;
 };

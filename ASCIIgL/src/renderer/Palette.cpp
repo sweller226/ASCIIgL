@@ -3,23 +3,23 @@
 Palette::Palette() {
     entries = {{
         //   rgb                  hex
-        { {0, 0, 0},             0x0 }, // black
-        { {8, 0, 0},           0x1 }, // red
-        { {0, 8, 0},           0x2 }, // green
-        { {8, 8, 0},         0x3 }, // yellow
-        { {0, 0, 8},           0x4 }, // blue
-        { {8, 0, 8},         0x5 }, // purple (magenta)
-        { {0, 8, 8},         0x6 }, // cyan
-        { {11, 11, 11},       0x7 }, // white (light gray)
+        { {0, 0, 0},            0x0 }, // black
+        { {8, 0, 0},            0x1 }, // red
+        { {0, 8, 0},            0x2 }, // green
+        { {8, 8, 0},            0x3 }, // yellow
+        { {0, 0, 8},            0x4 }, // blue
+        { {8, 0, 8},            0x5 }, // purple (magenta)
+        { {0, 8, 8},            0x6 }, // cyan
+        { {11, 11, 11},         0x7 }, // white (light gray)
         // bright variants (8..15)
-        { {8, 8, 8},       0x8 }, // brightBlack / dark gray
+        { {8, 8, 8},            0x8 }, // brightBlack / dark gray
         { {15, 0, 0},           0x9 }, // brightRed
         { {0, 15, 0},           0xA }, // brightGreen
-        { {15, 15, 0},         0xB }, // brightYellow
+        { {15, 15, 0},          0xB }, // brightYellow
         { {0, 0, 15},           0xC }, // brightBlue
-        { {15, 0, 15},         0xD }, // brightPurple
-        { {0, 15, 15},         0xE }, // brightCyan
-        { {15, 15, 15},       0xF }  // brightWhite
+        { {15, 0, 15},          0xD }, // brightPurple
+        { {0, 15, 15},          0xE }, // brightCyan
+        { {15, 15, 15},         0xF }  // brightWhite
     }};
 }
 

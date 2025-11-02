@@ -1,6 +1,6 @@
 #include <ASCIIgL/renderer/TileManager.hpp>
 
-#include <thread>
+#include <tbb/parallel_for.h>
 
 #include <ASCIIgL/renderer/Screen.hpp>
 #include <ASCIIgL/util/MathUtil.hpp>
@@ -65,7 +65,7 @@ bool TileManager::DoesTileEncapsulate(const Tile& tile, const VERTEX& v1, const 
 }
 
 void TileManager::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles) {
-    if (raster_triangles.size() >= 6000) {
+    if (raster_triangles.size() >= 3000) {
         BinTrianglesToTilesMultiThreaded(raster_triangles);
     }
     else {
@@ -89,7 +89,7 @@ void TileManager::BinTrianglesToTilesMultiThreaded(const std::vector<VERTEX>& ra
     const float invTileSizeX = 1.0f / tileSizeX;
     const float invTileSizeY = 1.0f / tileSizeY;
 
-    const size_t numThreads = std::max<size_t>(1, std::thread::hardware_concurrency());
+    const size_t numThreads = tbb::this_task_arena::max_concurrency();
     const size_t triCount   = raster_triangles.size() / 3;
     const size_t batchSize  = (triCount + numThreads - 1) / numThreads;
 
@@ -97,48 +97,41 @@ void TileManager::BinTrianglesToTilesMultiThreaded(const std::vector<VERTEX>& ra
     std::vector<std::vector<int>> threadEncapsulated(numThreads * _tileBuffer.size());
     std::vector<std::vector<int>> threadPartial(numThreads * _tileBuffer.size());
 
-    std::vector<std::thread> threads;
-    threads.reserve(numThreads);
+    // --- Parallel work using TBB ---
+    tbb::parallel_for(size_t(0), numThreads, [&](size_t t) {
+        const size_t startTri = t * batchSize;
+        const size_t endTri   = std::min(triCount, startTri + batchSize);
 
-    for (size_t t = 0; t < numThreads; ++t) {
-        threads.emplace_back([&, t]() {
-            const size_t startTri = t * batchSize;
-            const size_t endTri   = std::min(triCount, startTri + batchSize);
+        for (size_t triIdx = startTri; triIdx < endTri; ++triIdx) {
+            const int i = static_cast<int>(triIdx * 3);
+            const VERTEX& v1 = raster_triangles[i];
+            const VERTEX& v2 = raster_triangles[i + 1];
+            const VERTEX& v3 = raster_triangles[i + 2];
 
-            for (size_t triIdx = startTri; triIdx < endTri; ++triIdx) {
-                const int i = static_cast<int>(triIdx * 3);
-                const VERTEX& v1 = raster_triangles[i];
-                const VERTEX& v2 = raster_triangles[i + 1];
-                const VERTEX& v3 = raster_triangles[i + 2];
+            const auto [minTriPt, maxTriPt] = MathUtil::ComputeBoundingBox(
+                v1.GetXY(), v2.GetXY(), v3.GetXY()
+            );
 
-                const auto [minTriPt, maxTriPt] = MathUtil::ComputeBoundingBox(
-                    v1.GetXY(), v2.GetXY(), v3.GetXY()
-                );
+            int minTileX = std::max(0, static_cast<int>(minTriPt.x * invTileSizeX));
+            int maxTileX = std::min(tileCountX - 1, static_cast<int>(maxTriPt.x * invTileSizeX + 0.999f));
+            int minTileY = std::max(0, static_cast<int>(minTriPt.y * invTileSizeY));
+            int maxTileY = std::min(tileCountY - 1, static_cast<int>(maxTriPt.y * invTileSizeY + 0.999f));
 
-                int minTileX = std::max(0, static_cast<int>(minTriPt.x * invTileSizeX));
-                int maxTileX = std::min(tileCountX - 1, static_cast<int>(maxTriPt.x * invTileSizeX + 0.999f));
-                int minTileY = std::max(0, static_cast<int>(minTriPt.y * invTileSizeY));
-                int maxTileY = std::min(tileCountY - 1, static_cast<int>(maxTriPt.y * invTileSizeY + 0.999f));
+            for (int ty = minTileY; ty <= maxTileY; ++ty) {
+                const int rowOffset = ty * tileCountX;
+                for (int tx = minTileX; tx <= maxTileX; ++tx) {
+                    const int tileIndex = rowOffset + tx;
+                    const int threadTileIndex = t * _tileBuffer.size() + tileIndex;
 
-                for (int ty = minTileY; ty <= maxTileY; ++ty) {
-                    const int rowOffset = ty * tileCountX;
-                    for (int tx = minTileX; tx <= maxTileX; ++tx) {
-                        const int tileIndex = rowOffset + tx;
-                        const int threadTileIndex = t * _tileBuffer.size() + tileIndex;
-
-                        if (DoesTileEncapsulate(_tileBuffer[tileIndex], v1, v2, v3)) {
-                            threadEncapsulated[threadTileIndex].push_back(i);
-                        } else {
-                            threadPartial[threadTileIndex].push_back(i);
-                        }
+                    if (DoesTileEncapsulate(_tileBuffer[tileIndex], v1, v2, v3)) {
+                        threadEncapsulated[threadTileIndex].push_back(i);
+                    } else {
+                        threadPartial[threadTileIndex].push_back(i);
                     }
                 }
             }
-        });
-    }
-
-    // Wait for all threads
-    for (auto& t : threads) t.join();
+        }
+    });
 
     // --- Merge thread-local results ---
     for (size_t tileIndex = 0; tileIndex < _tileBuffer.size(); ++tileIndex) {
