@@ -8,6 +8,9 @@
 
 #include <ASCIICraft/input_manager/InputManager.hpp>
 
+// Forward declaration
+class World;
+
 enum class GameMode {
     Survival,
     Spectator  // Spectator mode with noclip
@@ -29,14 +32,14 @@ public:
     ~Player() = default;
 
     // Core update functions
-    void Update();
+    void Update(World* world);
     void HandleInput(const InputManager& input);
-    // void UpdatePhysics(float deltaTime, const World& world);
+    void UpdatePhysics(World* world);
     void UpdateCamera();
 
     // Movement
     void Move(const glm::vec3& direction);
-    // void Jump();
+    void Jump();
     // void StartSprinting();
     // void StopSprinting();
     // void StartSneaking();
@@ -60,9 +63,9 @@ public:
     MovementState GetMovementState() const { return movementState; }
     
     bool IsOnGround() const { return onGround; }
-    // bool IsFlying() const { return flying; }
-    // bool IsSprinting() const { return sprinting; }
-    // bool IsSneaking() const { return sneaking; }
+    bool IsFlying() const { return flying; }
+    bool IsSprinting() const { return sprinting; }
+    bool IsSneaking() const { return sneaking; }
 
     // Setters
     void SetPosition(const glm::vec3& pos);
@@ -116,15 +119,16 @@ private:
 
     // Private helper functions
     void UpdateMovementState();
-    // void ApplyGravity(float deltaTime);
-    // void HandleCollisions(const World& world);
-    // void UpdateBoundingBox();
-    // void CheckGroundCollision(const World& world);
+    void ApplyGravity();
+    void HandleCollisions(World* world);
+    bool CheckCollision(const glm::vec3& position, World* world) const;
+    glm::vec3 GetBoundingBoxMin() const { return position; }
+    glm::vec3 GetBoundingBoxMax() const { return position + boundingBoxSize; }
     
     // Input helpers
     void ProcessMovementInput(const InputManager& input);
     void ProcessCameraInput(const InputManager& input);
-    // void ProcessActionInput(const InputManager& input, World& world);
+    // void ProcessActionInput(const InputManager& input, World* world);
 
     // Block interaction helpers
     // glm::ivec3 GetTargetBlock(const World& world) const;
@@ -136,7 +140,7 @@ private:
     static constexpr float DEFAULT_RUN_SPEED = 5.612f;       // Blocks per second
     static constexpr float DEFAULT_SNEAK_SPEED = 1.295f;     // Blocks per second
     static constexpr float DEFAULT_FLY_SPEED = 10.89f;       // Blocks per second
-    static constexpr float DEFAULT_JUMP_HEIGHT = 1.25f;      // Blocks
+    static constexpr float DEFAULT_JUMP_HEIGHT = 1.35f;      // Blocks
     static constexpr float DEFAULT_GRAVITY = -32.0f;         // Blocks per second squared
     static constexpr float DEFAULT_REACH = 5.0f;             // Blocks
     
@@ -145,6 +149,6 @@ private:
     static constexpr float PLAYER_EYE_HEIGHT = 1.62f;        // Blocks from feet to eyes
 
     static constexpr float CAMERA_NEAR_PLANE = 0.1f;
-    static constexpr float CAMERA_FAR_PLANE = 100.0f;
+    static constexpr float CAMERA_FAR_PLANE = 300.0f;
     static constexpr float FOV = 70.0f;                      // Field of view in degrees
 };

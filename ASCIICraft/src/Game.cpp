@@ -92,11 +92,11 @@ bool Game::Initialize() {
     }
     
     // Initialize game systems
-    world = std::make_unique<World>(3, WorldPos(0, 80, 0), 16);
+    world = std::make_unique<World>(5, WorldPos(0, 90, 0), 16);
     inputManager = std::make_unique<InputManager>();
     
     // Create player at spawn point
-    player = std::make_unique<Player>(world->GetSpawnPoint().ToVec3());
+    player = std::make_unique<Player>(world->GetSpawnPoint().ToVec3(), GameMode::Survival);
     
     // Connect player to world
     world->SetPlayer(player.get());
@@ -184,7 +184,7 @@ void Game::Update() {
         case GameState::Playing:
             // Update player
             if (player) {
-                player->Update();
+                player->Update(world.get());
             }
             
             // Update world (chunk loading, physics, etc.)

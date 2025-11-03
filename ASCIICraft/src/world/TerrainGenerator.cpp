@@ -13,42 +13,90 @@ TerrainGenerator::TerrainGenerator()
     caveNoise1 = std::make_unique<FastNoiseLite>();
     caveNoise2 = std::make_unique<FastNoiseLite>();
     treeNoise = std::make_unique<FastNoiseLite>();
+    forestDensityNoise = std::make_unique<FastNoiseLite>();
 }
 
 TerrainGenerator::~TerrainGenerator() = default;
 
-void TerrainGenerator::GenerateChunk(Chunk* chunk,
-                                    SetBlockQuietCallback setBlockQuiet,
-                                    BatchInvalidateCallback batchInvalidate) {
+void TerrainGenerator::GenerateChunk(Chunk* chunk, SetBlockQuietCallback setBlockQuiet) {
     if (!chunk) return;
     
-    ChunkCoord coord = chunk->GetCoord();
-    
     InitializeNoiseGenerators();
-    
     const TerrainParams params = GetTerrainParams();
-    int chunkBaseY = coord.y * Chunk::SIZE;
-    std::vector<std::tuple<int, int, int>> treePlacementPositions;
+    const ChunkCoord coord = chunk->GetCoord();
+    
+    std::vector<glm::ivec3> treePlacementPositions;
+    GenerateTerrainColumn(chunk, coord, params, treePlacementPositions);
+    GenerateTrees(chunk, treePlacementPositions, setBlockQuiet);
+    
+    chunk->SetGenerated(true);
+}
+
+void TerrainGenerator::GenerateTerrainColumn(Chunk* chunk, const ChunkCoord& coord, const TerrainParams& params,
+                                            std::vector<glm::ivec3>& treePlacementPositions) {
+    const int chunkBaseY = coord.y * Chunk::SIZE;
     
     for (int x = 0; x < Chunk::SIZE; ++x) {
         for (int z = 0; z < Chunk::SIZE; ++z) {
-            int worldX = coord.x * Chunk::SIZE + x;
-            int worldZ = coord.z * Chunk::SIZE + z;
-            int terrainHeight = CalculateTerrainHeight(worldX, worldZ, params);
+            const glm::ivec3 worldPos = LocalToWorldPos(coord, x, z);
+            const int terrainHeight = CalculateTerrainHeight(worldPos.x, worldPos.z, params);
             
-            GenerateTerrainColumn(chunk, x, z, worldX, worldZ, chunkBaseY, terrainHeight, params, treePlacementPositions);
+            for (int y = 0; y < Chunk::SIZE; ++y) {
+                const int worldY = chunkBaseY + y;
+                const BlockType blockType = GetBlockTypeAt(worldPos.x, worldY, worldPos.z, terrainHeight, params, treePlacementPositions);
+                
+                if (blockType != BlockType::Air) {
+                    chunk->SetBlock(x, y, z, Block(blockType));
+                }
+            }
         }
     }
+}
 
-    // Generate trees if callbacks are provided
-    if (setBlockQuiet && batchInvalidate) {
-        for (const auto& pos : treePlacementPositions) {
-            GenerateTree(std::get<0>(pos), std::get<1>(pos), std::get<2>(pos), setBlockQuiet, batchInvalidate);
-        }
+void TerrainGenerator::GenerateTrees(Chunk* chunk, const std::vector<glm::ivec3>& treePlacementPositions,
+                                    SetBlockQuietCallback setBlockQuiet) {
+    if (!setBlockQuiet || treePlacementPositions.empty()) return;
+    
+    std::unordered_set<Chunk*> affectedChunks;
+    affectedChunks.insert(chunk);
+    
+    for (const auto& pos : treePlacementPositions) {
+        GenerateTree(pos.x, pos.y, pos.z, setBlockQuiet, affectedChunks);
     }
     
-    chunk->SetGenerated(true);
-    chunk->SetDirty(true);
+    for (auto* affectedChunk : affectedChunks) {
+        affectedChunk->InvalidateMesh();
+    }
+}
+
+glm::ivec3 TerrainGenerator::LocalToWorldPos(const ChunkCoord& coord, int localX, int localZ) const {
+    return glm::ivec3(
+        coord.x * Chunk::SIZE + localX,
+        0, // Y will be calculated per-block
+        coord.z * Chunk::SIZE + localZ
+    );
+}
+
+BlockType TerrainGenerator::GetBlockTypeAt(int worldX, int worldY, int worldZ, int terrainHeight,
+                                          const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions) {
+    // Bedrock layer at world bottom
+    if (worldY == 0) {
+        return BlockType::Bedrock;
+    }
+    
+    // Air above terrain
+    if (worldY > terrainHeight) {
+        return BlockType::Air;
+    }
+    
+    // Check for cave carving
+    const int depthFromSurface = terrainHeight - worldY;
+    if (ShouldCarveCave(worldX, worldY, worldZ, depthFromSurface, params)) {
+        return BlockType::Air;
+    }
+    
+    // Determine solid block type
+    return DetermineBlockType(worldX, worldY, worldZ, depthFromSurface, params, treePlacementPositions);
 }
 
 void TerrainGenerator::InitializeNoiseGenerators() {
@@ -81,11 +129,17 @@ void TerrainGenerator::InitializeNoiseGenerators() {
     caveNoise2->SetFractalGain(0.5f);
     caveNoise2->SetSeed(98765);
 
-    // Tree placement noise
-    treeNoise->SetNoiseType(FastNoiseLite::NoiseType_Cellular);
-    treeNoise->SetFrequency(0.05f);
-    treeNoise->SetCellularDistanceFunction(FastNoiseLite::CellularDistanceFunction_Euclidean);
-    treeNoise->SetCellularReturnType(FastNoiseLite::CellularReturnType_Distance);
+    // Forest density noise — big forest regions
+    forestDensityNoise->SetNoiseType(FastNoiseLite::NoiseType_Perlin);
+    forestDensityNoise->SetFrequency(0.01f);  // lower = bigger biomes
+    forestDensityNoise->SetFractalType(FastNoiseLite::FractalType_FBm);
+    forestDensityNoise->SetFractalOctaves(4);
+    forestDensityNoise->SetSeed(11111);
+
+    // Tree patch noise — small-scale patches/clumps
+    treeNoise->SetNoiseType(FastNoiseLite::NoiseType_Perlin);
+    treeNoise->SetFrequency(0.25f);  // smaller patches (~4 blocks wide)
+    treeNoise->SetFractalType(FastNoiseLite::FractalType_None);
     treeNoise->SetSeed(99999);
     
     noiseInitialized = true;
@@ -101,7 +155,6 @@ TerrainGenerator::TerrainParams TerrainGenerator::GetTerrainParams() const {
     params.MIN_CAVE_HEIGHT = 2;
     params.CAVE_THRESHOLD = 0.25f;  // Adjust for cave density (0.2-0.4)
     params.VERTICAL_STRETCH = 0.2f;  // Higher = more horizontal (try 3.5-5.0)
-    params.TREE_CHANCE_THRESHOLD = 0.35f;
     return params;
 }
 
@@ -112,80 +165,28 @@ int TerrainGenerator::CalculateTerrainHeight(int worldX, int worldZ, const Terra
     return (int)(terrainHeightChunks * Chunk::SIZE);
 }
 
-void TerrainGenerator::GenerateTerrainColumn(Chunk* chunk, int x, int z, int worldX, int worldZ, int chunkBaseY, 
-                                            int terrainHeight, const TerrainParams& params,
-                                            std::vector<std::tuple<int, int, int>>& treePlacementPositions) {
-    for (int y = 0; y < Chunk::SIZE; ++y) {
-        int worldY = chunkBaseY + y;
-        
-        // Bedrock at Y=0
-        if (worldY == 0) {
-            chunk->SetBlock(x, y, z, Block(BlockType::Bedrock));
-            continue;
-        }
-        
-        // Skip blocks above terrain surface
-        if (worldY > terrainHeight) continue;
-        
-        int depthFromSurface = terrainHeight - worldY;
-        
-        // Check if this block should be carved out as a cave
-        if (ShouldCarveCave(worldX, worldY, worldZ, depthFromSurface, params)) {
-            continue;  // Leave as air
-        }
-        
-        // Determine what block type to place
-        BlockType blockType = DetermineBlockType(worldX, worldY, worldZ, depthFromSurface, params, treePlacementPositions);
-        chunk->SetBlock(x, y, z, Block(blockType));
-    }
-}
-
 bool TerrainGenerator::ShouldCarveCave(int worldX, int worldY, int worldZ, int depthFromSurface, const TerrainParams& params) const {
-    // Only carve caves in the specified height range
-    if (worldY < params.MIN_CAVE_HEIGHT) {
-        return false;
-    }
+    if (worldY < params.MIN_CAVE_HEIGHT) return false;
     
-    // Perlin Worm cave generation - TRUE Minecraft-style approach
-    // Stretch Y coordinate to bias horizontal tunnels (like Minecraft's coordinate scaling)
-    float stretchedY = (float)worldY * params.VERTICAL_STRETCH;
+    // Perlin Worm cave generation - stretch Y for horizontal tunnels
+    const float stretchedY = static_cast<float>(worldY) * params.VERTICAL_STRETCH;
     
-    // Sample two noise fields at different scales
-    float cave1 = caveNoise1->GetNoise((float)worldX, stretchedY, (float)worldZ);
-    float cave2 = caveNoise2->GetNoise((float)worldX, stretchedY, (float)worldZ);
+    // Sample two noise fields for dual tunnel networks
+    const float cave1 = caveNoise1->GetNoise(static_cast<float>(worldX), stretchedY, static_cast<float>(worldZ));
+    const float cave2 = caveNoise2->GetNoise(static_cast<float>(worldX), stretchedY, static_cast<float>(worldZ));
     
-    // Caves form where EITHER noise field is above threshold
-    // This creates TWO separate tunnel networks that occasionally intersect
-    // Using OR instead of AND gives proper worm-like tunnels
-    bool isCave1 = cave1 > params.CAVE_THRESHOLD;
-    bool isCave2 = cave2 > params.CAVE_THRESHOLD;
+    // Calculate surface fade-in threshold (prevents caves breaking through surface)
+    const float surfaceFade = (depthFromSurface < 8) 
+        ? params.CAVE_THRESHOLD + (1.0f - depthFromSurface / 8.0f) * 0.3f
+        : params.CAVE_THRESHOLD;
     
-    if (!isCave1 && !isCave2) {
-        return false; // Neither tunnel system present
-    }
-    
-    // Prevent caves from breaking through near the surface for more organic transitions
-    // The closer to the surface, the HIGHER the threshold (harder to form caves)
-    if (depthFromSurface < 8) {
-        float surfaceFade = (float)depthFromSurface / 8.0f; // 0.0 at surface, 1.0 at depth 8
-        // As we get closer to surface (surfaceFade -> 0), threshold increases dramatically
-        float adjustedThreshold = params.CAVE_THRESHOLD + (1.0f - surfaceFade) * 0.3f; // Add up to 0.3
-        
-        // Check if either cave passes the adjusted threshold
-        bool cave1Passes = isCave1 && cave1 > adjustedThreshold;
-        bool cave2Passes = isCave2 && cave2 > adjustedThreshold;
-        
-        if (!cave1Passes || !cave2Passes) {
-            return false; // Both tunnels filtered by surface protection
-        }
-    }
-    
-    return true;
+    // Cave exists if either tunnel exceeds the threshold
+    return (cave1 > surfaceFade) || (cave2 > surfaceFade);
 }
 
 BlockType TerrainGenerator::DetermineBlockType(int worldX, int worldY, int worldZ, int depthFromSurface, 
                                               const TerrainParams& params,
-                                              std::vector<std::tuple<int, int, int>>& treePlacementPositions) {
+                                              std::vector<glm::ivec3>& treePlacementPositions) {
     if (depthFromSurface == 0) {
         // Surface block - grass
         CheckTreePlacement(worldX, worldY, worldZ, params, treePlacementPositions);
@@ -199,15 +200,46 @@ BlockType TerrainGenerator::DetermineBlockType(int worldX, int worldY, int world
     }
 }
 
-void TerrainGenerator::CheckTreePlacement(int worldX, int worldY, int worldZ, const TerrainParams& params,
-                                         std::vector<std::tuple<int, int, int>>& treePlacementPositions) const {
-    // Only check tree placement on a grid (every 8 blocks)
-    if ((worldX % 8 != 0) || (worldZ % 8 != 0)) return;
+void TerrainGenerator::CheckTreePlacement(
+    int worldX, int worldY, int worldZ,
+    const TerrainParams& params,
+    std::vector<glm::ivec3>& treePlacementPositions) const
+{
+    // Minecraft's actual approach: Chunk-based scatter with random attempts
+    // Trees are NOT placed per-block, but via random scatter attempts per chunk
+    // This naturally prevents clustering while allowing organic distribution
     
-    float treeValue = (treeNoise->GetNoise((float)worldX, (float)worldZ) + 1.0f) * 0.5f;
+    // Layer 1: Forest density (determines attempts per chunk)
+    float forestDensity = forestDensityNoise->GetNoise(static_cast<float>(worldX), static_cast<float>(worldZ));
+    forestDensity = (forestDensity + 1.0f) * 0.5f; // [0, 1]
     
-    if (treeValue < params.TREE_CHANCE_THRESHOLD) {
-        treePlacementPositions.push_back({worldX, worldY + 1, worldZ});
+    if (forestDensity < 0.2f) {
+        return; // Non-forest biome
+    }
+    
+    // Minecraft's trick: Use noise as a hash to create scatter points
+    // Only certain "special" positions can have trees (like Poisson disk sampling)
+    float noiseHash = treeNoise->GetNoise(static_cast<float>(worldX), static_cast<float>(worldZ));
+    
+    // Trees can only spawn where noise creates a "peak" (local maximum)
+    // Check if this position is higher than all 4 neighbors
+    float north = treeNoise->GetNoise(static_cast<float>(worldX), static_cast<float>(worldZ + 1));
+    float south = treeNoise->GetNoise(static_cast<float>(worldX), static_cast<float>(worldZ - 1));
+    float east = treeNoise->GetNoise(static_cast<float>(worldX + 1), static_cast<float>(worldZ));
+    float west = treeNoise->GetNoise(static_cast<float>(worldX - 1), static_cast<float>(worldZ));
+    
+    // This position is a "candidate" if it's a local maximum
+    bool isLocalMax = (noiseHash > north) && (noiseHash > south) && 
+                      (noiseHash > east) && (noiseHash > west);
+    
+    if (isLocalMax) {
+        // Probabilistic spawn based on forest density
+        float normalizedHash = (noiseHash + 1.0f) * 0.5f;
+        float threshold = 1.0f - (forestDensity * 0.5f); // Dense forest = lower threshold
+        
+        if (normalizedHash > threshold) {
+            treePlacementPositions.push_back(glm::ivec3(worldX, worldY + 1, worldZ));
+        }
     }
 }
 
@@ -305,52 +337,41 @@ void TerrainGenerator::GenerateOneBlockGrassChunk(Chunk* chunk) {
 }
 
 void TerrainGenerator::GenerateTree(int worldX, int worldY, int worldZ,
-                                   SetBlockQuietCallback setBlockQuiet,
-                                   BatchInvalidateCallback batchInvalidate) {
-    // Classic Minecraft oak tree: 4-6 blocks tall trunk + leaf crown
-    const int TRUNK_HEIGHT = 5;
+                                   SetBlockQuietCallback setBlockQuiet, std::unordered_set<Chunk*>& affectedChunks) {
+    // Tree structure constants
+    constexpr int TRUNK_HEIGHT = 5;
+    constexpr int LEAF_BASE_OFFSET = 3;
+    constexpr int LEAF_RADIUS = 2;
     
-    // Track which chunks we modify so we can invalidate them once at the end
-    std::unordered_set<ChunkCoord> affectedChunks;
-    
-    // Generate trunk (wood blocks)
-    setBlockQuiet(worldX, worldY - 1, worldZ, Block(BlockType::Dirt), affectedChunks); // Ensure dirt below trunk
+    // Generate trunk
+    setBlockQuiet(worldX, worldY - 1, worldZ, Block(BlockType::Dirt), affectedChunks);
     for (int i = 0; i < TRUNK_HEIGHT; ++i) {
         setBlockQuiet(worldX, worldY + i, worldZ, Block(BlockType::Wood), affectedChunks);
     }
     
-    // Leaf crown - Minecraft style from bottom to top:
-    // Layer 0 (Y+3): 5x5 base (no corners)
-    // Layer 1 (Y+4): 5x5 full square
-    // Layer 2 (Y+5): 3x3 around top of trunk
-    // Layer 3 (Y+6): Single leaf block on top
+    const int leafBaseY = worldY + LEAF_BASE_OFFSET;
     
-    int leafBaseY = worldY + 3; // Start leaves 3 blocks up
-    
-    // Bottom leaf layer (Y+3): 5x5 without corners
-    for (int dx = -2; dx <= 2; ++dx) {
-        for (int dz = -2; dz <= 2; ++dz) {
-            // Skip corners
-            if (std::abs(dx) == 2 && std::abs(dz) == 2) continue;
-            
-            setBlockQuiet(worldX + dx, leafBaseY, worldZ + dz, Block(BlockType::Leaves), affectedChunks);
+    // Bottom two layers (Y+3, Y+4): 5x5 without corners
+    for (int dy = 0; dy < 2; ++dy) {
+        for (int dx = -LEAF_RADIUS; dx <= LEAF_RADIUS; ++dx) {
+            for (int dz = -LEAF_RADIUS; dz <= LEAF_RADIUS; ++dz) {
+                if (std::abs(dx) == LEAF_RADIUS && std::abs(dz) == LEAF_RADIUS) continue; // Skip corners
+                setBlockQuiet(worldX + dx, leafBaseY + dy, worldZ + dz, Block(BlockType::Leaves), affectedChunks);
+            }
         }
     }
     
-    // Second leaf layer (Y+4): Full 5x5
-    for (int dx = -2; dx <= 2; ++dx) {
-        for (int dz = -2; dz <= 2; ++dz) {
-            setBlockQuiet(worldX + dx, leafBaseY + 1, worldZ + dz, Block(BlockType::Leaves), affectedChunks);
-        }
-    }
-    
-    // Third leaf layer (Y+5): 3x3
+    // Third layer (Y+5): 3x3
     for (int dx = -1; dx <= 1; ++dx) {
         for (int dz = -1; dz <= 1; ++dz) {
             setBlockQuiet(worldX + dx, leafBaseY + 2, worldZ + dz, Block(BlockType::Leaves), affectedChunks);
         }
     }
     
-    // Top leaf (Y+6): Single block
-    setBlockQuiet(worldX, leafBaseY + 3, worldZ, Block(BlockType::Leaves), affectedChunks);
+    // Top layer (Y+6): Crown
+    const int crownY = leafBaseY + 3;
+    setBlockQuiet(worldX, crownY, worldZ + 1, Block(BlockType::Leaves), affectedChunks);
+    setBlockQuiet(worldX, crownY, worldZ - 1, Block(BlockType::Leaves), affectedChunks);
+    setBlockQuiet(worldX + 1, crownY, worldZ, Block(BlockType::Leaves), affectedChunks);
+    setBlockQuiet(worldX - 1, crownY, worldZ, Block(BlockType::Leaves), affectedChunks);
 }

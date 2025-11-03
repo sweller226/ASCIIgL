@@ -1,4 +1,5 @@
 #include <ASCIICraft/player/Player.hpp>
+#include <ASCIICraft/world/World.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -20,7 +21,7 @@ Player::Player(const glm::vec3& startPosition, GameMode mode)
     , gameMode(mode)
     , movementState(MovementState::Walking)
     , onGround(false)
-    , flying(true) // Start on ground in survival mode
+    , flying(true) // Default flying state (overridden by game mode switch below)
     , sprinting(false)
     , sneaking(false)
     , jumpPressed(false)
@@ -37,23 +38,58 @@ Player::Player(const glm::vec3& startPosition, GameMode mode)
                  std::to_string(position.x) + ", " + 
                  std::to_string(position.y) + ", " + 
                  std::to_string(position.z) + ")");
+
+    switch (mode) {
+        case GameMode::Survival:
+            flying = false;
+            movementState = MovementState::Walking;
+            break;
+        case GameMode::Spectator:
+            flying = true;  // Enable noclip for spectator mode
+            movementState = MovementState::Flying;
+            break;
+    }
     
     UpdateCamera();
 }
 
-void Player::Update() {
+void Player::Update(World* world) {
     // Update movement state
     UpdateMovementState();
     
     // Update camera
     UpdateCamera();
+
+    UpdatePhysics(world);
     
     // Update timers
     jumpCooldown = std::max(0.0f, jumpCooldown - FPSClock::GetInst().GetDeltaTime());
-    lastOnGround += FPSClock::GetInst().GetDeltaTime();
+    
+    if (onGround) {
+        lastOnGround = 0.0f;
+    } else {
+        lastOnGround += FPSClock::GetInst().GetDeltaTime();
+    }
 
     // Reset jump pressed flag
     jumpPressed = false;
+}
+
+void Player::UpdatePhysics(World* world) {
+    // Skip physics for spectator mode (noclip)
+    if (gameMode == GameMode::Spectator || flying) {
+        onGround = false;
+        velocity.y = 0.0f;
+        return;
+    }
+    
+    // Apply gravity for survival mode
+    ApplyGravity();
+    
+    // Apply velocity to position with collision detection
+    HandleCollisions(world);
+    
+    // Note: onGround is set in HandleCollisions when hitting floor
 }
 
 void Player::HandleInput(const InputManager& input) {
@@ -64,18 +100,37 @@ void Player::HandleInput(const InputManager& input) {
 void Player::UpdateCamera() {
     // Update camera position to player eye position
     glm::vec3 eyePosition = position + eyeOffset;
-    camera.setCamPos(eyePosition);;
+    camera.setCamPos(eyePosition);
+    
+    // Smoothly adjust FOV when sprinting (slight increase for speed effect)
+    float targetFOV = FOV;
+    if (sprinting) {
+        targetFOV = FOV + 10.0f;  // +10 degrees when sprinting
+    }
+    
+    // Smoothly interpolate FOV towards target (smooth transition)
+    float currentFOV = camera.GetFov();
+    float fovTransitionSpeed = 8.0f; // How fast FOV changes (higher = faster)
+    float deltaTime = FPSClock::GetInst().GetDeltaTime();
+    
+    // Lerp FOV: currentFOV + (targetFOV - currentFOV) * speed * deltaTime
+    float newFOV = currentFOV + (targetFOV - currentFOV) * fovTransitionSpeed * deltaTime;
+    
+    // Update camera FOV
+    camera.SetFov(newFOV);
 }
 
 void Player::Move(const glm::vec3& direction) {
     // Get current movement speed based on state
     float currentSpeed = walkSpeed;
 
-    Logger::Debug("Player Move: direction=(" + 
+    Logger::Info("Player Move: direction=(" + 
                   std::to_string(direction.x) + ", " + 
                   std::to_string(direction.y) + ", " + 
                   std::to_string(direction.z) + "), state=" + 
-                  std::to_string(static_cast<int>(movementState)));
+                  std::to_string(static_cast<int>(movementState)) + 
+                  ", flying=" + std::to_string(flying) + 
+                  ", gameMode=" + std::to_string(static_cast<int>(gameMode)));
     
     switch (movementState) {
         case MovementState::Running:
@@ -92,23 +147,22 @@ void Player::Move(const glm::vec3& direction) {
             break;
     }
     
-    // Apply movement
-    glm::vec3 movement = direction * currentSpeed * FPSClock::GetInst().GetDeltaTime();
-    
     if (flying || gameMode == GameMode::Spectator) {
-        // Free flight movement (spectator noclip)
+        // Free flight movement (spectator noclip) - direct position change
+        glm::vec3 movement = direction * currentSpeed * FPSClock::GetInst().GetDeltaTime();
         position += movement;
+        velocity = movement / FPSClock::GetInst().GetDeltaTime();
+        Logger::Info("Spectator mode: moved by (" + std::to_string(movement.x) + ", " + std::to_string(movement.y) + ", " + std::to_string(movement.z) + ")");
     } else {
-        // Ground-based movement for survival
-        position.x += movement.x;
-        position.z += movement.z;
-        position.y += movement.y;
+        // Ground-based movement for survival - set horizontal velocity
+        // Vertical velocity is controlled by gravity and jumping
+        // Note: direction should already be normalized by ProcessMovementInput
+        velocity.x = direction.x * currentSpeed;
+        velocity.z = direction.z * currentSpeed;
+        Logger::Info("Survival mode: velocity set to (" + std::to_string(velocity.x) + ", " + std::to_string(velocity.y) + ", " + std::to_string(velocity.z) + ")");
     }
 
     RecalculateCameraPosition();
-
-    // Update velocity for other systems
-    velocity = movement / FPSClock::GetInst().GetDeltaTime();
 }
 
 void Player::RecalculateCameraPosition() {
@@ -159,6 +213,135 @@ void Player::Respawn(const glm::vec3& spawnPosition) {
                  std::to_string(spawnPosition.x) + ", " + 
                  std::to_string(spawnPosition.y) + ", " + 
                  std::to_string(spawnPosition.z) + ")");
+}
+
+void Player::ApplyGravity() {
+    // Don't apply gravity in spectator/flying mode
+    if (flying || gameMode == GameMode::Spectator) {
+        return;
+    }
+    
+    // Apply gravity acceleration
+    velocity.y += gravity * FPSClock::GetInst().GetDeltaTime();
+    
+    // Terminal velocity cap (prevents falling through blocks at high speeds)
+    const float TERMINAL_VELOCITY = -78.4f; // Minecraft's terminal velocity
+    velocity.y = std::max(velocity.y, TERMINAL_VELOCITY);
+}
+
+void Player::HandleCollisions(World* world) {
+    if (!world) return;  // Null check
+    
+    float deltaTime = FPSClock::GetInst().GetDeltaTime();
+    
+    Logger::Info("HandleCollisions: velocity=(" + std::to_string(velocity.x) + ", " + std::to_string(velocity.y) + ", " + std::to_string(velocity.z) + "), deltaTime=" + std::to_string(deltaTime));
+    
+    // Apply velocity with collision detection on each axis separately
+    // This prevents getting stuck in corners
+    
+    // X-axis collision
+    glm::vec3 testPos = position;
+    testPos.x += velocity.x * deltaTime;
+    if (!CheckCollision(testPos, world)) {
+        position.x = testPos.x;
+        Logger::Info("X: Moved from " + std::to_string(position.x - velocity.x * deltaTime) + " to " + std::to_string(position.x));
+    } else {
+        Logger::Info("X: COLLISION DETECTED at " + std::to_string(testPos.x));
+        velocity.x = 0.0f;
+    }
+    
+    // Y-axis collision
+    testPos = position;
+    testPos.y += velocity.y * deltaTime;
+    if (!CheckCollision(testPos, world)) {
+        position.y = testPos.y;
+        // If moving upward or no collision, we're not on ground
+        if (velocity.y >= 0.0f) {
+            onGround = false;
+        }
+    } else {
+        Logger::Info("Y: COLLISION DETECTED at " + std::to_string(testPos.y));
+        // Hit ceiling or floor - stop vertical movement
+        if (velocity.y < 0.0f) {
+            // Hitting ground while falling
+            onGround = true;
+            Logger::Info("Set onGround=true (hit floor)");
+        } else {
+            // Hit ceiling while jumping/rising
+            onGround = false;
+        }
+        velocity.y = 0.0f;
+    }
+    
+    // Z-axis collision
+    testPos = position;
+    testPos.z += velocity.z * deltaTime;
+    if (!CheckCollision(testPos, world)) {
+        position.z = testPos.z;
+        Logger::Info("Z: Moved from " + std::to_string(position.z - velocity.z * deltaTime) + " to " + std::to_string(position.z));
+    } else {
+        Logger::Info("Z: COLLISION DETECTED at " + std::to_string(testPos.z));
+        velocity.z = 0.0f;
+    }
+    
+    Logger::Info("Final position: (" + std::to_string(position.x) + ", " + std::to_string(position.y) + ", " + std::to_string(position.z) + ")");
+}
+
+bool Player::CheckCollision(const glm::vec3& testPosition, World* world) const {
+    if (!world) return false;  // Null check
+    
+    // Get player bounding box at test position
+    // Center the box horizontally around the player position
+    float halfWidth = boundingBoxSize.x / 2.0f;
+    float halfDepth = boundingBoxSize.z / 2.0f;
+    
+    glm::vec3 min = testPosition + glm::vec3(-halfWidth, 0.0f, -halfDepth);
+    glm::vec3 max = testPosition + glm::vec3(halfWidth, boundingBoxSize.y, halfDepth);
+    
+    // Check all blocks that the bounding box overlaps
+    int minX = static_cast<int>(std::floor(min.x));
+    int minY = static_cast<int>(std::floor(min.y));
+    int minZ = static_cast<int>(std::floor(min.z));
+    int maxX = static_cast<int>(std::floor(max.x));
+    int maxY = static_cast<int>(std::floor(max.y));
+    int maxZ = static_cast<int>(std::floor(max.z));
+    
+    // Check each block in the bounding box range
+    for (int x = minX; x <= maxX; x++) {
+        for (int y = minY; y <= maxY; y++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                Block block = world->GetBlock(x, y, z);
+                
+                // Check if block is solid (not air)
+                if (block.type != BlockType::Air) {
+                    return true; // Collision detected
+                }
+            }
+        }
+    }
+    
+    return false; // No collision
+}
+
+void Player::Jump() {
+    Logger::Info("Jump() called - onGround=" + std::to_string(onGround) + 
+                 ", jumpCooldown=" + std::to_string(jumpCooldown) + 
+                 ", flying=" + std::to_string(flying));
+    
+    // Can only jump if on ground (no cooldown needed for hold-to-jump)
+    if (onGround && jumpCooldown <= 0.0f && !flying) {
+        // Calculate jump velocity from jump height
+        // v = sqrt(2 * g * h)
+        float jumpVelocity = std::sqrt(2.0f * std::abs(gravity) * jumpHeight);
+        velocity.y = jumpVelocity;
+        
+        onGround = false;
+        jumpCooldown = 0.2f; 
+        
+        Logger::Info("Player jumped! velocity.y=" + std::to_string(jumpVelocity));
+    } else {
+        Logger::Info("Jump FAILED - conditions not met");
+    }
 }
 
 void Player::UpdateMovementState() {
@@ -212,6 +395,19 @@ void Player::ProcessMovementInput(const InputManager& input) {
         if (input.IsActionHeld("sneak")) {
             moveDirection.y -= 1.0f;
         }
+    } else {
+        // Jump for survival mode (can hold to keep jumping when landing)
+        if (input.IsActionHeld("jump")) {
+            Jump();
+        }
+        
+        // Sprinting (only in survival, only when moving)
+        // Can sprint while jumping/in air - maintains momentum
+        if (input.IsActionHeld("sprint") && glm::length(moveDirection) > 0.0f) {
+            sprinting = true;
+        } else {
+            sprinting = false;
+        }
     }
     
     // Normalize movement direction if needed
@@ -219,10 +415,8 @@ void Player::ProcessMovementInput(const InputManager& input) {
         moveDirection = glm::normalize(moveDirection);
     }
     
-    // Apply movement
-    if (glm::length(moveDirection) > 0.0f) {
-        Move(moveDirection);
-    }
+    // Apply movement (always call Move, even with zero direction for survival mode)
+    Move(moveDirection);
 }
 
 void Player::ProcessCameraInput(const InputManager& input) {
@@ -246,7 +440,7 @@ void Player::ProcessCameraInput(const InputManager& input) {
     }
     
     // Update camera direction
-    camera.setCamDir(camera.yaw += yawDelta, camera.pitch += pitchDelta);
+    camera.setCamDir(camera.GetYaw() + yawDelta, camera.GetPitch() + pitchDelta);
 }
 
 // void Player::ProcessActionInput(const InputManager& input, World& world) {

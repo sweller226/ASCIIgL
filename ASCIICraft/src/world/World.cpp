@@ -12,7 +12,7 @@
 #include <ASCIICraft/player/Player.hpp>
 
 // Static member definition - ordered to match face indices in Chunk::GenerateMesh()
-const ChunkCoord World::NEIGHBOR_OFFSETS[6] = {
+const ChunkCoord World::FACE_NEIGHBOR_OFFSETS[6] = {
     ChunkCoord(0, 1, 0),   // Face 0: Top (Y+)
     ChunkCoord(0, -1, 0),  // Face 1: Bottom (Y-)
     ChunkCoord(0, 0, 1),   // Face 2: North (Z+)
@@ -145,8 +145,7 @@ void World::SetBlock(int x, int y, int z, const Block& block) {
     glm::ivec3 localPos = WorldPosToLocalChunkPos(WorldPos(x, y, z));
     chunk->SetBlock(localPos.x, localPos.y, localPos.z, block);
     
-    // Batch invalidate meshes to prevent chain reactions
-    BatchInvalidateChunkMeshes(chunkCoord);
+
 }
 
 Chunk* World::GetChunk(const ChunkCoord& coord) {
@@ -177,15 +176,11 @@ void World::LoadChunk(const ChunkCoord& coord) {
     loadedChunks[coord] = std::move(chunk);
     
     // Generate terrain using TerrainGenerator with callbacks for World operations
-    auto setBlockQuiet = [this](int x, int y, int z, const Block& block, std::unordered_set<ChunkCoord>& affectedChunks) {
+    auto setBlockQuiet = [this](int x, int y, int z, const Block& block, std::unordered_set<Chunk*>& affectedChunks) {
         this->SetBlockQuiet(x, y, z, block, affectedChunks);
     };
     
-    auto batchInvalidate = [this](const ChunkCoord& coord) {
-        this->BatchInvalidateChunkMeshes(coord);
-    };
-    
-    terrainGenerator->GenerateChunk(chunkPtr, setBlockQuiet, batchInvalidate);
+    terrainGenerator->GenerateChunk(chunkPtr, setBlockQuiet);
     
     Logger::Debug("Loaded chunk at (" + std::to_string(coord.x) + ", " + 
                   std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
@@ -204,7 +199,7 @@ void World::UnloadChunk(const ChunkCoord& coord) {
     }
     
     for (int i = 0; i < 6; ++i) {
-        ChunkCoord neighborCoord = coord + NEIGHBOR_OFFSETS[i];
+        ChunkCoord neighborCoord = coord + FACE_NEIGHBOR_OFFSETS[i];
         
         // Use find() instead of GetChunk() to avoid issues during iteration
         auto neighborIt = loadedChunks.find(neighborCoord);
@@ -300,7 +295,7 @@ std::vector<Chunk*> World::GetVisibleChunks(const glm::vec3& playerPos, const gl
     
     // FOV-based frustum culling with safety margin
     const Camera3D& camera = player->GetCamera();
-    float fov = camera.fov;
+    float fov = camera.GetFov();
     float extendedFov = fov * 1.5f; // 30° margin for safety
     const float fovHalfAngle = glm::radians(extendedFov * 0.5f);
     const float fovCosine = cos(fovHalfAngle);
@@ -377,7 +372,7 @@ std::vector<Chunk*> World::GetVisibleChunks(const glm::vec3& playerPos, const gl
     return visibleChunks;
 }
 
-void World::BatchInvalidateChunkMeshes(const ChunkCoord& coord) {
+void World::BatchInvalidateChunkFaceNeighborMeshes(const ChunkCoord& coord) {
     // Collect all chunks that need invalidation without triggering regeneration
     std::unordered_set<ChunkCoord> chunksToInvalidate;
     
@@ -386,7 +381,7 @@ void World::BatchInvalidateChunkMeshes(const ChunkCoord& coord) {
     
     // Add neighboring chunks
     for (int i = 0; i < 6; ++i) {
-        ChunkCoord neighborCoord = coord + NEIGHBOR_OFFSETS[i];
+        ChunkCoord neighborCoord = coord + FACE_NEIGHBOR_OFFSETS[i];
         if (IsChunkLoaded(neighborCoord)) {
             chunksToInvalidate.insert(neighborCoord);
         }
@@ -433,7 +428,7 @@ void World::UpdateChunkNeighbors(const ChunkCoord& coord, bool markNeighborsDirt
     }
     
     for (int i = 0; i < 6; ++i) {
-        ChunkCoord neighborCoord = coord + NEIGHBOR_OFFSETS[i];
+        ChunkCoord neighborCoord = coord + FACE_NEIGHBOR_OFFSETS[i];
         Chunk* neighborChunk = GetChunk(neighborCoord);
         
         // Get old neighbor to check if it actually changed
@@ -503,13 +498,13 @@ bool World::IsChunkOutsideWorld(const ChunkCoord& coord) const {
     return distanceFromOrigin > maxWorldChunkRadius;
 }
 
-void World::SetBlockQuiet(int x, int y, int z, const Block& block, std::unordered_set<ChunkCoord>& affectedChunks) {
+void World::SetBlockQuiet(int x, int y, int z, const Block& block, std::unordered_set<Chunk*>& affectedChunks) {
     ChunkCoord chunkCoord = WorldPosToChunkCoord(WorldPos(x, y, z));
     Chunk* chunk = GetChunk(chunkCoord);
     if (!chunk) return; // Skip if chunk not loaded (tree at edge)
     
     glm::ivec3 localPos = WorldPosToLocalChunkPos(WorldPos(x, y, z));
     chunk->SetBlock(localPos.x, localPos.y, localPos.z, block);
-    affectedChunks.insert(chunkCoord);
+    affectedChunks.insert(chunk);
 }
 

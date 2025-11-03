@@ -136,3 +136,57 @@ void Camera3D::recalculateProjMat()
 {
 	proj = glm::perspective(glm::radians(fov), aspect, zNear, zFar);
 }
+
+void Camera3D::SetFov(float Pfov) {
+	fov = Pfov;
+	recalculateProjMat();
+}
+
+float Camera3D::GetFov() const {
+	return fov;
+}
+
+float Camera3D::GetAspect() const {
+	return aspect;
+}
+
+void Camera3D::SetAspect(float Paspect) {
+	aspect = Paspect;
+	recalculateProjMat();
+}
+
+float Camera3D::GetZNear() const {
+	return zNear;
+}
+
+void Camera3D::SetZNear(float PzNear) {
+	zNear = PzNear;
+	recalculateProjMat();
+}
+
+float Camera3D::GetZFar() const {
+	return zFar;
+}
+
+void Camera3D::SetZFar(float PzFar) {
+	zFar = PzFar;
+	recalculateProjMat();
+}
+
+float Camera3D::GetYaw() const {
+	return yaw;
+}
+
+void Camera3D::SetYaw(float Pyaw) {
+	yaw = Pyaw;
+	recalculateViewMat();
+}
+
+float Camera3D::GetPitch() const {
+	return pitch;
+}
+
+void Camera3D::SetPitch(float Ppitch) {
+	pitch = Ppitch;
+	recalculateViewMat();
+}

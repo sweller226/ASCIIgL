@@ -6,22 +6,17 @@
 class Camera3D // This is an inbuilt camera 3d class that primarily holds a view mat and a perspective proj mat to make a 3d camera
 {
 private:
+	float fov; // field of view for the camera, used in the perspective projection matrix
+	float aspect;
+	float zNear;
+	float zFar;
+	float yaw;
+	float pitch;
 
 public:
 	glm::vec3 pos;
 	glm::mat4 view; // this holds the view matrix (the view matrix is a glm::lookat matrix which is used for cameras)
 	glm::mat4 proj; // this holds the perspective projection matrix
-
-	float fov; // field of view for the camera, used in the perspective projection matrix
-
-	// rotations of the camera
-	float yaw;
-	float pitch;
-	float aspect;
-
-	// clipping planes on the z axis for the camera
-	float zNear;
-	float zFar;
 
 	// screen dimensions for aspect ratio calculation
 	unsigned int screenWidth;
@@ -48,4 +43,22 @@ public:
 	void setScreenDimensions(unsigned int width, unsigned int height); // this updates screen dimensions and recalculates projection matrix
 	void recalculateViewMat(); // recalculates the view matrix using the cameras euler angles and position
 	void recalculateProjMat(); // recalculates the projection matrix using current screen dimensions and aspect ratio
+
+	// Getters
+	float GetFov() const;
+	float GetAspect() const;
+	float GetZNear() const;
+	float GetZFar() const;
+	float GetYaw() const;
+	float GetPitch() const;
+	
+	// Setters (automatically recalculate projection matrix)
+	void SetFov(float Pfov);
+	void SetAspect(float Paspect);
+	void SetZNear(float PzNear);
+	void SetZFar(float PzFar);
+	
+	// Setters (automatically recalculate view matrix)
+	void SetYaw(float Pyaw);
+	void SetPitch(float Ppitch);
 };

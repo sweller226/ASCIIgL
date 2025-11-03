@@ -52,7 +52,7 @@ public:
     
     // Rendering support
     std::vector<Chunk*> GetVisibleChunks(const glm::vec3& playerPos, const glm::vec3& viewDir) const;
-    void BatchInvalidateChunkMeshes(const ChunkCoord& coord);  // Prevents chain reactions
+    void BatchInvalidateChunkFaceNeighborMeshes(const ChunkCoord& coord);  // Prevents chain reactions
     void RegenerateDirtyChunks();  // Batch regenerate all dirty chunks
     
     // World queries
@@ -81,11 +81,8 @@ private:
     glm::ivec3 WorldPosToLocalChunkPos(const WorldPos& pos) const;
     std::vector<ChunkCoord> GetChunksInRadius(const ChunkCoord& center, unsigned int radius) const;
     bool IsChunkOutsideWorld(const ChunkCoord& coord) const;
-    void GenerateTree(int worldX, int worldY, int worldZ); // Tree generation helper
-    void SetBlockQuiet(int x, int y, int z, const Block& block, std::unordered_set<ChunkCoord>& affectedChunks); // Set block without triggering invalidation
+    void SetBlockQuiet(int x, int y, int z, const Block& block, std::unordered_set<Chunk*>& affectedChunks); // Set block without triggering invalidation
 
-    // Constants for neighbor directions (indices into NEIGHBOR_OFFSETS)
-    static const ChunkCoord NEIGHBOR_OFFSETS[6];
-
+    static const ChunkCoord FACE_NEIGHBOR_OFFSETS[6];
     static constexpr int MAX_REGENERATIONS_PER_FRAME = 200;
 };
