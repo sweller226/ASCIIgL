@@ -370,6 +370,7 @@ void TerrainGenerator::GenerateTree(int worldX, int worldY, int worldZ,
     
     // Top layer (Y+6): Crown
     const int crownY = leafBaseY + 3;
+    setBlockQuiet(worldX, crownY, worldZ, Block(BlockType::Leaves), affectedChunks);
     setBlockQuiet(worldX, crownY, worldZ + 1, Block(BlockType::Leaves), affectedChunks);
     setBlockQuiet(worldX, crownY, worldZ - 1, Block(BlockType::Leaves), affectedChunks);
     setBlockQuiet(worldX + 1, crownY, worldZ, Block(BlockType::Leaves), affectedChunks);

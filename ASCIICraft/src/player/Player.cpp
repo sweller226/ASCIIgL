@@ -233,72 +233,80 @@ void Player::HandleCollisions(World* world) {
     if (!world) return;  // Null check
     
     float deltaTime = FPSClock::GetInst().GetDeltaTime();
+    glm::vec3 movement = velocity * deltaTime;
     
-    Logger::Info("HandleCollisions: velocity=(" + std::to_string(velocity.x) + ", " + std::to_string(velocity.y) + ", " + std::to_string(velocity.z) + "), deltaTime=" + std::to_string(deltaTime));
+    // Store original velocity direction for collision detection
+    bool wasMovingDown = velocity.y < 0.0f;
     
-    // Apply velocity with collision detection on each axis separately
-    // This prevents getting stuck in corners
+    // Apply movement on each axis separately (Minecraft-style swept AABB)
+    // Order matters: Y first, then X and Z (prevents sliding on walls when landing)
     
-    // X-axis collision
-    glm::vec3 testPos = position;
-    testPos.x += velocity.x * deltaTime;
-    if (!CheckCollision(testPos, world)) {
-        position.x = testPos.x;
-        Logger::Info("X: Moved from " + std::to_string(position.x - velocity.x * deltaTime) + " to " + std::to_string(position.x));
-    } else {
-        Logger::Info("X: COLLISION DETECTED at " + std::to_string(testPos.x));
-        velocity.x = 0.0f;
-    }
-    
-    // Y-axis collision
-    testPos = position;
-    testPos.y += velocity.y * deltaTime;
-    if (!CheckCollision(testPos, world)) {
-        position.y = testPos.y;
-        // If moving upward or no collision, we're not on ground
-        if (velocity.y >= 0.0f) {
-            onGround = false;
-        }
-    } else {
-        Logger::Info("Y: COLLISION DETECTED at " + std::to_string(testPos.y));
-        // Hit ceiling or floor - stop vertical movement
-        if (velocity.y < 0.0f) {
-            // Hitting ground while falling
-            onGround = true;
-            Logger::Info("Set onGround=true (hit floor)");
+    // ===== Y-AXIS (Vertical) =====
+    if (movement.y != 0.0f) {
+        glm::vec3 testPos = position + glm::vec3(0.0f, movement.y, 0.0f);
+        float adjustedY = SweepAxis(testPos, world, 1); // 1 = Y axis
+        
+        if (adjustedY != testPos.y) {
+            // Collision detected
+            position.y = adjustedY;
+            
+            if (wasMovingDown) {
+                // Landed on ground
+                onGround = true;
+                velocity.y = 0.0f;
+            } else {
+                // Hit ceiling
+                onGround = false;
+                velocity.y = 0.0f;
+            }
         } else {
-            // Hit ceiling while jumping/rising
-            onGround = false;
+            // No collision - apply full movement
+            position.y = testPos.y;
+            onGround = false; // In air
         }
-        velocity.y = 0.0f;
-    }
-    
-    // Z-axis collision
-    testPos = position;
-    testPos.z += velocity.z * deltaTime;
-    if (!CheckCollision(testPos, world)) {
-        position.z = testPos.z;
-        Logger::Info("Z: Moved from " + std::to_string(position.z - velocity.z * deltaTime) + " to " + std::to_string(position.z));
     } else {
-        Logger::Info("Z: COLLISION DETECTED at " + std::to_string(testPos.z));
-        velocity.z = 0.0f;
+        // Not moving vertically - check if still on ground (not walked off edge)
+        glm::vec3 testPos = position + glm::vec3(0.0f, -0.001f, 0.0f);
+        float adjustedY = SweepAxis(testPos, world, 1);
+        onGround = (adjustedY != testPos.y);
     }
     
-    Logger::Info("Final position: (" + std::to_string(position.x) + ", " + std::to_string(position.y) + ", " + std::to_string(position.z) + ")");
+    // ===== X-AXIS (Horizontal) =====
+    if (movement.x != 0.0f) {
+        glm::vec3 testPos = position + glm::vec3(movement.x, 0.0f, 0.0f);
+        float adjustedX = SweepAxis(testPos, world, 0); // 0 = X axis
+        
+        if (adjustedX != testPos.x) {
+            // Collision detected - stop horizontal movement
+            velocity.x = 0.0f;
+        }
+        position.x = adjustedX;
+    }
+    
+    // ===== Z-AXIS (Horizontal) =====
+    if (movement.z != 0.0f) {
+        glm::vec3 testPos = position + glm::vec3(0.0f, 0.0f, movement.z);
+        float adjustedZ = SweepAxis(testPos, world, 2); // 2 = Z axis
+        
+        if (adjustedZ != testPos.z) {
+            // Collision detected - stop horizontal movement
+            velocity.z = 0.0f;
+        }
+        position.z = adjustedZ;
+    }
 }
 
-bool Player::CheckCollision(const glm::vec3& testPosition, World* world) const {
-    if (!world) return false;  // Null check
+float Player::SweepAxis(const glm::vec3& testPosition, World* world, int axis) const {
+    if (!world) return testPosition[axis];
     
     // Get player bounding box at test position
-    // Center the box horizontally around the player position
     float halfWidth = boundingBoxSize.x / 2.0f;
     float halfDepth = boundingBoxSize.z / 2.0f;
     
     glm::vec3 min = testPosition + glm::vec3(-halfWidth, 0.0f, -halfDepth);
     glm::vec3 max = testPosition + glm::vec3(halfWidth, boundingBoxSize.y, halfDepth);
     
-    // Check all blocks that the bounding box overlaps
+    // Get block range that the bounding box overlaps
     int minX = static_cast<int>(std::floor(min.x));
     int minY = static_cast<int>(std::floor(min.y));
     int minZ = static_cast<int>(std::floor(min.z));
@@ -306,21 +314,63 @@ bool Player::CheckCollision(const glm::vec3& testPosition, World* world) const {
     int maxY = static_cast<int>(std::floor(max.y));
     int maxZ = static_cast<int>(std::floor(max.z));
     
-    // Check each block in the bounding box range
+    // Small epsilon to prevent floating point errors
+    const float EPSILON = 0.001f;
+    
+    // Check blocks and find the closest collision point on the given axis
+    float closestCollision = testPosition[axis];
+    bool foundCollision = false;
+    
     for (int x = minX; x <= maxX; x++) {
         for (int y = minY; y <= maxY; y++) {
             for (int z = minZ; z <= maxZ; z++) {
                 Block block = world->GetBlock(x, y, z);
                 
-                // Check if block is solid (not air)
-                if (block.type != BlockType::Air) {
-                    return true; // Collision detected
+                // Skip air blocks
+                if (block.type == BlockType::Air) continue;
+                
+                // Block bounds (blocks are 1x1x1)
+                float blockMin = static_cast<float>(axis == 0 ? x : (axis == 1 ? y : z));
+                float blockMax = blockMin + 1.0f;
+                
+                // Check if player bounding box overlaps this block on other axes
+                bool overlapOtherAxes = true;
+                
+                if (axis == 0) { // Moving on X axis, check Y and Z overlap
+                    overlapOtherAxes = !(max.y <= y || min.y >= y + 1.0f ||
+                                        max.z <= z || min.z >= z + 1.0f);
+                } else if (axis == 1) { // Moving on Y axis, check X and Z overlap
+                    overlapOtherAxes = !(max.x <= x || min.x >= x + 1.0f ||
+                                        max.z <= z || min.z >= z + 1.0f);
+                } else { // Moving on Z axis, check X and Y overlap
+                    overlapOtherAxes = !(max.x <= x || min.x >= x + 1.0f ||
+                                        max.y <= y || min.y >= y + 1.0f);
+                }
+                
+                if (!overlapOtherAxes) continue;
+                
+                // Calculate player bounds on this axis
+                float playerMin = min[axis];
+                float playerMax = max[axis];
+                
+                // Check if we're colliding with this block
+                if (playerMax > blockMin && playerMin < blockMax) {
+                    foundCollision = true;
+                    
+                    // Determine which side we're pushing against
+                    if (testPosition[axis] > position[axis]) {
+                        // Moving in positive direction - push back to block's min face
+                        closestCollision = std::min(closestCollision, blockMin - (playerMax - testPosition[axis]));
+                    } else {
+                        // Moving in negative direction - push back to block's max face
+                        closestCollision = std::max(closestCollision, blockMax - (playerMin - testPosition[axis]));
+                    }
                 }
             }
         }
     }
     
-    return false; // No collision
+    return closestCollision;
 }
 
 void Player::Jump() {
@@ -336,7 +386,7 @@ void Player::Jump() {
         velocity.y = jumpVelocity;
         
         onGround = false;
-        jumpCooldown = 0.2f; 
+        jumpCooldown = JUMP_COOLDOWN_MAX; 
         
         Logger::Info("Player jumped! velocity.y=" + std::to_string(jumpVelocity));
     } else {

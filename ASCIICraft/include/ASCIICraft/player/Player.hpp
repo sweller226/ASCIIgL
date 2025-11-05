@@ -121,7 +121,7 @@ private:
     void UpdateMovementState();
     void ApplyGravity();
     void HandleCollisions(World* world);
-    bool CheckCollision(const glm::vec3& position, World* world) const;
+    float SweepAxis(const glm::vec3& testPosition, World* world, int axis) const;
     glm::vec3 GetBoundingBoxMin() const { return position; }
     glm::vec3 GetBoundingBoxMax() const { return position + boundingBoxSize; }
     
@@ -147,6 +147,8 @@ private:
     static constexpr float PLAYER_WIDTH = 0.6f;              // Blocks
     static constexpr float PLAYER_HEIGHT = 1.8f;             // Blocks
     static constexpr float PLAYER_EYE_HEIGHT = 1.62f;        // Blocks from feet to eyes
+
+    static constexpr float JUMP_COOLDOWN_MAX = 0.2f;         // Seconds
 
     static constexpr float CAMERA_NEAR_PLANE = 0.1f;
     static constexpr float CAMERA_FAR_PLANE = 300.0f;

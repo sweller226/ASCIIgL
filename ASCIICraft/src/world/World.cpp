@@ -166,6 +166,10 @@ Chunk* World::GetOrCreateChunk(const ChunkCoord& coord) {
 }
 
 void World::LoadChunk(const ChunkCoord& coord) {
+    if (coord.y < 0) {
+        return; // Below world bounds
+    }
+
     if (IsChunkLoaded(coord)) {
         return; // Already loaded
     }
