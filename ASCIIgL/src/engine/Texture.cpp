@@ -5,8 +5,7 @@
 #include <algorithm>
 
 // PIMPL Implementation class that contains all stb_image-related code
-class Texture::Impl
-{
+class Texture::Impl {
 public:
     uint8_t* _RGBABuffer;     // buffer that holds RGBA color data (4 channels)
     int _width, _height, _bpp;
@@ -20,8 +19,7 @@ public:
 };
 
 Texture::Impl::Impl(const std::string& path)
-    : FilePath(path), _RGBABuffer(nullptr), _width(0), _height(0), _bpp(0)
-{
+    : FilePath(path), _RGBABuffer(nullptr), _width(0), _height(0), _bpp(0) {
     Logger::Info("TEXTURE: Attempting to load texture: " + path);
 
     stbi_set_flip_vertically_on_load(0);
@@ -58,16 +56,14 @@ Texture::Impl::Impl(const std::string& path)
     Logger::Debug("TEXTURE: RGBA buffer size: " + std::to_string(_width * _height * 4) + " bytes (0-15 range)");
 }
 
-Texture::Impl::~Impl()
-{
+Texture::Impl::~Impl() {
     // deletes the buffers
     if (_RGBABuffer) {
         delete[] _RGBABuffer;
     }
 }
 
-glm::vec3 Texture::Impl::GetPixelRGB(int x, int y) const
-{
+glm::vec3 Texture::Impl::GetPixelRGB(int x, int y) const {
     const size_t offset = (static_cast<size_t>(y) * static_cast<size_t>(_width) + static_cast<size_t>(x)) * 4;
     return glm::vec3(
         _RGBABuffer[offset],     // Red
@@ -76,8 +72,7 @@ glm::vec3 Texture::Impl::GetPixelRGB(int x, int y) const
     );
 }
 
-glm::vec4 Texture::Impl::GetPixelRGBA(int x, int y) const
-{
+glm::vec4 Texture::Impl::GetPixelRGBA(int x, int y) const {
     const size_t offset = (static_cast<size_t>(y) * static_cast<size_t>(_width) + static_cast<size_t>(x)) * 4;
     return glm::vec4(
         _RGBABuffer[offset],     // Red
@@ -87,61 +82,52 @@ glm::vec4 Texture::Impl::GetPixelRGBA(int x, int y) const
     );
 }
 
-inline const uint8_t* Texture::Impl::GetPixelRGBAPtr(int x, int y) const
-{
+inline const uint8_t* Texture::Impl::GetPixelRGBAPtr(int x, int y) const {
     const size_t offset = (static_cast<size_t>(y) * static_cast<size_t>(_width) + static_cast<size_t>(x)) * 4;
     return &_RGBABuffer[offset];
 }
 
 // Texture public interface implementation
 Texture::Texture(const std::string& path, const std::string type)
-    : texType(type), pImpl(std::make_unique<Impl>(path))
-{
-}
+    : texType(type), pImpl(std::make_unique<Impl>(path)) { }
 
 Texture::~Texture() = default;
 
 Texture::Texture(Texture&& other) noexcept 
-    : texType(std::move(other.texType)), pImpl(std::move(other.pImpl))
-{
-}
+    : texType(std::move(other.texType)), pImpl(std::move(other.pImpl)) { }
 
-Texture& Texture::operator=(Texture&& other) noexcept
-{
-    if (this != &other)
-    {
+Texture& Texture::operator=(Texture&& other) noexcept {
+    if (this != &other) {
         texType = std::move(other.texType);
         pImpl = std::move(other.pImpl);
     }
     return *this;
 }
 
-int Texture::GetWidth() const
-{
+int Texture::GetWidth() const {
     return pImpl->_width;
 }
 
-int Texture::GetHeight() const
-{
+int Texture::GetHeight() const {
     return pImpl->_height;
 }
 
-std::string Texture::GetFilePath() const
-{
+std::string Texture::GetFilePath() const {
     return pImpl->FilePath;
 }
 
-glm::vec3 Texture::GetPixelRGB(int x, int y) const
-{
+glm::vec3 Texture::GetPixelRGB(int x, int y) const {
     return pImpl->GetPixelRGB(x, y);
 }
 
-glm::vec4 Texture::GetPixelRGBA(int x, int y) const
-{
+glm::vec4 Texture::GetPixelRGBA(int x, int y) const {
     return pImpl->GetPixelRGBA(x, y);
 }
 
-const uint8_t* Texture::GetPixelRGBAPtr(int x, int y) const
-{
+const uint8_t* Texture::GetPixelRGBAPtr(int x, int y) const {
     return pImpl->GetPixelRGBAPtr(x, y);
+}
+
+const uint8_t* Texture::GetDataPtr() const {
+    return pImpl->_RGBABuffer;
 }

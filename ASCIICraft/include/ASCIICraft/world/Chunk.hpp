@@ -2,7 +2,7 @@
 
 #include <ASCIICraft/world/Block.hpp>
 #include <ASCIIgL/engine/Mesh.hpp>
-#include <ASCIIgL/renderer/VertexShader.hpp>
+#include <ASCIIgL/renderer/VertexShaderCPU.hpp>
 #include <ASCIIgL/engine/Camera3D.hpp>
 
 #include <glm/glm.hpp>
@@ -97,9 +97,6 @@ public:
     // Utility
     bool IsValidBlockCoord(int x, int y, int z) const;
     WorldPos ChunkToWorldPos(int x, int y, int z) const;
-
-    // Rendering
-    void Render(VERTEX_SHADER& vertex_shader, const Camera3D& camera);
 
     // Logging
     void LogNeighbors() const;

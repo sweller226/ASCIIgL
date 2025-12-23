@@ -35,6 +35,8 @@ public:
 	
 	// Fast accessor - returns pointer to raw uint8_t data (RGBA)
 	const uint8_t* GetPixelRGBAPtr(int x, int y) const;
+	const uint8_t* GetDataPtr() const;
+
 private:
 	// Forward declaration for PIMPL pattern
 	class Impl;

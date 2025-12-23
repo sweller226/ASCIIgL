@@ -4,7 +4,7 @@
 #include <cassert>
 
 #include <ASCIIgL/renderer/Renderer.hpp>
-#include <ASCIIgL/renderer/VertexShader.hpp>
+#include <ASCIIgL/renderer/VertexShaderCPU.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 
 // Chunk constructor
@@ -312,25 +312,6 @@ WorldPos Chunk::ChunkToWorldPos(int x, int y, int z) const {
 int Chunk::GetBlockIndex(int x, int y, int z) const {
     // 3D array indexing: index = x + y*SIZE + z*SIZE*SIZE
     return x + y * SIZE + z * SIZE * SIZE;
-}
-
-void Chunk::Render(VERTEX_SHADER& vertex_shader, const Camera3D& camera) {
-    // Generate mesh if needed (lazy generation)
-    if (generated && !HasMesh() && dirty) {
-        GenerateMesh();
-    }
-    
-    if (!this->HasMesh() || !this->mesh || !generated) {
-        return; // No mesh to render
-    }
-
-    // Check if mesh has valid texture before rendering
-    if (this->mesh->texture) {
-        vertex_shader.SetMatrices(glm::mat4(1.0f), camera.view, camera.proj);
-        Renderer::GetInst().DrawMesh(vertex_shader, this->mesh.get());
-    } else {
-        Logger::Warning("Chunk mesh has no texture - skipping render");
-    }
 }
 
 void Chunk::LogNeighbors() const {

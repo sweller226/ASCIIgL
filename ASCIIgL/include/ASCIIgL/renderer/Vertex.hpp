@@ -16,7 +16,7 @@ struct Vertex {
     glm::vec2 GetXY() const;
     glm::vec3 GetXYZ() const;
     glm::vec4 GetXYZW() const;
-    glm::vec3 GetUVW() const;
+    glm::vec2 GetUV() const;
 
     // Short getters for every coordinate
     float X() const;
@@ -25,13 +25,16 @@ struct Vertex {
     float W() const;
     float U() const;
     float V() const;
-    float UVW() const;
+    float InvW() const;
 
     // Fast mutators
+    void SetXY(const glm::vec2 inXY);
     void SetXYZ(const glm::vec3 inXYZ);
     void SetXYZW(const glm::vec4 inXYZW);
     void SetUV(const glm::vec2 inUV);
     void SetUVW(const glm::vec3 inUVW);
+    void SetInvW(const float inInvW);
+    void SetW(const float inW);
 };
 
 using VERTEX = Vertex;

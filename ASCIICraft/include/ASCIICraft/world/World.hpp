@@ -10,7 +10,7 @@
 #include <vector>
 #include <glm/glm.hpp>
 
-#include <ASCIIgL/renderer/VertexShader.hpp>
+#include <ASCIIgL/renderer/VertexShaderCPU.hpp>
 
 // Forward declarations
 class Player;
@@ -71,9 +71,6 @@ private:
     WorldPos spawnPoint;
     Player* player; // Reference to the current player for chunk streaming
     unsigned int maxWorldChunkRadius;
-
-    // rendering
-    VERTEX_SHADER vertex_shader;
     
     // Internal methods
     void UpdateChunkNeighbors(const ChunkCoord& coord, bool markNeighborsDirty = true);

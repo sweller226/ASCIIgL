@@ -8,6 +8,8 @@
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/util/Profiler.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
+#include <ASCIIgL/renderer/RendererCPU.hpp>
+#include <ASCIIgL/renderer/RendererGPU.hpp>
 
 #include <ASCIICraft/player/Player.hpp>
 
@@ -67,7 +69,7 @@ void World::Render() {
 
     for (Chunk* chunk : visibleChunks) {
         if (!chunk || !chunk->IsGenerated() || !chunk->HasMesh()) {
-            Logger::Debug("Render: Skipping invalid chunk");
+            // Logger::Debug("Render: Skipping invalid chunk");
             continue;
         }
         auto* mesh = chunk->GetMesh();
@@ -79,9 +81,16 @@ void World::Render() {
         chunkVertexBatches.push_back(&mesh->vertices);
     }
 
+    Logger::Debug("World::Render - Batches: " + std::to_string(chunkVertexBatches.size()) + 
+                  ", Texture: " + (batchTexture ? "valid" : "NULL"));
+    
     if (!chunkVertexBatches.empty() && batchTexture) {
-        vertex_shader.SetMatrices(glm::mat4(1.0f), player->GetCamera().view, player->GetCamera().proj);
-        Renderer::GetInst().RenderTriangles(vertex_shader, chunkVertexBatches, batchTexture);
+        if (Renderer::GetInst().GetCpuOnly()) {
+            RendererCPU::GetInst().GetVShader().SetMatrices(glm::mat4(1.0f), player->GetCamera().view, player->GetCamera().proj);
+        } else {
+            RendererGPU::GetInst().SetMVP(player->GetCamera().proj * player->GetCamera().view * glm::mat4(1.0f));
+        }
+        Renderer::GetInst().RenderTriangles(chunkVertexBatches, batchTexture);
     } else {
         Logger::Debug("Render: Skipping RenderTriangles, no valid batches or texture.");
     }

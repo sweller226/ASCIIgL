@@ -36,6 +36,13 @@ int Screen::Initialize(
     unsigned int fontSize, 
     const Palette palette
 ) {
+    if (!_initialized) {
+        Logger::Info("Initializing Screen...");
+    } else {
+        Logger::Warning("Screen is already initialized!");
+        return 0;
+    }
+
     Logger::Debug(L"CPU has max " + std::to_wstring(std::thread::hardware_concurrency()) + L" threads.");
 
     Logger::Debug(L"Initializing screen with width=" + std::to_wstring(width) + L", height=" + std::to_wstring(height) + L", title=" + title);
