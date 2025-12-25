@@ -151,6 +151,6 @@ private:
     static constexpr float JUMP_COOLDOWN_MAX = 0.2f;         // Seconds
 
     static constexpr float CAMERA_NEAR_PLANE = 0.1f;
-    static constexpr float CAMERA_FAR_PLANE = 300.0f;
+    static constexpr float CAMERA_FAR_PLANE = 1000.0f;
     static constexpr float FOV = 70.0f;                      // Field of view in degrees
 };
