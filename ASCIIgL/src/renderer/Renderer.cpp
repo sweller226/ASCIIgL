@@ -150,46 +150,30 @@ void Renderer::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& position
 // RENDERING PIPELINE ENTRY POINTS
 // =============================================================================
 
-void Renderer::RenderTriangles(const std::vector<VERTEX>& vertices, const Texture* tex) {
+void Renderer::RenderTriangles(const std::vector<VERTEX>& vertices, const Texture* tex, const std::vector<int>& indices) {
     if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) {
         Logger::Warning("RenderTriangles: Texture is invalid or has zero dimensions.");
         return;
     }
 
     if (_cpu_only) {
-        RenderTrianglesCPU(vertices, tex);
+        _rendererCPU->RenderTriangles(vertices, tex);
     } else {
-        RenderTrianglesGPU(vertices, tex);
+        _rendererGPU->RenderTriangles(vertices, tex, indices);
     }
 }
 
-void Renderer::RenderTriangles(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex) {
+void Renderer::RenderTriangles(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex, const std::vector<std::vector<int>>& indices) {
     if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) {
         Logger::Warning("RenderTriangles: Texture is invalid or has zero dimensions.");
         return;
     }
 
     if (_cpu_only) {
-        RenderTrianglesCPU(vertices, tex);
+        _rendererCPU->RenderTriangles(vertices, tex);
     } else {
-        RenderTrianglesGPU(vertices, tex);
+        _rendererGPU->RenderTriangles(vertices, tex, indices);
     }
-}
-
-void Renderer::RenderTrianglesCPU(const std::vector<VERTEX>& vertices, const Texture* tex) {
-    _rendererCPU->RenderTriangles(vertices, tex);
-}
-
-void Renderer::RenderTrianglesCPU(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex) {
-    _rendererCPU->RenderTriangles(vertices, tex);
-}
-
-void Renderer::RenderTrianglesGPU(const std::vector<VERTEX>& vertices, const Texture* tex) {
-    _rendererGPU->RenderTriangles(vertices, tex);
-}
-
-void Renderer::RenderTrianglesGPU(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex) {
-    _rendererGPU->RenderTriangles(vertices, tex);
 }
 
 // =============================================================================
@@ -531,16 +515,12 @@ void Renderer::PrecomputeColorLUT() {
     for (int r = 0; r < static_cast<int>(_rgbLUTDepth); ++r) {
         for (int g = 0; g < static_cast<int>(_rgbLUTDepth); ++g) {
             for (int b = 0; b < static_cast<int>(_rgbLUTDepth); ++b) {
-                // Convert discrete RGB to normalized [0,1] range for contrast adjustment
+                // Convert discrete RGB to normalized [0,1] range
                 glm::vec3 rgb(
                     r*invPaletteDepth,
                     g*invPaletteDepth,
                     b*invPaletteDepth
                 );
-
-                // Apply contrast adjustment
-                rgb = (rgb - 0.5f) * _contrast + 0.5f;
-                rgb = glm::clamp(rgb, 0.0f, 1.0f);
 
                 // Find best match using original algorithm
                 float minError = FLT_MAX;
@@ -658,23 +638,6 @@ bool Renderer::GetAntialiasing() const {
 
 int Renderer::GetAntialiasingsamples() const {
     return _antialiasing_samples;
-}
-
-// =============================================================================
-// RENDER SETTINGS - CONTRAST
-// =============================================================================
-
-void Renderer::SetContrast(const float contrast) {
-    _contrast = std::min(5.0f, std::max(0.0f, contrast));
-    _colorLUTComputed = false; // Mark LUT for recomputation
-
-    if (!_cpu_only) {
-        _rendererGPU->SetContrastUniform(contrast);
-    }
-}
-
-float Renderer::GetContrast() const {
-    return _contrast;
 }
 
 // =============================================================================

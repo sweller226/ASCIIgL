@@ -85,10 +85,13 @@ public:
     void SetGenerated(bool g) { generated = g; }
     
     // Mesh generation for rendering
-    void GenerateMesh();
+    void GenerateMesh(bool useIndices = false);
     bool HasMesh() const { return hasMesh; }
     Mesh* GetMesh() const { return mesh.get(); }
     void InvalidateMesh() { hasMesh = false; dirty = true; }
+    
+    // Rendering
+    void Render() const;
     
     // Neighbor access for mesh generation
     void SetNeighbor(int direction, Chunk* neighbor);

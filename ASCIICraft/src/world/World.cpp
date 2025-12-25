@@ -63,36 +63,19 @@ void World::Render() {
     std::vector<Chunk*> visibleChunks = GetVisibleChunks(player->GetPosition(), player->GetCamera().getCamFront());
     Logger::Debug("Render: visibleChunks = " + std::to_string(visibleChunks.size()));
 
-    Texture* batchTexture = nullptr;
-    std::vector<std::vector<VERTEX>*> chunkVertexBatches;
-    chunkVertexBatches.reserve(visibleChunks.size());
-
-    for (Chunk* chunk : visibleChunks) {
-        if (!chunk || !chunk->IsGenerated() || !chunk->HasMesh()) {
-            // Logger::Debug("Render: Skipping invalid chunk");
-            continue;
-        }
-        auto* mesh = chunk->GetMesh();
-        if (!mesh || !mesh->texture || mesh->vertices.empty()) {
-            Logger::Debug("Render: Skipping chunk with invalid mesh/texture/vertices");
-            continue;
-        }
-        if (!batchTexture) batchTexture = mesh->texture;
-        chunkVertexBatches.push_back(&mesh->vertices);
-    }
-
-    Logger::Debug("World::Render - Batches: " + std::to_string(chunkVertexBatches.size()) + 
-                  ", Texture: " + (batchTexture ? "valid" : "NULL"));
-    
-    if (!chunkVertexBatches.empty() && batchTexture) {
-        if (Renderer::GetInst().GetCpuOnly()) {
-            RendererCPU::GetInst().GetVShader().SetMatrices(glm::mat4(1.0f), player->GetCamera().view, player->GetCamera().proj);
-        } else {
-            RendererGPU::GetInst().SetMVP(player->GetCamera().proj * player->GetCamera().view * glm::mat4(1.0f));
-        }
-        Renderer::GetInst().RenderTriangles(chunkVertexBatches, batchTexture);
+    // Set up view-projection matrix once
+    if (Renderer::GetInst().GetCpuOnly()) {
+        RendererCPU::GetInst().GetVShader().SetMatrices(glm::mat4(1.0f), player->GetCamera().view, player->GetCamera().proj);
     } else {
-        Logger::Debug("Render: Skipping RenderTriangles, no valid batches or texture.");
+        RendererGPU::GetInst().SetMVP(player->GetCamera().proj * player->GetCamera().view * glm::mat4(1.0f));
+    }
+    
+    // Render each chunk individually - leverages GPU mesh caching
+    for (Chunk* chunk : visibleChunks) {
+        if (!chunk || !chunk->IsGenerated()) {
+            continue;
+        }
+        chunk->Render();
     }
 }
 
@@ -424,7 +407,7 @@ void World::RegenerateDirtyChunks() {
         Chunk* chunk = pair.second.get();
         
         if (chunk && chunk->IsDirty() && chunk->IsGenerated()) {
-            chunk->GenerateMesh();
+            chunk->GenerateMesh(!Renderer::GetInst().GetCpuOnly());
             regeneratedCount++;
         }
     }

@@ -44,7 +44,7 @@ private:
     bool _wireframe = false;
     bool _backface_culling = true;
     bool _ccw = false;
-    float _contrast = 1.0f;
+
     glm::ivec3 _background_col = glm::ivec3(0, 0, 0);
     bool _cpu_only = false;
 
@@ -83,15 +83,6 @@ private:
     bool _diagnostics_enabled = false;
 
     // =========================================================================
-    // Core Private Rendering Functions
-    // =========================================================================
-    void RenderTrianglesGPU(const std::vector<VERTEX>& vertices, const Texture* tex);
-    void RenderTrianglesCPU(const std::vector<VERTEX>& vertices, const Texture* tex);
-
-    void RenderTrianglesCPU(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex);
-    void RenderTrianglesGPU(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex);
-
-    // =========================================================================
     // Helper Drawing Functions
     // =========================================================================
     void DrawClippedLinePxBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, WCHAR pixel_type, unsigned short col);
@@ -112,8 +103,8 @@ public:
     void Initialize(bool antialiasing = false, int antialiasing_samples = 4, bool cpu_only = false);
     bool IsInitialized() const;
 
-    void RenderTriangles(const std::vector<VERTEX>& vertices, const Texture* tex);
-    void RenderTriangles(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex);
+    void RenderTriangles(const std::vector<VERTEX>& vertices, const Texture* tex, const std::vector<int>& indices = {});
+    void RenderTriangles(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex, const std::vector<std::vector<int>>& indices = {});
 
     // =========================================================================
     // Drawing API
@@ -166,8 +157,7 @@ public:
 
     bool GetAntialiasing() const;
 
-    void SetContrast(const float contrast);
-    float GetContrast() const;
+
 
     glm::ivec3 GetBackgroundCol() const;
     void SetBackgroundCol(const glm::ivec3& color);

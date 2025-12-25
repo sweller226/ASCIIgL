@@ -45,8 +45,8 @@ namespace BlockTextures {
         
         float minU = tileX * tileWidth;
         float minV = tileY * tileHeight;
-        float maxU = minU + tileWidth;
-        float maxV = minV + tileHeight;
+        float maxU = (tileX + 1) * tileWidth;
+        float maxV = (tileY + 1) * tileHeight;
         
         return glm::vec4(minU, minV, maxU, maxV);
     }

@@ -40,6 +40,12 @@ class RendererGPU
 
 private:
     // =========================================================================
+    // Buffer Configuration Constants
+    // =========================================================================
+    static constexpr size_t INITIAL_VERTEX_BUFFER_CAPACITY = 10000;
+    static constexpr size_t BUFFER_GROWTH_FACTOR = 2;
+
+    // =========================================================================
     // Singleton Pattern (Non-copyable, Non-movable)
     // =========================================================================
     RendererGPU() = default;
@@ -82,8 +88,6 @@ private:
     // =========================================================================
     struct ConstantBuffer {
         glm::mat4 mvp;           // Model-View-Projection matrix
-        float contrast;          // Contrast setting
-        float padding[3];        // Padding to 16-byte alignment
     };
     ComPtr<ID3D11Buffer> _constantBuffer;
     ConstantBuffer _currentConstantBuffer;  // Current values to upload to GPU
@@ -93,6 +97,24 @@ private:
     // =========================================================================
     ComPtr<ID3D11Buffer> _vertexBuffer;
     size_t _vertexBufferCapacity = 0;
+
+    // =========================================================================
+    // Index Buffer (Dynamic)
+    // =========================================================================
+    ComPtr<ID3D11Buffer> _indexBuffer;
+    size_t _indexBufferCapacity = 0;
+
+    // =========================================================================
+    // Per-Mesh GPU Buffer Cache
+    // =========================================================================
+    struct GPUMeshCache {
+        ComPtr<ID3D11Buffer> vertexBuffer;
+        ComPtr<ID3D11Buffer> indexBuffer;
+        size_t vertexCount = 0;
+        size_t indexCount = 0;
+    };
+    
+    GPUMeshCache* GetOrCreateMeshCache(const Mesh* mesh);
 
     // =========================================================================
     // Texture Resources
@@ -142,6 +164,7 @@ private:
     // Buffer Management
     // =========================================================================
     bool UpdateVertexBuffer(const std::vector<VERTEX>& vertices);
+    bool UpdateIndexBuffer(const std::vector<int>& indices);
     bool UpdateConstantBuffer(const ConstantBuffer& cb);
 
     // =========================================================================
@@ -166,11 +189,8 @@ private:
     // =========================================================================
     // High-Level Drawing API - 2D Quads (Friend-Accessible Only via Renderer)
     // =========================================================================
-    void Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& position, const float rotation, const glm::vec2& size, const Camera2D& camera, const int layer);
-    void Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer);
-
-    // =========================================================================
-    void SetContrastUniform(float contrast);
+    void Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& position, const float rotation, const glm::vec2& size, const Camera2D& camera, const int layer, const bool CCW = true);
+    void Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer, const bool CCW = true);
 
 public:
     // =========================================================================
@@ -185,12 +205,16 @@ public:
     // Public API
     // =========================================================================
     bool IsInitialized() const { return _initialized; }
+    
+    // Resource cache cleanup (called by resource destructors)
+    void ReleaseMeshCache(void* cachePtr);
+    void InvalidateTextureCache(const Texture* tex);
 
     // =========================================================================
     // Frame Management
     // =========================================================================
-    void RenderTriangles(const std::vector<VERTEX>& vertices, const Texture* tex);
-    void RenderTriangles(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex);
+    void RenderTriangles(const std::vector<VERTEX>& vertices, const Texture* tex, const std::vector<int>& indices = {});
+    void RenderTriangles(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex, const std::vector<std::vector<int>>& indices = {});
     void EndColBuffFrame();  // Presents debug swap chain for RenderDoc
     void DownloadFramebuffer();
 
@@ -198,7 +222,4 @@ public:
     // Shader Uniforms (Set before rendering)
     // =========================================================================
     void SetMVP(const glm::mat4& mvp);
-    
-    // Set all uniforms at once for efficiency
-    void SetUniforms(const glm::mat4& mvp, float contrast);
 };
