@@ -4,6 +4,8 @@
 #include <stb_image/stb_image.h>
 #include <algorithm>
 
+namespace ASCIIgL {
+
 // PIMPL Implementation class that contains all stb_image-related code
 class Texture::Impl {
 public:
@@ -131,3 +133,5 @@ const uint8_t* Texture::GetPixelRGBAPtr(int x, int y) const {
 const uint8_t* Texture::GetDataPtr() const {
     return pImpl->_RGBABuffer;
 }
+
+} // namespace ASCIIgL

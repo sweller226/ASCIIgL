@@ -6,7 +6,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <ASCIIgL/renderer/Vertex.hpp>
+#include <ASCIIgL/renderer/RendererCPU.hpp>
+
+namespace ASCIIgL {
 
 struct Tile {
     glm::vec2 position;
@@ -36,7 +38,7 @@ public:
     
     void SetTileSize(unsigned int size_x, unsigned int size_y);
     void InitializeTiles();
-    void BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles);
+    void BinTrianglesToTiles(const std::vector<VertStructs::PosUVW>& raster_triangles);
     
     void UpdateActiveTiles();
     
@@ -51,11 +53,11 @@ public:
     ~TileManager() = default;
     
     void ClearTileTriangleLists();
-    bool DoesTileEncapsulate(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3);
+    bool DoesTileEncapsulate(const Tile& tile, const VertStructs::PosUVW& vert1, const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert3);
     void InvalidateTiles();
     void CalculateTileCounts();
-    void BinTrianglesToTilesSingleThreaded(const std::vector<VERTEX>& raster_triangles);
-    void BinTrianglesToTilesMultiThreaded(const std::vector<VERTEX>& raster_triangles);
+    void BinTrianglesToTilesSingleThreaded(const std::vector<VertStructs::PosUVW>& raster_triangles);
+    void BinTrianglesToTilesMultiThreaded(const std::vector<VertStructs::PosUVW>& raster_triangles);
 
     // Tile properties
     unsigned int TILE_COUNT_X = 0;
@@ -65,3 +67,5 @@ public:
 
     bool _tilesInitialized = false;
 };
+
+} // namespace ASCIIgL

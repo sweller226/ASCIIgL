@@ -57,7 +57,7 @@ public:
     // Getters
     const glm::vec3& GetPosition() const { return position; }
     const glm::vec3& GetVelocity() const { return velocity; }
-    const Camera3D& GetCamera() const { return camera; }
+    const ASCIIgL::Camera3D& GetCamera() const { return camera; }
     
     GameMode GetGameMode() const { return gameMode; }
     MovementState GetMovementState() const { return movementState; }
@@ -83,7 +83,7 @@ private:
     glm::vec3 velocity;
 
     // Camera
-    Camera3D camera;
+    ASCIIgL::Camera3D camera;
 
     // Physical properties
     float walkSpeed;

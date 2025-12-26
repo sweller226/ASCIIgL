@@ -18,6 +18,8 @@ namespace {
     std::mutex logMutex;
 }
 
+namespace ASCIIgL {
+
 LogLevel Logger::currentLevel = LogLevel::Info;
 
 void Logger::Init(const std::string& filename, LogLevel level) {
@@ -100,3 +102,5 @@ void Logger::Close() {
         logFile.close();
     }
 }
+
+} // namespace ASCIIgL

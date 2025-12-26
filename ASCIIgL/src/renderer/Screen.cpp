@@ -23,6 +23,8 @@
     #include <ASCIIgL/renderer/ScreenWinImpl.hpp>
 #endif
 
+namespace ASCIIgL {
+
 // Custom constructor and destructor for PIMPL pattern - must be defined where ScreenWinImpl is complete
 Screen::Screen() = default;
 Screen::~Screen() {
@@ -165,3 +167,5 @@ bool Screen::IsInitialized() const {
 Palette& Screen::GetPalette() {
     return _palette;
 }
+
+} // namespace ASCIIgL

@@ -7,6 +7,8 @@
 
 #include <ASCIIgL/util/Logger.hpp>
 
+namespace ASCIIgL {
+
 // PIMPL Implementation class that contains all tinyobjloader-related code
 class Model::Impl
 {
@@ -59,7 +61,7 @@ void Model::Impl::loadModel(std::string path, std::vector<Mesh*>& meshes)
 
 Mesh* Model::Impl::processMesh(const tinyobj::attrib_t& attrib, const tinyobj::shape_t& shape, const std::vector<tinyobj::material_t>& materials)
 {
-    std::vector<VERTEX> vertices;
+    std::vector<std::byte> vertices;
     Texture* texture = nullptr;
 
     // Collect unique material IDs for this shape
@@ -82,6 +84,21 @@ Mesh* Model::Impl::processMesh(const tinyobj::attrib_t& attrib, const tinyobj::s
         }
     }
 
+    // Detect what attributes are available in the entire mesh
+    bool hasTexCoords = !attrib.texcoords.empty();
+    bool hasNormals = !attrib.normals.empty();
+
+    // Build vertex format based on available attributes
+    VertFormat::Builder vFormatBuilder;
+    vFormatBuilder.AddFloat4(VertexElementSemantic::Position);
+    if (hasTexCoords) {
+        vFormatBuilder.AddFloat2(VertexElementSemantic::TexCoord0);
+    }
+    if (hasNormals) {
+        vFormatBuilder.AddFloat3(VertexElementSemantic::Normal);
+    }
+    VertFormat format = vFormatBuilder.Build();
+
     // Loop over faces (polygons)
     size_t index_offset = 0;
     for (size_t f = 0; f < shape.mesh.num_face_vertices.size(); f++) {
@@ -92,34 +109,51 @@ Mesh* Model::Impl::processMesh(const tinyobj::attrib_t& attrib, const tinyobj::s
             // Access to vertex
             tinyobj::index_t idx = shape.mesh.indices[index_offset + v];
             
-            VERTEX vertex;
+            std::vector<std::byte> vertex;
 
-            // Position
-            if (idx.vertex_index >= 0) {
-                vertex.SetXYZW(glm::vec4(
-                    attrib.vertices[3 * idx.vertex_index + 0],
-                    attrib.vertices[3 * idx.vertex_index + 1],
-                    attrib.vertices[3 * idx.vertex_index + 2],
-                    1.0f
-                ));
+            // Position (always present)
+            glm::vec4 position(
+                idx.vertex_index >= 0 ? attrib.vertices[3 * idx.vertex_index + 0] : 0.0f,
+                idx.vertex_index >= 0 ? attrib.vertices[3 * idx.vertex_index + 1] : 0.0f,
+                idx.vertex_index >= 0 ? attrib.vertices[3 * idx.vertex_index + 2] : 0.0f,
+                1.0f
+            );
+            const std::byte* posBytes = reinterpret_cast<const std::byte*>(&position);
+            vertex.insert(vertex.end(), posBytes, posBytes + sizeof(glm::vec4));
+
+            // Texture coordinates (if format includes them)
+            if (hasTexCoords) {
+                glm::vec2 texCoords = (idx.texcoord_index >= 0)
+                    ? glm::vec2(
+                        attrib.texcoords[2 * idx.texcoord_index + 0],
+                        1.0f - attrib.texcoords[2 * idx.texcoord_index + 1] // Flip V coordinate
+                      )
+                    : glm::vec2(0.0f, 0.0f);
+                
+                const std::byte* texBytes = reinterpret_cast<const std::byte*>(&texCoords);
+                vertex.insert(vertex.end(), texBytes, texBytes + sizeof(glm::vec2));
             }
 
-            // Texture coordinates
-            if (idx.texcoord_index >= 0) {
-                vertex.SetUV(glm::vec2(
-                    attrib.texcoords[2 * idx.texcoord_index + 0],
-                    1.0f - attrib.texcoords[2 * idx.texcoord_index + 1] // Flip V coordinate
-                ));
-            } else {
-                vertex.SetUV(glm::vec2(0.0f, 0.0f));
+            // Normals (if format includes them)
+            if (hasNormals) {
+                glm::vec3 normal = (idx.normal_index >= 0)
+                    ? glm::vec3(
+                        attrib.normals[3 * idx.normal_index + 0],
+                        attrib.normals[3 * idx.normal_index + 1],
+                        attrib.normals[3 * idx.normal_index + 2]
+                      )
+                    : glm::vec3(0.0f, 0.0f, 0.0f);
+                
+                const std::byte* normBytes = reinterpret_cast<const std::byte*>(&normal);
+                vertex.insert(vertex.end(), normBytes, normBytes + sizeof(glm::vec3));
             }
 
-            vertices.push_back(vertex);
+            vertices.insert(vertices.end(), vertex.begin(), vertex.end());
         }
         index_offset += fv;
     }
 
-    return new Mesh(std::move(vertices), texture);
+    return new Mesh(std::move(vertices), format, texture);
 }
 
 Texture* Model::Impl::loadMaterialTextures(const tinyobj::material_t& material)
@@ -168,11 +202,6 @@ Model::Model(std::string path) : pImpl(std::make_unique<Impl>())
     pImpl->loadModel(path, meshes);
 }
 
-Model::Model(std::vector<VERTEX>&& vertices, Texture* texture) : pImpl(std::make_unique<Impl>())
-{
-    meshes.push_back(new Mesh(std::move(vertices), texture));
-}
-
 Model::~Model() = default;
 
 Model::Model(Model&& other) noexcept : meshes(std::move(other.meshes)), pImpl(std::move(other.pImpl))
@@ -188,3 +217,5 @@ Model& Model::operator=(Model&& other) noexcept
     }
     return *this;
 }
+
+} // namespace ASCIIgL

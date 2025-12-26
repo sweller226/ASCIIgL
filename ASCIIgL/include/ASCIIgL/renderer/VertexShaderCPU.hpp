@@ -4,7 +4,9 @@
 
 #include <glm/glm.hpp>
 
-#include <ASCIIgL/renderer/Vertex.hpp>
+#include <ASCIIgL/renderer/RendererCPU.hpp>
+
+namespace ASCIIgL {
 
 struct Vertex_Shader_CPU {
     private: 
@@ -30,8 +32,10 @@ struct Vertex_Shader_CPU {
     void SetMatrices(const glm::mat4& model, const glm::mat4& view, const glm::mat4& proj);
 
     // Vertex transformation methods
-    void Use(VERTEX& vertice) const;
-    void UseBatch(std::vector<VERTEX>& vertices) const;
+    void Use(VertStructs::PosUVW& vertice) const;
+    void UseBatch(std::vector<VertStructs::PosUVW>& vertices) const;
 };
 
 typedef Vertex_Shader_CPU VERTEX_SHADER_CPU;
+
+} // namespace ASCIIgL

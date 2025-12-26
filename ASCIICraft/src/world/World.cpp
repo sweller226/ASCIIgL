@@ -29,11 +29,11 @@ World::World(unsigned int renderDistance, const WorldPos& spawnPoint, unsigned i
     , player(nullptr)
     , maxWorldChunkRadius(maxWorldChunkRadius)
     , terrainGenerator(std::make_unique<TerrainGenerator>()) {
-    Logger::Info("World created");
+    ASCIIgL::Logger::Info("World created");
 }
 
 World::~World() {
-    Logger::Info("World destroyed");
+    ASCIIgL::Logger::Info("World destroyed");
 }
 
 void World::Update() {
@@ -43,31 +43,31 @@ void World::Update() {
     
     // Step 1: Load/unload chunks based on player position
     {
-        PROFILE_SCOPE("Update.UpdateChunkLoading");
+        ASCIIgL::PROFILE_SCOPE("Update.UpdateChunkLoading");
         UpdateChunkLoading();
     }
 
     // Step 2: Regenerate meshes for dirty chunks (batch processing)
     {
-        PROFILE_SCOPE("Update.RegenerateDirtyChunks");
+        ASCIIgL::PROFILE_SCOPE("Update.RegenerateDirtyChunks");
         RegenerateDirtyChunks();
     }
 }
 
 void World::Render() {
     if (!player) {
-        Logger::Warning("No player set for world rendering");
+        ASCIIgL::Logger::Warning("No player set for world rendering");
         return;
     }
 
     std::vector<Chunk*> visibleChunks = GetVisibleChunks(player->GetPosition(), player->GetCamera().getCamFront());
-    Logger::Debug("Render: visibleChunks = " + std::to_string(visibleChunks.size()));
+    ASCIIgL::Logger::Debug("Render: visibleChunks = " + std::to_string(visibleChunks.size()));
 
     // Set up view-projection matrix once
-    if (Renderer::GetInst().GetCpuOnly()) {
-        RendererCPU::GetInst().GetVShader().SetMatrices(glm::mat4(1.0f), player->GetCamera().view, player->GetCamera().proj);
+    if (ASCIIgL::Renderer::GetInst().GetCpuOnly()) {
+        ASCIIgL::RendererCPU::GetInst().GetVShader().SetMatrices(glm::mat4(1.0f), player->GetCamera().view, player->GetCamera().proj);
     } else {
-        RendererGPU::GetInst().SetMVP(player->GetCamera().proj * player->GetCamera().view * glm::mat4(1.0f));
+        ASCIIgL::RendererGPU::GetInst().SetMVP(player->GetCamera().proj * player->GetCamera().view * glm::mat4(1.0f));
     }
     
     // Render each chunk individually - leverages GPU mesh caching
@@ -99,7 +99,7 @@ void World::GenerateWorld() {
         }
     }
     
-    Logger::Debug("Updating neighbors for " + std::to_string(generatedChunks.size()) + " chunks");
+    ASCIIgL::Logger::Debug("Updating neighbors for " + std::to_string(generatedChunks.size()) + " chunks");
     for (const ChunkCoord& coord : generatedChunks) {
         UpdateChunkNeighbors(coord, true);
     }
@@ -130,7 +130,7 @@ void World::SetBlock(int x, int y, int z, const Block& block) {
     
     Chunk* chunk = GetOrCreateChunk(chunkCoord);
     if (!chunk) {
-        Logger::Error("Failed to get or create chunk for block placement");
+        ASCIIgL::Logger::Error("Failed to get or create chunk for block placement");
         return;
     }
     
@@ -178,7 +178,7 @@ void World::LoadChunk(const ChunkCoord& coord) {
     
     terrainGenerator->GenerateChunk(chunkPtr, setBlockQuiet);
     
-    Logger::Debug("Loaded chunk at (" + std::to_string(coord.x) + ", " + 
+    ASCIIgL::Logger::Debug("Loaded chunk at (" + std::to_string(coord.x) + ", " + 
                   std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
 }
 
@@ -213,7 +213,7 @@ void World::UnloadChunk(const ChunkCoord& coord) {
     
     // Now safe to unload the chunk
     loadedChunks.erase(it);
-    Logger::Debug("Unloaded chunk at (" + std::to_string(coord.x) + ", " + 
+    ASCIIgL::Logger::Debug("Unloaded chunk at (" + std::to_string(coord.x) + ", " + 
                   std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
 }
 
@@ -241,7 +241,7 @@ void World::UpdateChunkLoading() {
             return IsChunkOutsideWorld(coord) || IsChunkLoaded(coord);
         }), chunksToLoad.end());
 
-    Logger::Debug(std::to_string(loadedChunks.size()) + " chunks currently loaded");
+    ASCIIgL::Logger::Debug(std::to_string(loadedChunks.size()) + " chunks currently loaded");
 
     // Load missing chunks
     std::vector<ChunkCoord> newlyLoadedChunks;
@@ -275,7 +275,7 @@ void World::UpdateChunkLoading() {
     }
     
     if (chunksToUnload.size() > 0) {
-        Logger::Debug("Unloaded " + std::to_string(chunksToUnload.size()) + " distant chunks");
+        ASCIIgL::Logger::Debug("Unloaded " + std::to_string(chunksToUnload.size()) + " distant chunks");
     }
 }
 
@@ -290,7 +290,7 @@ std::vector<Chunk*> World::GetVisibleChunks(const glm::vec3& playerPos, const gl
     glm::vec3 forward = glm::normalize(viewDir);
     
     // FOV-based frustum culling with safety margin
-    const Camera3D& camera = player->GetCamera();
+    const ASCIIgL::Camera3D& camera = player->GetCamera();
     float fov = camera.GetFov();
     float extendedFov = fov * 1.5f; // 30° margin for safety
     const float fovHalfAngle = glm::radians(extendedFov * 0.5f);
@@ -391,7 +391,7 @@ void World::BatchInvalidateChunkFaceNeighborMeshes(const ChunkCoord& coord) {
         }
     }
     
-    Logger::Debug("Batch invalidated " + std::to_string(chunksToInvalidate.size()) + " chunk meshes");
+    ASCIIgL::Logger::Debug("Batch invalidated " + std::to_string(chunksToInvalidate.size()) + " chunk meshes");
 }
 
 void World::RegenerateDirtyChunks() {
@@ -400,20 +400,20 @@ void World::RegenerateDirtyChunks() {
     // Simple: regenerate all dirty chunks that are loaded
     for (const auto& pair : loadedChunks) {
         if (regeneratedCount >= MAX_REGENERATIONS_PER_FRAME) {
-            Logger::Warning("Hit max regenerations per frame (" + std::to_string(MAX_REGENERATIONS_PER_FRAME) + "), deferring rest to next frame");
+            ASCIIgL::Logger::Warning("Hit max regenerations per frame (" + std::to_string(MAX_REGENERATIONS_PER_FRAME) + "), deferring rest to next frame");
             break;
         }
         
         Chunk* chunk = pair.second.get();
         
         if (chunk && chunk->IsDirty() && chunk->IsGenerated()) {
-            chunk->GenerateMesh(!Renderer::GetInst().GetCpuOnly());
+            chunk->GenerateMesh(!ASCIIgL::Renderer::GetInst().GetCpuOnly());
             regeneratedCount++;
         }
     }
     
     if (regeneratedCount > 0) {
-        Logger::Debug("Regenerated " + std::to_string(regeneratedCount) + " dirty chunk meshes");
+        ASCIIgL::Logger::Debug("Regenerated " + std::to_string(regeneratedCount) + " dirty chunk meshes");
     }
 }
 

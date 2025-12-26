@@ -1,5 +1,7 @@
 #include <ASCIIgL/engine/FPSClock.hpp>
 
+namespace ASCIIgL {
+
 void FPSClock::StartFPSClock() {
     _fpsClock.StartClock();
 }
@@ -54,3 +56,5 @@ unsigned int FPSClock::GetFPSCap() const {
 double FPSClock::GetFPS() const {
     return _fps;
 }
+
+} // namespace ASCIIgL

@@ -9,7 +9,6 @@
 #include <glm/glm.hpp>
 
 #ifdef _WIN32
-    class ScreenWinImpl; // Forward declaration
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
     #endif
@@ -19,6 +18,12 @@
     #include <windows.h>
 #else
     struct CHAR_INFO {};
+#endif
+
+namespace ASCIIgL {
+
+#ifdef _WIN32
+    class ScreenWinImpl; // Forward declaration
 #endif
 
 class Screen {
@@ -64,3 +69,5 @@ public:
     Palette& GetPalette();
     std::vector<CHAR_INFO>& GetPixelBuffer();
 };
+
+} // namespace ASCIIgL

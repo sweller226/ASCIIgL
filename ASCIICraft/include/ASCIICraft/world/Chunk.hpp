@@ -87,7 +87,7 @@ public:
     // Mesh generation for rendering
     void GenerateMesh(bool useIndices = false);
     bool HasMesh() const { return hasMesh; }
-    Mesh* GetMesh() const { return mesh.get(); }
+    ASCIIgL::Mesh* GetMesh() const { return mesh.get(); }
     void InvalidateMesh() { hasMesh = false; dirty = true; }
     
     // Rendering
@@ -113,7 +113,7 @@ private:
     bool hasMesh;
     
     // Mesh data for rendering
-    std::unique_ptr<Mesh> mesh;
+    std::unique_ptr<ASCIIgL::Mesh> mesh;
     
     // Neighbor chunks (6 directions: +X, -X, +Y, -Y, +Z, -Z)
     Chunk* neighbors[6];

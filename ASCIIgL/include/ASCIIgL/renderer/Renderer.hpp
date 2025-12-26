@@ -15,6 +15,9 @@
 #include <ASCIIgL/renderer/Screen.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
 #include <ASCIIgL/renderer/TileManager.hpp>
+#include <ASCIIgL/renderer/VertFormat.hpp>
+
+namespace ASCIIgL {
 
 class RendererCPU;
 class RendererGPU;
@@ -103,8 +106,8 @@ public:
     void Initialize(bool antialiasing = false, int antialiasing_samples = 4, bool cpu_only = false);
     bool IsInitialized() const;
 
-    void RenderTriangles(const std::vector<VERTEX>& vertices, const Texture* tex, const std::vector<int>& indices = {});
-    void RenderTriangles(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex, const std::vector<std::vector<int>>& indices = {});
+    void RenderTriangles(const std::vector<std::byte>& vertices, const VertFormat& format, const Texture* tex, const std::vector<int>& indices = {});
+    void RenderTriangles(const std::vector<std::vector<std::byte>*>& vertices, const VertFormat& format, const Texture* tex, const std::vector<std::vector<int>>& indices = {});
 
     // =========================================================================
     // Drawing API
@@ -119,15 +122,13 @@ public:
     // =========================================================================
     // Low-Level Drawing API - Primitives, No pipeline involved
     // =========================================================================
-    void DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
-
     void DrawLinePxBuff(int x1, int y1, int x2, int y2, WCHAR pixel_type, const unsigned short col);
     void DrawLineColBuff(int x1, int y1, int x2, int y2, const glm::ivec4& col);
     void DrawLineColBuff(int x1, int y1, int x2, int y2, const glm::ivec3& col);
 
-    void DrawTriangleWireframePxBuff(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, WCHAR pixel_type, const unsigned short col);
-    void DrawTriangleWireframeColBuff(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::ivec4& col);
-    void DrawTriangleWireframeColBuff(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::ivec3& col);
+    void DrawTriangleWireframePxBuff(const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, WCHAR pixel_type, const unsigned short col);
+    void DrawTriangleWireframeColBuff(const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, const glm::ivec4& col);
+    void DrawTriangleWireframeColBuff(const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, const glm::ivec3& col);
 
     void DrawScreenBorderPxBuff(const unsigned short col);
     void DrawScreenBorderColBuff(const glm::vec3& col);
@@ -157,8 +158,6 @@ public:
 
     bool GetAntialiasing() const;
 
-
-
     glm::ivec3 GetBackgroundCol() const;
     void SetBackgroundCol(const glm::ivec3& color);
 
@@ -178,3 +177,5 @@ public:
     void TestRenderColorContinuous();
     std::vector<glm::ivec4>& GetColorBuffer();
 };
+
+} // namespace ASCIIgL

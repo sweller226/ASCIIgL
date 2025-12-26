@@ -18,6 +18,9 @@
 #include <ASCIIgL/renderer/Screen.hpp>
 #include <ASCIIgL/renderer/RendererCPU.hpp>
 #include <ASCIIgL/renderer/RendererGPU.hpp>
+#include <ASCIIgL/renderer/VertFormat.hpp>
+
+namespace ASCIIgL {
 
 // =============================================================================
 // LIFECYCLE MANAGEMENT
@@ -83,7 +86,8 @@ void Renderer::DrawMesh(const Mesh* mesh) {
         Logger::Error("DrawMesh: mesh is nullptr!");
         return;
     }
-    if (mesh->texture) {
+    
+    if (mesh->GetTexture()) {
         if (_cpu_only) {
             _rendererCPU->DrawMesh(mesh);
         } else {
@@ -99,7 +103,8 @@ void Renderer::DrawMesh(const Mesh* mesh, const glm::vec3& position, const glm::
         Logger::Error("DrawMesh: mesh is nullptr!");
         return;
     }
-    if (mesh->texture) {
+    
+    if (mesh->GetTexture()) {
         if (_cpu_only) {
             _rendererCPU->DrawMesh(mesh, position, rotation, size, camera);
         } else {
@@ -150,63 +155,55 @@ void Renderer::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& position
 // RENDERING PIPELINE ENTRY POINTS
 // =============================================================================
 
-void Renderer::RenderTriangles(const std::vector<VERTEX>& vertices, const Texture* tex, const std::vector<int>& indices) {
+void Renderer::RenderTriangles(const std::vector<std::byte>& vertices, const VertFormat& format, const Texture* tex, const std::vector<int>& indices) {
     if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) {
         Logger::Warning("RenderTriangles: Texture is invalid or has zero dimensions.");
         return;
     }
 
     if (_cpu_only) {
-        _rendererCPU->RenderTriangles(vertices, tex);
+        _rendererCPU->RenderTriangles(vertices, format, tex);
     } else {
-        _rendererGPU->RenderTriangles(vertices, tex, indices);
+        _rendererGPU->RenderTriangles(vertices, format, tex, indices);
     }
 }
 
-void Renderer::RenderTriangles(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex, const std::vector<std::vector<int>>& indices) {
+void Renderer::RenderTriangles(const std::vector<std::vector<std::byte>*>& vertices, const VertFormat& format, const Texture* tex, const std::vector<std::vector<int>>& indices) {
     if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) {
         Logger::Warning("RenderTriangles: Texture is invalid or has zero dimensions.");
         return;
     }
 
     if (_cpu_only) {
-        _rendererCPU->RenderTriangles(vertices, tex);
+        _rendererCPU->RenderTriangles(vertices, format, tex);
     } else {
-        _rendererGPU->RenderTriangles(vertices, tex, indices);
+        _rendererGPU->RenderTriangles(vertices, format, tex, indices);
     }
-}
-
-// =============================================================================
-// TRIANGLE RASTERIZATION - TEXTURED
-// =============================================================================
-
-void Renderer::DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex) {
-    _rendererCPU->DrawTriangleTextured(vert1, vert2, vert3, tex);
 }
 
 // =============================================================================
 // TRIANGLE RASTERIZATION - WIREFRAME (PIXEL BUFFER)
 // =============================================================================
 
-void Renderer::DrawTriangleWireframePxBuff(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const WCHAR pixel_type, const unsigned short col) {
+void Renderer::DrawTriangleWireframePxBuff(const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, const WCHAR pixel_type, const unsigned short col) {
     // RENDERING LINES BETWEEN VERTICES
-    DrawLinePxBuff((int) vert1.X(), (int) vert1.Y(), (int) vert2.X(), (int) vert2.Y(), pixel_type, col);
-    DrawLinePxBuff((int) vert2.X(), (int) vert2.Y(), (int) vert3.X(), (int) vert3.Y(), pixel_type, col);
-    DrawLinePxBuff((int) vert3.X(), (int) vert3.Y(), (int) vert1.X(), (int) vert1.Y(), pixel_type, col);
+    DrawLinePxBuff((int) vert1.x, (int) vert1.y, (int) vert2.x, (int) vert2.y, pixel_type, col);
+    DrawLinePxBuff((int) vert2.x, (int) vert2.y, (int) vert3.x, (int) vert3.y, pixel_type, col);
+    DrawLinePxBuff((int) vert3.x, (int) vert3.y, (int) vert1.x, (int) vert1.y, pixel_type, col);
 }
 
 // =============================================================================
 // TRIANGLE RASTERIZATION - WIREFRAME (COLOR BUFFER)
 // =============================================================================
 
-void Renderer::DrawTriangleWireframeColBuff(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::ivec4& col) {
+void Renderer::DrawTriangleWireframeColBuff(const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, const glm::ivec4& col) {
     // RENDERING LINES BETWEEN VERTICES
-    DrawLineColBuff((int) vert1.X(), (int) vert1.Y(), (int) vert2.X(), (int) vert2.Y(), col);
-    DrawLineColBuff((int) vert2.X(), (int) vert2.Y(), (int) vert3.X(), (int) vert3.Y(), col);
-    DrawLineColBuff((int) vert3.X(), (int) vert3.Y(), (int) vert1.X(), (int) vert1.Y(), col);
+    DrawLineColBuff((int) vert1.x, (int) vert1.y, (int) vert2.x, (int) vert2.y, col);
+    DrawLineColBuff((int) vert2.x, (int) vert2.y, (int) vert3.x, (int) vert3.y, col);
+    DrawLineColBuff((int) vert3.x, (int) vert3.y, (int) vert1.x, (int) vert1.y, col);
 }
 
-void Renderer::DrawTriangleWireframeColBuff(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::ivec3& col) {
+void Renderer::DrawTriangleWireframeColBuff(const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, const glm::ivec3& col) {
     DrawTriangleWireframeColBuff(vert1, vert2, vert3, glm::ivec4(col, 1));
 }
 
@@ -790,3 +787,5 @@ void Renderer::EndColBuffFrame() {
 
     OverwritePxBuffWithColBuff();
 }
+
+} // namespace ASCIIgL

@@ -3,6 +3,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+namespace ASCIIgL {
+
 class Camera2D // this is an inbuilt 2d camera that uses orthographic projection instead of perspective projection
 {
 private:
@@ -22,3 +24,4 @@ public:
 	void recalculateViewMat(); // this resets the view matrix with the
 	void recalculateProjMat(); // this recalculates the projection matrix with current screen dimensions
 };
+} // namespace ASCIIgL

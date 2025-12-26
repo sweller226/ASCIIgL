@@ -3,6 +3,8 @@
 #include <iostream>
 #include <iomanip>
 
+namespace ASCIIgL {
+
 void Profiler::BeginFrame()
 {
     if (!_enabled) return;
@@ -203,3 +205,5 @@ void Profiler::Reset()
     _totalFrameTime_ms = 0.0;
     _inFrame = false;
 }
+
+} // namespace ASCIIgL

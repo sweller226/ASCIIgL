@@ -7,6 +7,8 @@
 #include <ASCIIgL/renderer/RendererGPU.hpp>
 #include <ASCIIgL/renderer/RendererCPU.hpp>
 #include <ASCIIgL/renderer/VertexShaderCPU.hpp>
+#include <ASCIIgL/renderer/VertFormat.hpp>
+
 #include <ASCIIgL/util/Logger.hpp>
 
 // Chunk constructor
@@ -53,20 +55,18 @@ void Chunk::GenerateMesh(bool useIndices) {
         return; // Can't generate mesh for ungenerated chunk
     }
 
-    std::vector<VERTEX> vertices;
+    std::vector<std::byte> vertices;
     std::vector<int> indices;
 
     // Get the block texture atlas
     if (!Block::HasTextureAtlas()) {
-        Logger::Warning("No texture atlas available for chunk mesh generation");
+        ASCIIgL::Logger::Warning("No texture atlas available for chunk mesh generation");
         return;
     }
 
-    // LogNeighbors();
-
-    Logger::Debug("Generating mesh for chunk at (" + std::to_string(coord.x) + ", " + std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
+    ASCIIgL::Logger::Debug("Generating mesh for chunk at (" + std::to_string(coord.x) + ", " + std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
     
-    Texture* blockAtlas = Block::GetTextureAtlas();
+    ASCIIgL::Texture* blockAtlas = Block::GetTextureAtlas();
 
     // Face normal vectors for cube faces
     const glm::vec3 faceNormals[6] = {
@@ -224,11 +224,9 @@ void Chunk::GenerateMesh(bool useIndices) {
                     
                     if (useIndices) {
                         // Indexed rendering: generate 4 unique vertices
-                        int baseVertexIndex = vertices.size();
+                        int baseVertexIndex = vertices.size() / ASCIIgL::VertFormats::PosUV().GetStride();
                         
                         for (int vertIdx = 0; vertIdx < 4; vertIdx++) {
-                            VERTEX vertex;
-                            
                             // World position (chunk-relative + block position)
                             glm::vec3 worldPos = glm::vec3(
                                 coord.x * SIZE + x,
@@ -236,17 +234,21 @@ void Chunk::GenerateMesh(bool useIndices) {
                                 coord.z * SIZE + z
                             ) + faceVerticesIndexed[face][vertIdx];
                             
-                            vertex.SetXYZW(glm::vec4(worldPos, 1.0f));
-                            
                             // UV coordinates (map face UV to block's texture UV)
                             glm::vec2 faceUV = faceUVsIndexed[vertIdx];
                             glm::vec2 textureUV = glm::vec2(
                                 blockTextureUV.x + faceUV.x * (blockTextureUV.z - blockTextureUV.x),
                                 blockTextureUV.w - faceUV.y * (blockTextureUV.w - blockTextureUV.y)
                             );
-                            vertex.SetUV(textureUV);
                             
-                            vertices.push_back(vertex);
+                            struct ASCIIgL::VertStructs::PosUV vertex = {
+                                worldPos.x, worldPos.y, worldPos.z,
+                                textureUV.x, textureUV.y
+                            };
+                            
+                            // Append bytes to vertices vector
+                            const auto* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
+                            vertices.insert(vertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUV));
                         }
                         
                         // Add indices for this face (2 triangles)
@@ -256,8 +258,6 @@ void Chunk::GenerateMesh(bool useIndices) {
                     } else {
                         // Non-indexed rendering: generate 6 vertices (with duplicates)
                         for (int vertIdx = 0; vertIdx < 6; vertIdx++) {
-                            VERTEX vertex;
-                            
                             // World position (chunk-relative + block position)
                             glm::vec3 worldPos = glm::vec3(
                                 coord.x * SIZE + x,
@@ -265,17 +265,21 @@ void Chunk::GenerateMesh(bool useIndices) {
                                 coord.z * SIZE + z
                             ) + faceVertices[face][vertIdx];
                             
-                            vertex.SetXYZW(glm::vec4(worldPos, 1.0f));
-                            
                             // UV coordinates (map face UV to block's texture UV)
                             glm::vec2 faceUV = faceUVs[vertIdx];
                             glm::vec2 textureUV = glm::vec2(
                                 blockTextureUV.x + faceUV.x * (blockTextureUV.z - blockTextureUV.x),
                                 blockTextureUV.w - faceUV.y * (blockTextureUV.w - blockTextureUV.y)
                             );
-                            vertex.SetUV(textureUV);
                             
-                            vertices.push_back(vertex);
+                            struct ASCIIgL::VertStructs::PosUV vertex = {
+                                worldPos.x, worldPos.y, worldPos.z,
+                                textureUV.x, textureUV.y
+                            };
+                            
+                            // Append bytes to vertices vector
+                            const auto* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
+                            vertices.insert(vertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUV));
                         }
                     }
                 }
@@ -290,13 +294,13 @@ void Chunk::GenerateMesh(bool useIndices) {
             try {
                 width = blockAtlas->GetWidth();
             } catch (const std::exception& e) {
-                Logger::Error("  Exception in GetWidth(): " + std::string(e.what()));
+                ASCIIgL::Logger::Error("  Exception in GetWidth(): " + std::string(e.what()));
                 mesh.reset();
                 hasMesh = false;
                 SetDirty(false);
                 return;
             } catch (...) {
-                Logger::Error("  Unknown exception in GetWidth()!");
+                ASCIIgL::Logger::Error("  Unknown exception in GetWidth()!");
                 mesh.reset();
                 hasMesh = false;
                 SetDirty(false);
@@ -307,20 +311,20 @@ void Chunk::GenerateMesh(bool useIndices) {
             try {
                 height = blockAtlas->GetHeight();
             } catch (const std::exception& e) {
-                Logger::Error("  Exception in GetHeight(): " + std::string(e.what()));
+                ASCIIgL::Logger::Error("  Exception in GetHeight(): " + std::string(e.what()));
                 mesh.reset();
                 hasMesh = false;
                 SetDirty(false);
                 return;
             } catch (...) {
-                Logger::Error("  Unknown exception in GetHeight()!");
+                ASCIIgL::Logger::Error("  Unknown exception in GetHeight()!");
                 mesh.reset();
                 hasMesh = false;
                 SetDirty(false);
                 return;
             }
         } else {
-            Logger::Error("  Block atlas is nullptr!");
+            ASCIIgL::Logger::Error("  Block atlas is nullptr!");
             mesh.reset();
             hasMesh = false;
             SetDirty(false);
@@ -328,11 +332,11 @@ void Chunk::GenerateMesh(bool useIndices) {
         }
         
         if (useIndices && !indices.empty()) {
-            mesh = std::make_unique<Mesh>(std::move(vertices), std::move(indices), blockAtlas);
-            Logger::Debug("Indexed mesh created successfully with " + std::to_string(vertices.size()) + " vertices and " + std::to_string(indices.size()) + " indices");
+            mesh = std::make_unique<ASCIIgL::Mesh>(std::move(vertices), ASCIIgL::VertFormats::PosUV(), std::move(indices), blockAtlas);
+            ASCIIgL::Logger::Debug("Indexed mesh created successfully with " + std::to_string(vertices.size()) + " bytes and " + std::to_string(indices.size()) + " indices");
         } else {
-            mesh = std::make_unique<Mesh>(std::move(vertices), blockAtlas);
-            Logger::Debug("Mesh created successfully with " + std::to_string(vertices.size()) + " vertices");
+            mesh = std::make_unique<ASCIIgL::Mesh>(std::move(vertices), ASCIIgL::VertFormats::PosUV(), blockAtlas);
+            ASCIIgL::Logger::Debug("Mesh created successfully with " + std::to_string(vertices.size()) + " bytes");
         }
         hasMesh = true;
     } else {
@@ -380,18 +384,18 @@ int Chunk::GetBlockIndex(int x, int y, int z) const {
 void Chunk::LogNeighbors() const {
     for (int i = 0; i < 6; ++i) {
         if (neighbors[i]) {
-            Logger::Debug("Neighbor " + std::to_string(i) + ": " + neighbors[i]->coord.ToString());
+            ASCIIgL::Logger::Debug("Neighbor " + std::to_string(i) + ": " + neighbors[i]->coord.ToString());
         } else {
-            Logger::Debug("Neighbor " + std::to_string(i) + ": nullptr");
+            ASCIIgL::Logger::Debug("Neighbor " + std::to_string(i) + ": nullptr");
         }
     }
 }
 
 void Chunk::Render() const {
-    if (!hasMesh || !mesh || !mesh->texture) {
+    if (!hasMesh || !mesh || !mesh->GetTexture()) {
         return;
     }
     
     // Use DrawMesh instead of batching - leverages GPU mesh caching
-    Renderer::GetInst().DrawMesh(mesh.get());
+    ASCIIgL::Renderer::GetInst().DrawMesh(mesh.get());
 }

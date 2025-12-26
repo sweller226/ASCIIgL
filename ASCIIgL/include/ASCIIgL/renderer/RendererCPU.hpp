@@ -15,6 +15,9 @@
 #include <ASCIIgL/renderer/Screen.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
 #include <ASCIIgL/renderer/TileManager.hpp>
+#include <ASCIIgL/renderer/VertFormat.hpp>
+
+namespace ASCIIgL {
 
 // Forward declaration
 class Renderer;
@@ -44,8 +47,8 @@ private:
     // Rendering Buffers
     // =========================================================================
     std::vector<float> _depth_buffer;
-    std::vector<VERTEX> _vertexBuffer;
-    std::vector<VERTEX> _clippedBuffer;
+    std::vector<VertStructs::PosUVW> _vertexBuffer;
+    std::vector<VertStructs::PosUVW> _clippedBuffer;
 
     // =========================================================================
     // Antialiasing
@@ -70,36 +73,36 @@ private:
     // =========================================================================
     // Clipping Stage
     // =========================================================================
-    VERTEX HomogenousPlaneIntersect(const VERTEX& vert2, const VERTEX& vert1, const int component, const bool Near);
-    void ClipTriAgainstPlane(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, std::vector<VERTEX>& output, const int component, const bool Near);
-    void ClippingHelper(std::vector<VERTEX>& vertices, std::vector<VERTEX>& clipped);
-    void ClippingHelperThreaded(std::vector<VERTEX>& vertices, std::vector<VERTEX>& clipped);
-    void ClippingHelperSingleThreaded(std::vector<VERTEX>& vertices, std::vector<VERTEX>& clipped);
+    VertStructs::PosUVW HomogenousPlaneIntersect(const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert1, int component, bool Near);
+    void ClipTriAgainstPlane(const VertStructs::PosUVW& vert1, const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert3, std::vector<VertStructs::PosUVW>& output, int component, bool Near);
+    void ClippingHelper(std::vector<VertStructs::PosUVW>& vertices, std::vector<VertStructs::PosUVW>& clipped);
+    void ClippingHelperThreaded(std::vector<VertStructs::PosUVW>& vertices, std::vector<VertStructs::PosUVW>& clipped);
+    void ClippingHelperSingleThreaded(std::vector<VertStructs::PosUVW>& vertices, std::vector<VertStructs::PosUVW>& clipped);
 
     // =========================================================================
     // Backface Culling Stage
     // =========================================================================
-    bool BackFaceCull(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const bool CCW);
-    void BackFaceCullHelper(std::vector<VERTEX>& vertices);
+    bool BackFaceCull(const VertStructs::PosUVW& vert1, const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert3, bool CCW);
+    void BackFaceCullHelper(std::vector<VertStructs::PosUVW>& vertices);
 
     // =========================================================================
     // Transformation Stage
     // =========================================================================
-    void PerspectiveAndViewportTransform(std::vector<VERTEX>& raster_triangles);
+    void PerspectiveAndViewportTransform(std::vector<VertStructs::PosUVW>& raster_triangles);
 
     // =========================================================================
     // Tile-Based Rasterization
     // =========================================================================
-    void DrawTiles(const std::vector<VERTEX>& raster_triangles, const Texture* tex);
-    void DrawTileTextured(const Tile& tile, const std::vector<VERTEX>& raster_triangles, const Texture* tex);
-    void DrawTileWireframe(const Tile& tile, const std::vector<VERTEX>& raster_triangles);
+    void DrawTiles(const std::vector<VertStructs::PosUVW>& raster_triangles, const Texture* tex);
+    void DrawTileTextured(const Tile& tile, const std::vector<VertStructs::PosUVW>& raster_triangles, const Texture* tex);
+    void DrawTileWireframe(const Tile& tile, const std::vector<VertStructs::PosUVW>& raster_triangles);
 
     // =========================================================================
     // Triangle Rasterization Functions
     // =========================================================================
-    void DrawTriangleTexturedImpl(const VERTEX& v1, const VERTEX& v2, const VERTEX& v3, const Texture* tex, int minX, int maxX, int minY, int maxY);
-    void DrawTriangleTexturedPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
-    void DrawTriangleWireframeColBuffPartial(const Tile& tile, const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const glm::vec4& col);
+    void DrawTriangleTexturedImpl(const VertStructs::PosUVW& v1, const VertStructs::PosUVW& v2, const VertStructs::PosUVW& v3, const Texture* tex, int minX, int maxX, int minY, int maxY);
+    void DrawTriangleTexturedPartial(const Tile& tile, const VertStructs::PosUVW& vert1, const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert3, const Texture* tex);
+    void DrawTriangleWireframeColBuffPartial(const Tile& tile, const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, const glm::vec4& col);
 
     // =========================================================================
     // Pixel Plotting
@@ -129,13 +132,20 @@ private:
     // ========================================================================
     // Mid-level API - Rendering Pipelines (Friend-Accessible Only via Renderer)
     // =========================================================================
-    void RenderTriangles(const std::vector<VERTEX>& vertices, const Texture* tex);
-    void RenderTriangles(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex);
+    void RenderTriangles(const std::vector<std::vector<std::byte>*>& vertices, const VertFormat& format, const Texture* tex);
+    void RenderTriangles(const std::vector<std::byte>& vertices, const VertFormat& format, const Texture* tex);
 
     // =========================================================================
     // Low-Level Drawing API - Primitives (Friend-Accessible Only via Renderer)
     // =========================================================================
-    void DrawTriangleTextured(const VERTEX& vert1, const VERTEX& vert2, const VERTEX& vert3, const Texture* tex);
+    void DrawTriangleTextured(const VertStructs::PosUVW& vert1, const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert3, const Texture* tex);
+
+    // =========================================================================
+    // Format Validation
+    // =========================================================================
+    // Validates that mesh uses PosUVW format (required by CPU renderer)
+    // Returns true if format is valid, false otherwise
+    bool ValidateVertFormat(const Mesh& mesh) const;
 
 public:
     // =========================================================================
@@ -156,3 +166,5 @@ public:
     // =========================================================================
     VERTEX_SHADER_CPU& GetVShader();
 };
+
+} // namespace ASCIIgL

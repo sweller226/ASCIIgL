@@ -1,7 +1,8 @@
 #include <ASCIIgL/renderer/VertexShaderCPU.hpp>
-#include <ASCIIgL/renderer/Vertex.hpp>
 
 #include <tbb/parallel_for_each.h>
+
+namespace ASCIIgL {
 
 // UpdateMVP
 void Vertex_Shader_CPU::UpdateMVP() {
@@ -49,24 +50,26 @@ void Vertex_Shader_CPU::SetMatrices(const glm::mat4& model, const glm::mat4& vie
 }
 
 // Vertex transformation
-void Vertex_Shader_CPU::Use(VERTEX& vertice) const {
+void Vertex_Shader_CPU::Use(VertStructs::PosUVW& vertice) const {
     vertice.SetXYZW(_mvp * vertice.GetXYZW());
 }
 
-void Vertex_Shader_CPU::UseBatch(std::vector<VERTEX>& vertices) const {
+void Vertex_Shader_CPU::UseBatch(std::vector<VertStructs::PosUVW>& vertices) const {
     if (vertices.empty()) return;
     
     const size_t vertex_count = vertices.size();
     
     if (vertex_count < 2000) {
-        for (VERTEX& vertex : vertices) {
+        for (VertStructs::PosUVW& vertex : vertices) {
             Use(vertex);
         }
         return;
     }
     
     tbb::parallel_for_each(vertices.begin(), vertices.end(),
-        [this](VERTEX& vertex) {
+        [this](VertStructs::PosUVW& vertex) {
             vertex.SetXYZW(_mvp * vertex.GetXYZW());
         });
 }
+
+} // namespace ASCIIgL

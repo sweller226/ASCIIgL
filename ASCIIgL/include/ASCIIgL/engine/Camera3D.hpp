@@ -3,6 +3,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+namespace ASCIIgL {
+
 class Camera3D // This is an inbuilt camera 3d class that primarily holds a view mat and a perspective proj mat to make a 3d camera
 {
 private:
@@ -62,3 +64,5 @@ public:
 	void SetYaw(float Pyaw);
 	void SetPitch(float Ppitch);
 };
+
+} // namespace ASCIIgL

@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 
+namespace ASCIIgL {
+
 // A palette entry: RGB color and its console enum hex mapping
 struct PaletteEntry {
     glm::ivec3 rgb;      // RGB in [0,255] range
@@ -34,3 +36,5 @@ public:
     unsigned short GetFgColor(unsigned int idx) const;
     unsigned short GetBgColor(unsigned int idx) const;
 };
+
+} // namespace ASCIIgL

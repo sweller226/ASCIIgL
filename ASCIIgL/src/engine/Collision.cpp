@@ -2,6 +2,8 @@
 
 #include <ASCIIgL/util/MathUtil.hpp>
 
+namespace ASCIIgL {
+
 bool Collision::DoesPointLineCol(glm::vec2 p, glm::vec2 lineStart, glm::vec2 lineEnd)
 {
 
@@ -90,3 +92,5 @@ bool Collision::DoesAABBCol(const glm::vec2& minA, const glm::vec2& maxA, const 
     if (maxA.y < minB.y || minA.y > maxB.y) return false;
     return true;
 }
+
+} // namespace ASCIIgL

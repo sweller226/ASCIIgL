@@ -2,6 +2,8 @@
 
 #include <ASCIIgL/engine/Model.hpp>
 
+namespace ASCIIgL {
+
 class GameObj // this class just represents a general game object, meant to be inherited and extended
 { // just holds a model, and a position size and rotation
 private:
@@ -15,3 +17,5 @@ public:
 	glm::vec3 rotation;
 	glm::vec3 size;
 };
+
+} // namespace ASCIIgL

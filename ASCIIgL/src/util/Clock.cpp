@@ -1,5 +1,7 @@
 #include <ASCIIgL/util/Clock.hpp>
 
+namespace ASCIIgL {
+
 void Clock::StartClock() {
     startTime = std::chrono::system_clock::now();
 }
@@ -17,3 +19,5 @@ float Clock::GetDeltaTime() const {
 void Clock::SetDeltaTime(float dt) {
     _deltaTime = dt;
 }
+
+} // namespace ASCIIgL

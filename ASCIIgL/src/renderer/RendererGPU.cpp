@@ -9,6 +9,8 @@
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/util/MathUtil.hpp>
 
+namespace ASCIIgL {
+
 // =========================================================================
 // Default HLSL Shader Sources
 // =========================================================================
@@ -350,7 +352,7 @@ bool RendererGPU::InitializeBuffers() {
     _vertexBufferCapacity = INITIAL_VERTEX_BUFFER_CAPACITY;
 
     D3D11_BUFFER_DESC vbDesc = {};
-    vbDesc.ByteWidth = sizeof(VERTEX) * _vertexBufferCapacity;
+    vbDesc.ByteWidth = static_cast<UINT>(_vertexBufferCapacity);  // Capacity is already in bytes
     vbDesc.Usage = D3D11_USAGE_DYNAMIC;
     vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
     vbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -538,15 +540,15 @@ static bool CreatePixelShaderFromSource(ID3D11Device* device, const std::string&
 // Buffer Management
 // =========================================================================
 
-bool RendererGPU::UpdateVertexBuffer(const std::vector<VERTEX>& vertices) {
+bool RendererGPU::UpdateVertexBuffer(const std::vector<std::byte>& vertices) {
     if (vertices.empty()) return true;
 
-    // Resize buffer if needed
+    // Resize buffer if needed (capacity is in bytes)
     if (vertices.size() > _vertexBufferCapacity) {
         _vertexBufferCapacity = vertices.size() * BUFFER_GROWTH_FACTOR;
 
         D3D11_BUFFER_DESC vbDesc = {};
-        vbDesc.ByteWidth = sizeof(VERTEX) * _vertexBufferCapacity;
+        vbDesc.ByteWidth = static_cast<UINT>(_vertexBufferCapacity);
         vbDesc.Usage = D3D11_USAGE_DYNAMIC;
         vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
         vbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -567,7 +569,7 @@ bool RendererGPU::UpdateVertexBuffer(const std::vector<VERTEX>& vertices) {
         return false;
     }
 
-    memcpy(mapped.pData, vertices.data(), sizeof(VERTEX) * vertices.size());
+    memcpy(mapped.pData, vertices.data(), vertices.size());
     _context->Unmap(_vertexBuffer.Get(), 0);
 
     return true;
@@ -851,18 +853,20 @@ void RendererGPU::EndColBuffFrame() {
     RendererGPU::GetInst().DownloadFramebuffer();
 }
 
-void RendererGPU::RenderTriangles(const std::vector<VERTEX>& vertices, const Texture* tex, const std::vector<int>& indices) {
+void RendererGPU::RenderTriangles(const std::vector<std::byte>& vertices, const VertFormat& format, const Texture* tex, const std::vector<int>& indices) {
     if (!_initialized || vertices.empty()) return;
 
+    const UINT stride = format.GetStride();
+    const size_t vertexCount = vertices.size() / stride;
+
     bool useIndices = !indices.empty();
-    Logger::Debug("RenderTriangles: Drawing " + std::to_string(vertices.size()) + " vertices" + 
+    Logger::Debug("RenderTriangles: Drawing " + std::to_string(vertexCount) + " vertices" + 
                   (useIndices ? " with " + std::to_string(indices.size()) + " indices" : ""));
 
     // Update vertex buffer
     if (!UpdateVertexBuffer(vertices)) return;
 
     // Bind vertex buffer
-    UINT stride = sizeof(VERTEX);
     UINT offset = 0;
     _context->IASetVertexBuffers(0, 1, _vertexBuffer.GetAddressOf(), &stride, &offset);
 
@@ -877,24 +881,28 @@ void RendererGPU::RenderTriangles(const std::vector<VERTEX>& vertices, const Tex
         _context->IASetIndexBuffer(_indexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
         
         // Draw indexed
-        _context->DrawIndexed(indices.size(), 0, 0);
+        _context->DrawIndexed(static_cast<UINT>(indices.size()), 0, 0);
     } else {
         // Non-indexed rendering
-        _context->Draw(vertices.size(), 0);
+        _context->Draw(static_cast<UINT>(vertexCount), 0);
     }
 }
 
-void RendererGPU::RenderTriangles(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex, const std::vector<std::vector<int>>& indices) {
-    // Flatten all vertex arrays and offset indices appropriately
-    std::vector<VERTEX> flatVertices;
+void RendererGPU::RenderTriangles(const std::vector<std::vector<std::byte>*>& vertices, const VertFormat& format, const Texture* tex, const std::vector<std::vector<int>>& indices) {
+    const UINT stride = format.GetStride();
+    
+    // Flatten all vertex byte arrays and offset indices appropriately
+    std::vector<std::byte> flatVertices;
     std::vector<int> flatIndices;
     
     int vertexOffset = 0;
     
     for (size_t i = 0; i < vertices.size(); ++i) {
         const auto* vertArray = vertices[i];
-        if (vertArray) {
-            // Add vertices
+        if (vertArray && !vertArray->empty()) {
+            const size_t vertexCount = vertArray->size() / stride;
+            
+            // Add vertices (byte data)
             flatVertices.insert(flatVertices.end(), vertArray->begin(), vertArray->end());
             
             // Add indices with offset
@@ -905,12 +913,12 @@ void RendererGPU::RenderTriangles(const std::vector<std::vector<VERTEX>*>& verti
                 }
             }
             
-            // Update offset for next mesh
-            vertexOffset += vertArray->size();
+            // Update offset for next mesh (in vertex count, not bytes)
+            vertexOffset += static_cast<int>(vertexCount);
         }
     }
 
-    RenderTriangles(flatVertices, tex, flatIndices);
+    RenderTriangles(flatVertices, format, tex, flatIndices);
 }
 
 // =========================================================================
@@ -1053,14 +1061,14 @@ RendererGPU::GPUMeshCache* RendererGPU::GetOrCreateMeshCache(const Mesh* mesh) {
     GPUMeshCache* cache = new GPUMeshCache();
     
     // Create vertex buffer (immutable for static meshes)
-    if (!mesh->vertices.empty()) {
+    if (mesh->GetVertexDataSize() > 0) {
         D3D11_BUFFER_DESC vbDesc = {};
-        vbDesc.ByteWidth = sizeof(VERTEX) * mesh->vertices.size();
+        vbDesc.ByteWidth = static_cast<UINT>(mesh->GetVertexDataSize());  // Size in bytes
         vbDesc.Usage = D3D11_USAGE_IMMUTABLE;  // Static - won't change
         vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
         
         D3D11_SUBRESOURCE_DATA vbData = {};
-        vbData.pSysMem = mesh->vertices.data();
+        vbData.pSysMem = mesh->GetVertices().data();
         
         HRESULT hr = _device->CreateBuffer(&vbDesc, &vbData, &cache->vertexBuffer);
         if (FAILED(hr)) {
@@ -1068,18 +1076,18 @@ RendererGPU::GPUMeshCache* RendererGPU::GetOrCreateMeshCache(const Mesh* mesh) {
             delete cache;
             return nullptr;
         }
-        cache->vertexCount = mesh->vertices.size();
+        cache->vertexCount = mesh->GetVertexCount();
     }
     
     // Create index buffer if mesh is indexed
-    if (!mesh->indices.empty()) {
+    if (!mesh->GetIndices().empty()) {
         D3D11_BUFFER_DESC ibDesc = {};
-        ibDesc.ByteWidth = sizeof(int) * mesh->indices.size();
+        ibDesc.ByteWidth = sizeof(int) * mesh->GetIndices().size();
         ibDesc.Usage = D3D11_USAGE_IMMUTABLE;
         ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
         
         D3D11_SUBRESOURCE_DATA ibData = {};
-        ibData.pSysMem = mesh->indices.data();
+        ibData.pSysMem = mesh->GetIndices().data();
         
         HRESULT hr = _device->CreateBuffer(&ibDesc, &ibData, &cache->indexBuffer);
         if (FAILED(hr)) {
@@ -1087,7 +1095,7 @@ RendererGPU::GPUMeshCache* RendererGPU::GetOrCreateMeshCache(const Mesh* mesh) {
             delete cache;
             return nullptr;
         }
-        cache->indexCount = mesh->indices.size();
+        cache->indexCount = mesh->GetIndices().size();
     }
     
     // Store cache in mesh
@@ -1128,32 +1136,35 @@ void RendererGPU::DrawMesh(const Mesh* mesh) {
     GPUMeshCache* cache = GetOrCreateMeshCache(mesh);
     if (!cache || !cache->vertexBuffer) return;
     
-    // Bind cached vertex buffer
-    UINT stride = sizeof(VERTEX);
+    // Bind cached vertex buffer with mesh's format stride
+    UINT stride = mesh->GetVertFormat().GetStride();
     UINT offset = 0;
     _context->IASetVertexBuffers(0, 1, cache->vertexBuffer.GetAddressOf(), &stride, &offset);
     
     // Bind texture
-    BindTexture(mesh->texture);
+    BindTexture(mesh->GetTexture());
     
     // Draw with or without indices
     if (cache->indexBuffer && cache->indexCount > 0) {
         _context->IASetIndexBuffer(cache->indexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
-        _context->DrawIndexed(cache->indexCount, 0, 0);
+        _context->DrawIndexed(static_cast<UINT>(cache->indexCount), 0, 0);
     } else {
-        _context->Draw(cache->vertexCount, 0);
+        _context->Draw(static_cast<UINT>(cache->vertexCount), 0);
     }
 }
 
 void RendererGPU::DrawMesh(const Mesh* mesh, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera) {
+    if (!mesh) return;
+    
     glm::mat4 model = MathUtil::CalcModelMatrix(position, rotation, size);
     glm::mat4 mvp = camera.proj * camera.view * model;
  
     // Set MVP matrix for GPU rendering
     SetMVP(mvp);
     
-    // mesh safety checking done outside
-    RenderTriangles(mesh->vertices, mesh->texture, mesh->indices);
+    // Create byte vector from mesh vertex data
+    std::vector<std::byte> vertexBytes(mesh->GetVertices().data(), mesh->GetVertices().data() + mesh->GetVertexDataSize());
+    RenderTriangles(vertexBytes, mesh->GetVertFormat(), mesh->texture, mesh->GetIndices());
 }
 
 void RendererGPU::DrawModel(const Model& ModelObj, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera) {
@@ -1187,12 +1198,19 @@ void RendererGPU::Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& posi
     // Set MVP matrix for GPU rendering
     SetMVP(mvp);
 
-    // CCW version (counter-clockwise)
-    static const std::vector<VERTEX> CCWverts = {
-        VERTEX({ -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f}), // 0: bottom-left
-        VERTEX({ -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f}), // 1: top-left
-        VERTEX({  1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f}), // 2: top-right
-        VERTEX({  1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f}), // 3: bottom-right
+    // Quad vertices as PosUVW format (XYZW + UVW = 7 floats = 28 bytes per vertex)
+    static const float CCWquadVerts[] = {
+        -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // 0: bottom-left
+        -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f,  // 1: top-left
+         1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f,  // 2: top-right
+         1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f   // 3: bottom-right
+    };
+
+    static const float CWquadVerts[] = {
+        -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // 0: bottom-left
+        -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f,  // 1: top-left
+         1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f,  // 2: top-right
+         1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f   // 3: bottom-right
     };
 
     static const std::vector<int> CCWindices = {
@@ -1200,25 +1218,17 @@ void RendererGPU::Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& posi
         0, 2, 3   // Triangle 2: bottom-left → top-right → bottom-right
     };
 
-    // CW version (clockwise)
-    static const std::vector<VERTEX> CWverts = {
-        VERTEX({ -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f}), // 0: bottom-left
-        VERTEX({ -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f}), // 1: top-left
-        VERTEX({  1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f}), // 2: top-right
-        VERTEX({  1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f}), // 3: bottom-right
-    };
-
     static const std::vector<int> CWindices = {
         0, 2, 1,  // Triangle 1: bottom-left → top-right → top-left
         0, 3, 2   // Triangle 2: bottom-left → bottom-right → top-right
     };
 
-    if (CCW) {
-        RenderTriangles(CCWverts, &tex, CCWindices);
-    }
-    else {
-        RenderTriangles(CWverts, &tex, CWindices);
-    }
+    // Convert to byte vector
+    const float* verts = CCW ? CCWquadVerts : CWquadVerts;
+    const auto* vertBytes = reinterpret_cast<const std::byte*>(verts);
+    std::vector<std::byte> quadBytes(vertBytes, vertBytes + sizeof(CCWquadVerts));
+
+    RenderTriangles(quadBytes, VertFormats::PosUVW(), &tex, CCW ? CCWindices : CWindices);
 }
 
 void RendererGPU::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer, const bool CCW)
@@ -1236,12 +1246,19 @@ void RendererGPU::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& posit
     // Set MVP matrix for GPU rendering
     SetMVP(mvp);
 
-    // CCW version (counter-clockwise)
-    static const std::vector<VERTEX> CCWverts = {
-        VERTEX({ -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f}), // 0: bottom-left
-        VERTEX({ -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f}), // 1: top-left
-        VERTEX({  1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f}), // 2: top-right
-        VERTEX({  1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f}), // 3: bottom-right
+    // Quad vertices as PosUVW format (XYZW + UVW = 7 floats = 28 bytes per vertex)
+    static const float CCWquadVerts[] = {
+        -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // 0: bottom-left
+        -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f,  // 1: top-left
+         1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f,  // 2: top-right
+         1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f   // 3: bottom-right
+    };
+
+    static const float CWquadVerts[] = {
+        -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // 0: bottom-left
+        -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f,  // 1: top-left
+         1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f,  // 2: top-right
+         1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f   // 3: bottom-right
     };
 
     static const std::vector<int> CCWindices = {
@@ -1249,23 +1266,16 @@ void RendererGPU::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& posit
         0, 2, 3   // Triangle 2: bottom-left → top-right → bottom-right
     };
 
-    // CW version (clockwise)
-    static const std::vector<VERTEX> CWverts = {
-        VERTEX({ -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f}), // 0: bottom-left
-        VERTEX({ -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f}), // 1: top-left
-        VERTEX({  1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f}), // 2: top-right
-        VERTEX({  1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f}), // 3: bottom-right
-    };
-
     static const std::vector<int> CWindices = {
         0, 2, 1,  // Triangle 1: bottom-left → top-right → top-left
         0, 3, 2   // Triangle 2: bottom-left → bottom-right → top-right
     };
 
-    if (CCW) {
-        RenderTriangles(CCWverts, &tex, CCWindices);
-    }
-    else {
-        RenderTriangles(CWverts, &tex, CWindices);
-    }
+    // Convert to byte vector
+    const float* verts = CCW ? CCWquadVerts : CWquadVerts;
+    const auto* vertBytes = reinterpret_cast<const std::byte*>(verts);
+    std::vector<std::byte> quadBytes(vertBytes, vertBytes + sizeof(CCWquadVerts));
+
+    RenderTriangles(quadBytes, VertFormats::PosUVW(), &tex, CCW ? CCWindices : CWindices);
 }
+} // namespace ASCIIgL

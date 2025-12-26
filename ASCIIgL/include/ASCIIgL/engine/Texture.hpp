@@ -7,6 +7,8 @@
 #include <string>
 #include <memory>
 
+namespace ASCIIgL {
+
 class Texture // this class loads a texture from a path and holds its data in a 1d buffer
 {
 public:
@@ -42,3 +44,5 @@ private:
 	class Impl;
 	std::unique_ptr<Impl> pImpl;
 };
+
+} // namespace ASCIIgL

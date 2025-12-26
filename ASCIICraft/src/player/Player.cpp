@@ -34,7 +34,7 @@ Player::Player(const glm::vec3& startPosition, GameMode mode)
     , jumpCooldown(0.0f)
     , lastOnGround(0.0f) {
     
-    Logger::Info("Player created at position (" + 
+    ASCIIgL::Logger::Info("Player created at position (" + 
                  std::to_string(position.x) + ", " + 
                  std::to_string(position.y) + ", " + 
                  std::to_string(position.z) + ")");
@@ -63,12 +63,12 @@ void Player::Update(World* world) {
     UpdatePhysics(world);
     
     // Update timers
-    jumpCooldown = std::max(0.0f, jumpCooldown - FPSClock::GetInst().GetDeltaTime());
+    jumpCooldown = std::max(0.0f, jumpCooldown - ASCIIgL::FPSClock::GetInst().GetDeltaTime());
     
     if (onGround) {
         lastOnGround = 0.0f;
     } else {
-        lastOnGround += FPSClock::GetInst().GetDeltaTime();
+        lastOnGround += ASCIIgL::FPSClock::GetInst().GetDeltaTime();
     }
 
     // Reset jump pressed flag
@@ -111,7 +111,7 @@ void Player::UpdateCamera() {
     // Smoothly interpolate FOV towards target (smooth transition)
     float currentFOV = camera.GetFov();
     float fovTransitionSpeed = 8.0f; // How fast FOV changes (higher = faster)
-    float deltaTime = FPSClock::GetInst().GetDeltaTime();
+    float deltaTime = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
     
     // Lerp FOV: currentFOV + (targetFOV - currentFOV) * speed * deltaTime
     float newFOV = currentFOV + (targetFOV - currentFOV) * fovTransitionSpeed * deltaTime;
@@ -124,7 +124,7 @@ void Player::Move(const glm::vec3& direction) {
     // Get current movement speed based on state
     float currentSpeed = walkSpeed;
 
-    Logger::Info("Player Move: direction=(" + 
+    ASCIIgL::Logger::Info("Player Move: direction=(" + 
                   std::to_string(direction.x) + ", " + 
                   std::to_string(direction.y) + ", " + 
                   std::to_string(direction.z) + "), state=" + 
@@ -149,17 +149,17 @@ void Player::Move(const glm::vec3& direction) {
     
     if (flying || gameMode == GameMode::Spectator) {
         // Free flight movement (spectator noclip) - direct position change
-        glm::vec3 movement = direction * currentSpeed * FPSClock::GetInst().GetDeltaTime();
+        glm::vec3 movement = direction * currentSpeed * ASCIIgL::FPSClock::GetInst().GetDeltaTime();
         position += movement;
-        velocity = movement / FPSClock::GetInst().GetDeltaTime();
-        Logger::Info("Spectator mode: moved by (" + std::to_string(movement.x) + ", " + std::to_string(movement.y) + ", " + std::to_string(movement.z) + ")");
+        velocity = movement / ASCIIgL::FPSClock::GetInst().GetDeltaTime();
+        ASCIIgL::Logger::Info("Spectator mode: moved by (" + std::to_string(movement.x) + ", " + std::to_string(movement.y) + ", " + std::to_string(movement.z) + ")");
     } else {
         // Ground-based movement for survival - set horizontal velocity
         // Vertical velocity is controlled by gravity and jumping
         // Note: direction should already be normalized by ProcessMovementInput
         velocity.x = direction.x * currentSpeed;
         velocity.z = direction.z * currentSpeed;
-        Logger::Info("Survival mode: velocity set to (" + std::to_string(velocity.x) + ", " + std::to_string(velocity.y) + ", " + std::to_string(velocity.z) + ")");
+        ASCIIgL::Logger::Info("Survival mode: velocity set to (" + std::to_string(velocity.x) + ", " + std::to_string(velocity.y) + ", " + std::to_string(velocity.z) + ")");
     }
 
     RecalculateCameraPosition();
@@ -189,7 +189,7 @@ void Player::SetGameMode(GameMode mode) {
             break;
     }
     
-    Logger::Info("Player game mode changed to " + std::to_string(static_cast<int>(mode)));
+    ASCIIgL::Logger::Info("Player game mode changed to " + std::to_string(static_cast<int>(mode)));
 }
 
 void Player::Respawn(const glm::vec3& spawnPosition) {
@@ -209,7 +209,7 @@ void Player::Respawn(const glm::vec3& spawnPosition) {
     blockBreakProgress = 0.0f;
     isBreakingBlock = false;
     
-    Logger::Info("Player respawned at (" + 
+    ASCIIgL::Logger::Info("Player respawned at (" + 
                  std::to_string(spawnPosition.x) + ", " + 
                  std::to_string(spawnPosition.y) + ", " + 
                  std::to_string(spawnPosition.z) + ")");
@@ -222,7 +222,7 @@ void Player::ApplyGravity() {
     }
     
     // Apply gravity acceleration
-    velocity.y += gravity * FPSClock::GetInst().GetDeltaTime();
+    velocity.y += gravity * ASCIIgL::FPSClock::GetInst().GetDeltaTime();
     
     // Terminal velocity cap (prevents falling through blocks at high speeds)
     const float TERMINAL_VELOCITY = -78.4f; // Minecraft's terminal velocity
@@ -232,7 +232,7 @@ void Player::ApplyGravity() {
 void Player::HandleCollisions(World* world) {
     if (!world) return;  // Null check
     
-    float deltaTime = FPSClock::GetInst().GetDeltaTime();
+    float deltaTime = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
     glm::vec3 movement = velocity * deltaTime;
     
     // Store original velocity direction for collision detection
@@ -374,7 +374,7 @@ float Player::SweepAxis(const glm::vec3& testPosition, World* world, int axis) c
 }
 
 void Player::Jump() {
-    Logger::Info("Jump() called - onGround=" + std::to_string(onGround) + 
+    ASCIIgL::Logger::Info("Jump() called - onGround=" + std::to_string(onGround) + 
                  ", jumpCooldown=" + std::to_string(jumpCooldown) + 
                  ", flying=" + std::to_string(flying));
     
@@ -388,9 +388,9 @@ void Player::Jump() {
         onGround = false;
         jumpCooldown = JUMP_COOLDOWN_MAX; 
         
-        Logger::Info("Player jumped! velocity.y=" + std::to_string(jumpVelocity));
+        ASCIIgL::Logger::Info("Player jumped! velocity.y=" + std::to_string(jumpVelocity));
     } else {
-        Logger::Info("Jump FAILED - conditions not met");
+        ASCIIgL::Logger::Info("Jump FAILED - conditions not met");
     }
 }
 
@@ -477,16 +477,16 @@ void Player::ProcessCameraInput(const InputManager& input) {
     
     // Arrow keys for camera rotation
     if (input.IsActionHeld("camera_left")) {
-        yawDelta -= input.GetMouseSensitivity() * FPSClock::GetInst().GetDeltaTime();
+        yawDelta -= input.GetMouseSensitivity() * ASCIIgL::FPSClock::GetInst().GetDeltaTime();
     }
     if (input.IsActionHeld("camera_right")) {
-        yawDelta += input.GetMouseSensitivity() * FPSClock::GetInst().GetDeltaTime();
+        yawDelta += input.GetMouseSensitivity() * ASCIIgL::FPSClock::GetInst().GetDeltaTime();
     }
     if (input.IsActionHeld("camera_up")) {
-        pitchDelta += input.GetMouseSensitivity() * FPSClock::GetInst().GetDeltaTime();
+        pitchDelta += input.GetMouseSensitivity() * ASCIIgL::FPSClock::GetInst().GetDeltaTime();
     }
     if (input.IsActionHeld("camera_down")) {
-        pitchDelta -= input.GetMouseSensitivity() * FPSClock::GetInst().GetDeltaTime();
+        pitchDelta -= input.GetMouseSensitivity() * ASCIIgL::FPSClock::GetInst().GetDeltaTime();
     }
     
     // Update camera direction

@@ -11,8 +11,8 @@ public:
     void Update(float deltaTime);
     void Render();
 
-    const Camera2D& GetCamera() const { return guiCamera; }
+    const ASCIIgL::Camera2D& GetCamera() const { return guiCamera; }
 
 private:
-    Camera2D guiCamera;
+    ASCIIgL::Camera2D guiCamera;
 };

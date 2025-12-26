@@ -21,6 +21,8 @@
 // vendor
 #include <nlohmann/json.hpp>
 
+namespace ASCIIgL {
+
 // Static member definitions for platform-specific implementations
 #ifdef _WIN32
 
@@ -653,3 +655,5 @@ void ScreenWinImpl::EnableVTMode() {
 }
 
 #endif
+
+} // namespace ASCIIgL

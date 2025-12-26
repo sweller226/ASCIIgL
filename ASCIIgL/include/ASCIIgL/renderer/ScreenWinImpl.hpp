@@ -5,8 +5,6 @@
 #include <ASCIIgL/renderer/Palette.hpp>
 #include <glm/glm.hpp>
 
-class Screen; // Forward declaration
-
 #ifdef _WIN32
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
@@ -15,6 +13,13 @@ class Screen; // Forward declaration
         #define NOMINMAX
     #endif
     #include <windows.h>
+#endif
+
+namespace ASCIIgL {
+
+class Screen; // Forward declaration
+
+#ifdef _WIN32
 
 class ScreenWinImpl {
 private:
@@ -58,3 +63,5 @@ public:
 };
 
 #endif
+
+} // namespace ASCIIgL

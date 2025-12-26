@@ -4,6 +4,8 @@
 #include <array>
 #include <string>
 #include <unordered_map>
+#include <cstddef>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -25,7 +27,9 @@
 #include <ASCIIgL/renderer/Screen.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
 #include <ASCIIgL/renderer/TileManager.hpp>
-#include <ASCIIgL/renderer/Vertex.hpp>
+#include <ASCIIgL/renderer/VertFormat.hpp>
+
+namespace ASCIIgL {
 
 // Forward declaration
 class Renderer;
@@ -121,7 +125,6 @@ private:
     // =========================================================================
     // Single sampler with linear filtering (no anisotropic - MSAA handles AA)
     ComPtr<ID3D11SamplerState> _samplerLinear;
-    
     ComPtr<ID3D11ShaderResourceView> _currentTextureSRV;
     
     // Texture cache: Maps Texture* -> ShaderResourceView
@@ -163,7 +166,7 @@ private:
     // =========================================================================
     // Buffer Management
     // =========================================================================
-    bool UpdateVertexBuffer(const std::vector<VERTEX>& vertices);
+    bool UpdateVertexBuffer(const std::vector<std::byte>& vertices);
     bool UpdateIndexBuffer(const std::vector<int>& indices);
     bool UpdateConstantBuffer(const ConstantBuffer& cb);
 
@@ -213,8 +216,8 @@ public:
     // =========================================================================
     // Frame Management
     // =========================================================================
-    void RenderTriangles(const std::vector<VERTEX>& vertices, const Texture* tex, const std::vector<int>& indices = {});
-    void RenderTriangles(const std::vector<std::vector<VERTEX>*>& vertices, const Texture* tex, const std::vector<std::vector<int>>& indices = {});
+    void RenderTriangles(const std::vector<std::byte>& vertices, const VertFormat& format, const Texture* tex, const std::vector<int>& indices = {});
+    void RenderTriangles(const std::vector<std::vector<std::byte>*>& vertices, const VertFormat& format, const Texture* tex, const std::vector<std::vector<int>>& indices = {});
     void EndColBuffFrame();  // Presents debug swap chain for RenderDoc
     void DownloadFramebuffer();
 
@@ -223,3 +226,5 @@ public:
     // =========================================================================
     void SetMVP(const glm::mat4& mvp);
 };
+
+} // namespace ASCIIgL

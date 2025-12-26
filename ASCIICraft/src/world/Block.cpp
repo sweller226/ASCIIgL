@@ -3,7 +3,7 @@
 #include <ASCIIgL/engine/Texture.hpp>
 
 // Static texture atlas definition
-Texture* Block::textureAtlas = nullptr;
+ASCIIgL::Texture* Block::textureAtlas = nullptr;
 
 // Get UV coordinates for the block's texture
 glm::vec4 Block::GetTextureUV(int face) const {
@@ -11,11 +11,11 @@ glm::vec4 Block::GetTextureUV(int face) const {
 }
 
 // Static texture atlas management
-void Block::SetTextureAtlas(Texture* atlas) {
+void Block::SetTextureAtlas(ASCIIgL::Texture* atlas) {
     textureAtlas = atlas;
 }
 
-Texture* Block::GetTextureAtlas() {
+ASCIIgL::Texture* Block::GetTextureAtlas() {
     return textureAtlas;
 }
 
@@ -31,7 +31,7 @@ namespace BlockTextures {
             return glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);  // Fallback
         }
         
-        Texture* atlas = Block::GetTextureAtlas();
+        ASCIIgL::Texture* atlas = Block::GetTextureAtlas();
         const int atlasWidth = atlas->GetWidth();
         const int atlasHeight = atlas->GetHeight();
         

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+namespace ASCIIgL {
+
 glm::vec3 MathUtil::CalcNormal(const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& p3, const bool out)
 {
 	glm::vec3 normal;
@@ -52,3 +54,5 @@ glm::mat4 MathUtil::CalcModelMatrix(const glm::vec3& position, const float rotat
 
 	return model;
 }
+
+} // namespace ASCIIgL
