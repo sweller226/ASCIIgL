@@ -173,7 +173,7 @@ const char* GetSemanticName(VertexElementSemantic semantic) {
 
 namespace VertFormats {
 
-const VertFormat& PosUVW() {
+const VertFormat& PosWUVInvW() {
     static VertFormat format = VertFormat::Builder()
         .AddFloat4(VertexElementSemantic::Position)    // XYZW (16 bytes)
         .AddFloat3(VertexElementSemantic::TexCoord0)   // UVW (12 bytes)

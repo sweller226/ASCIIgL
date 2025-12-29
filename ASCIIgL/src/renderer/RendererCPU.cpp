@@ -53,7 +53,7 @@ void RendererCPU::Initialize() {
     _initialized = true;
 }
 
-VertStructs::PosUVW RendererCPU::HomogenousPlaneIntersect(const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert1, const int component, const bool Near) {
+VertStructs::PosWUVInvW RendererCPU::HomogenousPlaneIntersect(const VertStructs::PosWUVInvW& vert2, const VertStructs::PosWUVInvW& vert1, const int component, const bool Near) {
     // Compute difference directly
     float i0 = vert1.data[component];
     float w0 = vert1.data[3];
@@ -78,7 +78,7 @@ VertStructs::PosUVW RendererCPU::HomogenousPlaneIntersect(const VertStructs::Pos
     else
         t = (i0 - w0) / denom;
 
-    VertStructs::PosUVW newVert;
+    VertStructs::PosWUVInvW newVert;
     for (int i = 0; i < 7; ++i)
         newVert.data[i] = glm::mix(vert1.data[i], vert2.data[i], t);
 
@@ -127,7 +127,7 @@ void RendererCPU::Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& posi
 
     _vertex_shader.SetMatrices(model, camera.view, camera.proj);
 
-    static const VertStructs::PosUVW vertexData[] = {
+    static const VertStructs::PosWUVInvW vertexData[] = {
         {{ -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f}}, // bottom-left
         {{ -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f}}, // top-left
         {{  1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f}}, // top-right
@@ -141,7 +141,7 @@ void RendererCPU::Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& posi
         reinterpret_cast<const std::byte*>(vertexData) + sizeof(vertexData)
     );
 
-    RenderTriangles(vertices, VertFormats::PosUVW(), &tex);
+    RenderTriangles(vertices, VertFormats::PosWUVInvW(), &tex);
 }
 
 void RendererCPU::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer)
@@ -160,7 +160,7 @@ void RendererCPU::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& posit
     _vertex_shader.SetProj(camera.proj);
     _vertex_shader.UpdateMVP();
 
-    static const VertStructs::PosUVW vertexData[] = {
+    static const VertStructs::PosWUVInvW vertexData[] = {
         {{ -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f}}, // bottom-left
         {{ -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f}}, // top-left
         {{  1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f}}, // top-right
@@ -174,7 +174,7 @@ void RendererCPU::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& posit
         reinterpret_cast<const std::byte*>(vertexData) + sizeof(vertexData)
     );
 
-    RenderTriangles(vertices, VertFormats::PosUVW(), &tex);
+    RenderTriangles(vertices, VertFormats::PosWUVInvW(), &tex);
 }
 
 void RendererCPU::RenderPipeline(const Texture* tex = nullptr) {
@@ -250,17 +250,17 @@ void RendererCPU::RenderPipeline(const Texture* tex = nullptr) {
 }
 
 void RendererCPU::RenderTriangles(const std::vector<std::vector<std::byte>*>& vertices, const VertFormat& format, const Texture* tex) {
-    // CPU renderer requires PosUVW format
-    if (format != VertFormats::PosUVW()) {
-        Logger::Error("RenderTrianglesCPU: Vertices must use PosUVW vertex format!");
+    // CPU renderer requires PosWUVInvW format
+    if (format != VertFormats::PosWUVInvW()) {
+        Logger::Error("RenderTrianglesCPU: Vertices must use PosWUVInvW vertex format!");
         return;
     }
 
-    const uint32_t stride = format.GetStride(); // 28 bytes for PosUVW
+    const uint32_t stride = format.GetStride(); // 28 bytes for PosWUVInvW
     
     _vertexBuffer.clear();
 
-    // Interpret byte data as VertStructs::PosUVW and copy into buffer
+    // Interpret byte data as VertStructs::PosWUVInvW and copy into buffer
     for (const auto* vvec : vertices) {
         if (!vvec || vvec->empty()) {
             if (!vvec) {
@@ -269,7 +269,7 @@ void RendererCPU::RenderTriangles(const std::vector<std::vector<std::byte>*>& ve
             continue;
         }
         
-        const VertStructs::PosUVW* vertexData = reinterpret_cast<const VertStructs::PosUVW*>(vvec->data());
+        const VertStructs::PosWUVInvW* vertexData = reinterpret_cast<const VertStructs::PosWUVInvW*>(vvec->data());
         const size_t vertexCount = vvec->size() / stride;
         
         _vertexBuffer.insert(_vertexBuffer.end(), vertexData, vertexData + vertexCount);
@@ -290,13 +290,13 @@ void RendererCPU::RenderTriangles(const std::vector<std::vector<std::byte>*>& ve
 }
 
 void RendererCPU::RenderTriangles(const std::vector<std::byte>& vertices, const VertFormat& format, const Texture* tex) {
-    // CPU renderer requires PosUVW format
-    if (format != VertFormats::PosUVW()) {
-        Logger::Error("RenderTrianglesCPU: Vertices must use PosUVW vertex format!");
+    // CPU renderer requires PosWUVInvW format
+    if (format != VertFormats::PosWUVInvW()) {
+        Logger::Error("RenderTrianglesCPU: Vertices must use PosWUVInvW vertex format!");
         return;
     }
 
-    const uint32_t stride = format.GetStride(); // 28 bytes for PosUVW
+    const uint32_t stride = format.GetStride(); // 28 bytes for PosWUVInvW
     const size_t vertexCount = vertices.size() / stride;
 
     // basic validation
@@ -311,14 +311,14 @@ void RendererCPU::RenderTriangles(const std::vector<std::byte>& vertices, const 
     
     _triangles_inputted += static_cast<unsigned int>(vertexCount / 3);
     
-    // Interpret byte data as VertStructs::PosUVW and copy into buffer
+    // Interpret byte data as VertStructs::PosWUVInvW and copy into buffer
     {
         PROFILE_SCOPE("RenderTriangles.VertexBufferSetup");
         if (_vertexBuffer.capacity() < vertexCount) {
             _vertexBuffer.reserve(static_cast<size_t>(vertexCount * 1.5f));
         }
         
-        const VertStructs::PosUVW* vertexData = reinterpret_cast<const VertStructs::PosUVW*>(vertices.data());
+        const VertStructs::PosWUVInvW* vertexData = reinterpret_cast<const VertStructs::PosWUVInvW*>(vertices.data());
         _vertexBuffer.assign(vertexData, vertexData + vertexCount);
     }
 
@@ -363,7 +363,7 @@ const std::vector<std::pair<float, float>>& RendererCPU::GetSubpixelOffsets() {
     return _subpixel_offsets;
 }
 
-void RendererCPU::BackFaceCullHelper(std::vector<VertStructs::PosUVW>& vertices) {
+void RendererCPU::BackFaceCullHelper(std::vector<VertStructs::PosWUVInvW>& vertices) {
     if (vertices.size() < 3) return;
 
     const size_t triangleCount = vertices.size() / 3;
@@ -426,7 +426,7 @@ void RendererCPU::BackFaceCullHelper(std::vector<VertStructs::PosUVW>& vertices)
 // TILE-BASED RENDERING FUNCTIONS
 // =============================================================================
 
-void RendererCPU::DrawTiles(const std::vector<VertStructs::PosUVW>& raster_triangles, const Texture* tex) {
+void RendererCPU::DrawTiles(const std::vector<VertStructs::PosWUVInvW>& raster_triangles, const Texture* tex) {
     auto& tile_manager = TileManager::GetInst();
     tile_manager.UpdateActiveTiles();
     
@@ -456,7 +456,7 @@ void RendererCPU::DrawTiles(const std::vector<VertStructs::PosUVW>& raster_trian
     }
 }
 
-void RendererCPU::DrawTileTextured(const Tile& tile, const std::vector<VertStructs::PosUVW>& raster_triangles, const Texture* tex) {
+void RendererCPU::DrawTileTextured(const Tile& tile, const std::vector<VertStructs::PosWUVInvW>& raster_triangles, const Texture* tex) {
     for (int triIndex : tile.tri_indices_encapsulated) {
         DrawTriangleTextured(raster_triangles[triIndex], raster_triangles[triIndex + 1], raster_triangles[triIndex + 2], tex);
     }
@@ -466,7 +466,7 @@ void RendererCPU::DrawTileTextured(const Tile& tile, const std::vector<VertStruc
     }
 }
 
-void RendererCPU::DrawTileWireframe(const Tile& tile, const std::vector<VertStructs::PosUVW>& raster_triangles) {
+void RendererCPU::DrawTileWireframe(const Tile& tile, const std::vector<VertStructs::PosWUVInvW>& raster_triangles) {
     // Draw wireframe for each triangle in the tile
     for (int triIndex : tile.tri_indices_encapsulated) {
         _renderer->DrawTriangleWireframeColBuff(raster_triangles[triIndex].GetXY(), raster_triangles[triIndex + 1].GetXY(), raster_triangles[triIndex + 2].GetXY(), glm::ivec3(15));
@@ -495,7 +495,7 @@ void RendererCPU::DrawTriangleWireframeColBuffPartial(const Tile& tile, const gl
                     minX, maxX, minY, maxY, col);
 }
 
-void RendererCPU::DrawTriangleTexturedPartial(const Tile& tile, const VertStructs::PosUVW& vert1, const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert3, const Texture* tex) {
+void RendererCPU::DrawTriangleTexturedPartial(const Tile& tile, const VertStructs::PosWUVInvW& vert1, const VertStructs::PosWUVInvW& vert2, const VertStructs::PosWUVInvW& vert3, const Texture* tex) {
     if (!tex) { Logger::Error("  Texture is nullptr!"); return; }
     const int texWidth = tex->GetWidth(), texHeight = tex->GetHeight();
     if (texWidth == 0 || texHeight == 0) { Logger::Error("  Invalid texture dimensions!"); return; }
@@ -525,7 +525,7 @@ void RendererCPU::DrawTriangleTexturedPartial(const Tile& tile, const VertStruct
     DrawTriangleTexturedImpl(vert1, vert2, vert3, tex, minX, maxX, minY, maxY);
 }
 
-void RendererCPU::DrawTriangleTexturedImpl(const VertStructs::PosUVW& vert1, const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert3, const Texture* tex, int minX, int maxX, int minY, int maxY) {
+void RendererCPU::DrawTriangleTexturedImpl(const VertStructs::PosWUVInvW& vert1, const VertStructs::PosWUVInvW& vert2, const VertStructs::PosWUVInvW& vert3, const Texture* tex, int minX, int maxX, int minY, int maxY) {
     const int texWidth = tex->GetWidth(), texHeight = tex->GetHeight();
     const int screenWidth = Screen::GetInst().GetWidth();
     const int screenHeight = Screen::GetInst().GetHeight();
@@ -657,7 +657,7 @@ void RendererCPU::DrawTriangleTexturedImpl(const VertStructs::PosUVW& vert1, con
     }
 }
 
-void RendererCPU::DrawTriangleTextured(const VertStructs::PosUVW& v1, const VertStructs::PosUVW& v2, const VertStructs::PosUVW& v3, const Texture* tex) {
+void RendererCPU::DrawTriangleTextured(const VertStructs::PosWUVInvW& v1, const VertStructs::PosWUVInvW& v2, const VertStructs::PosWUVInvW& v3, const Texture* tex) {
     if (!tex) { Logger::Error("  Texture is nullptr!"); return; }
     const int texWidth = tex->GetWidth(), texHeight = tex->GetHeight();
     if (texWidth == 0 || texHeight == 0) { Logger::Error("  Invalid texture dimensions!"); return; }
@@ -677,7 +677,7 @@ void RendererCPU::DrawTriangleTextured(const VertStructs::PosUVW& v1, const Vert
     DrawTriangleTexturedImpl(v1, v2, v3, tex, minX, maxX, minY, maxY);
 }
 
-bool RendererCPU::BackFaceCull(const VertStructs::PosUVW& vert1, const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert3, bool CCW) { // determines if the triangle is in the correct winding order or not
+bool RendererCPU::BackFaceCull(const VertStructs::PosWUVInvW& vert1, const VertStructs::PosWUVInvW& vert2, const VertStructs::PosWUVInvW& vert3, bool CCW) { // determines if the triangle is in the correct winding order or not
 
 	// it calculates it based on glm cross because if the perpendicular z is less than 0, the triangle is pointing away
 	glm::vec3 U = vert2.GetXYZ() - vert1.GetXYZ();
@@ -697,7 +697,7 @@ bool RendererCPU::BackFaceCull(const VertStructs::PosUVW& vert1, const VertStruc
 // CLIPPING FUNCTIONS
 // =============================================================================
 
-void RendererCPU::ClippingHelper(std::vector<VertStructs::PosUVW>& vertices, std::vector<VertStructs::PosUVW>& clipped) {
+void RendererCPU::ClippingHelper(std::vector<VertStructs::PosWUVInvW>& vertices, std::vector<VertStructs::PosWUVInvW>& clipped) {
     if (vertices.size() < 3) return;
 
     // Adaptive clipping: use multithreading for large meshes, single-threaded for small meshes
@@ -710,7 +710,7 @@ void RendererCPU::ClippingHelper(std::vector<VertStructs::PosUVW>& vertices, std
     }
 }
 
-void RendererCPU::ClippingHelperThreaded(std::vector<VertStructs::PosUVW>& vertices, std::vector<VertStructs::PosUVW>& clipped) {
+void RendererCPU::ClippingHelperThreaded(std::vector<VertStructs::PosWUVInvW>& vertices, std::vector<VertStructs::PosWUVInvW>& clipped) {
     constexpr int NUM_PLANES = 6;
     static const int components[NUM_PLANES] = {2, 2, 1, 1, 0, 0};
     static const bool nears[NUM_PLANES]     = {true, false, true, false, true, false};
@@ -723,16 +723,16 @@ void RendererCPU::ClippingHelperThreaded(std::vector<VertStructs::PosUVW>& verti
     const size_t numThreads = tbb::this_task_arena::max_concurrency();
     const size_t batchSize  = (triangleCount + numThreads - 1) / numThreads;
 
-    std::vector<std::vector<VertStructs::PosUVW>> threadResults(numThreads);
+    std::vector<std::vector<VertStructs::PosWUVInvW>> threadResults(numThreads);
 
     // --- Parallel work using TBB ---
     tbb::parallel_for(size_t(0), numThreads, [&](size_t t) {
-        std::vector<VertStructs::PosUVW>& out = threadResults[t];
+        std::vector<VertStructs::PosWUVInvW>& out = threadResults[t];
         out.clear();
         out.reserve(batchSize * 3); // heuristic: ~3 verts per tri
 
-        std::vector<VertStructs::PosUVW> tri;
-        std::vector<VertStructs::PosUVW> temp;
+        std::vector<VertStructs::PosWUVInvW> tri;
+        std::vector<VertStructs::PosWUVInvW> temp;
         tri.reserve(12);
         temp.reserve(12);
 
@@ -772,7 +772,7 @@ void RendererCPU::ClippingHelperThreaded(std::vector<VertStructs::PosUVW>& verti
     }
 }
 
-void RendererCPU::ClippingHelperSingleThreaded(std::vector<VertStructs::PosUVW>& vertices, std::vector<VertStructs::PosUVW>& clipped) {
+void RendererCPU::ClippingHelperSingleThreaded(std::vector<VertStructs::PosWUVInvW>& vertices, std::vector<VertStructs::PosWUVInvW>& clipped) {
     constexpr int NUM_PLANES = 6;
     static const int components[NUM_PLANES] = {2, 2, 1, 1, 0, 0};
     static const bool nears[NUM_PLANES]     = {true, false, true, false, true, false};
@@ -781,8 +781,8 @@ void RendererCPU::ClippingHelperSingleThreaded(std::vector<VertStructs::PosUVW>&
     const size_t triangleCount = vertices.size() / 3;
     if (triangleCount == 0) return;
 
-    std::vector<VertStructs::PosUVW> tri;
-    std::vector<VertStructs::PosUVW> temp;
+    std::vector<VertStructs::PosWUVInvW> tri;
+    std::vector<VertStructs::PosWUVInvW> temp;
     tri.reserve(12);
     temp.reserve(12);
 
@@ -812,7 +812,7 @@ void RendererCPU::ClippingHelperSingleThreaded(std::vector<VertStructs::PosUVW>&
     }
 }
 
-void RendererCPU::ClipTriAgainstPlane(const VertStructs::PosUVW& vert1, const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert3, std::vector<VertStructs::PosUVW>& output, 
+void RendererCPU::ClipTriAgainstPlane(const VertStructs::PosWUVInvW& vert1, const VertStructs::PosWUVInvW& vert2, const VertStructs::PosWUVInvW& vert3, std::vector<VertStructs::PosWUVInvW>& output, 
                                 const int component, const bool Near) {
 
     const float w0 = vert1.W();
@@ -836,7 +836,7 @@ void RendererCPU::ClipTriAgainstPlane(const VertStructs::PosUVW& vert1, const Ve
     }
     // Two vertices inside - create 2 triangles (quad split)
     else if (insideCount == 2) {
-        VertStructs::PosUVW insideVert0, insideVert1, outsideVert;
+        VertStructs::PosWUVInvW insideVert0, insideVert1, outsideVert;
 
         if (!in0) {
             outsideVert = vert1; insideVert0 = vert2; insideVert1 = vert3;
@@ -846,8 +846,8 @@ void RendererCPU::ClipTriAgainstPlane(const VertStructs::PosUVW& vert1, const Ve
             outsideVert = vert3; insideVert0 = vert1; insideVert1 = vert2;
         }
 
-        const VertStructs::PosUVW newVert0 = HomogenousPlaneIntersect(insideVert0, outsideVert, component, Near);
-        const VertStructs::PosUVW newVert1 = HomogenousPlaneIntersect(insideVert1, outsideVert, component, Near);
+        const VertStructs::PosWUVInvW newVert0 = HomogenousPlaneIntersect(insideVert0, outsideVert, component, Near);
+        const VertStructs::PosWUVInvW newVert1 = HomogenousPlaneIntersect(insideVert1, outsideVert, component, Near);
 
         // Triangle 1
         output.push_back(insideVert0);
@@ -861,7 +861,7 @@ void RendererCPU::ClipTriAgainstPlane(const VertStructs::PosUVW& vert1, const Ve
     }
     // One vertex inside - create 1 smaller triangle
     else if (insideCount == 1) {
-        VertStructs::PosUVW insideVert, outsideVert0, outsideVert1;
+        VertStructs::PosWUVInvW insideVert, outsideVert0, outsideVert1;
 
         if (in0) {
             insideVert = vert1; outsideVert0 = vert2; outsideVert1 = vert3;
@@ -871,8 +871,8 @@ void RendererCPU::ClipTriAgainstPlane(const VertStructs::PosUVW& vert1, const Ve
             insideVert = vert3; outsideVert0 = vert1; outsideVert1 = vert2;
         }
 
-        const VertStructs::PosUVW newVert0 = HomogenousPlaneIntersect(insideVert, outsideVert0, component, Near);
-        const VertStructs::PosUVW newVert1 = HomogenousPlaneIntersect(insideVert, outsideVert1, component, Near);
+        const VertStructs::PosWUVInvW newVert0 = HomogenousPlaneIntersect(insideVert, outsideVert0, component, Near);
+        const VertStructs::PosWUVInvW newVert1 = HomogenousPlaneIntersect(insideVert, outsideVert1, component, Near);
 
         output.push_back(insideVert);
         output.push_back(newVert0);
@@ -901,7 +901,7 @@ void RendererCPU::PlotColorBlend(int x, int y, const glm::ivec4& color, float de
     }
 }
 
-void RendererCPU::PerspectiveAndViewportTransform(std::vector<VertStructs::PosUVW>& vertices) {
+void RendererCPU::PerspectiveAndViewportTransform(std::vector<VertStructs::PosWUVInvW>& vertices) {
     const float screenWidth = static_cast<float>(Screen::GetInst().GetWidth());
     const float screenHeight = static_cast<float>(Screen::GetInst().GetHeight());
     const float halfWidth = screenWidth * 0.5f;

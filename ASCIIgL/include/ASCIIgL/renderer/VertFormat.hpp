@@ -141,7 +141,7 @@ const char* GetSemanticName(VertexElementSemantic semantic);
 
 namespace VertFormats {
     // Position (XYZW) + TexCoord (UVW) - Current ASCIIgL VERTEX format (7 floats = 28 bytes)
-    const VertFormat& PosUVW();
+    const VertFormat& PosWUVInvW();
     
     // Position (XYZ) + TexCoord (UV) - Standard textured mesh
     const VertFormat& PosUV();
@@ -159,9 +159,9 @@ namespace VertFormats {
 
 namespace VertStructs {
 
-// PosUVW vertex: XYZW + UVW (7 floats = 28 bytes) - Used by CPU renderer for perspective division
+// PosWUVInvW vertex: XYZW + UVW (7 floats = 28 bytes) - Used by CPU renderer for perspective division
 
-struct PosUVW {
+struct PosWUVInvW {
     float data[7]; // XYZW + UVW
 
     // Accessors

@@ -50,24 +50,24 @@ void Vertex_Shader_CPU::SetMatrices(const glm::mat4& model, const glm::mat4& vie
 }
 
 // Vertex transformation
-void Vertex_Shader_CPU::Use(VertStructs::PosUVW& vertice) const {
+void Vertex_Shader_CPU::Use(VertStructs::PosWUVInvW& vertice) const {
     vertice.SetXYZW(_mvp * vertice.GetXYZW());
 }
 
-void Vertex_Shader_CPU::UseBatch(std::vector<VertStructs::PosUVW>& vertices) const {
+void Vertex_Shader_CPU::UseBatch(std::vector<VertStructs::PosWUVInvW>& vertices) const {
     if (vertices.empty()) return;
     
     const size_t vertex_count = vertices.size();
     
     if (vertex_count < 2000) {
-        for (VertStructs::PosUVW& vertex : vertices) {
+        for (VertStructs::PosWUVInvW& vertex : vertices) {
             Use(vertex);
         }
         return;
     }
     
     tbb::parallel_for_each(vertices.begin(), vertices.end(),
-        [this](VertStructs::PosUVW& vertex) {
+        [this](VertStructs::PosWUVInvW& vertex) {
             vertex.SetXYZW(_mvp * vertex.GetXYZW());
         });
 }

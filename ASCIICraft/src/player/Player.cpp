@@ -151,7 +151,6 @@ void Player::Move(const glm::vec3& direction) {
         // Free flight movement (spectator noclip) - direct position change
         glm::vec3 movement = direction * currentSpeed * ASCIIgL::FPSClock::GetInst().GetDeltaTime();
         position += movement;
-        velocity = movement / ASCIIgL::FPSClock::GetInst().GetDeltaTime();
         ASCIIgL::Logger::Info("Spectator mode: moved by (" + std::to_string(movement.x) + ", " + std::to_string(movement.y) + ", " + std::to_string(movement.z) + ")");
     } else {
         // Ground-based movement for survival - set horizontal velocity

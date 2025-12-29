@@ -32,8 +32,8 @@ struct Vertex_Shader_CPU {
     void SetMatrices(const glm::mat4& model, const glm::mat4& view, const glm::mat4& proj);
 
     // Vertex transformation methods
-    void Use(VertStructs::PosUVW& vertice) const;
-    void UseBatch(std::vector<VertStructs::PosUVW>& vertices) const;
+    void Use(VertStructs::PosWUVInvW& vertice) const;
+    void UseBatch(std::vector<VertStructs::PosWUVInvW>& vertices) const;
 };
 
 typedef Vertex_Shader_CPU VERTEX_SHADER_CPU;

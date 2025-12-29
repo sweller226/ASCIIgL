@@ -17,7 +17,9 @@ void FPSClock::CapFPS() {
 
     if (_fpsClock.GetDeltaTime() < inverseFrameCap) {
         std::this_thread::sleep_for(std::chrono::duration<double>(inverseFrameCap - _fpsClock.GetDeltaTime()));
-        _fpsClock.SetDeltaTime(inverseFrameCap); // Ensure _deltaTime is at least the frame cap
+        // Re-measure the actual total frame time after sleeping
+        // This gives physics the true elapsed time (processing + sleep)
+        _fpsClock.EndClock();
     }
 }
 

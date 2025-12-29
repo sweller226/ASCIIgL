@@ -38,7 +38,7 @@ public:
     
     void SetTileSize(unsigned int size_x, unsigned int size_y);
     void InitializeTiles();
-    void BinTrianglesToTiles(const std::vector<VertStructs::PosUVW>& raster_triangles);
+    void BinTrianglesToTiles(const std::vector<VertStructs::PosWUVInvW>& raster_triangles);
     
     void UpdateActiveTiles();
     
@@ -53,11 +53,11 @@ public:
     ~TileManager() = default;
     
     void ClearTileTriangleLists();
-    bool DoesTileEncapsulate(const Tile& tile, const VertStructs::PosUVW& vert1, const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert3);
+    bool DoesTileEncapsulate(const Tile& tile, const VertStructs::PosWUVInvW& vert1, const VertStructs::PosWUVInvW& vert2, const VertStructs::PosWUVInvW& vert3);
     void InvalidateTiles();
     void CalculateTileCounts();
-    void BinTrianglesToTilesSingleThreaded(const std::vector<VertStructs::PosUVW>& raster_triangles);
-    void BinTrianglesToTilesMultiThreaded(const std::vector<VertStructs::PosUVW>& raster_triangles);
+    void BinTrianglesToTilesSingleThreaded(const std::vector<VertStructs::PosWUVInvW>& raster_triangles);
+    void BinTrianglesToTilesMultiThreaded(const std::vector<VertStructs::PosWUVInvW>& raster_triangles);
 
     // Tile properties
     unsigned int TILE_COUNT_X = 0;
