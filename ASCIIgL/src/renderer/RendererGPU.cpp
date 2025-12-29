@@ -23,8 +23,8 @@ cbuffer ConstantBuffer : register(b0)
 
 struct VS_INPUT
 {
-    float4 position : POSITION;   // XYZW from VERTEX data[0-3]
-    float3 texcoord : TEXCOORD0;  // UVW from VERTEX data[4-6]
+    float3 position : POSITION;   // XYZ from VERTEX data[0-2]
+    float2 texcoord : TEXCOORD0;  // UV from VERTEX data[3-4]
 };
 
 struct PS_INPUT
@@ -37,11 +37,11 @@ PS_INPUT main(VS_INPUT input)
 {
     PS_INPUT output;
     
-    // Transform position to clip space
-    output.position = mul(mvp, input.position);
+    // Transform position to clip space (add W=1 for homogeneous coordinates)
+    output.position = mul(mvp, float4(input.position, 1.0));
     
-    // Pass through texture coordinates (just UV, ignore W for now)
-    output.texcoord = input.texcoord.xy;
+    // Pass through texture coordinates
+    output.texcoord = input.texcoord;
     
     return output;
 }
@@ -159,6 +159,9 @@ void RendererGPU::Initialize() {
         std::cerr << "[RendererGPU] Failed to initialize debug swap chain (non-fatal)" << std::endl;
         // Non-fatal - continue without swap chain
     }
+
+    // Initialize static quad meshes for 2D rendering
+    InitializeQuadMeshes();
 
     _initialized = true;
     std::cout << "[RendererGPU] DirectX 11 initialized successfully" << std::endl;
@@ -348,21 +351,6 @@ bool RendererGPU::InitializeBuffers() {
         return false;
     }
 
-    // Initial vertex buffer (will resize dynamically)
-    _vertexBufferCapacity = INITIAL_VERTEX_BUFFER_CAPACITY;
-
-    D3D11_BUFFER_DESC vbDesc = {};
-    vbDesc.ByteWidth = static_cast<UINT>(_vertexBufferCapacity);  // Capacity is already in bytes
-    vbDesc.Usage = D3D11_USAGE_DYNAMIC;
-    vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    vbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-    hr = _device->CreateBuffer(&vbDesc, nullptr, &_vertexBuffer);
-    if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create vertex buffer: 0x" << std::hex << hr << std::endl;
-        return false;
-    }
-
     return true;
 }
 
@@ -490,12 +478,12 @@ static bool CreateVertexShaderFromSource(ID3D11Device* device, const std::string
         return false;
     }
 
-    // Create input layout to match VERTEX structure (7 floats = 28 bytes)
-    // data[0-3] = XYZW (position, 16 bytes)
-    // data[4-6] = UVW (texcoord, 12 bytes)
+    // Create input layout to match PosUV structure (5 floats = 20 bytes)
+    // data[0-2] = XYZ (position, 12 bytes)
+    // data[3-4] = UV (texcoord, 8 bytes)
     D3D11_INPUT_ELEMENT_DESC layout[] = {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },  // XYZW
-        { "TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0 },  // UVW
+        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },  // XYZ
+        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },  // UV
     };
 
     hr = device->CreateInputLayout(
@@ -539,76 +527,6 @@ static bool CreatePixelShaderFromSource(ID3D11Device* device, const std::string&
 // =========================================================================
 // Buffer Management
 // =========================================================================
-
-bool RendererGPU::UpdateVertexBuffer(const std::vector<std::byte>& vertices) {
-    if (vertices.empty()) return true;
-
-    // Resize buffer if needed (capacity is in bytes)
-    if (vertices.size() > _vertexBufferCapacity) {
-        _vertexBufferCapacity = vertices.size() * BUFFER_GROWTH_FACTOR;
-
-        D3D11_BUFFER_DESC vbDesc = {};
-        vbDesc.ByteWidth = static_cast<UINT>(_vertexBufferCapacity);
-        vbDesc.Usage = D3D11_USAGE_DYNAMIC;
-        vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        vbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-        _vertexBuffer.Reset();
-        HRESULT hr = _device->CreateBuffer(&vbDesc, nullptr, &_vertexBuffer);
-        if (FAILED(hr)) {
-            std::cerr << "[RendererGPU] Failed to resize vertex buffer: 0x" << std::hex << hr << std::endl;
-            return false;
-        }
-    }
-
-    // Map and update
-    D3D11_MAPPED_SUBRESOURCE mapped;
-    HRESULT hr = _context->Map(_vertexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to map vertex buffer: 0x" << std::hex << hr << std::endl;
-        return false;
-    }
-
-    memcpy(mapped.pData, vertices.data(), vertices.size());
-    _context->Unmap(_vertexBuffer.Get(), 0);
-
-    return true;
-}
-
-bool RendererGPU::UpdateIndexBuffer(const std::vector<int>& indices) {
-    if (indices.empty()) return true;
-
-    // Resize buffer if needed
-    if (indices.size() > _indexBufferCapacity) {
-        _indexBufferCapacity = indices.size() * BUFFER_GROWTH_FACTOR;
-
-        D3D11_BUFFER_DESC ibDesc = {};
-        ibDesc.ByteWidth = sizeof(int) * _indexBufferCapacity;
-        ibDesc.Usage = D3D11_USAGE_DYNAMIC;
-        ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-        ibDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-        _indexBuffer.Reset();
-        HRESULT hr = _device->CreateBuffer(&ibDesc, nullptr, &_indexBuffer);
-        if (FAILED(hr)) {
-            std::cerr << "[RendererGPU] Failed to resize index buffer: 0x" << std::hex << hr << std::endl;
-            return false;
-        }
-    }
-
-    // Map and update
-    D3D11_MAPPED_SUBRESOURCE mapped;
-    HRESULT hr = _context->Map(_indexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to map index buffer: 0x" << std::hex << hr << std::endl;
-        return false;
-    }
-
-    memcpy(mapped.pData, indices.data(), sizeof(int) * indices.size());
-    _context->Unmap(_indexBuffer.Get(), 0);
-
-    return true;
-}
 
 bool RendererGPU::UpdateConstantBuffer(const ConstantBuffer& cb) {
     D3D11_MAPPED_SUBRESOURCE mapped;
@@ -764,6 +682,62 @@ bool RendererGPU::InitializeDebugSwapChain() {
     return true;
 }
 
+void RendererGPU::InitializeQuadMeshes() {
+    // Quad vertices as PosUV format (XYZ + UV = 5 floats = 20 bytes per vertex)
+    // Counter-clockwise winding
+    const VertStructs::PosUV CCWquadVerts[] = {
+        {{-1.0f, -1.0f, 0.0f, 0.0f, 0.0f}},  // 0: bottom-left
+        {{-1.0f,  1.0f, 0.0f, 0.0f, 1.0f}},  // 1: top-left
+        {{ 1.0f,  1.0f, 0.0f, 1.0f, 1.0f}},  // 2: top-right
+        {{ 1.0f, -1.0f, 0.0f, 1.0f, 0.0f}}   // 3: bottom-right
+    };
+
+    // Clockwise winding (same vertices, different index order)
+    const VertStructs::PosUV CWquadVerts[] = {
+        {{-1.0f, -1.0f, 0.0f, 0.0f, 0.0f}},  // 0: bottom-left
+        {{-1.0f,  1.0f, 0.0f, 0.0f, 1.0f}},  // 1: top-left
+        {{ 1.0f,  1.0f, 0.0f, 1.0f, 1.0f}},  // 2: top-right
+        {{ 1.0f, -1.0f, 0.0f, 1.0f, 0.0f}}   // 3: bottom-right
+    };
+
+    const std::vector<int> CCWindices = {
+        0, 1, 2,  // Triangle 1: bottom-left → top-left → top-right
+        0, 2, 3   // Triangle 2: bottom-left → top-right → bottom-right
+    };
+
+    const std::vector<int> CWindices = {
+        0, 2, 1,  // Triangle 1: bottom-left → top-right → top-left
+        0, 3, 2   // Triangle 2: bottom-left → bottom-right → top-right
+    };
+
+    // Convert to byte vectors
+    const auto* ccwBytes = reinterpret_cast<const std::byte*>(CCWquadVerts);
+    const auto* cwBytes = reinterpret_cast<const std::byte*>(CWquadVerts);
+    
+    std::vector<std::byte> ccwVertexData(ccwBytes, ccwBytes + sizeof(CCWquadVerts));
+    std::vector<std::byte> cwVertexData(cwBytes, cwBytes + sizeof(CWquadVerts));
+
+    // Create meshes (without texture - texture will be set per draw call)
+    std::vector<int> ccwIndicesCopy = CCWindices;
+    std::vector<int> cwIndicesCopy = CWindices;
+    
+    _quadMeshCCW = new Mesh(std::move(ccwVertexData), VertFormats::PosUV(), std::move(ccwIndicesCopy), nullptr);
+    _quadMeshCW = new Mesh(std::move(cwVertexData), VertFormats::PosUV(), std::move(cwIndicesCopy), nullptr);
+
+    Logger::Debug("[RendererGPU] Static quad meshes created (CCW and CW)");
+}
+
+void RendererGPU::CleanupQuadMeshes() {
+    if (_quadMeshCCW) {
+        delete _quadMeshCCW;
+        _quadMeshCCW = nullptr;
+    }
+    if (_quadMeshCW) {
+        delete _quadMeshCW;
+        _quadMeshCW = nullptr;
+    }
+}
+
 // =========================================================================
 // Rendering Pipeline
 // =========================================================================
@@ -779,9 +753,14 @@ void RendererGPU::BeginColBuffFrame() {
     // Update constant buffer with current values
     UpdateConstantBuffer(_currentConstantBuffer);
 
-    // Clear render target
-    float clear_color[4] = { _renderer->GetBackgroundCol().x, _renderer->GetBackgroundCol().y, 
-                             _renderer->GetBackgroundCol().z, 1.0f };
+    // Clear render target (convert 0-15 integer color to 0-1 float)
+    glm::ivec3 bgCol = _renderer->GetBackgroundCol();
+    float clear_color[4] = { 
+        static_cast<float>(bgCol.x) / 15.0f, 
+        static_cast<float>(bgCol.y) / 15.0f, 
+        static_cast<float>(bgCol.z) / 15.0f, 
+        1.0f 
+    };
     _context->ClearRenderTargetView(_renderTargetView.Get(), clear_color);
 
     // Clear depth stencil
@@ -851,74 +830,6 @@ void RendererGPU::EndColBuffFrame() {
     }
 
     RendererGPU::GetInst().DownloadFramebuffer();
-}
-
-void RendererGPU::RenderTriangles(const std::vector<std::byte>& vertices, const VertFormat& format, const Texture* tex, const std::vector<int>& indices) {
-    if (!_initialized || vertices.empty()) return;
-
-    const UINT stride = format.GetStride();
-    const size_t vertexCount = vertices.size() / stride;
-
-    bool useIndices = !indices.empty();
-    Logger::Debug("RenderTriangles: Drawing " + std::to_string(vertexCount) + " vertices" + 
-                  (useIndices ? " with " + std::to_string(indices.size()) + " indices" : ""));
-
-    // Update vertex buffer
-    if (!UpdateVertexBuffer(vertices)) return;
-
-    // Bind vertex buffer
-    UINT offset = 0;
-    _context->IASetVertexBuffers(0, 1, _vertexBuffer.GetAddressOf(), &stride, &offset);
-
-    // Bind texture
-    BindTexture(tex);
-
-    if (useIndices) {
-        // Indexed rendering
-        if (!UpdateIndexBuffer(indices)) return;
-        
-        // Bind index buffer
-        _context->IASetIndexBuffer(_indexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
-        
-        // Draw indexed
-        _context->DrawIndexed(static_cast<UINT>(indices.size()), 0, 0);
-    } else {
-        // Non-indexed rendering
-        _context->Draw(static_cast<UINT>(vertexCount), 0);
-    }
-}
-
-void RendererGPU::RenderTriangles(const std::vector<std::vector<std::byte>*>& vertices, const VertFormat& format, const Texture* tex, const std::vector<std::vector<int>>& indices) {
-    const UINT stride = format.GetStride();
-    
-    // Flatten all vertex byte arrays and offset indices appropriately
-    std::vector<std::byte> flatVertices;
-    std::vector<int> flatIndices;
-    
-    int vertexOffset = 0;
-    
-    for (size_t i = 0; i < vertices.size(); ++i) {
-        const auto* vertArray = vertices[i];
-        if (vertArray && !vertArray->empty()) {
-            const size_t vertexCount = vertArray->size() / stride;
-            
-            // Add vertices (byte data)
-            flatVertices.insert(flatVertices.end(), vertArray->begin(), vertArray->end());
-            
-            // Add indices with offset
-            if (i < indices.size()) {
-                const auto& indexArray = indices[i];
-                for (int index : indexArray) {
-                    flatIndices.push_back(index + vertexOffset);
-                }
-            }
-            
-            // Update offset for next mesh (in vertex count, not bytes)
-            vertexOffset += static_cast<int>(vertexCount);
-        }
-    }
-
-    RenderTriangles(flatVertices, format, tex, flatIndices);
 }
 
 // =========================================================================
@@ -1013,6 +924,9 @@ void RendererGPU::Shutdown()
 {
     if (!_initialized) return;
 
+    // Clean up static quad meshes
+    CleanupQuadMeshes();
+
     // Release all COM objects (ComPtr handles this automatically)
     _textureCache.clear();  // Clear texture cache
     _currentTextureSRV.Reset();
@@ -1026,8 +940,6 @@ void RendererGPU::Shutdown()
         state.Reset();
     }
     
-    _vertexBuffer.Reset();
-    _indexBuffer.Reset();
     _constantBuffer.Reset();
     _inputLayout.Reset();
     _pixelShader.Reset();
@@ -1162,9 +1074,8 @@ void RendererGPU::DrawMesh(const Mesh* mesh, const glm::vec3& position, const gl
     // Set MVP matrix for GPU rendering
     SetMVP(mvp);
     
-    // Create byte vector from mesh vertex data
-    std::vector<std::byte> vertexBytes(mesh->GetVertices().data(), mesh->GetVertices().data() + mesh->GetVertexDataSize());
-    RenderTriangles(vertexBytes, mesh->GetVertFormat(), mesh->texture, mesh->GetIndices());
+    // Use cached rendering path
+    DrawMesh(mesh);
 }
 
 void RendererGPU::DrawModel(const Model& ModelObj, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera) {
@@ -1192,47 +1103,32 @@ void RendererGPU::DrawModel(const Model& ModelObj, const glm::mat4& model, const
 }
 
 void RendererGPU::Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& position, const float rotation, const glm::vec2& size, const Camera2D& camera, const int layer, const bool CCW) {
+    if (!_initialized || (!_quadMeshCCW && !_quadMeshCW)) return;
+    
     glm::mat4 model = MathUtil::CalcModelMatrix(glm::vec3(position, layer), rotation, glm::vec3(size, 0.0f));
     glm::mat4 mvp = camera.proj * camera.view * model;
 
     // Set MVP matrix for GPU rendering
     SetMVP(mvp);
 
-    // Quad vertices as PosUVW format (XYZW + UVW = 7 floats = 28 bytes per vertex)
-    static const float CCWquadVerts[] = {
-        -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // 0: bottom-left
-        -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f,  // 1: top-left
-         1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f,  // 2: top-right
-         1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f   // 3: bottom-right
-    };
-
-    static const float CWquadVerts[] = {
-        -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // 0: bottom-left
-        -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f,  // 1: top-left
-         1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f,  // 2: top-right
-         1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f   // 3: bottom-right
-    };
-
-    static const std::vector<int> CCWindices = {
-        0, 1, 2,  // Triangle 1: bottom-left → top-left → top-right
-        0, 2, 3   // Triangle 2: bottom-left → top-right → bottom-right
-    };
-
-    static const std::vector<int> CWindices = {
-        0, 2, 1,  // Triangle 1: bottom-left → top-right → top-left
-        0, 3, 2   // Triangle 2: bottom-left → bottom-right → top-right
-    };
-
-    // Convert to byte vector
-    const float* verts = CCW ? CCWquadVerts : CWquadVerts;
-    const auto* vertBytes = reinterpret_cast<const std::byte*>(verts);
-    std::vector<std::byte> quadBytes(vertBytes, vertBytes + sizeof(CCWquadVerts));
-
-    RenderTriangles(quadBytes, VertFormats::PosUVW(), &tex, CCW ? CCWindices : CWindices);
+    // Select appropriate quad mesh
+    Mesh* quadMesh = CCW ? _quadMeshCCW : _quadMeshCW;
+    
+    // Temporarily set texture on mesh
+    Texture* originalTexture = quadMesh->texture;
+    quadMesh->texture = const_cast<Texture*>(&tex);
+    
+    // Draw using cached mesh
+    DrawMesh(quadMesh);
+    
+    // Restore original texture (nullptr)
+    quadMesh->texture = originalTexture;
 }
 
 void RendererGPU::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer, const bool CCW)
 {
+    if (!_initialized || (!_quadMeshCCW && !_quadMeshCW)) return;
+    
     // Convert percentage coordinates to pixel coordinates
     float screenWidth = static_cast<float>(Screen::GetInst().GetWidth());
     float screenHeight = static_cast<float>(Screen::GetInst().GetHeight());
@@ -1246,36 +1142,17 @@ void RendererGPU::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& posit
     // Set MVP matrix for GPU rendering
     SetMVP(mvp);
 
-    // Quad vertices as PosUVW format (XYZW + UVW = 7 floats = 28 bytes per vertex)
-    static const float CCWquadVerts[] = {
-        -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // 0: bottom-left
-        -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f,  // 1: top-left
-         1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f,  // 2: top-right
-         1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f   // 3: bottom-right
-    };
-
-    static const float CWquadVerts[] = {
-        -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // 0: bottom-left
-        -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f,  // 1: top-left
-         1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f,  // 2: top-right
-         1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f   // 3: bottom-right
-    };
-
-    static const std::vector<int> CCWindices = {
-        0, 1, 2,  // Triangle 1: bottom-left → top-left → top-right
-        0, 2, 3   // Triangle 2: bottom-left → top-right → bottom-right
-    };
-
-    static const std::vector<int> CWindices = {
-        0, 2, 1,  // Triangle 1: bottom-left → top-right → top-left
-        0, 3, 2   // Triangle 2: bottom-left → bottom-right → top-right
-    };
-
-    // Convert to byte vector
-    const float* verts = CCW ? CCWquadVerts : CWquadVerts;
-    const auto* vertBytes = reinterpret_cast<const std::byte*>(verts);
-    std::vector<std::byte> quadBytes(vertBytes, vertBytes + sizeof(CCWquadVerts));
-
-    RenderTriangles(quadBytes, VertFormats::PosUVW(), &tex, CCW ? CCWindices : CWindices);
+    // Select appropriate quad mesh
+    Mesh* quadMesh = CCW ? _quadMeshCCW : _quadMeshCW;
+    
+    // Temporarily set texture on mesh
+    Texture* originalTexture = quadMesh->texture;
+    quadMesh->texture = const_cast<Texture*>(&tex);
+    
+    // Draw using cached mesh
+    DrawMesh(quadMesh);
+    
+    // Restore original texture (nullptr)
+    quadMesh->texture = originalTexture;
 }
 } // namespace ASCIIgL

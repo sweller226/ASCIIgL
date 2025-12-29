@@ -407,7 +407,7 @@ void World::RegenerateDirtyChunks() {
         Chunk* chunk = pair.second.get();
         
         if (chunk && chunk->IsDirty() && chunk->IsGenerated()) {
-            chunk->GenerateMesh(!ASCIIgL::Renderer::GetInst().GetCpuOnly());
+            chunk->GenerateMesh();
             regeneratedCount++;
         }
     }

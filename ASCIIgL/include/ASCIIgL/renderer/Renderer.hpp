@@ -90,7 +90,6 @@ private:
     // =========================================================================
     void DrawClippedLinePxBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, WCHAR pixel_type, unsigned short col);
     void DrawClippedLineColBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, const glm::ivec4& col);
-
 public:
     // =========================================================================
     // Singleton Access
@@ -105,9 +104,6 @@ public:
     // =========================================================================
     void Initialize(bool antialiasing = false, int antialiasing_samples = 4, bool cpu_only = false);
     bool IsInitialized() const;
-
-    void RenderTriangles(const std::vector<std::byte>& vertices, const VertFormat& format, const Texture* tex, const std::vector<int>& indices = {});
-    void RenderTriangles(const std::vector<std::vector<std::byte>*>& vertices, const VertFormat& format, const Texture* tex, const std::vector<std::vector<int>>& indices = {});
 
     // =========================================================================
     // Drawing API

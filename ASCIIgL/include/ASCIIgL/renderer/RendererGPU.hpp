@@ -96,17 +96,7 @@ private:
     ComPtr<ID3D11Buffer> _constantBuffer;
     ConstantBuffer _currentConstantBuffer;  // Current values to upload to GPU
 
-    // =========================================================================
-    // Vertex Buffer (Dynamic)
-    // =========================================================================
-    ComPtr<ID3D11Buffer> _vertexBuffer;
-    size_t _vertexBufferCapacity = 0;
 
-    // =========================================================================
-    // Index Buffer (Dynamic)
-    // =========================================================================
-    ComPtr<ID3D11Buffer> _indexBuffer;
-    size_t _indexBufferCapacity = 0;
 
     // =========================================================================
     // Per-Mesh GPU Buffer Cache
@@ -139,6 +129,14 @@ private:
     ComPtr<ID3D11RasterizerState> _rasterizerStates[8];
 
     // =========================================================================
+    // Static Quad Meshes (for 2D rendering)
+    // =========================================================================
+    Mesh* _quadMeshCCW = nullptr;
+    Mesh* _quadMeshCW = nullptr;
+    void InitializeQuadMeshes();
+    void CleanupQuadMeshes();
+
+    // =========================================================================
     // Staging Texture (for GPU->CPU framebuffer download)
     // =========================================================================
     ComPtr<ID3D11Texture2D> _stagingTexture;
@@ -166,8 +164,6 @@ private:
     // =========================================================================
     // Buffer Management
     // =========================================================================
-    bool UpdateVertexBuffer(const std::vector<std::byte>& vertices);
-    bool UpdateIndexBuffer(const std::vector<int>& indices);
     bool UpdateConstantBuffer(const ConstantBuffer& cb);
 
     // =========================================================================
@@ -216,8 +212,6 @@ public:
     // =========================================================================
     // Frame Management
     // =========================================================================
-    void RenderTriangles(const std::vector<std::byte>& vertices, const VertFormat& format, const Texture* tex, const std::vector<int>& indices = {});
-    void RenderTriangles(const std::vector<std::vector<std::byte>*>& vertices, const VertFormat& format, const Texture* tex, const std::vector<std::vector<int>>& indices = {});
     void EndColBuffFrame();  // Presents debug swap chain for RenderDoc
     void DownloadFramebuffer();
 

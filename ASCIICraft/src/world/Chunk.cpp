@@ -50,7 +50,7 @@ void Chunk::SetBlock(int x, int y, int z, const Block& block) {
 }
 
 // Mesh generation
-void Chunk::GenerateMesh(bool useIndices) {
+void Chunk::GenerateMesh() {
     if (!generated) {
         return; // Can't generate mesh for ungenerated chunk
     }
@@ -222,65 +222,37 @@ void Chunk::GenerateMesh(bool useIndices) {
                     // Get texture coordinates for this block face
                     glm::vec4 blockTextureUV = block.GetTextureUV(face);
                     
-                    if (useIndices) {
-                        // Indexed rendering: generate 4 unique vertices
-                        int baseVertexIndex = vertices.size() / ASCIIgL::VertFormats::PosUV().GetStride();
+                    // Indexed rendering: generate 4 unique vertices
+                    int baseVertexIndex = vertices.size() / ASCIIgL::VertFormats::PosUV().GetStride();
+                    
+                    for (int vertIdx = 0; vertIdx < 4; vertIdx++) {
+                        // World position (chunk-relative + block position)
+                        glm::vec3 worldPos = glm::vec3(
+                            coord.x * SIZE + x,
+                            coord.y * SIZE + y, 
+                            coord.z * SIZE + z
+                        ) + faceVerticesIndexed[face][vertIdx];
                         
-                        for (int vertIdx = 0; vertIdx < 4; vertIdx++) {
-                            // World position (chunk-relative + block position)
-                            glm::vec3 worldPos = glm::vec3(
-                                coord.x * SIZE + x,
-                                coord.y * SIZE + y, 
-                                coord.z * SIZE + z
-                            ) + faceVerticesIndexed[face][vertIdx];
-                            
-                            // UV coordinates (map face UV to block's texture UV)
-                            glm::vec2 faceUV = faceUVsIndexed[vertIdx];
-                            glm::vec2 textureUV = glm::vec2(
-                                blockTextureUV.x + faceUV.x * (blockTextureUV.z - blockTextureUV.x),
-                                blockTextureUV.w - faceUV.y * (blockTextureUV.w - blockTextureUV.y)
-                            );
-                            
-                            struct ASCIIgL::VertStructs::PosUV vertex = {
-                                worldPos.x, worldPos.y, worldPos.z,
-                                textureUV.x, textureUV.y
-                            };
-                            
-                            // Append bytes to vertices vector
-                            const auto* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
-                            vertices.insert(vertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUV));
-                        }
+                        // UV coordinates (map face UV to block's texture UV)
+                        glm::vec2 faceUV = faceUVsIndexed[vertIdx];
+                        glm::vec2 textureUV = glm::vec2(
+                            blockTextureUV.x + faceUV.x * (blockTextureUV.z - blockTextureUV.x),
+                            blockTextureUV.w - faceUV.y * (blockTextureUV.w - blockTextureUV.y)
+                        );
                         
-                        // Add indices for this face (2 triangles)
-                        for (int i = 0; i < 6; i++) {
-                            indices.push_back(baseVertexIndex + faceIndices[i]);
-                        }
-                    } else {
-                        // Non-indexed rendering: generate 6 vertices (with duplicates)
-                        for (int vertIdx = 0; vertIdx < 6; vertIdx++) {
-                            // World position (chunk-relative + block position)
-                            glm::vec3 worldPos = glm::vec3(
-                                coord.x * SIZE + x,
-                                coord.y * SIZE + y, 
-                                coord.z * SIZE + z
-                            ) + faceVertices[face][vertIdx];
-                            
-                            // UV coordinates (map face UV to block's texture UV)
-                            glm::vec2 faceUV = faceUVs[vertIdx];
-                            glm::vec2 textureUV = glm::vec2(
-                                blockTextureUV.x + faceUV.x * (blockTextureUV.z - blockTextureUV.x),
-                                blockTextureUV.w - faceUV.y * (blockTextureUV.w - blockTextureUV.y)
-                            );
-                            
-                            struct ASCIIgL::VertStructs::PosUV vertex = {
-                                worldPos.x, worldPos.y, worldPos.z,
-                                textureUV.x, textureUV.y
-                            };
-                            
-                            // Append bytes to vertices vector
-                            const auto* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
-                            vertices.insert(vertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUV));
-                        }
+                        ASCIIgL::VertStructs::PosUV vertex = {
+                            worldPos.x, worldPos.y, worldPos.z,  // XYZ
+                            textureUV.x, textureUV.y             // UV
+                        };
+                        
+                        // Append bytes to vertices vector
+                        const auto* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
+                        vertices.insert(vertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUV));
+                    }
+                    
+                    // Add indices for this face (2 triangles)
+                    for (int i = 0; i < 6; i++) {
+                        indices.push_back(baseVertexIndex + faceIndices[i]);
                     }
                 }
             }
@@ -331,13 +303,11 @@ void Chunk::GenerateMesh(bool useIndices) {
             return;
         }
         
-        if (useIndices && !indices.empty()) {
+        if (!indices.empty()) {
             mesh = std::make_unique<ASCIIgL::Mesh>(std::move(vertices), ASCIIgL::VertFormats::PosUV(), std::move(indices), blockAtlas);
             ASCIIgL::Logger::Debug("Indexed mesh created successfully with " + std::to_string(vertices.size()) + " bytes and " + std::to_string(indices.size()) + " indices");
-        } else {
-            mesh = std::make_unique<ASCIIgL::Mesh>(std::move(vertices), ASCIIgL::VertFormats::PosUV(), blockAtlas);
-            ASCIIgL::Logger::Debug("Mesh created successfully with " + std::to_string(vertices.size()) + " bytes");
         }
+
         hasMesh = true;
     } else {
         mesh.reset();

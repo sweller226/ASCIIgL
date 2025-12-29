@@ -152,36 +152,6 @@ void Renderer::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& position
 }
 
 // =============================================================================
-// RENDERING PIPELINE ENTRY POINTS
-// =============================================================================
-
-void Renderer::RenderTriangles(const std::vector<std::byte>& vertices, const VertFormat& format, const Texture* tex, const std::vector<int>& indices) {
-    if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) {
-        Logger::Warning("RenderTriangles: Texture is invalid or has zero dimensions.");
-        return;
-    }
-
-    if (_cpu_only) {
-        _rendererCPU->RenderTriangles(vertices, format, tex);
-    } else {
-        _rendererGPU->RenderTriangles(vertices, format, tex, indices);
-    }
-}
-
-void Renderer::RenderTriangles(const std::vector<std::vector<std::byte>*>& vertices, const VertFormat& format, const Texture* tex, const std::vector<std::vector<int>>& indices) {
-    if (tex && (tex->GetWidth() <= 0 || tex->GetHeight() <= 0)) {
-        Logger::Warning("RenderTriangles: Texture is invalid or has zero dimensions.");
-        return;
-    }
-
-    if (_cpu_only) {
-        _rendererCPU->RenderTriangles(vertices, format, tex);
-    } else {
-        _rendererGPU->RenderTriangles(vertices, format, tex, indices);
-    }
-}
-
-// =============================================================================
 // TRIANGLE RASTERIZATION - WIREFRAME (PIXEL BUFFER)
 // =============================================================================
 

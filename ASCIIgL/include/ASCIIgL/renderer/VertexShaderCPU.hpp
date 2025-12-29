@@ -4,7 +4,7 @@
 
 #include <glm/glm.hpp>
 
-#include <ASCIIgL/renderer/RendererCPU.hpp>
+#include <ASCIIgL/renderer/VertFormat.hpp>
 
 namespace ASCIIgL {
 

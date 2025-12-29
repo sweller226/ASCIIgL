@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <string>
+#include <glm/glm.hpp>
 
 namespace ASCIIgL {
 
@@ -134,12 +135,6 @@ uint32_t GetVertexElementTypeSize(VertexElementType type);
 // Get semantic name as string (for DirectX input layout)
 const char* GetSemanticName(VertexElementSemantic semantic);
 
-// Get DXGI format for DirectX input layout
-#ifdef _WIN32
-#include <d3d11.h>
-DXGI_FORMAT GetDXGIFormat(VertexElementType type);
-#endif
-
 // =========================================================================
 // Predefined Common Formats
 // =========================================================================
@@ -162,8 +157,9 @@ namespace VertFormats {
 // Predefined Vertex Structs
 // =========================================================================
 
-// PosUVW vertex: XYZW + UVW (7 floats = 28 bytes)
 namespace VertStructs {
+
+// PosUVW vertex: XYZW + UVW (7 floats = 28 bytes) - Used by CPU renderer for perspective division
 
 struct PosUVW {
     float data[7]; // XYZW + UVW
@@ -193,30 +189,26 @@ struct PosUVW {
 
 // PosUV vertex: XYZ + UV (5 floats = 20 bytes)
 struct PosUV {
-    float data[6];
+    float data[5];
 
     // Accessors
     float X() const { return data[0]; }
     float Y() const { return data[1]; }
     float Z() const { return data[2]; }
-    float W() const { return data[3]; }
-    float U() const { return data[4]; }
-    float V() const { return data[5]; }
+    float U() const { return data[3]; }
+    float V() const { return data[4]; }
 
     glm::vec2 GetXY() const { return glm::vec2(data[0], data[1]); }
     glm::vec3 GetXYZ() const { return glm::vec3(data[0], data[1], data[2]); }
-    glm::vec4 GetXYZW() const { return glm::vec4(data[0], data[1], data[2], data[3]); }
-    glm::vec2 GetUV() const { return glm::vec2(data[4], data[5]); }
+    glm::vec2 GetUV() const { return glm::vec2(data[3], data[4]); }
 
     // Mutators
     void SetXY(const glm::vec2 v) { data[0] = v.x; data[1] = v.y; }
     void SetXYZ(const glm::vec3 v) { data[0] = v.x; data[1] = v.y; data[2] = v.z; }
-    void SetXYZW(const glm::vec4 v) { data[0] = v.x; data[1] = v.y; data[2] = v.z; data[3] = v.w; }
-    void SetUV(const glm::vec2 v) { data[4] = v.x; data[5] = v.y; }
-    void SetUVW(const glm::vec3 v) { data[4] = v.x; data[5] = v.y; data[6] = v.z; }
+    void SetUV(const glm::vec2 v) { data[3] = v.x; data[4] = v.y; }
 };
 
-}
+} // namespace VertStructs
 
 } // namespace ASCIIgL
 

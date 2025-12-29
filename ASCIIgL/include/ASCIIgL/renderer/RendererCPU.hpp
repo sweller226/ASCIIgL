@@ -102,6 +102,7 @@ private:
     // =========================================================================
     void DrawTriangleTexturedImpl(const VertStructs::PosUVW& v1, const VertStructs::PosUVW& v2, const VertStructs::PosUVW& v3, const Texture* tex, int minX, int maxX, int minY, int maxY);
     void DrawTriangleTexturedPartial(const Tile& tile, const VertStructs::PosUVW& vert1, const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert3, const Texture* tex);
+    void DrawTriangleTextured(const VertStructs::PosUVW& vert1, const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert3, const Texture* tex);
     void DrawTriangleWireframeColBuffPartial(const Tile& tile, const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, const glm::vec4& col);
 
     // =========================================================================
@@ -134,18 +135,6 @@ private:
     // =========================================================================
     void RenderTriangles(const std::vector<std::vector<std::byte>*>& vertices, const VertFormat& format, const Texture* tex);
     void RenderTriangles(const std::vector<std::byte>& vertices, const VertFormat& format, const Texture* tex);
-
-    // =========================================================================
-    // Low-Level Drawing API - Primitives (Friend-Accessible Only via Renderer)
-    // =========================================================================
-    void DrawTriangleTextured(const VertStructs::PosUVW& vert1, const VertStructs::PosUVW& vert2, const VertStructs::PosUVW& vert3, const Texture* tex);
-
-    // =========================================================================
-    // Format Validation
-    // =========================================================================
-    // Validates that mesh uses PosUVW format (required by CPU renderer)
-    // Returns true if format is valid, false otherwise
-    bool ValidateVertFormat(const Mesh& mesh) const;
 
 public:
     // =========================================================================

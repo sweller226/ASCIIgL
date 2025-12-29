@@ -85,7 +85,7 @@ public:
     void SetGenerated(bool g) { generated = g; }
     
     // Mesh generation for rendering
-    void GenerateMesh(bool useIndices = false);
+    void GenerateMesh();
     bool HasMesh() const { return hasMesh; }
     ASCIIgL::Mesh* GetMesh() const { return mesh.get(); }
     void InvalidateMesh() { hasMesh = false; dirty = true; }
