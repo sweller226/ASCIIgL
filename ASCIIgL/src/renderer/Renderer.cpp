@@ -98,56 +98,20 @@ void Renderer::DrawMesh(const Mesh* mesh) {
     }
 }
 
-void Renderer::DrawMesh(const Mesh* mesh, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera) {
-    if (!mesh) {
-        Logger::Error("DrawMesh: mesh is nullptr!");
-        return;
-    }
-    
-    if (mesh->GetTexture()) {
-        if (_cpu_only) {
-            _rendererCPU->DrawMesh(mesh, position, rotation, size, camera);
-        } else {
-            _rendererGPU->DrawMesh(mesh, position, rotation, size, camera);
-        }
-    } else {
-        Logger::Warning("DrawMesh: mesh texture is null");
-    }
-}
 
-void Renderer::DrawModel(const Model& ModelObj, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera) {
+void Renderer::DrawModel(const Model& ModelObj) {
     if (_cpu_only) {
-        _rendererCPU->DrawModel(ModelObj, position, rotation, size, camera);
+        _rendererCPU->DrawModel(ModelObj);
     } else {
-        _rendererGPU->DrawModel(ModelObj, position, rotation, size, camera);
+        _rendererGPU->DrawModel(ModelObj);
     }
 }
 
-void Renderer::DrawModel(const Model& ModelObj, const glm::mat4& model, const Camera3D& camera) {
-     if (_cpu_only) {
-        _rendererCPU->DrawModel(ModelObj, model, camera);
-     } else {
-        _rendererGPU->DrawModel(ModelObj, model, camera);
-     }
-}
-
-// =============================================================================
-// HIGH-LEVEL DRAWING API - 2D QUADS
-// =============================================================================
-
-void Renderer::Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& position, const float rotation, const glm::vec2& size, const Camera2D& camera, const int layer) {
+void Renderer::Draw2DQuad(const Texture& tex) {
     if (_cpu_only) {
-        _rendererCPU->Draw2DQuadPixelSpace(tex, position, rotation, size, camera, layer);
+        _rendererCPU->Draw2DQuad(tex);
     } else {
-        _rendererGPU->Draw2DQuadPixelSpace(tex, position, rotation, size, camera, layer);
-    }
-}
-
-void Renderer::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer) {
-    if (_cpu_only) {
-        _rendererCPU->Draw2DQuadPercSpace(tex, positionPerc, rotation, sizePerc, camera, layer);
-    } else {
-        _rendererGPU->Draw2DQuadPercSpace(tex, positionPerc, rotation, sizePerc, camera, layer);
+        _rendererGPU->Draw2DQuad(tex);
     }
 }
 

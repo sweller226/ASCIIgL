@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <cstddef>
+#include <memory>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -31,8 +32,11 @@
 
 namespace ASCIIgL {
 
-// Forward declaration
+// Forward declarations
 class Renderer;
+class Shader;
+class ShaderProgram;
+class Material;
 
 // ComPtr alias for cleaner code
 template<typename T>
@@ -41,6 +45,9 @@ using ComPtr = Microsoft::WRL::ComPtr<T>;
 class RendererGPU
 {
     friend class Renderer;
+    friend class Shader;
+    friend class ShaderProgram;
+    friend class Material;
 
 private:
     // =========================================================================
@@ -81,24 +88,6 @@ private:
     HWND _debugWindow = nullptr;
 
     // =========================================================================
-    // Shaders and Input Layout
-    // =========================================================================
-    ComPtr<ID3D11VertexShader> _vertexShader;
-    ComPtr<ID3D11PixelShader> _pixelShader;
-    ComPtr<ID3D11InputLayout> _inputLayout;
-
-    // =========================================================================
-    // Constant Buffers (for shader uniforms)
-    // =========================================================================
-    struct ConstantBuffer {
-        glm::mat4 mvp;           // Model-View-Projection matrix
-    };
-    ComPtr<ID3D11Buffer> _constantBuffer;
-    ConstantBuffer _currentConstantBuffer;  // Current values to upload to GPU
-
-
-
-    // =========================================================================
     // Per-Mesh GPU Buffer Cache
     // =========================================================================
     struct GPUMeshCache {
@@ -107,7 +96,6 @@ private:
         size_t vertexCount = 0;
         size_t indexCount = 0;
     };
-    
     GPUMeshCache* GetOrCreateMeshCache(const Mesh* mesh);
 
     // =========================================================================
@@ -142,13 +130,17 @@ private:
     ComPtr<ID3D11Texture2D> _stagingTexture;
 
     // =========================================================================
+    // Currently Bound Shader Program (nullptr = default)
+    // =========================================================================
+    ShaderProgram* _boundShaderProgram = nullptr;
+    Material* _boundMaterial = nullptr;
+
+    // =========================================================================
     // Initialization Methods
     // =========================================================================
     bool InitializeDevice();
     bool InitializeRenderTarget();
     bool InitializeDepthStencil();
-    bool InitializeShaders();
-    bool InitializeBuffers();
     bool InitializeSamplers();
     bool InitializeRasterizerStates();
     bool InitializeStagingTexture();
@@ -162,11 +154,6 @@ private:
     void UnbindTexture();
 
     // =========================================================================
-    // Buffer Management
-    // =========================================================================
-    bool UpdateConstantBuffer(const ConstantBuffer& cb);
-
-    // =========================================================================
     // Cleanup
     // =========================================================================
     void Shutdown();
@@ -177,19 +164,11 @@ private:
     void BeginColBuffFrame();
 
     // =========================================================================
-    // High-Level Drawing API - Meshes and Models (Friend-Accessible Only via Renderer)
+    // High-Level Drawing API - (Friend-Accessible Only via Renderer)
     // =========================================================================
     void DrawMesh(const Mesh* mesh);
-    void DrawMesh(const Mesh* mesh, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera);
-    
-    void DrawModel(const Model& ModelObj, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera);
-    void DrawModel(const Model& ModelObj, const glm::mat4& model, const Camera3D& camera);
-
-    // =========================================================================
-    // High-Level Drawing API - 2D Quads (Friend-Accessible Only via Renderer)
-    // =========================================================================
-    void Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& position, const float rotation, const glm::vec2& size, const Camera2D& camera, const int layer, const bool CCW = true);
-    void Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer, const bool CCW = true);
+    void DrawModel(const Model& ModelObj);
+    void Draw2DQuad(const Texture& tex);
 
 public:
     // =========================================================================
@@ -214,11 +193,21 @@ public:
     // =========================================================================
     void EndColBuffFrame();  // Presents debug swap chain for RenderDoc
     void DownloadFramebuffer();
+    
+    // Bind a custom shader program (nullptr to use default)
+    void BindShaderProgram(ShaderProgram* program);
+    
+    // Bind a material (sets shader + uniforms + textures)
+    void BindMaterial(Material* material);
+    
+    // Unbind custom shader (reverts to default)
+    void UnbindShaderProgram();
+    
+    // Get currently bound shader program (nullptr if using default)
+    ShaderProgram* GetBoundShaderProgram() const { return _boundShaderProgram; }
 
-    // =========================================================================
-    // Shader Uniforms (Set before rendering)
-    // =========================================================================
-    void SetMVP(const glm::mat4& mvp);
+    // Helper: Upload material's constant buffer
+    void UploadMaterialConstants(Material* material);
 };
 
 } // namespace ASCIIgL

@@ -3,7 +3,10 @@
 #include <vector>
 #include <cstdint>
 #include <string>
+
 #include <glm/glm.hpp>
+
+#include <dxgiformat.h>
 
 namespace ASCIIgL {
 
@@ -134,6 +137,8 @@ uint32_t GetVertexElementTypeSize(VertexElementType type);
 
 // Get semantic name as string (for DirectX input layout)
 const char* GetSemanticName(VertexElementSemantic semantic);
+
+DXGI_FORMAT GetDXGIFormat(VertexElementType type);
 
 // =========================================================================
 // Predefined Common Formats

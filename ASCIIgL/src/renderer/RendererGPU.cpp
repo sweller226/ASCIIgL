@@ -1,6 +1,9 @@
 #include <ASCIIgL/renderer/RendererGPU.hpp>
+#include <ASCIIgL/renderer/Shader.hpp>
+#include <ASCIIgL/renderer/Material.hpp>
 
 #include <iostream>
+#include <sstream>
 #include <Windows.h>
 
 #include <ASCIIgL/renderer/Renderer.hpp>
@@ -71,17 +74,6 @@ float4 main(PS_INPUT input) : SV_TARGET
 )";
 
 // =========================================================================
-// Forward Declarations for Static Helper Functions
-// =========================================================================
-static bool CompileShaderFromSource(ID3D11Device* device, const std::string& source, 
-                                    const char* entryPoint, const char* target, ID3DBlob** blob);
-static bool CreateVertexShaderFromSource(ID3D11Device* device, const std::string& source, 
-                                         const char* entryPoint, ID3D11VertexShader** vertexShader,
-                                         ID3D11InputLayout** inputLayout);
-static bool CreatePixelShaderFromSource(ID3D11Device* device, const std::string& source, 
-                                        const char* entryPoint, ID3D11PixelShader** pixelShader);
-
-// =========================================================================
 // Destructor
 // =========================================================================
 
@@ -110,53 +102,40 @@ void RendererGPU::Initialize() {
         _renderer = &Renderer::GetInst();
     }
 
-    std::cout << "[RendererGPU] Initializing DirectX 11..." << std::endl;
-
-    // Initialize constant buffer data with defaults
-    _currentConstantBuffer.mvp = glm::mat4(1.0f);
+    Logger::Info("[RendererGPU] Initializing DirectX 11...");
 
     if (!InitializeDevice()) {
-        std::cerr << "[RendererGPU] Failed to initialize device" << std::endl;
+        Logger::Error("[RendererGPU] Failed to initialize device");
         return;
     }
 
     if (!InitializeRenderTarget()) {
-        std::cerr << "[RendererGPU] Failed to initialize render target" << std::endl;
+        Logger::Error("[RendererGPU] Failed to initialize render target");
         return;
     }
 
     if (!InitializeDepthStencil()) {
-        std::cerr << "[RendererGPU] Failed to initialize depth stencil" << std::endl;
-        return;
-    }
-
-    if (!InitializeShaders()) {
-        std::cerr << "[RendererGPU] Failed to initialize shaders" << std::endl;
-        return;
-    }
-
-    if (!InitializeBuffers()) {
-        std::cerr << "[RendererGPU] Failed to initialize buffers" << std::endl;
+        Logger::Error("[RendererGPU] Failed to initialize depth stencil");
         return;
     }
 
     if (!InitializeSamplers()) {
-        std::cerr << "[RendererGPU] Failed to initialize samplers" << std::endl;
+        Logger::Error("[RendererGPU] Failed to initialize samplers");
         return;
     }
 
     if (!InitializeRasterizerStates()) {
-        std::cerr << "[RendererGPU] Failed to initialize rasterizer states" << std::endl;
+        Logger::Error("[RendererGPU] Failed to initialize rasterizer states");
         return;
     }
 
     if (!InitializeStagingTexture()) {
-        std::cerr << "[RendererGPU] Failed to initialize staging texture" << std::endl;
+        Logger::Error("[RendererGPU] Failed to initialize staging texture");
         return;
     }
 
     if (!InitializeDebugSwapChain()) {
-        std::cerr << "[RendererGPU] Failed to initialize debug swap chain (non-fatal)" << std::endl;
+        Logger::Error("[RendererGPU] Failed to initialize debug swap chain (non-fatal)");
         // Non-fatal - continue without swap chain
     }
 
@@ -164,7 +143,6 @@ void RendererGPU::Initialize() {
     InitializeQuadMeshes();
 
     _initialized = true;
-    std::cout << "[RendererGPU] DirectX 11 initialized successfully" << std::endl;
     Logger::Debug("RendererGPU initialization complete - Device, Shaders, Buffers ready");
 }
 
@@ -194,12 +172,14 @@ bool RendererGPU::InitializeDevice() {
     );
 
     if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] D3D11CreateDevice failed: 0x" << std::hex << hr << std::endl;
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] D3D11CreateDevice failed: 0x" + ss.str());
         return false;
     }
 
-    std::cout << "[RendererGPU] Device created with feature level: " 
-              << (featureLevel == D3D_FEATURE_LEVEL_11_1 ? "11.1" : "11.0") << std::endl;
+    std::string featureLevelStr = (featureLevel == D3D_FEATURE_LEVEL_11_1) ? "11.1" : "11.0";
+    Logger::Info("[RendererGPU] Device created with feature level: " + featureLevelStr);
 
     return true;
 }
@@ -221,7 +201,7 @@ bool RendererGPU::InitializeRenderTarget() {
         if (numQualityLevels > 0) {
             qualityLevel = 0;  // Use highest quality
         } else {
-            std::cerr << "[RendererGPU] " << sampleCount << "x MSAA not supported, falling back to 1x" << std::endl;
+            Logger::Warning("[RendererGPU] " + std::to_string(sampleCount) + " x MSAA not supported, falling back to 1x");
             sampleCount = 1;
         }
     }
@@ -243,14 +223,18 @@ bool RendererGPU::InitializeRenderTarget() {
 
     HRESULT hr = _device->CreateTexture2D(&texDesc, nullptr, &_renderTarget);
     if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create render target texture: 0x" << std::hex << hr << std::endl;
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] Failed to create render target texture: 0x" + ss.str());
         return false;
     }
 
     // Create render target view
     hr = _device->CreateRenderTargetView(_renderTarget.Get(), nullptr, &_renderTargetView);
     if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create render target view: 0x" << std::hex << hr << std::endl;
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] Failed to create render target view: 0x" + ss.str());
         return false;
     }
     
@@ -261,12 +245,17 @@ bool RendererGPU::InitializeRenderTarget() {
     
     hr = _device->CreateTexture2D(&texDesc, nullptr, &_resolvedTexture);
     if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create resolved texture: 0x" << std::hex << hr << std::endl;
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] Failed to create resolved texture: 0x" + ss.str());
         return false;
     }
 
-    std::cout << "[RendererGPU] Render target created: " 
-              << Screen::GetInst().GetWidth() << "x" << Screen::GetInst().GetHeight() << std::endl;
+    std::string msg = "[RendererGPU] Render target initialized: " + 
+        std::to_string(Screen::GetInst().GetWidth()) + "x" + 
+        std::to_string(Screen::GetInst().GetHeight()) + 
+        (useMSAA ? (" with " + std::to_string(sampleCount) + "x MSAA") : " without MSAA");
+    Logger::Info(msg);
 
     return true;
 }
@@ -295,14 +284,18 @@ bool RendererGPU::InitializeDepthStencil() {
 
     HRESULT hr = _device->CreateTexture2D(&depthDesc, nullptr, &_depthStencilBuffer);
     if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create depth stencil buffer: 0x" << std::hex << hr << std::endl;
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] Failed to create depth stencil buffer: 0x" + ss.str());
         return false;
     }
 
     // Create depth stencil view
     hr = _device->CreateDepthStencilView(_depthStencilBuffer.Get(), nullptr, &_depthStencilView);
     if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create depth stencil view: 0x" << std::hex << hr << std::endl;
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] Failed to create depth stencil view: 0x" + ss.str());
         return false;
     }
 
@@ -315,39 +308,9 @@ bool RendererGPU::InitializeDepthStencil() {
 
     hr = _device->CreateDepthStencilState(&dsDesc, &_depthStencilState);
     if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create depth stencil state: 0x" << std::hex << hr << std::endl;
-        return false;
-    }
-
-    return true;
-}
-
-bool RendererGPU::InitializeShaders() {
-    // Compile and create vertex shader
-    if (!CreateVertexShaderFromSource(_device.Get(), g_VertexShaderSource, "main", &_vertexShader, &_inputLayout)) {
-        return false;
-    }
-
-    // Compile and create pixel shader
-    if (!CreatePixelShaderFromSource(_device.Get(), g_PixelShaderSource, "main", &_pixelShader)) {
-        return false;
-    }
-
-    std::cout << "[RendererGPU] Shaders compiled successfully" << std::endl;
-    return true;
-}
-
-bool RendererGPU::InitializeBuffers() {
-    // Create constant buffer
-    D3D11_BUFFER_DESC cbDesc = {};
-    cbDesc.ByteWidth = sizeof(ConstantBuffer);
-    cbDesc.Usage = D3D11_USAGE_DYNAMIC;
-    cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-    cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-    HRESULT hr = _device->CreateBuffer(&cbDesc, nullptr, &_constantBuffer);
-    if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create constant buffer: 0x" << std::hex << hr << std::endl;
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] Failed to create depth stencil state: 0x" + ss.str());
         return false;
     }
 
@@ -370,7 +333,9 @@ bool RendererGPU::InitializeSamplers() {
 
     HRESULT hr = _device->CreateSamplerState(&samplerDesc, &_samplerLinear);
     if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create sampler state: 0x" << std::hex << hr << std::endl;
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] Failed to create sampler state: 0x" + ss.str());
         return false;
     }
 
@@ -394,7 +359,9 @@ bool RendererGPU::InitializeRasterizerStates() {
 
         HRESULT hr = _device->CreateRasterizerState(&desc, &_rasterizerStates[i]);
         if (FAILED(hr)) {
-            std::cerr << "[RendererGPU] Failed to create rasterizer state " << i << ": 0x" << std::hex << hr << std::endl;
+            std::ostringstream ss;
+            ss << std::hex << hr;
+            Logger::Error("[RendererGPU] Failed to create rasterizer state " + std::to_string(i) + ": 0x" + ss.str());
             return false;
         }
     }
@@ -417,127 +384,11 @@ bool RendererGPU::InitializeStagingTexture() {
 
     HRESULT hr = _device->CreateTexture2D(&stagingDesc, nullptr, &_stagingTexture);
     if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create staging texture: 0x" << std::hex << hr << std::endl;
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] Failed to create staging texture: 0x" + ss.str());
         return false;
     }
-
-    return true;
-}
-
-// =========================================================================
-// Shader Compilation (Internal - Default Shaders Only)
-// =========================================================================
-
-static bool CompileShaderFromSource(ID3D11Device* device, const std::string& source, 
-                                    const char* entryPoint, const char* target, ID3DBlob** blob) {
-    ID3DBlob* errorBlob = nullptr;
-    HRESULT hr = D3DCompile(
-        source.c_str(),
-        source.length(),
-        nullptr,
-        nullptr,
-        nullptr,
-        entryPoint,
-        target,
-        D3DCOMPILE_ENABLE_STRICTNESS,
-        0,
-        blob,
-        &errorBlob
-    );
-
-    if (FAILED(hr)) {
-        if (errorBlob) {
-            std::cerr << "[RendererGPU] Shader compilation failed:\n" 
-                      << (char*)errorBlob->GetBufferPointer() << std::endl;
-            errorBlob->Release();
-        }
-        return false;
-    }
-
-    if (errorBlob) errorBlob->Release();
-    return true;
-}
-
-static bool CreateVertexShaderFromSource(ID3D11Device* device, const std::string& source, 
-                                         const char* entryPoint, ID3D11VertexShader** vertexShader,
-                                         ID3D11InputLayout** inputLayout) {
-    ComPtr<ID3DBlob> vsBlob;
-    if (!CompileShaderFromSource(device, source, entryPoint, "vs_5_0", &vsBlob)) {
-        return false;
-    }
-
-    HRESULT hr = device->CreateVertexShader(
-        vsBlob->GetBufferPointer(),
-        vsBlob->GetBufferSize(),
-        nullptr,
-        vertexShader
-    );
-
-    if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create vertex shader: 0x" << std::hex << hr << std::endl;
-        return false;
-    }
-
-    // Create input layout to match PosUV structure (5 floats = 20 bytes)
-    // data[0-2] = XYZ (position, 12 bytes)
-    // data[3-4] = UV (texcoord, 8 bytes)
-    D3D11_INPUT_ELEMENT_DESC layout[] = {
-        { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },  // XYZ
-        { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },  // UV
-    };
-
-    hr = device->CreateInputLayout(
-        layout,
-        ARRAYSIZE(layout),
-        vsBlob->GetBufferPointer(),
-        vsBlob->GetBufferSize(),
-        inputLayout
-    );
-
-    if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create input layout: 0x" << std::hex << hr << std::endl;
-        return false;
-    }
-
-    return true;
-}
-
-static bool CreatePixelShaderFromSource(ID3D11Device* device, const std::string& source, 
-                                        const char* entryPoint, ID3D11PixelShader** pixelShader) {
-    ComPtr<ID3DBlob> psBlob;
-    if (!CompileShaderFromSource(device, source, entryPoint, "ps_5_0", &psBlob)) {
-        return false;
-    }
-
-    HRESULT hr = device->CreatePixelShader(
-        psBlob->GetBufferPointer(),
-        psBlob->GetBufferSize(),
-        nullptr,
-        pixelShader
-    );
-
-    if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create pixel shader: 0x" << std::hex << hr << std::endl;
-        return false;
-    }
-
-    return true;
-}
-
-// =========================================================================
-// Buffer Management
-// =========================================================================
-
-bool RendererGPU::UpdateConstantBuffer(const ConstantBuffer& cb) {
-    D3D11_MAPPED_SUBRESOURCE mapped;
-    HRESULT hr = _context->Map(_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-    if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to map constant buffer: 0x" << std::hex << hr << std::endl;
-        return false;
-    }
-
-    memcpy(mapped.pData, &cb, sizeof(ConstantBuffer));
-    _context->Unmap(_constantBuffer.Get(), 0);
 
     return true;
 }
@@ -581,7 +432,9 @@ bool RendererGPU::CreateTextureFromASCIIgLTexture(const Texture* tex, ID3D11Shad
     ComPtr<ID3D11Texture2D> texture;
     HRESULT hr = _device->CreateTexture2D(&texDesc, nullptr, &texture);
     if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create texture: 0x" << std::hex << hr << std::endl;
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] Failed to create texture: 0x" + ss.str());
         return false;
     }
 
@@ -591,7 +444,9 @@ bool RendererGPU::CreateTextureFromASCIIgLTexture(const Texture* tex, ID3D11Shad
     // Create shader resource view first
     hr = _device->CreateShaderResourceView(texture.Get(), nullptr, srv);
     if (FAILED(hr)) {
-        std::cerr << "[RendererGPU] Failed to create SRV: 0x" << std::hex << hr << std::endl;
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] Failed to create SRV: 0x" + ss.str());
         return false;
     }
 
@@ -635,7 +490,7 @@ bool RendererGPU::InitializeDebugSwapChain() {
     // Get console window handle for minimal swap chain
     HWND hwnd = GetConsoleWindow();
     if (!hwnd) {
-        std::cerr << "[RendererGPU] Failed to get console window handle" << std::endl;
+        Logger::Error("[RendererGPU] Failed to get console window handle");
         return false;
     }
 
@@ -657,28 +512,28 @@ bool RendererGPU::InitializeDebugSwapChain() {
     // Get DXGI factory from device
     ComPtr<IDXGIDevice> dxgiDevice;
     if (FAILED(_device.As(&dxgiDevice))) {
-        std::cerr << "[RendererGPU] Failed to get DXGI device" << std::endl;
+        Logger::Error("[RendererGPU] Failed to get DXGI device");
         return false;
     }
 
     ComPtr<IDXGIAdapter> dxgiAdapter;
     if (FAILED(dxgiDevice->GetAdapter(&dxgiAdapter))) {
-        std::cerr << "[RendererGPU] Failed to get DXGI adapter" << std::endl;
+        Logger::Error("[RendererGPU] Failed to get DXGI adapter");
         return false;
     }
 
     ComPtr<IDXGIFactory> dxgiFactory;
     if (FAILED(dxgiAdapter->GetParent(__uuidof(IDXGIFactory), &dxgiFactory))) {
-        std::cerr << "[RendererGPU] Failed to get DXGI factory" << std::endl;
+        Logger::Error("[RendererGPU] Failed to get DXGI factory");
         return false;
     }
 
     if (FAILED(dxgiFactory->CreateSwapChain(_device.Get(), &swapChainDesc, &_debugSwapChain))) {
-        std::cerr << "[RendererGPU] Failed to create debug swap chain" << std::endl;
+        Logger::Error("[RendererGPU] Failed to create debug swap chain");
         return false;
     }
 
-    std::cout << "[RendererGPU] Debug swap chain created successfully" << std::endl;
+    Logger::Debug("[RendererGPU] Debug swap chain created successfully");
     return true;
 }
 
@@ -744,14 +599,11 @@ void RendererGPU::CleanupQuadMeshes() {
 
 void RendererGPU::BeginColBuffFrame() {
     if (!_initialized) {
-        std::cerr << "[RendererGPU] BeginFrame called before initialization!" << std::endl;
+        Logger::Error("[RendererGPU] BeginFrame called before initialization!");
         return;
     }
 
     Logger::Debug("BeginFrame: Clearing render target and setting up pipeline");
-
-    // Update constant buffer with current values
-    UpdateConstantBuffer(_currentConstantBuffer);
 
     // Clear render target (convert 0-15 integer color to 0-1 float)
     glm::ivec3 bgCol = _renderer->GetBackgroundCol();
@@ -788,15 +640,6 @@ void RendererGPU::BeginColBuffFrame() {
     // Calculate index: wireframe(0/1) + cull(0/2) + ccw(0/4)
     int stateIndex = (wireframe ? 1 : 0) + (backfaceCulling ? 2 : 0) + (ccw ? 4 : 0);
     _context->RSSetState(_rasterizerStates[stateIndex].Get());
-
-    // Bind shaders
-    _context->VSSetShader(_vertexShader.Get(), nullptr, 0);
-    _context->PSSetShader(_pixelShader.Get(), nullptr, 0);
-    _context->IASetInputLayout(_inputLayout.Get());
-
-    // Update and bind constant buffer
-    _context->VSSetConstantBuffers(0, 1, _constantBuffer.GetAddressOf());
-    _context->PSSetConstantBuffers(0, 1, _constantBuffer.GetAddressOf());
 
     // Bind sampler
     _context->PSSetSamplers(0, 1, _samplerLinear.GetAddressOf());
@@ -902,21 +745,6 @@ void RendererGPU::DownloadFramebuffer()
 }
 
 // =========================================================================
-// Shader Uniforms
-// =========================================================================
-
-void RendererGPU::SetMVP(const glm::mat4& mvp) {
-    _currentConstantBuffer.mvp = mvp;
-    
-    // Log MVP matrix (first time or when it changes significantly)
-    static bool firstTime = true;
-    if (firstTime) {
-        Logger::Debug("MVP Matrix set - [0][0]=" + std::to_string(mvp[0][0]) + " [3][3]=" + std::to_string(mvp[3][3]));
-        firstTime = false;
-    }
-}
-
-// =========================================================================
 // Cleanup
 // =========================================================================
 
@@ -939,11 +767,7 @@ void RendererGPU::Shutdown()
     for (auto& state : _rasterizerStates) {
         state.Reset();
     }
-    
-    _constantBuffer.Reset();
-    _inputLayout.Reset();
-    _pixelShader.Reset();
-    _vertexShader.Reset();
+
     _depthStencilState.Reset();
     _depthStencilView.Reset();
     _depthStencilBuffer.Reset();
@@ -954,7 +778,7 @@ void RendererGPU::Shutdown()
     _device.Reset();
 
     _initialized = false;
-    std::cout << "[RendererGPU] Shutdown complete" << std::endl;
+    Logger::Debug("[RendererGPU] Shutdown complete");
 }
 
 // =========================================================================
@@ -984,7 +808,9 @@ RendererGPU::GPUMeshCache* RendererGPU::GetOrCreateMeshCache(const Mesh* mesh) {
         
         HRESULT hr = _device->CreateBuffer(&vbDesc, &vbData, &cache->vertexBuffer);
         if (FAILED(hr)) {
-            std::cerr << "[RendererGPU] Failed to create mesh vertex buffer: 0x" << std::hex << hr << std::endl;
+            std::ostringstream ss;
+            ss << std::hex << hr;
+            Logger::Error("[RendererGPU] Failed to create mesh vertex buffer: 0x" + ss.str());
             delete cache;
             return nullptr;
         }
@@ -1003,7 +829,9 @@ RendererGPU::GPUMeshCache* RendererGPU::GetOrCreateMeshCache(const Mesh* mesh) {
         
         HRESULT hr = _device->CreateBuffer(&ibDesc, &ibData, &cache->indexBuffer);
         if (FAILED(hr)) {
-            std::cerr << "[RendererGPU] Failed to create mesh index buffer: 0x" << std::hex << hr << std::endl;
+            std::ostringstream ss;
+            ss << std::hex << hr;
+            Logger::Error("[RendererGPU] Failed to create mesh index buffer: 0x" + ss.str());
             delete cache;
             return nullptr;
         }
@@ -1065,54 +893,17 @@ void RendererGPU::DrawMesh(const Mesh* mesh) {
     }
 }
 
-void RendererGPU::DrawMesh(const Mesh* mesh, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera) {
-    if (!mesh) return;
-    
-    glm::mat4 model = MathUtil::CalcModelMatrix(position, rotation, size);
-    glm::mat4 mvp = camera.proj * camera.view * model;
- 
-    // Set MVP matrix for GPU rendering
-    SetMVP(mvp);
-    
-    // Use cached rendering path
-    DrawMesh(mesh);
-}
-
-void RendererGPU::DrawModel(const Model& ModelObj, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera) {
-    glm::mat4 model = MathUtil::CalcModelMatrix(position, rotation, size);
-    glm::mat4 mvp = camera.proj * camera.view * model;
-
-    // Set MVP matrix for GPU rendering
-    SetMVP(mvp);
-
+void RendererGPU::DrawModel(const Model& ModelObj) {
     for (size_t i = 0; i < ModelObj.meshes.size(); i++) {
         DrawMesh(ModelObj.meshes[i]);
     }
 }
 
-void RendererGPU::DrawModel(const Model& ModelObj, const glm::mat4& model, const Camera3D& camera)
-{
-    glm::mat4 mvp = camera.proj * camera.view * model;
-
-    // Set MVP matrix for GPU rendering
-    SetMVP(mvp);
-
-    for (size_t i = 0; i < ModelObj.meshes.size(); i++) {
-        DrawMesh(ModelObj.meshes[i]);
-    }
-}
-
-void RendererGPU::Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& position, const float rotation, const glm::vec2& size, const Camera2D& camera, const int layer, const bool CCW) {
+void RendererGPU::Draw2DQuad(const Texture& tex) {
     if (!_initialized || (!_quadMeshCCW && !_quadMeshCW)) return;
-    
-    glm::mat4 model = MathUtil::CalcModelMatrix(glm::vec3(position, layer), rotation, glm::vec3(size, 0.0f));
-    glm::mat4 mvp = camera.proj * camera.view * model;
-
-    // Set MVP matrix for GPU rendering
-    SetMVP(mvp);
 
     // Select appropriate quad mesh
-    Mesh* quadMesh = CCW ? _quadMeshCCW : _quadMeshCW;
+    Mesh* quadMesh = _renderer->_ccw ? _quadMeshCCW : _quadMeshCW;
     
     // Temporarily set texture on mesh
     Texture* originalTexture = quadMesh->texture;
@@ -1125,34 +916,96 @@ void RendererGPU::Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& posi
     quadMesh->texture = originalTexture;
 }
 
-void RendererGPU::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer, const bool CCW)
-{
-    if (!_initialized || (!_quadMeshCCW && !_quadMeshCW)) return;
-    
-    // Convert percentage coordinates to pixel coordinates
-    float screenWidth = static_cast<float>(Screen::GetInst().GetWidth());
-    float screenHeight = static_cast<float>(Screen::GetInst().GetHeight());
-    
-    glm::vec2 pixelPosition = glm::vec2(positionPerc.x * screenWidth, positionPerc.y * screenHeight);
-    glm::vec2 pixelSize = glm::vec2(sizePerc.x * screenWidth, sizePerc.y * screenHeight);
-    
-    glm::mat4 model = MathUtil::CalcModelMatrix(glm::vec3(pixelPosition, layer), rotation, glm::vec3(pixelSize, 0.0f));
-    glm::mat4 mvp = camera.proj * camera.view * model;
+// =========================================================================
+// Custom Shader/Material System Implementation
+// =========================================================================
 
-    // Set MVP matrix for GPU rendering
-    SetMVP(mvp);
-
-    // Select appropriate quad mesh
-    Mesh* quadMesh = CCW ? _quadMeshCCW : _quadMeshCW;
+void RendererGPU::BindShaderProgram(ShaderProgram* program) {
+    if (!_initialized) return;
     
-    // Temporarily set texture on mesh
-    Texture* originalTexture = quadMesh->texture;
-    quadMesh->texture = const_cast<Texture*>(&tex);
+    _boundShaderProgram = program;
     
-    // Draw using cached mesh
-    DrawMesh(quadMesh);
-    
-    // Restore original texture (nullptr)
-    quadMesh->texture = originalTexture;
+    if (program && program->IsValid()) {
+        // Bind custom shaders and input layout
+        _context->VSSetShader(program->_vertexShader->_vertexShader.Get(), nullptr, 0);
+        _context->PSSetShader(program->_pixelShader->_pixelShader.Get(), nullptr, 0);
+        _context->IASetInputLayout(program->_inputLayout.Get());
+    } else {
+        // Revert to default shaders
+        UnbindShaderProgram();
+    }
 }
+
+void RendererGPU::UnbindShaderProgram() {
+    if (!_initialized) return;
+    
+    _boundShaderProgram = nullptr;
+    _boundMaterial = nullptr;
+}
+
+void RendererGPU::BindMaterial(Material* material) {
+    if (!_initialized || !material) return;
+    
+    _boundMaterial = material;
+    
+    // Bind shader program
+    auto program = material->GetShaderProgram();
+    if (program) {
+        BindShaderProgram(program.get());
+    }
+    
+    // Bind textures
+    for (const auto& slot : material->_textureSlots) {
+        if (slot.texture) {
+            BindTexture(slot.texture);
+            // If we had multiple texture slots, we'd set them to different registers
+            // For now, we only support slot 0 (diffuse)
+        }
+    }
+    
+    // Upload constant buffer if dirty
+    UploadMaterialConstants(material);
+}
+
+void RendererGPU::UploadMaterialConstants(Material* material) {
+    if (!material || !_initialized) return;
+    
+    // Update material's packed constant buffer data
+    material->UpdateConstantBufferData();
+    
+    auto program = material->GetShaderProgram();
+    if (!program) return;
+    
+    const auto& layout = program->GetUniformLayout();
+    if (layout.GetSize() == 0) return;
+    
+    // Create or update material's GPU constant buffer
+    if (!material->_constantBufferInitialized) {
+        D3D11_BUFFER_DESC cbDesc = {};
+        cbDesc.ByteWidth = layout.GetSize();
+        cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+        cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        
+        HRESULT hr = _device->CreateBuffer(&cbDesc, nullptr, &material->_constantBuffer);
+        if (FAILED(hr)) {
+            Logger::Error("Failed to create material constant buffer");
+            return;
+        }
+        material->_constantBufferInitialized = true;
+    }
+    
+    // Map and upload data
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    HRESULT hr = _context->Map(material->_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    if (SUCCEEDED(hr)) {
+        memcpy(mapped.pData, material->_constantBufferData.data(), layout.GetSize());
+        _context->Unmap(material->_constantBuffer.Get(), 0);
+    }
+    
+    // Bind to both vertex and pixel shader stages
+    _context->VSSetConstantBuffers(0, 1, material->_constantBuffer.GetAddressOf());
+    _context->PSSetConstantBuffers(0, 1, material->_constantBuffer.GetAddressOf());
+}
+
 } // namespace ASCIIgL

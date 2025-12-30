@@ -109,12 +109,9 @@ public:
     // Drawing API
     // =========================================================================
     void DrawMesh(const Mesh* mesh);
-    void DrawMesh(const Mesh* mesh, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera);
-    void DrawModel(const Model& ModelObj, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera);
-    void DrawModel(const Model& ModelObj, const glm::mat4& model, const Camera3D& camera);
-    void Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& position, const float rotation, const glm::vec2& size, const Camera2D& camera, const int layer);
-    void Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer);
-    
+    void DrawModel(const Model& ModelObj);
+    void Draw2DQuad(const Texture& tex);
+
     // =========================================================================
     // Low-Level Drawing API - Primitives, No pipeline involved
     // =========================================================================

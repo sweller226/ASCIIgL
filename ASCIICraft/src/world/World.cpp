@@ -10,6 +10,7 @@
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/RendererCPU.hpp>
 #include <ASCIIgL/renderer/RendererGPU.hpp>
+#include <ASCIIgL/renderer/Material.hpp>
 
 #include <ASCIICraft/player/Player.hpp>
 
@@ -64,11 +65,11 @@ void World::Render() {
     ASCIIgL::Logger::Debug("Render: visibleChunks = " + std::to_string(visibleChunks.size()));
 
     // Set up view-projection matrix once
-    if (ASCIIgL::Renderer::GetInst().GetCpuOnly()) {
-        ASCIIgL::RendererCPU::GetInst().GetVShader().SetMatrices(glm::mat4(1.0f), player->GetCamera().view, player->GetCamera().proj);
-    } else {
-        ASCIIgL::RendererGPU::GetInst().SetMVP(player->GetCamera().proj * player->GetCamera().view * glm::mat4(1.0f));
-    }
+    glm::mat4 mvp = player->GetCamera().proj * player->GetCamera().view * glm::mat4(1.0f);
+    auto mat = ASCIIgL::MaterialLibrary::GetInst().GetDefault();
+    ASCIIgL::RendererGPU::GetInst().BindMaterial(mat.get());
+    mat->SetMatrix4("mvp", mvp);
+    ASCIIgL::RendererGPU::GetInst().UploadMaterialConstants(mat.get());
     
     // Render each chunk individually - leverages GPU mesh caching
     for (Chunk* chunk : visibleChunks) {

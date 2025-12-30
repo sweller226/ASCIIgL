@@ -93,41 +93,15 @@ void RendererCPU::DrawMesh(const Mesh* mesh) {
     RenderTriangles(mesh->GetVertices(), mesh->GetVertFormat(), mesh->GetTexture());
 }
 
-void RendererCPU::DrawMesh(const Mesh* mesh, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera) {
-    glm::mat4 model = MathUtil::CalcModelMatrix(position, rotation, size);
 
-    _vertex_shader.SetMatrices(model, camera.view, camera.proj);
-    
-    RenderTriangles(mesh->GetVertices(), mesh->GetVertFormat(), mesh->GetTexture());
-}
-
-
-void RendererCPU::DrawModel(const Model& ModelObj, const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size, const Camera3D& camera) {
-    glm::mat4 model = MathUtil::CalcModelMatrix(position, rotation, size);
-
-    _vertex_shader.SetMatrices(model, camera.view, camera.proj);
-
+void RendererCPU::DrawModel(const Model& ModelObj) {
     for (size_t i = 0; i < ModelObj.meshes.size(); i++) {
         DrawMesh(ModelObj.meshes[i]);
     }
 }
 
-void RendererCPU::DrawModel(const Model& ModelObj, const glm::mat4& model, const Camera3D& camera)
-{
-    _vertex_shader.SetMatrices(model, camera.view, camera.proj);
-
-    for (size_t i = 0; i < ModelObj.meshes.size(); i++) {
-        DrawMesh(ModelObj.meshes[i]);
-    }
-}
-
-void RendererCPU::Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& position, const float rotation, const glm::vec2& size, const Camera2D& camera, const int layer)
-{
-    glm::mat4 model = MathUtil::CalcModelMatrix(glm::vec3(position, layer), rotation, glm::vec3(size, 0.0f));
-
-    _vertex_shader.SetMatrices(model, camera.view, camera.proj);
-
-    static const VertStructs::PosWUVInvW vertexData[] = {
+void RendererCPU::Draw2DQuad(const Texture& tex) {
+    static const VertStructs::PosWUVInvW vertexDataCCW[] = {
         {{ -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f}}, // bottom-left
         {{ -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f}}, // top-left
         {{  1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f}}, // top-right
@@ -135,39 +109,18 @@ void RendererCPU::Draw2DQuadPixelSpace(const Texture& tex, const glm::vec2& posi
         {{  1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f}}, // bottom-right
         {{ -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f}}, // bottom-left
     };
-    
-    static const std::vector<std::byte> vertices(
-        reinterpret_cast<const std::byte*>(vertexData),
-        reinterpret_cast<const std::byte*>(vertexData) + sizeof(vertexData)
-    );
 
-    RenderTriangles(vertices, VertFormats::PosWUVInvW(), &tex);
-}
-
-void RendererCPU::Draw2DQuadPercSpace(const Texture& tex, const glm::vec2& positionPerc, const float rotation, const glm::vec2& sizePerc, const Camera2D& camera, const int layer)
-{
-    // Convert percentage coordinates to pixel coordinates
-    float screenWidth = static_cast<float>(Screen::GetInst().GetWidth());
-    float screenHeight = static_cast<float>(Screen::GetInst().GetHeight());
-    
-    glm::vec2 pixelPosition = glm::vec2(positionPerc.x * screenWidth, positionPerc.y * screenHeight);
-    glm::vec2 pixelSize = glm::vec2(sizePerc.x * screenWidth, sizePerc.y * screenHeight);
-    
-    glm::mat4 model = MathUtil::CalcModelMatrix(glm::vec3(pixelPosition, layer), rotation, glm::vec3(pixelSize, 0.0f));
-
-    _vertex_shader.SetModel(model);
-    _vertex_shader.SetView(camera.view);
-    _vertex_shader.SetProj(camera.proj);
-    _vertex_shader.UpdateMVP();
-
-    static const VertStructs::PosWUVInvW vertexData[] = {
+    static const VertStructs::PosWUVInvW vertexDataCW[] = {
         {{ -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f}}, // bottom-left
+        {{  1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f}}, // top-right
         {{ -1.0f,  1.0f,  0.0f, 1.0f, 0.0f, 1.0f, 1.0f}}, // top-left
-        {{  1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f}}, // top-right
-        {{  1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f}}, // top-right
-        {{  1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f}}, // bottom-right
+
         {{ -1.0f, -1.0f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f}}, // bottom-left
+        {{  1.0f, -1.0f,  0.0f, 1.0f, 1.0f, 0.0f, 1.0f}}, // bottom-right
+        {{  1.0f,  1.0f,  0.0f, 1.0f, 1.0f, 1.0f, 1.0f}}, // top-right
     };
+
+    const VertStructs::PosWUVInvW* vertexData = _renderer->_ccw ? vertexDataCCW : vertexDataCW;
     
     static const std::vector<std::byte> vertices(
         reinterpret_cast<const std::byte*>(vertexData),

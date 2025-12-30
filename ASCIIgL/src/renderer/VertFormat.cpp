@@ -167,6 +167,31 @@ const char* GetSemanticName(VertexElementSemantic semantic) {
     }
 }
 
+// Helper function to convert VertexElementType to DXGI_FORMAT
+DXGI_FORMAT GetDXGIFormat(VertexElementType type) {
+    switch (type) {
+        case VertexElementType::Float:              return DXGI_FORMAT_R32_FLOAT;
+        case VertexElementType::Float2:             return DXGI_FORMAT_R32G32_FLOAT;
+        case VertexElementType::Float3:             return DXGI_FORMAT_R32G32B32_FLOAT;
+        case VertexElementType::Float4:             return DXGI_FORMAT_R32G32B32A32_FLOAT;
+        case VertexElementType::Int:                return DXGI_FORMAT_R32_SINT;
+        case VertexElementType::Int2:               return DXGI_FORMAT_R32G32_SINT;
+        case VertexElementType::Int3:               return DXGI_FORMAT_R32G32B32_SINT;
+        case VertexElementType::Int4:               return DXGI_FORMAT_R32G32B32A32_SINT;
+        case VertexElementType::UByte4:             return DXGI_FORMAT_R8G8B8A8_UINT;
+        case VertexElementType::UByte4Normalized:   return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case VertexElementType::Short2:             return DXGI_FORMAT_R16G16_SINT;
+        case VertexElementType::Short2Normalized:   return DXGI_FORMAT_R16G16_SNORM;
+        case VertexElementType::Short4:             return DXGI_FORMAT_R16G16B16A16_SINT;
+        case VertexElementType::Short4Normalized:   return DXGI_FORMAT_R16G16B16A16_SNORM;
+        case VertexElementType::UShort2:            return DXGI_FORMAT_R16G16_UINT;
+        case VertexElementType::UShort2Normalized:  return DXGI_FORMAT_R16G16_UNORM;
+        case VertexElementType::UShort4:            return DXGI_FORMAT_R16G16B16A16_UINT;
+        case VertexElementType::UShort4Normalized:  return DXGI_FORMAT_R16G16B16A16_UNORM;
+        default:                                    return DXGI_FORMAT_UNKNOWN;
+    }
+}
+
 // =========================================================================
 // Predefined Common Formats
 // =========================================================================

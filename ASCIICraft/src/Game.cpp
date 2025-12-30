@@ -4,6 +4,7 @@
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
 #include <ASCIIgL/renderer/RendererGPU.hpp>
+#include <ASCIIgL/renderer/Material.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
@@ -65,7 +66,7 @@ bool Game::Initialize() {
     ASCIIgL::Renderer::GetInst().SetDiagnosticsEnabled(true);
 
     ASCIIgL::Renderer::GetInst().Initialize(true, 4, false); // Enable antialiasing with 4 samples, not CPU only
-    
+
     // Load resources
     if (!LoadResources()) {
         ASCIIgL::Logger::Error("Failed to load resources");
