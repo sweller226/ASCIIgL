@@ -1,4 +1,4 @@
-#include <ASCIIgL/renderer/RendererCPU.hpp>
+#include <ASCIIgL/renderer/cpu/RendererCPU.hpp>
 
 #include <algorithm>
 #include <execution>
@@ -15,9 +15,9 @@
 #include <ASCIIgL/util/MathUtil.hpp>
 #include <ASCIIgL/util/Profiler.hpp>
 
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
-#include <ASCIIgL/renderer/TileManager.hpp>
+#include <ASCIIgL/renderer/cpu/TileManager.hpp>
 
 namespace ASCIIgL {
 

@@ -1,13 +1,13 @@
-#include <ASCIIgL/renderer/RendererGPU.hpp>
-#include <ASCIIgL/renderer/Shader.hpp>
-#include <ASCIIgL/renderer/Material.hpp>
+#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
 
 #include <iostream>
 #include <sstream>
 #include <Windows.h>
 
 #include <ASCIIgL/renderer/Renderer.hpp>
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
+#include <ASCIIgL/renderer/gpu/Shader.hpp>
+#include <ASCIIgL/renderer/gpu/Material.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/util/MathUtil.hpp>

@@ -1,10 +1,12 @@
 #include <ASCIICraft/game/Game.hpp>
 
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
+
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
-#include <ASCIIgL/renderer/RendererGPU.hpp>
-#include <ASCIIgL/renderer/Material.hpp>
+
+#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
+#include <ASCIIgL/renderer/gpu/Material.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>

@@ -1,5 +1,5 @@
 #include <ASCIIgL/engine/Mesh.hpp>
-#include <ASCIIgL/renderer/RendererGPU.hpp>
+#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
 
 namespace ASCIIgL {
 

@@ -1,5 +1,5 @@
 // header include
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
 
 // c++ standard library
 #include <thread>
@@ -20,7 +20,7 @@
 #include <ASCIIgL/util/Logger.hpp>
 
 #ifdef _WIN32
-    #include <ASCIIgL/renderer/ScreenWinImpl.hpp>
+    #include <ASCIIgL/renderer/screen/ScreenWinImpl.hpp>
 #endif
 
 namespace ASCIIgL {

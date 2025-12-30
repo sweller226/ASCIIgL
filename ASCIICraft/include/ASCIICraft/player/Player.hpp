@@ -4,7 +4,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <ASCIIgL/engine/Camera3D.hpp>
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
 
 #include <ASCIICraft/input_manager/InputManager.hpp>
 

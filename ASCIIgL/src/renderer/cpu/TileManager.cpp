@@ -1,8 +1,8 @@
-#include <ASCIIgL/renderer/TileManager.hpp>
+#include <ASCIIgL/renderer/cpu/TileManager.hpp>
 
 #include <tbb/parallel_for.h>
 
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/util/MathUtil.hpp>
 
 namespace ASCIIgL {

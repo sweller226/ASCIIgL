@@ -1,5 +1,6 @@
-#include <ASCIIgL/renderer/Material.hpp>
-#include <ASCIIgL/renderer/RendererGPU.hpp>
+#include <ASCIIgL/renderer/gpu/Material.hpp>
+
+#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 

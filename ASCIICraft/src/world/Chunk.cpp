@@ -4,9 +4,6 @@
 #include <cassert>
 
 #include <ASCIIgL/renderer/Renderer.hpp>
-#include <ASCIIgL/renderer/RendererGPU.hpp>
-#include <ASCIIgL/renderer/RendererCPU.hpp>
-#include <ASCIIgL/renderer/VertexShaderCPU.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>

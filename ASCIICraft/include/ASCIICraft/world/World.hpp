@@ -10,8 +10,6 @@
 #include <vector>
 #include <glm/glm.hpp>
 
-#include <ASCIIgL/renderer/VertexShaderCPU.hpp>
-
 // Forward declarations
 class Player;
 

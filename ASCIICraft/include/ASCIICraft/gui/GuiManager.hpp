@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ASCIIgL/engine/Camera2D.hpp>
-#include <ASCIIgL/renderer/VertexShaderCPU.hpp>
 
 class GuiManager {
 public:

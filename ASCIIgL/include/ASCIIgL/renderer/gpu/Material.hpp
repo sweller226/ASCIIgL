@@ -8,7 +8,7 @@
 
 #include <glm/glm.hpp>
 
-#include <ASCIIgL/renderer/Shader.hpp>
+#include <ASCIIgL/renderer/gpu/Shader.hpp>
 
 #ifdef _WIN32
 #include <d3d11.h>

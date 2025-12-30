@@ -1,8 +1,9 @@
-#include <ASCIIgL/renderer/Shader.hpp>
+#include <ASCIIgL/renderer/gpu/Shader.hpp>
 
 #include <iostream>
 
-#include <ASCIIgL/renderer/RendererGPU.hpp>
+#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
+
 #include <ASCIIgL/util/Logger.hpp>
 
 

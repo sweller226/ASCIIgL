@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
 
 #include <ASCIICraft/world/World.hpp>

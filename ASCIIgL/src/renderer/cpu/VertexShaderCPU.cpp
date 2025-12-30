@@ -1,4 +1,4 @@
-#include <ASCIIgL/renderer/VertexShaderCPU.hpp>
+#include <ASCIIgL/renderer/cpu/VertexShaderCPU.hpp>
 
 #include <tbb/parallel_for_each.h>
 

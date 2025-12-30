@@ -11,10 +11,12 @@
 #include <ASCIIgL/engine/Camera3D.hpp>
 #include <ASCIIgL/engine/Camera2D.hpp>
 
-#include <ASCIIgL/renderer/VertexShaderCPU.hpp>
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
+
+#include <ASCIIgL/renderer/cpu/VertexShaderCPU.hpp>
+#include <ASCIIgL/renderer/cpu/TileManager.hpp>
+
 #include <ASCIIgL/renderer/Palette.hpp>
-#include <ASCIIgL/renderer/TileManager.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 
 namespace ASCIIgL {

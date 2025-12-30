@@ -15,9 +15,9 @@
 #include <ASCIIgL/util/MathUtil.hpp>
 #include <ASCIIgL/util/Profiler.hpp>
 
-#include <ASCIIgL/renderer/Screen.hpp>
-#include <ASCIIgL/renderer/RendererCPU.hpp>
-#include <ASCIIgL/renderer/RendererGPU.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
+#include <ASCIIgL/renderer/cpu/RendererCPU.hpp>
+#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 
 namespace ASCIIgL {
