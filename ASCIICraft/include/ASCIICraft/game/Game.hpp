@@ -4,10 +4,10 @@
 
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
+#include <ASCIIgL/engine/InputManager.hpp>
 
 #include <ASCIICraft/world/World.hpp>
 #include <ASCIICraft/player/Player.hpp>
-#include <ASCIICraft/input_manager/InputManager.hpp>
 
 enum class GameState {
     Playing,
@@ -37,7 +37,6 @@ private:
     // Core systems
     std::unique_ptr<World> world;
     std::unique_ptr<Player> player;
-    std::unique_ptr<InputManager> inputManager;
     
     // Resources
     std::unique_ptr<ASCIIgL::Texture> blockAtlas;  // Block texture atlas - must persist during game lifetime

@@ -92,7 +92,7 @@ void Player::UpdatePhysics(World* world) {
     // Note: onGround is set in HandleCollisions when hitting floor
 }
 
-void Player::HandleInput(const InputManager& input) {
+void Player::HandleInput(const ASCIIgL::InputManager& input) {
     ProcessMovementInput(input);
     ProcessCameraInput(input);
 }
@@ -407,7 +407,7 @@ void Player::UpdateMovementState() {
     }
 }
 
-void Player::ProcessMovementInput(const InputManager& input) {
+void Player::ProcessMovementInput(const ASCIIgL::InputManager& input) {
     glm::vec3 moveDirection(0.0f);
 
     // Get camera directions for movement
@@ -468,7 +468,7 @@ void Player::ProcessMovementInput(const InputManager& input) {
     Move(moveDirection);
 }
 
-void Player::ProcessCameraInput(const InputManager& input) {
+void Player::ProcessCameraInput(const ASCIIgL::InputManager& input) {
     // Use keyboard controls for camera movement (arrow keys only)
     
     float yawDelta = 0.0f;

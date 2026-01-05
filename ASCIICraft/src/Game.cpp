@@ -78,10 +78,10 @@ bool Game::Initialize() {
     
     // Initialize game systems
     world = std::make_unique<World>(12, WorldPos(0, 90, 0), 16);
-    inputManager = std::make_unique<InputManager>();
+    ASCIIgL::InputManager::GetInst().Initialize();
     
     // Create player at spawn point
-    player = std::make_unique<Player>(world->GetSpawnPoint().ToVec3(), GameMode::Spectator);
+    player = std::make_unique<Player>(world->GetSpawnPoint().ToVec3(), GameMode::Survival);
     
     // Connect player to world
     world->SetPlayer(player.get());
@@ -192,15 +192,15 @@ void Game::Render() {
 }
 
 void Game::HandleInput() {
-    inputManager->Update();
+    ASCIIgL::InputManager::GetInst().Update();
     
     // Process player input
     if (player && gameState == GameState::Playing) {
-        player->HandleInput(*inputManager);
+        player->HandleInput(ASCIIgL::InputManager::GetInst());
     }
     
     // Handle exit input
-    if (inputManager->IsActionPressed("quit")) {
+    if (ASCIIgL::InputManager::GetInst().IsActionPressed("quit")) {
         gameState = GameState::Exiting;
     }
 }
@@ -214,7 +214,6 @@ void Game::Shutdown() {
     // Clean up resources
     player.reset();
     world.reset();
-    inputManager.reset();
     blockAtlas.reset();  // Destroy the texture atlas
     
     // Screen cleanup happens automatically in destructor
