@@ -41,7 +41,7 @@ private:
 	unsigned int SCR_HEIGHT = 400;
 
 	bool running = true;
-	VERTEX_SHADER vertexShader;  // default vertex shader, didn't have time to implement custom ones
+	VERTEX_SHADER_CPU vertexShader;  // default vertex shader, didn't have time to implement custom ones
 
 	// LOADING LEVEL
 	int levelXSize = 300;

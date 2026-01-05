@@ -1,5 +1,5 @@
 // header include
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
 
 // c++ standard library
 #include <thread>
@@ -20,8 +20,10 @@
 #include <ASCIIgL/util/Logger.hpp>
 
 #ifdef _WIN32
-    #include <ASCIIgL/renderer/ScreenWinImpl.hpp>
+    #include <ASCIIgL/renderer/screen/ScreenWinImpl.hpp>
 #endif
+
+namespace ASCIIgL {
 
 // Custom constructor and destructor for PIMPL pattern - must be defined where ScreenWinImpl is complete
 Screen::Screen() = default;
@@ -36,6 +38,13 @@ int Screen::Initialize(
     unsigned int fontSize, 
     const Palette palette
 ) {
+    if (!_initialized) {
+        Logger::Info("Initializing Screen...");
+    } else {
+        Logger::Warning("Screen is already initialized!");
+        return 0;
+    }
+
     Logger::Debug(L"CPU has max " + std::to_wstring(std::thread::hardware_concurrency()) + L" threads.");
 
     Logger::Debug(L"Initializing screen with width=" + std::to_wstring(width) + L", height=" + std::to_wstring(height) + L", title=" + title);
@@ -158,3 +167,5 @@ bool Screen::IsInitialized() const {
 Palette& Screen::GetPalette() {
     return _palette;
 }
+
+} // namespace ASCIIgL

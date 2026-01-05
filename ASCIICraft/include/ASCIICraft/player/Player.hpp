@@ -4,7 +4,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <ASCIIgL/engine/Camera3D.hpp>
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
 
 #include <ASCIICraft/input_manager/InputManager.hpp>
 
@@ -57,7 +57,7 @@ public:
     // Getters
     const glm::vec3& GetPosition() const { return position; }
     const glm::vec3& GetVelocity() const { return velocity; }
-    const Camera3D& GetCamera() const { return camera; }
+    const ASCIIgL::Camera3D& GetCamera() const { return camera; }
     
     GameMode GetGameMode() const { return gameMode; }
     MovementState GetMovementState() const { return movementState; }
@@ -83,7 +83,7 @@ private:
     glm::vec3 velocity;
 
     // Camera
-    Camera3D camera;
+    ASCIIgL::Camera3D camera;
 
     // Physical properties
     float walkSpeed;
@@ -151,6 +151,6 @@ private:
     static constexpr float JUMP_COOLDOWN_MAX = 0.2f;         // Seconds
 
     static constexpr float CAMERA_NEAR_PLANE = 0.1f;
-    static constexpr float CAMERA_FAR_PLANE = 300.0f;
+    static constexpr float CAMERA_FAR_PLANE = 1000.0f;
     static constexpr float FOV = 70.0f;                      // Field of view in degrees
 };

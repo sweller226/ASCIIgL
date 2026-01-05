@@ -4,15 +4,19 @@
 
 #include <glm/glm.hpp>
 
-#include <ASCIIgL/renderer/Vertex.hpp>
+#include <ASCIIgL/renderer/VertFormat.hpp>
 
-struct Vertex_Shader {
-    glm::mat4 GLmodel = glm::mat4(1.0f);
-    glm::mat4 GLview = glm::mat4(1.0f);
-    glm::mat4 GLproj = glm::mat4(1.0f);
-    glm::mat4 GLmvp = glm::mat4(1.0f); // precomputed MVP matrix
+namespace ASCIIgL {
 
-    // Internal helper to update the MVP matrix
+struct Vertex_Shader_CPU {
+    private: 
+    glm::mat4 _proj = glm::mat4(1.0f);
+    glm::mat4 _view = glm::mat4(1.0f);
+    glm::mat4 _model = glm::mat4(1.0f);
+    glm::mat4 _mvp = glm::mat4(1.0f); // precomputed MVP matrix
+    
+    public:
+    
     void UpdateMVP();
 
     // Getters
@@ -28,8 +32,10 @@ struct Vertex_Shader {
     void SetMatrices(const glm::mat4& model, const glm::mat4& view, const glm::mat4& proj);
 
     // Vertex transformation methods
-    void GLUse(VERTEX& vertice) const;
-    void GLUseBatch(std::vector<VERTEX>& vertices) const;
+    void Use(VertStructs::PosWUVInvW& vertice) const;
+    void UseBatch(std::vector<VertStructs::PosWUVInvW>& vertices) const;
 };
 
-typedef Vertex_Shader VERTEX_SHADER;
+typedef Vertex_Shader_CPU VERTEX_SHADER_CPU;
+
+} // namespace ASCIIgL

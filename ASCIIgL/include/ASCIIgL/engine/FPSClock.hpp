@@ -2,6 +2,8 @@
 
 #include <deque>
 
+namespace ASCIIgL {
+
 class FPSClock {
 public:
     // Singleton accessor
@@ -38,3 +40,5 @@ private:
     void CapFPS();
     void FPSSampleCalculate(const double currentDeltaTime);
 };
+
+} // namespace ASCIIgL

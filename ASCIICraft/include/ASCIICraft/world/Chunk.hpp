@@ -2,7 +2,6 @@
 
 #include <ASCIICraft/world/Block.hpp>
 #include <ASCIIgL/engine/Mesh.hpp>
-#include <ASCIIgL/renderer/VertexShader.hpp>
 #include <ASCIIgL/engine/Camera3D.hpp>
 
 #include <glm/glm.hpp>
@@ -87,8 +86,11 @@ public:
     // Mesh generation for rendering
     void GenerateMesh();
     bool HasMesh() const { return hasMesh; }
-    Mesh* GetMesh() const { return mesh.get(); }
+    ASCIIgL::Mesh* GetMesh() const { return mesh.get(); }
     void InvalidateMesh() { hasMesh = false; dirty = true; }
+    
+    // Rendering
+    void Render() const;
     
     // Neighbor access for mesh generation
     void SetNeighbor(int direction, Chunk* neighbor);
@@ -97,9 +99,6 @@ public:
     // Utility
     bool IsValidBlockCoord(int x, int y, int z) const;
     WorldPos ChunkToWorldPos(int x, int y, int z) const;
-
-    // Rendering
-    void Render(VERTEX_SHADER& vertex_shader, const Camera3D& camera);
 
     // Logging
     void LogNeighbors() const;
@@ -113,7 +112,7 @@ private:
     bool hasMesh;
     
     // Mesh data for rendering
-    std::unique_ptr<Mesh> mesh;
+    std::unique_ptr<ASCIIgL::Mesh> mesh;
     
     // Neighbor chunks (6 directions: +X, -X, +Y, -Y, +Z, -Z)
     Chunk* neighbors[6];

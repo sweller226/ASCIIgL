@@ -3,6 +3,8 @@
 
 #include <ASCIIgL/engine/Camera3D.hpp>
 
+namespace ASCIIgL {
+
 Camera3D::Camera3D(glm::vec3 Pposition, float Pfov, float Paspect, glm::vec2 yawPitch, float PzNear, float PzFar)
 	: pos(Pposition), fov(Pfov), pitch(yawPitch.y), yaw(yawPitch.x), aspect(Paspect), zNear(PzNear), zFar(PzFar)
 {
@@ -190,3 +192,5 @@ void Camera3D::SetPitch(float Ppitch) {
 	pitch = Ppitch;
 	recalculateViewMat();
 }
+
+} // namespace ASCIIgL

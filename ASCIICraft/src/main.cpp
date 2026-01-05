@@ -4,12 +4,12 @@
 int main() {
     // Initialize logging
     #ifdef NDEBUG
-        Logger::Init("logs/debug.log", LogLevel::Info); // Release build
+        ASCIIgL::Logger::Init("logs/debug.log", ASCIIgL::LogLevel::Info); // Release build
     #else
-        Logger::Init("logs/debug.log", LogLevel::Debug); // Debug build: log everything
+        ASCIIgL::Logger::Init("logs/debug.log", ASCIIgL::LogLevel::Debug); // Debug build: log everything
     #endif
 
-    Logger::Info("ASCIICraft starting...");
+    ASCIIgL::Logger::Info("ASCIICraft starting...");
 
     try {
         // Create and run the game
@@ -18,14 +18,14 @@ int main() {
         game.Shutdown();
     }
     catch (const std::exception& e) {
-        Logger::Error("Game crashed with exception: " + std::string(e.what()));
+        ASCIIgL::Logger::Error("Game crashed with exception: " + std::string(e.what()));
     }
     catch (...) {
-        Logger::Error("Game crashed with unknown exception");
+        ASCIIgL::Logger::Error("Game crashed with unknown exception");
     }
 
-    Logger::Info("ASCIICraft exited");
-    Logger::Close();
+    ASCIIgL::Logger::Info("ASCIICraft exited");
+    ASCIIgL::Logger::Close();
     
     return 0;
 }

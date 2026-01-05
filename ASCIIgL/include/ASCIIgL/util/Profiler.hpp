@@ -8,6 +8,8 @@
 #include <sstream>
 #include <iomanip>
 
+namespace ASCIIgL {
+
 class Profiler
 {
 public:
@@ -118,3 +120,5 @@ private:
 #else
     #define PROFILE_SCOPE_DEBUG(name) PROFILE_SCOPE(name)
 #endif
+
+} // namespace ASCIIgL

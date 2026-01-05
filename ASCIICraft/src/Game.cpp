@@ -1,8 +1,12 @@
 #include <ASCIICraft/game/Game.hpp>
 
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
+
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
+
+#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
+#include <ASCIIgL/renderer/gpu/Material.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
@@ -22,29 +26,11 @@ Game::~Game() {
 }
 
 bool Game::Initialize() {
-    Logger::Info("Initializing ASCIICraft...");
+    ASCIIgL::Logger::Info("Initializing ASCIICraft...");
 
-    Logger::Info("Setting up palette and screen...");
+    ASCIIgL::Logger::Info("Setting up palette and screen...");
 
-    // std::array<PaletteEntry, 15> paletteEntries = {{
-    //     { {15, 15, 15}, 0x1 },        // White (#FFFFFF)
-    //     { {3, 4, 3}, 0x2 },           // Dark Gray Green (#323C39)
-    //     { {6, 6, 6}, 0x3 },           // Medium Gray (#696A6A)
-    //     { {8, 7, 8}, 0x4 },           // Light Gray Purple (#847E87)
-    //     { {6, 3, 3}, 0x5 },           // Dark Brown Red (#663931)
-    //     { {8, 5, 3}, 0x6 },           // Medium Brown (#8F563B)
-    //     { {13, 10, 6}, 0x7 },         // Light Brown (#D9A066)
-    //     { {8, 6, 3}, 0x8 },           // Dark Yellow Brown (#8A6F30)
-    //     { {8, 9, 4}, 0x9 },           // Olive Green (#8F974A)
-    //     { {15, 15, 3}, 0xA },         // Bright Yellow (#FBF236)
-    //     { {4, 6, 2}, 0xB },           // Dark Forest Green (#4B692F)
-    //     { {6, 11, 3}, 0xC },          // Medium Green (#6ABE30)
-    //     { {9, 14, 5}, 0xD },          // Bright Green (#99E550)
-    //     { {5, 12, 14}, 0xE },         // Light Blue (#5FCDE4)
-    //     { {9, 10, 11}, 0xF }          // Light Gray Blue (#9BADB7)
-    // }};
-
-    std::array<PaletteEntry, 15> paletteEntries = {{
+    std::array<ASCIIgL::PaletteEntry, 15> paletteEntries = {{
         { {3, 0, 0}, 0x1 },        // #330701
         { {4, 0, 0}, 0x2 },        // #490902
         { {5, 0, 0}, 0x3 },        // #5E0C03
@@ -62,41 +48,39 @@ bool Game::Initialize() {
         { {15, 7, 7}, 0xF }        // #FA7F70
     }};
 
-    Palette gamePalette = Palette(paletteEntries); // Custom palette with black auto-added at 0
+    ASCIIgL::Palette gamePalette = ASCIIgL::Palette(paletteEntries); // Custom palette with black auto-added at 0
 
     // Initialize screen
-    if (Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
-        Logger::Error("Failed to initialize screen");
+    if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
+        ASCIIgL::Logger::Error("Failed to initialize screen");
         return false;
     }
-    SCREEN_WIDTH = Screen::GetInst().GetWidth();
-    SCREEN_HEIGHT = Screen::GetInst().GetHeight();
+    SCREEN_WIDTH = ASCIIgL::Screen::GetInst().GetWidth();
+    SCREEN_HEIGHT = ASCIIgL::Screen::GetInst().GetHeight();
 
-    FPSClock::GetInst().Initialize(static_cast<unsigned int>(TARGET_FPS), 1.0f);
+    ASCIIgL::FPSClock::GetInst().Initialize(static_cast<unsigned int>(TARGET_FPS), 1.0f);
 
-    Renderer::GetInst().Initialize();
-    Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(0));
+    ASCIIgL::Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(0));
     
-    Renderer::GetInst().SetWireframe(false);
-    Renderer::GetInst().SetBackfaceCulling(true);
-    Renderer::GetInst().SetCCW(true);
-	Renderer::GetInst().SetAntialiasingsamples(8);
-	Renderer::GetInst().SetAntialiasing(true);
-    Renderer::GetInst().SetDiagnosticsEnabled(true);
-    Renderer::GetInst().SetCpuOnly(true);
+    ASCIIgL::Renderer::GetInst().SetWireframe(false);
+    ASCIIgL::Renderer::GetInst().SetBackfaceCulling(true);
+    ASCIIgL::Renderer::GetInst().SetCCW(true);
+    ASCIIgL::Renderer::GetInst().SetDiagnosticsEnabled(true);
+
+    ASCIIgL::Renderer::GetInst().Initialize(true, 4, false); // Enable antialiasing with 4 samples, not CPU only
 
     // Load resources
     if (!LoadResources()) {
-        Logger::Error("Failed to load resources");
+        ASCIIgL::Logger::Error("Failed to load resources");
         return false;
     }
     
     // Initialize game systems
-    world = std::make_unique<World>(5, WorldPos(0, 90, 0), 16);
+    world = std::make_unique<World>(12, WorldPos(0, 90, 0), 16);
     inputManager = std::make_unique<InputManager>();
     
     // Create player at spawn point
-    player = std::make_unique<Player>(world->GetSpawnPoint().ToVec3(), GameMode::Survival);
+    player = std::make_unique<Player>(world->GetSpawnPoint().ToVec3(), GameMode::Spectator);
     
     // Connect player to world
     world->SetPlayer(player.get());
@@ -105,74 +89,51 @@ bool Game::Initialize() {
     gameState = GameState::Playing;
     isRunning = true;
     
-    Logger::Info("ASCIICraft initialized successfully!");
+    ASCIIgL::Logger::Info("ASCIICraft initialized successfully!");
     return true;
 }
 
 void Game::Run() {
     if (!Initialize()) {
-        Logger::Error("Failed to initialize game");
+        ASCIIgL::Logger::Error("Failed to initialize game");
         return;
     }
     
-    Logger::Info("Starting game loop...");
+    ASCIIgL::Logger::Info("Starting game loop...");
 
-    Profiler::GetInst().SetEnabled(true);
+    ASCIIgL::Profiler::GetInst().SetEnabled(true);
 
     // Main game loop
     int frameCounter = 0;
     while (isRunning) {
-        Profiler::GetInst().BeginFrame();
-
-        FPSClock::GetInst().StartFPSClock();
+        ASCIIgL::Profiler::GetInst().BeginFrame();
+        ASCIIgL::FPSClock::GetInst().StartFPSClock();
         
         {
-            PROFILE_SCOPE("ClearBuffers");
-            Screen::GetInst().ClearPixelBuffer();
-            Renderer::GetInst().ClearBuffers();
-        }
-        
-        {
-            PROFILE_SCOPE("HandleInput");
+            ASCIIgL::PROFILE_SCOPE("HandleInput");
             HandleInput();
         }
         
         {
-            PROFILE_SCOPE("Update");
+            ASCIIgL::PROFILE_SCOPE("Update");
             Update();
         }
         
         {
-            PROFILE_SCOPE("RenderGame");
+            ASCIIgL::PROFILE_SCOPE("RenderGame");
             Render();
         }
-
-        // color buffer draws ending
-        {
-            PROFILE_SCOPE("ColorBufferOverwrite");
-            Renderer::GetInst().OverwritePxBuffWithColBuff();
-        }
-
-        // pixel buffer draws
-        {
-            PROFILE_SCOPE("PixelBufferBorderDraw");
-            Renderer::GetInst().DrawScreenBorderPxBuff(0xF);
-        }
-        {
-            PROFILE_SCOPE("PixelBufferOutput");
-            Screen::GetInst().OutputBuffer();
-        }
         
-        FPSClock::GetInst().EndFPSClock();
+        ASCIIgL::FPSClock::GetInst().EndFPSClock();
         
         // profiling work
-        Profiler::GetInst().EndFrame();
+        ASCIIgL::Profiler::GetInst().EndFrame();
         frameCounter++;
         if (frameCounter % 60 == 0) { 
             frameCounter = 0;
-            Logger::Info("FPS: " + std::to_string(FPSClock::GetInst().GetFPS()));
-            Profiler::GetInst().LogReport();
-            Profiler::GetInst().Reset();  // Reset profiler data after logging
+            ASCIIgL::Logger::Info("FPS: " + std::to_string(ASCIIgL::FPSClock::GetInst().GetFPS()));
+            ASCIIgL::Profiler::GetInst().LogReport();
+            ASCIIgL::Profiler::GetInst().Reset();  // Reset profiler data after logging
         }
     }
     
@@ -197,10 +158,34 @@ void Game::Update() {
 }
 
 void Game::Render() {    
+    {
+        ASCIIgL::PROFILE_SCOPE("Clear Px Buff/Begin Frame");
+        ASCIIgL::Screen::GetInst().ClearPixelBuffer();
+        ASCIIgL::Renderer::GetInst().BeginColBuffFrame();
+    }
+
     switch (gameState) {
         case GameState::Playing:
-            RenderPlaying();
+            {
+                ASCIIgL::PROFILE_SCOPE("Render.RenderPlaying");
+                RenderPlaying();
+            }
             break;
+    }
+
+    {
+        ASCIIgL::PROFILE_SCOPE("Render.EndColBuffFrame");
+        ASCIIgL::Renderer::GetInst().EndColBuffFrame();  // Present for RenderDoc
+        
+    }
+    // pixel buffer draws
+    {
+        ASCIIgL::PROFILE_SCOPE("Render.PixelBufferDraws");
+        ASCIIgL::Renderer::GetInst().DrawScreenBorderPxBuff(0xF);
+    }
+    {
+        ASCIIgL::PROFILE_SCOPE("Render.PixelBufferOutput");
+        ASCIIgL::Screen::GetInst().OutputBuffer();
     }
     
 }
@@ -220,7 +205,7 @@ void Game::HandleInput() {
 }
 
 void Game::Shutdown() {
-    Logger::Info("Shutting down ASCIICraft...");
+    ASCIIgL::Logger::Info("Shutting down ASCIICraft...");
     
     // Clear the block atlas reference before destroying it
     Block::SetTextureAtlas(nullptr);
@@ -232,23 +217,23 @@ void Game::Shutdown() {
     blockAtlas.reset();  // Destroy the texture atlas
     
     // Screen cleanup happens automatically in destructor
-    Logger::Info("ASCIICraft shutdown complete");
+    ASCIIgL::Logger::Info("ASCIICraft shutdown complete");
 }
 
 bool Game::LoadResources() {
-    Logger::Info("Loading game resources...");
+    ASCIIgL::Logger::Info("Loading game resources...");
     
     // Load block texture atlas - store as member to prevent destruction
-    blockAtlas = std::make_unique<Texture>("res/textures/terrain.png");
+    blockAtlas = std::make_unique<ASCIIgL::Texture>("res/textures/terrain.png");
     if (!blockAtlas) {
-        Logger::Error("Failed to load block texture atlas");
+        ASCIIgL::Logger::Error("Failed to load block texture atlas");
         return false;
     }
     
     // Set the global block atlas
     Block::SetTextureAtlas(blockAtlas.get());
     
-    Logger::Info("Resources loaded successfully");
+    ASCIIgL::Logger::Info("Resources loaded successfully");
     return true;
 }
 

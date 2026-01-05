@@ -1,5 +1,7 @@
 #include <ASCIIgL/renderer/Palette.hpp>
 
+namespace ASCIIgL {
+
 Palette::Palette() {
     entries = {{
         //   rgb                  hex
@@ -52,3 +54,5 @@ unsigned short Palette::GetBgColor(unsigned int idx) const {
     if (idx >= COLOR_COUNT) return 0x0;
     return static_cast<unsigned short>((entries[idx].hex & 0xF) << 4);
 }
+
+} // namespace ASCIIgL

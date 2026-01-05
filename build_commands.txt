@@ -1,3 +1,6 @@
+To count # of lines
+Get-ChildItem -Recurse -Include *.cpp,*.hpp | Where-Object { $_.FullName -notmatch '\\(lib|dist|vendor|build)\\' } | ForEach-Object { Get-Content $_ } | Measure-Object -Line
+
 ASCIIgL
     Build Release
     ./scripts/build_release.ps1
@@ -45,3 +48,5 @@ ASCIICraft
 
     Rebuild Library
     ./scripts/build_ASCIIgL_ASCIICraft.ps1
+
+

@@ -7,6 +7,8 @@
 #include <string>
 #include <memory>
 
+namespace ASCIIgL {
+
 class Texture // this class loads a texture from a path and holds its data in a 1d buffer
 {
 public:
@@ -35,8 +37,12 @@ public:
 	
 	// Fast accessor - returns pointer to raw uint8_t data (RGBA)
 	const uint8_t* GetPixelRGBAPtr(int x, int y) const;
+	const uint8_t* GetDataPtr() const;
+
 private:
 	// Forward declaration for PIMPL pattern
 	class Impl;
 	std::unique_ptr<Impl> pImpl;
 };
+
+} // namespace ASCIIgL

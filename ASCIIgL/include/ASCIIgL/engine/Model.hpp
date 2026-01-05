@@ -1,15 +1,18 @@
 #pragma once
 
+#include <memory>
+
 #include <ASCIIgL/engine/Mesh.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
-#include <ASCIIgL/renderer/Vertex.hpp>
-#include <memory>
+
+#include <ASCIIgL/renderer/VertFormat.hpp>
+
+namespace ASCIIgL {
 
 class Model
 {
 public:
     Model(std::string path);
-    Model(std::vector<VERTEX>&& vertices, Texture* texture);
     ~Model();
 
     // Move constructor and assignment for PIMPL
@@ -27,3 +30,5 @@ private:
     class Impl;
     std::unique_ptr<Impl> pImpl;
 };
+
+} // namespace ASCIIgL

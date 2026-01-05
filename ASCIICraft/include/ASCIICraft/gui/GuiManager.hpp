@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ASCIIgL/engine/Camera2D.hpp>
-#include <ASCIIgL/renderer/VertexShader.hpp>
 
 class GuiManager {
 public:
@@ -11,10 +10,8 @@ public:
     void Update(float deltaTime);
     void Render();
 
-    const Camera2D& GetCamera() const { return guiCamera; }
-    VERTEX_SHADER& GetVShader() { return guiShader; }
+    const ASCIIgL::Camera2D& GetCamera() const { return guiCamera; }
 
 private:
-    Camera2D guiCamera;
-    VERTEX_SHADER guiShader;
+    ASCIIgL::Camera2D guiCamera;
 };

@@ -1,4 +1,4 @@
-#include <ASCIIgL/renderer/ScreenWinImpl.hpp>
+#include <ASCIIgL/renderer/screen/ScreenWinImpl.hpp>
 
 #include <algorithm>
 #include <string>
@@ -16,10 +16,12 @@
 
 #include <ASCIIgL/engine/FPSClock.hpp>
 
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
 
 // vendor
 #include <nlohmann/json.hpp>
+
+namespace ASCIIgL {
 
 // Static member definitions for platform-specific implementations
 #ifdef _WIN32
@@ -653,3 +655,5 @@ void ScreenWinImpl::EnableVTMode() {
 }
 
 #endif
+
+} // namespace ASCIIgL

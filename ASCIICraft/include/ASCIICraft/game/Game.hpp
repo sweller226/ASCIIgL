@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
 
 #include <ASCIICraft/world/World.hpp>
@@ -40,7 +40,7 @@ private:
     std::unique_ptr<InputManager> inputManager;
     
     // Resources
-    std::unique_ptr<Texture> blockAtlas;  // Block texture atlas - must persist during game lifetime
+    std::unique_ptr<ASCIIgL::Texture> blockAtlas;  // Block texture atlas - must persist during game lifetime
     
     // Game state
     GameState gameState;

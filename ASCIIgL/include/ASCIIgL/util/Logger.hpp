@@ -2,6 +2,8 @@
 
 #include <string>
 
+namespace ASCIIgL {
+
 enum class LogLevel {
     Error = 0,
     Warning = 1,
@@ -30,3 +32,5 @@ private:
     static void LogInternal(LogLevel level, const std::string& message);
     static void LogInternal(LogLevel level, const std::wstring& message);
 };
+
+} // namespace ASCIIgL

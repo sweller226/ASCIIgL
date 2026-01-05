@@ -1,5 +1,7 @@
 #include <ASCIIgL/engine/Camera2D.hpp>
 
+namespace ASCIIgL {
+
 Camera2D::Camera2D(glm::vec2 Pposition, unsigned int SCR_WIDTH, unsigned int SCR_HEIGHT)
 	: position(Pposition), screenWidth(SCR_WIDTH), screenHeight(SCR_HEIGHT)
 {
@@ -34,3 +36,5 @@ void Camera2D::recalculateProjMat()
 {
 	proj = glm::ortho(0.0f, (float)screenWidth, (float)screenHeight, 0.0f, -100.0f, 100.0f);
 }
+
+} // namespace ASCIIgL

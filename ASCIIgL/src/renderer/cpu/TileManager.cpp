@@ -1,9 +1,11 @@
-#include <ASCIIgL/renderer/TileManager.hpp>
+#include <ASCIIgL/renderer/cpu/TileManager.hpp>
 
 #include <tbb/parallel_for.h>
 
-#include <ASCIIgL/renderer/Screen.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/util/MathUtil.hpp>
+
+namespace ASCIIgL {
 
 void TileManager::InitializeTiles() {
     CalculateTileCounts();
@@ -43,7 +45,7 @@ void TileManager::ClearTileTriangleLists() {
     }
 }
 
-bool TileManager::DoesTileEncapsulate(const Tile& tile, const VERTEX& v1, const VERTEX& v2, const VERTEX& v3)
+bool TileManager::DoesTileEncapsulate(const Tile& tile, const VertStructs::PosWUVInvW& v1, const VertStructs::PosWUVInvW& v2, const VertStructs::PosWUVInvW& v3)
 {
     // Get triangle bounding box
     const auto [minTriPt, maxTriPt] = MathUtil::ComputeBoundingBox(
@@ -64,7 +66,7 @@ bool TileManager::DoesTileEncapsulate(const Tile& tile, const VERTEX& v1, const 
     return fullyInside;
 }
 
-void TileManager::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangles) {
+void TileManager::BinTrianglesToTiles(const std::vector<VertStructs::PosWUVInvW>& raster_triangles) {
     if (raster_triangles.size() >= 3000) {
         BinTrianglesToTilesMultiThreaded(raster_triangles);
     }
@@ -73,7 +75,7 @@ void TileManager::BinTrianglesToTiles(const std::vector<VERTEX>& raster_triangle
     }
 }
 
-void TileManager::BinTrianglesToTilesMultiThreaded(const std::vector<VERTEX>& raster_triangles) {
+void TileManager::BinTrianglesToTilesMultiThreaded(const std::vector<VertStructs::PosWUVInvW>& raster_triangles) {
     for (auto& tile : _tileBuffer) {
         tile.tri_indices_encapsulated.clear();
         tile.tri_indices_partial.clear();
@@ -104,9 +106,9 @@ void TileManager::BinTrianglesToTilesMultiThreaded(const std::vector<VERTEX>& ra
 
         for (size_t triIdx = startTri; triIdx < endTri; ++triIdx) {
             const int i = static_cast<int>(triIdx * 3);
-            const VERTEX& v1 = raster_triangles[i];
-            const VERTEX& v2 = raster_triangles[i + 1];
-            const VERTEX& v3 = raster_triangles[i + 2];
+            const VertStructs::PosWUVInvW& v1 = raster_triangles[i];
+            const VertStructs::PosWUVInvW& v2 = raster_triangles[i + 1];
+            const VertStructs::PosWUVInvW& v3 = raster_triangles[i + 2];
 
             const auto [minTriPt, maxTriPt] = MathUtil::ComputeBoundingBox(
                 v1.GetXY(), v2.GetXY(), v3.GetXY()
@@ -153,7 +155,7 @@ void TileManager::BinTrianglesToTilesMultiThreaded(const std::vector<VERTEX>& ra
     }
 }
 
-void TileManager::BinTrianglesToTilesSingleThreaded(const std::vector<VERTEX>& raster_triangles) {
+void TileManager::BinTrianglesToTilesSingleThreaded(const std::vector<VertStructs::PosWUVInvW>& raster_triangles) {
     for (auto& tile : _tileBuffer) {
         tile.tri_indices_encapsulated.clear();
         tile.tri_indices_partial.clear();
@@ -171,9 +173,9 @@ void TileManager::BinTrianglesToTilesSingleThreaded(const std::vector<VERTEX>& r
     const float invTileSizeY = 1.0f / tileSizeY;
 
     for (int i = 0; i < static_cast<int>(raster_triangles.size()); i += 3) {
-        const VERTEX& v1 = raster_triangles[i];
-        const VERTEX& v2 = raster_triangles[i + 1];
-        const VERTEX& v3 = raster_triangles[i + 2];
+        const VertStructs::PosWUVInvW& v1 = raster_triangles[i];
+        const VertStructs::PosWUVInvW& v2 = raster_triangles[i + 1];
+        const VertStructs::PosWUVInvW& v3 = raster_triangles[i + 2];
         
         const auto [minTriPt, maxTriPt] = MathUtil::ComputeBoundingBox(
             v1.GetXY(), v2.GetXY(), v3.GetXY()
@@ -244,3 +246,5 @@ void TileManager::UpdateActiveTiles() {
         }
     }
 }
+
+} // namespace ASCIIgL

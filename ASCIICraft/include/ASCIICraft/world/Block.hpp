@@ -3,8 +3,7 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 
-// Forward declaration
-class Texture;
+#include <ASCIIgL/engine/Texture.hpp>
 
 // Block types
 enum class BlockType : uint8_t {
@@ -41,12 +40,12 @@ struct Block {
     glm::vec4 GetTextureUV(int face = 0) const;
     
     // Static texture atlas management
-    static void SetTextureAtlas(Texture* atlas);
-    static Texture* GetTextureAtlas();
+    static void SetTextureAtlas(ASCIIgL::Texture* atlas);
+    static ASCIIgL::Texture* GetTextureAtlas();
     static bool HasTextureAtlas();
 
 private:
-    static Texture* textureAtlas;  // Global texture atlas for all blocks
+    static ASCIIgL::Texture* textureAtlas;  // Global texture atlas for all blocks
 };
 
 // Block face indices for GetTextureUV
