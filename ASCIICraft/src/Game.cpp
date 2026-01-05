@@ -30,7 +30,8 @@ bool Game::Initialize() {
 
     ASCIIgL::Logger::Info("Setting up palette and screen...");
 
-    std::array<ASCIIgL::PaletteEntry, 15> paletteEntries = {{
+    std::array<ASCIIgL::PaletteEntry, 16> paletteEntries = {{
+        { {0, 0, 0}, 0x0 },        // #000000 (black)
         { {3, 0, 0}, 0x1 },        // #330701
         { {4, 0, 0}, 0x2 },        // #490902
         { {5, 0, 0}, 0x3 },        // #5E0C03
@@ -45,10 +46,10 @@ bool Game::Initialize() {
         { {15, 3, 2}, 0xC },       // #F73B26
         { {15, 4, 3}, 0xD },       // #F84734
         { {15, 6, 5}, 0xE },       // #F96352
-        { {15, 7, 7}, 0xF }        // #FA7F70
+        { {15, 7, 7}, 0xF },       // #FA7F70
     }};
 
-    ASCIIgL::Palette gamePalette = ASCIIgL::Palette(paletteEntries); // Custom palette with black auto-added at 0
+    ASCIIgL::Palette gamePalette = ASCIIgL::Palette(paletteEntries);
 
     // Initialize screen
     if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
@@ -60,7 +61,7 @@ bool Game::Initialize() {
 
     ASCIIgL::FPSClock::GetInst().Initialize(static_cast<unsigned int>(TARGET_FPS), 1.0f);
 
-    ASCIIgL::Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(0));
+    ASCIIgL::Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(1));
     
     ASCIIgL::Renderer::GetInst().SetWireframe(false);
     ASCIIgL::Renderer::GetInst().SetBackfaceCulling(true);

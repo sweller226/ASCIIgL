@@ -457,6 +457,7 @@ void Renderer::PrecomputeColorLUT() {
                 float minError = FLT_MAX;
                 int bestFgIndex = 0, bestBgIndex = 0, bestCharIndex = 0;
 
+                // 16-color palette: all indices 0-15 can be used for both fg and bg
                 for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
                     for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
                         for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
