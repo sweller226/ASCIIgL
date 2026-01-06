@@ -33,7 +33,7 @@ public:
     SMALL_RECT rcRegion = {0, 0, 0, 0};
 
     ScreenWinImpl(Screen& screenRef);
-    ~ScreenWinImpl() = default;
+    ~ScreenWinImpl();
 
     int Initialize(unsigned int width, unsigned int height, unsigned int fontSize, const Palette& palette);
     void ClearPixelBuffer();
@@ -46,20 +46,15 @@ public:
     void PlotPixel(int idx, const CHAR_INFO charCol);
     std::vector<CHAR_INFO>& GetPixelBuffer();
 
-    // Windows terminal/font/palette methods...
+    // Windows Terminal methods
     void SetFontTerminal(HANDLE currentHandle, unsigned int fontSize);
-    bool IsTerminal();
     std::wstring GetTerminalSettingsPath();
     bool ModifyTerminalFont(const std::wstring& settingsPath, float fontSize);
     float ConvertPixelSizeToTerminalPoints(unsigned int pixelSize);
     void EnableVTMode();
-    void SetFontConsole(HANDLE currentHandle, unsigned int fontSize);
     bool IsFontInstalled(const std::wstring& fontName);
     bool InstallFontFromFile(const std::wstring& fontFilePath);
-    void SetCursorInvisibleConsole(HANDLE currentHandle);
-    void DisableWindowResizingConsole();
     void SetPaletteTerminal(const Palette& palette, HANDLE& hOutput);
-    void SetPaletteConsole(const Palette& palette, HANDLE& hOutput);
 };
 
 #endif

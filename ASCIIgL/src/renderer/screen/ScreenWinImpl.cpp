@@ -30,7 +30,13 @@ ScreenWinImpl::ScreenWinImpl(Screen& screenRef)
     : screen(screenRef) {
 }
 
-// ScreenWinImpl method implementations (Unified Windows console implementation)
+ScreenWinImpl::~ScreenWinImpl() {
+    if (_hOutput != nullptr && _hOutput != INVALID_HANDLE_VALUE) {
+        CloseHandle(_hOutput);
+    }
+}
+
+// ScreenWinImpl method implementations (Windows Terminal only)
 int ScreenWinImpl::Initialize(const unsigned int width, const unsigned int height, const unsigned int fontSize, const Palette& palette) {
     // First, get current console handle to check maximum window size with proper font
     HANDLE currentHandle = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -41,12 +47,7 @@ int ScreenWinImpl::Initialize(const unsigned int width, const unsigned int heigh
 
     // Set the font FIRST to get accurate maximum window size calculations
     Logger::Debug(L"Setting font for accurate size calculations.");
-    if (IsTerminal()) {
-        SetFontTerminal(currentHandle, fontSize);
-    }
-    else {
-        SetFontConsole(currentHandle, fontSize);
-    }
+    SetFontTerminal(currentHandle, fontSize);
 
     // Small delay to ensure font change takes effect
     Sleep(300);
@@ -88,10 +89,11 @@ int ScreenWinImpl::Initialize(const unsigned int width, const unsigned int heigh
     dwBufferCoord = COORD{ 0, 0 };
     rcRegion = SMALL_RECT{ 0, 0, SHORT(adjustedWidth - 1), SHORT(adjustedHeight - 1) };
 
-    Logger::Debug(L"Creating console screen buffers.");
+    // Create console screen buffer (Windows Terminal handles double-buffering internally)
+    Logger::Debug(L"Creating console screen buffer.");
     _hOutput = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, 0, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
     if (_hOutput == INVALID_HANDLE_VALUE) {
-        Logger::Error(L"Failed to create console screen buffers.");
+        Logger::Error(L"Failed to create console screen buffer.");
         return -1;
     }
 
@@ -102,30 +104,11 @@ int ScreenWinImpl::Initialize(const unsigned int width, const unsigned int heigh
     SMALL_RECT m_rectWindow = { 0, 0, 1, 1 };
     SetConsoleWindowInfo(_hOutput, TRUE, &m_rectWindow);
 
-    // console vs terminal stuff
-    if (IsTerminal()) {
-        SetFontTerminal(_hOutput, fontSize);
+    // Configure for Windows Terminal
+    SetFontTerminal(_hOutput, fontSize);
+    SetPaletteTerminal(palette, _hOutput);
 
-        // set palette here
-        SetPaletteTerminal(palette, _hOutput);
-
-        // enabling VT processing for the terminal
-        EnableVTMode();
-    }
-    else {
-        SetFontConsole(_hOutput, fontSize);
-
-        // set palette here
-        SetPaletteConsole(palette, _hOutput);
-
-        // setting console cursor to invisible for the console
-        SetCursorInvisibleConsole(_hOutput);
-
-        // disabling window resizing for the console
-        DisableWindowResizingConsole();
-    }
-
-    // idsabling quick edit
+    // Disable quick edit mode
     DWORD mode;
     GetConsoleMode(_hOutput, &mode);
     mode &= ~ENABLE_QUICK_EDIT_MODE;
@@ -142,10 +125,13 @@ int ScreenWinImpl::Initialize(const unsigned int width, const unsigned int heigh
     Logger::Debug(L"Setting physical size of console window.");
     SetConsoleWindowInfo(_hOutput, TRUE, &rcRegion);
 
-    Logger::Debug(L"Setting _hOutput as the active console screen buffer.");
+    // Enable Virtual Terminal Processing for ANSI escape codes
+    EnableVTMode();
+
+    Logger::Debug(L"Setting active console screen buffer.");
     SetConsoleActiveScreenBuffer(_hOutput);
 
-    Logger::Debug(L"Deleting old buffers and creating new ones.");
+    Logger::Debug(L"Creating pixel buffer.");
 	_pixelBuffer.resize(adjustedWidth * adjustedHeight);
 
     return 0;
@@ -216,45 +202,6 @@ void ScreenWinImpl::PlotPixel(int idx, const CHAR_INFO charCol) {
 
 std::vector<CHAR_INFO>& ScreenWinImpl::GetPixelBuffer() {
     return _pixelBuffer;
-}
-
-bool ScreenWinImpl::IsTerminal() {
-    // Method 1: Check for Windows Terminal specific environment variables
-    const char* wtSession = std::getenv("WT_SESSION");
-    if (wtSession != nullptr) {
-        return true;
-    }
-    
-    // Method 2: Check for TERM_PROGRAM environment variable (modern terminals set this)
-    const char* termProgram = std::getenv("TERM_PROGRAM");
-    if (termProgram != nullptr && std::string(termProgram) == "vscode") {
-        // VSCode integrated terminal (which uses Windows Terminal backend)
-        return true;
-    }
-
-    // Method 3: Check if ConEmu environment variable exists (ConEmu is another modern terminal)
-    const char* conEmuANSI = std::getenv("ConEmuANSI");
-    if (conEmuANSI != nullptr) {
-        return true; // ConEmu supports modern terminal features
-    }
-    
-    // If none of the above conditions are met, assume it's traditional Command Prompt
-    return false;
-}
-
-
-void ScreenWinImpl::SetFontConsole(HANDLE currentHandle, unsigned int fontSize) {
-    CONSOLE_FONT_INFOEX fontForSizing;
-    fontForSizing.cbSize = sizeof(fontForSizing);
-    fontForSizing.nFont = 0;
-    fontForSizing.dwFontSize.X = fontSize;
-    fontForSizing.dwFontSize.Y = fontSize;
-    fontForSizing.FontFamily = FF_DONTCARE;
-    fontForSizing.FontWeight = FW_NORMAL;
-    wcscpy_s(fontForSizing.FaceName, LF_FACESIZE, L"Lucida Console");
-    if (!SetCurrentConsoleFontEx(currentHandle, FALSE, &fontForSizing)) {
-        Logger::Error(L"Failed to set font.");
-    }
 }
 
 void ScreenWinImpl::SetFontTerminal(HANDLE currentHandle, unsigned int fontSize) {
@@ -480,25 +427,6 @@ bool ScreenWinImpl::InstallFontFromFile(const std::wstring& fontPath) {
     return true;
 }
 
-void ScreenWinImpl::SetCursorInvisibleConsole(HANDLE currentHandle) {
-    CONSOLE_CURSOR_INFO cursorInfo;
-    GetConsoleCursorInfo(currentHandle, &cursorInfo);
-    cursorInfo.bVisible = FALSE; // Set cursor visibility to false
-    SetConsoleCursorInfo(currentHandle, &cursorInfo);
-}
-
-void ScreenWinImpl::DisableWindowResizingConsole() {
-    HWND hwnd = GetConsoleWindow();
-    if (hwnd) {
-        LONG style = GetWindowLong(hwnd, GWL_STYLE);
-        style &= ~WS_MAXIMIZEBOX; // Disable maximize button
-        style &= ~WS_SIZEBOX;     // Disable resizing border
-        SetWindowLong(hwnd, GWL_STYLE, style);
-    } else {
-        Logger::Error(L"Failed to get console window handle for disabling resizing.");
-    }
-}
-
 void ScreenWinImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOutput) {
     Logger::Info(L"Attempting to modify Windows Terminal color scheme.");
 
@@ -537,30 +465,57 @@ void ScreenWinImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOutput) 
         nlohmann::json customScheme;
         customScheme["name"] = "ASCIIgL Custom";
         
-        // Set foreground, background, and cursor overrides to black (palette index 0)
-        glm::ivec3 blackRGB = palette.GetRGB(0);
-        int blackR = (blackRGB.r * 255) / 15;
-        int blackG = (blackRGB.g * 255) / 15;
-        int blackB = (blackRGB.b * 255) / 15;
-        char blackHex[8];
-        snprintf(blackHex, sizeof(blackHex), "#%02X%02X%02X", blackR, blackG, blackB);
-        customScheme["foreground"] = blackHex;
-        customScheme["background"] = blackHex;
-        customScheme["cursorColor"] = blackHex;
+        // 16-color palette:
+        // - Index 0-15: Standard 16 colors (mapped to attributes 0x0-0xF)
+        // - Foreground/background overrides are set to match index 0
+        //   so that attribute 0x0 displays correctly
         
-        std::vector<std::string> colorNames = {
-            "black", "blue", "green", "cyan", "red", "purple", "yellow", "white",
-            "brightBlack", "brightBlue", "brightGreen", "brightCyan", "brightRed", "brightPurple", "brightYellow", "brightWhite"
-        };
-        for (size_t i = 0; i < std::min(static_cast<size_t>(Palette::COLOR_COUNT), colorNames.size()); ++i) {
-            glm::ivec3 rgb = palette.GetRGB(static_cast<uint8_t>(i));
-            // Convert from 0-15 to 0-255 range: (value * 255) / 15
+        // Helper lambda to convert palette RGB (0-15) to hex color string
+        auto toHex = [&palette](int paletteIdx) -> std::string {
+            glm::ivec3 rgb = palette.GetRGB(paletteIdx);
             int r = (rgb.r * 255) / 15;
             int g = (rgb.g * 255) / 15;
             int b = (rgb.b * 255) / 15;
             char hexColor[8];
             snprintf(hexColor, sizeof(hexColor), "#%02X%02X%02X", r, g, b);
-            customScheme[colorNames[i]] = hexColor;
+            return std::string(hexColor);
+        };
+        
+        // Set foreground and background overrides to palette index 0
+        // This ensures attribute 0x0 displays as palette[0] color in both fg and bg positions
+        customScheme["foreground"] = toHex(0);
+        customScheme["background"] = toHex(0);
+        customScheme["cursorColor"] = toHex(0);
+        
+        // Windows Terminal color scheme mapping to console attributes:
+        // Attribute 0x0 -> "black" (overridden by foreground/background to match palette[0])
+        // Attribute 0x1 -> "blue"
+        // Attribute 0x2 -> "green"
+        // ... etc.
+        
+        // Map attribute values to Windows Terminal color names
+        std::vector<std::string> attrToColorName = {
+            "black",        // 0x0
+            "blue",         // 0x1
+            "green",        // 0x2
+            "cyan",         // 0x3
+            "red",          // 0x4
+            "purple",       // 0x5
+            "yellow",       // 0x6
+            "white",        // 0x7
+            "brightBlack",  // 0x8
+            "brightBlue",   // 0x9
+            "brightGreen",  // 0xA
+            "brightCyan",   // 0xB
+            "brightRed",    // 0xC
+            "brightPurple", // 0xD
+            "brightYellow", // 0xE
+            "brightWhite"   // 0xF
+        };
+        
+        // Map all 16 palette indices to their corresponding color slots
+        for (int i = 0; i < 16; ++i) {
+            customScheme[attrToColorName[i]] = toHex(i);
         }
 
         // Ensure "schemes" exists and is an array
@@ -576,6 +531,24 @@ void ScreenWinImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOutput) 
 
         // Add the new custom scheme
         schemes.push_back(customScheme);
+        
+        // Update profiles.defaults to use our color scheme and ensure no profile-level
+        // foreground/background overrides that would take precedence over the scheme
+        if (j.contains("profiles") && j["profiles"].is_object()) {
+            nlohmann::json& profiles = j["profiles"];
+            if (!profiles.contains("defaults") || !profiles["defaults"].is_object()) {
+                profiles["defaults"] = nlohmann::json::object();
+            }
+            nlohmann::json& defaults = profiles["defaults"];
+            
+            // Set the color scheme to our custom scheme
+            defaults["colorScheme"] = "ASCIIgL Custom";
+            
+            // Remove any profile-level foreground/background overrides
+            // These would take precedence over the color scheme's values
+            defaults.erase("foreground");
+            defaults.erase("background");
+        }
 
         // Write back as UTF-8
         std::ofstream outFile(settingsPathStr);
@@ -586,50 +559,11 @@ void ScreenWinImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOutput) 
         outFile << j.dump(4); // Pretty print with 4-space indent
         outFile.close();
 
-        Logger::Info(L"Successfully modified Windows Terminal color scheme.");
+        Logger::Info(L"Successfully modified Windows Terminal color scheme with 16 colors.");
 
     } catch (const std::exception& e) {
         Logger::Error(L"Failed to modify Windows Terminal color scheme: " + std::wstring(converter.from_bytes(e.what())));
     }
-}
-
-void ScreenWinImpl::SetPaletteConsole(const Palette& palette, HANDLE& hOutput) {
-    Logger::Info(L"Setting console palette for legacy Command Prompt.");
-
-    if (hOutput == INVALID_HANDLE_VALUE) {
-        Logger::Error(L"Failed to get console output handle for palette setting.");
-        return;
-    }
-    
-    // Get current console screen buffer info
-    CONSOLE_SCREEN_BUFFER_INFOEX csbi;
-    csbi.cbSize = sizeof(CONSOLE_SCREEN_BUFFER_INFOEX);
-    
-    if (!GetConsoleScreenBufferInfoEx(hOutput, &csbi)) {
-        Logger::Error(L"Failed to get console screen buffer info for palette setting.");
-        return;
-    }
-    
-    // Map the 16 palette colors to the console color table
-    for (uint8_t i = 0; i < Palette::COLOR_COUNT; ++i) {
-        glm::ivec3 rgb = palette.GetRGB(i);
-        
-        // Convert RGB from 0-15 to 0-255 range: (value * 255) / 15
-        BYTE r = static_cast<BYTE>((rgb.r * 255) / 15);
-        BYTE g = static_cast<BYTE>((rgb.g * 255) / 15);
-        BYTE b = static_cast<BYTE>((rgb.b * 255) / 15);
-        
-        // Set the color in the console color table
-        csbi.ColorTable[i] = RGB(r, g, b);
-    }
-    
-    // Apply the updated color table to the console
-    if (!SetConsoleScreenBufferInfoEx(hOutput, &csbi)) {
-        Logger::Error(L"Failed to set console screen buffer info for palette.");
-        return;
-    }
-    
-    Logger::Info(L"Successfully set console palette for legacy Command Prompt.");
 }
 
 void ScreenWinImpl::EnableVTMode() {

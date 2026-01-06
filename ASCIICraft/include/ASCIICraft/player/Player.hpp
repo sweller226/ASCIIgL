@@ -4,9 +4,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <ASCIIgL/engine/Camera3D.hpp>
+#include <ASCIIgL/engine/InputManager.hpp>
 #include <ASCIIgL/renderer/screen/Screen.hpp>
-
-#include <ASCIICraft/input_manager/InputManager.hpp>
 
 // Forward declaration
 class World;
@@ -33,7 +32,7 @@ public:
 
     // Core update functions
     void Update(World* world);
-    void HandleInput(const InputManager& input);
+    void HandleInput(const ASCIIgL::InputManager& input);
     void UpdatePhysics(World* world);
     void UpdateCamera();
 
@@ -126,9 +125,9 @@ private:
     glm::vec3 GetBoundingBoxMax() const { return position + boundingBoxSize; }
     
     // Input helpers
-    void ProcessMovementInput(const InputManager& input);
-    void ProcessCameraInput(const InputManager& input);
-    // void ProcessActionInput(const InputManager& input, World* world);
+    void ProcessMovementInput(const ASCIIgL::InputManager& input);
+    void ProcessCameraInput(const ASCIIgL::InputManager& input);
+    // void ProcessActionInput(const ASCIIgL::InputManager& input, World* world);
 
     // Block interaction helpers
     // glm::ivec3 GetTargetBlock(const World& world) const;

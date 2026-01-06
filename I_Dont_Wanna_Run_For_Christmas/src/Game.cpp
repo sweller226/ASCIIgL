@@ -61,7 +61,8 @@ void Game::Run() {
     Logger::Info("Game loop starting.");
 
     Logger::Info("Setting up palette and screen...");
-	std::array<PaletteEntry, 15> paletteEntries = {{
+	std::array<PaletteEntry, 16> paletteEntries = {{
+		{ {0, 0, 0}, 0x0 },        // Black
 		{ {1, 1, 1}, 0x1 },        // Very Dark Gray
 		{ {2, 2, 2}, 0x2 },        // Darker Gray
 		{ {3, 3, 3}, 0x3 },        // Dark Gray
@@ -78,7 +79,7 @@ void Game::Run() {
 		{ {14, 14, 14}, 0xE },     // Near White
 		{ {15, 15, 15}, 0xF }      // White
 	}};
-    Palette gamePalette = Palette(paletteEntries); // Default palette
+    Palette gamePalette = Palette(paletteEntries);
 
 	Screen::GetInst().Initialize(SCR_WIDTH, SCR_HEIGHT, L"I Don't Wanna Run For Christmas", 3, gamePalette);
 	FPSClock::GetInst().Initialize(60, 1.0f);
