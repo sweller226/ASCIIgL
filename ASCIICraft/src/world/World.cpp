@@ -12,6 +12,8 @@
 #include <ASCIIgL/renderer/gpu/Material.hpp>
 
 #include <ASCIICraft/player/Player.hpp>
+#include <ASCIICraft/mobs/Mobs.hpp>
+#include <ASCIIgL/engine/FPSClock.hpp>
 
 // Static member definition - ordered to match face indices in Chunk::GenerateMesh()
 const ChunkCoord World::FACE_NEIGHBOR_OFFSETS[6] = {
@@ -40,7 +42,10 @@ void World::Update() {
     if (!player) {
         return;
     }
-    
+
+    // -> get delta time early for per-entity updates
+    float dt = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
+
     // Step 1: Load/unload chunks based on player position
     {
         ASCIIgL::PROFILE_SCOPE("Update.UpdateChunkLoading");
@@ -52,6 +57,26 @@ void World::Update() {
         ASCIIgL::PROFILE_SCOPE("Update.RegenerateDirtyChunks");
         RegenerateDirtyChunks();
     }
+
+    // Step 3: Update mobs
+    {
+        ASCIIgL::PROFILE_SCOPE("Update.Mobs");
+        for (auto& mob : mobs) {
+            if (mob) mob->Update(dt, *this);
+        }
+
+        // -> remove dead mobs
+        mobs.erase(std::remove_if(mobs.begin(), mobs.end(), [](const std::unique_ptr<ASCIICraft::Mobs>& m) {
+            return !m || !m->IsAlive();
+        }), mobs.end());
+    }
+}
+
+// -> Spawn a mob into the world (takes ownership)
+void World::SpawnMob(std::unique_ptr<ASCIICraft::Mobs> mob)
+{
+    if (!mob) return;
+    mobs.push_back(std::move(mob));
 }
 
 void World::Render() {

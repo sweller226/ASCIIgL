@@ -12,6 +12,7 @@
 
 // Forward declarations
 class Player;
+namespace ASCIICraft { class Mobs; }
 
 // Main World class
 class World {
@@ -57,6 +58,13 @@ public:
     WorldPos GetSpawnPoint() const { return spawnPoint; }
     void SetSpawnPoint(const WorldPos& pos) { spawnPoint = pos; }
 
+    // Mob management
+    // -> Public API for creating and inspecting mobs in the world
+    // -> `SpawnMob` takes ownership via `std::unique_ptr` to make ownership explicit
+    // -> `GetMobs` returns a const reference for iteration without copying
+    void SpawnMob(std::unique_ptr<ASCIICraft::Mobs> mob);
+    const std::vector<std::unique_ptr<ASCIICraft::Mobs>>& GetMobs() const { return mobs; }
+
 private:
     // Chunk storage
     std::unordered_map<ChunkCoord, std::unique_ptr<Chunk>> loadedChunks;
@@ -80,4 +88,9 @@ private:
 
     static const ChunkCoord FACE_NEIGHBOR_OFFSETS[6];
     static constexpr int MAX_REGENERATIONS_PER_FRAME = 200;
+
+    // Mob storage
+    // -> World owns mobs in this vector using `unique_ptr`
+    // -> World::Update() should iterate and call `Update(dt, *this)` on each mob
+    std::vector<std::unique_ptr<ASCIICraft::Mobs>> mobs;
 };
