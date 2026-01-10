@@ -18,7 +18,7 @@ TerrainGenerator::TerrainGenerator()
 
 TerrainGenerator::~TerrainGenerator() = default;
 
-void TerrainGenerator::GenerateChunk(Chunk* chunk, SetBlockQuietCallback setBlockQuiet) {
+void TerrainGenerator::GenerateChunk(Chunk* chunk, SetBlockCallback setBlock) {
     if (!chunk) return;
     
     InitializeNoiseGenerators();
@@ -26,24 +26,24 @@ void TerrainGenerator::GenerateChunk(Chunk* chunk, SetBlockQuietCallback setBloc
     const ChunkCoord coord = chunk->GetCoord();
     
     std::vector<glm::ivec3> treePlacementPositions;
-    GenerateTerrainColumn(chunk, coord, params, treePlacementPositions);
-    GenerateTrees(chunk, treePlacementPositions, setBlockQuiet);
+    GenerateTerrainColumns(chunk, coord, params, treePlacementPositions);
+    GenerateTrees(chunk, treePlacementPositions, setBlock);
     
     chunk->SetGenerated(true);
 }
 
-void TerrainGenerator::GenerateTerrainColumn(Chunk* chunk, const ChunkCoord& coord, const TerrainParams& params,
+void TerrainGenerator::GenerateTerrainColumns(Chunk* chunk, const ChunkCoord& coord, const TerrainParams& params,
                                             std::vector<glm::ivec3>& treePlacementPositions) {
     const int chunkBaseY = coord.y * Chunk::SIZE;
     
     for (int x = 0; x < Chunk::SIZE; ++x) {
         for (int z = 0; z < Chunk::SIZE; ++z) {
-            const glm::ivec3 worldPos = LocalToWorldPos(coord, x, z);
-            const int terrainHeight = CalculateTerrainHeight(worldPos.x, worldPos.z, params);
+            const glm::ivec3 WorldCoord = LocalToWorldCoord(coord, x, z);
+            const int terrainHeight = CalculateTerrainHeight(WorldCoord.x, WorldCoord.z, params);
             
             for (int y = 0; y < Chunk::SIZE; ++y) {
                 const int worldY = chunkBaseY + y;
-                const BlockType blockType = GetBlockTypeAt(worldPos.x, worldY, worldPos.z, terrainHeight, params, treePlacementPositions);
+                const BlockType blockType = GetBlockTypeAt(WorldCoord.x, worldY, WorldCoord.z, terrainHeight, params, treePlacementPositions);
                 
                 if (blockType != BlockType::Air) {
                     chunk->SetBlock(x, y, z, Block(blockType));
@@ -53,23 +53,15 @@ void TerrainGenerator::GenerateTerrainColumn(Chunk* chunk, const ChunkCoord& coo
     }
 }
 
-void TerrainGenerator::GenerateTrees(Chunk* chunk, const std::vector<glm::ivec3>& treePlacementPositions,
-                                    SetBlockQuietCallback setBlockQuiet) {
-    if (!setBlockQuiet || treePlacementPositions.empty()) return;
-    
-    std::unordered_set<Chunk*> affectedChunks;
-    affectedChunks.insert(chunk);
+void TerrainGenerator::GenerateTrees(Chunk* chunk, const std::vector<glm::ivec3>& treePlacementPositions, SetBlockCallback setBlock) {
+    if (!setBlock || treePlacementPositions.empty()) return;
     
     for (const auto& pos : treePlacementPositions) {
-        GenerateTree(pos.x, pos.y, pos.z, setBlockQuiet, affectedChunks);
-    }
-    
-    for (auto* affectedChunk : affectedChunks) {
-        affectedChunk->InvalidateMesh();
+        GenerateTree(pos.x, pos.y, pos.z, setBlock);
     }
 }
 
-glm::ivec3 TerrainGenerator::LocalToWorldPos(const ChunkCoord& coord, int localX, int localZ) const {
+glm::ivec3 TerrainGenerator::LocalToWorldCoord(const ChunkCoord& coord, int localX, int localZ) const {
     return glm::ivec3(
         coord.x * Chunk::SIZE + localX,
         0, // Y will be calculated per-block
@@ -336,17 +328,16 @@ void TerrainGenerator::GenerateOneBlockGrassChunk(Chunk* chunk) {
     chunk->SetDirty(true);
 }
 
-void TerrainGenerator::GenerateTree(int worldX, int worldY, int worldZ,
-                                   SetBlockQuietCallback setBlockQuiet, std::unordered_set<Chunk*>& affectedChunks) {
+void TerrainGenerator::GenerateTree(int worldX, int worldY, int worldZ, SetBlockCallback setBlock) {
     // Tree structure constants
     constexpr int TRUNK_HEIGHT = 5;
     constexpr int LEAF_BASE_OFFSET = 3;
     constexpr int LEAF_RADIUS = 2;
     
     // Generate trunk
-    setBlockQuiet(worldX, worldY - 1, worldZ, Block(BlockType::Dirt), affectedChunks);
+    setBlock(worldX, worldY - 1, worldZ, Block(BlockType::Dirt));
     for (int i = 0; i < TRUNK_HEIGHT; ++i) {
-        setBlockQuiet(worldX, worldY + i, worldZ, Block(BlockType::Wood), affectedChunks);
+        setBlock(worldX, worldY + i, worldZ, Block(BlockType::Wood));
     }
     
     const int leafBaseY = worldY + LEAF_BASE_OFFSET;
@@ -356,7 +347,7 @@ void TerrainGenerator::GenerateTree(int worldX, int worldY, int worldZ,
         for (int dx = -LEAF_RADIUS; dx <= LEAF_RADIUS; ++dx) {
             for (int dz = -LEAF_RADIUS; dz <= LEAF_RADIUS; ++dz) {
                 if (std::abs(dx) == LEAF_RADIUS && std::abs(dz) == LEAF_RADIUS) continue; // Skip corners
-                setBlockQuiet(worldX + dx, leafBaseY + dy, worldZ + dz, Block(BlockType::Leaves), affectedChunks);
+                setBlock(worldX + dx, leafBaseY + dy, worldZ + dz, Block(BlockType::Leaves));
             }
         }
     }
@@ -364,15 +355,15 @@ void TerrainGenerator::GenerateTree(int worldX, int worldY, int worldZ,
     // Third layer (Y+5): 3x3
     for (int dx = -1; dx <= 1; ++dx) {
         for (int dz = -1; dz <= 1; ++dz) {
-            setBlockQuiet(worldX + dx, leafBaseY + 2, worldZ + dz, Block(BlockType::Leaves), affectedChunks);
+            setBlock(worldX + dx, leafBaseY + 2, worldZ + dz, Block(BlockType::Leaves));
         }
     }
     
     // Top layer (Y+6): Crown
     const int crownY = leafBaseY + 3;
-    setBlockQuiet(worldX, crownY, worldZ, Block(BlockType::Leaves), affectedChunks);
-    setBlockQuiet(worldX, crownY, worldZ + 1, Block(BlockType::Leaves), affectedChunks);
-    setBlockQuiet(worldX, crownY, worldZ - 1, Block(BlockType::Leaves), affectedChunks);
-    setBlockQuiet(worldX + 1, crownY, worldZ, Block(BlockType::Leaves), affectedChunks);
-    setBlockQuiet(worldX - 1, crownY, worldZ, Block(BlockType::Leaves), affectedChunks);
+    setBlock(worldX, crownY, worldZ, Block(BlockType::Leaves));
+    setBlock(worldX, crownY, worldZ + 1, Block(BlockType::Leaves));
+    setBlock(worldX, crownY, worldZ - 1, Block(BlockType::Leaves));
+    setBlock(worldX + 1, crownY, worldZ, Block(BlockType::Leaves));
+    setBlock(worldX - 1, crownY, worldZ, Block(BlockType::Leaves));
 }

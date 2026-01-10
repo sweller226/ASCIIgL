@@ -77,7 +77,7 @@ bool Game::Initialize() {
     }
     
     // Initialize game systems
-    world = std::make_unique<World>(12, WorldPos(0, 90, 0), 16);
+    world = std::make_unique<World>(12, WorldCoord(0, 90, 0), 16);
     ASCIIgL::InputManager::GetInst().Initialize();
     
     // Create player at spawn point

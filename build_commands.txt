@@ -33,11 +33,11 @@ I_Dont_Wanna_Run_For_Christmas
 
 ASCIICraft
     Run Debug Command
-    cd "C:\Users\Skwig\Desktop\Development\dev\ASCIIgL\ASCIICraft\build\bin\Debug"
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Debug"
     .\ASCIICraft.exe
 
     Run Release Command
-    cd "C:\Users\Skwig\Desktop\Development\dev\ASCIIgL\ASCIICraft\build\bin\Release"
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
     .\ASCIICraft.exe
 
     Build Release

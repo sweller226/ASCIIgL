@@ -41,7 +41,6 @@ void Chunk::SetBlock(int x, int y, int z, const Block& block) {
     int index = GetBlockIndex(x, y, z);
     if (blocks[index].type != block.type || blocks[index].metadata != block.metadata) {
         blocks[index] = block;
-        SetDirty(true);
         InvalidateMesh();
     }
 }
@@ -224,7 +223,7 @@ void Chunk::GenerateMesh() {
                     
                     for (int vertIdx = 0; vertIdx < 4; vertIdx++) {
                         // World position (chunk-relative + block position)
-                        glm::vec3 worldPos = glm::vec3(
+                        glm::vec3 WorldCoord = glm::vec3(
                             coord.x * SIZE + x,
                             coord.y * SIZE + y, 
                             coord.z * SIZE + z
@@ -238,7 +237,7 @@ void Chunk::GenerateMesh() {
                         );
                         
                         ASCIIgL::VertStructs::PosUV vertex = {
-                            worldPos.x, worldPos.y, worldPos.z,  // XYZ
+                            WorldCoord.x, WorldCoord.y, WorldCoord.z,  // XYZ
                             textureUV.x, textureUV.y             // UV
                         };
                         
@@ -332,10 +331,10 @@ bool Chunk::IsValidBlockCoord(int x, int y, int z) const {
            z >= 0 && z < SIZE;
 }
 
-WorldPos Chunk::ChunkToWorldPos(int x, int y, int z) const {
+WorldCoord Chunk::ChunkToWorldCoord(int x, int y, int z) const {
     assert(IsValidBlockCoord(x, y, z) && "Block coordinates out of range");
     
-    return WorldPos(
+    return WorldCoord(
         coord.x * SIZE + x,
         coord.y * SIZE + y,
         coord.z * SIZE + z
@@ -365,4 +364,18 @@ void Chunk::Render() const {
     
     // Use DrawMesh instead of batching - leverages GPU mesh caching
     ASCIIgL::Renderer::GetInst().DrawMesh(mesh.get());
+}
+
+Block& Chunk::GetBlockByIndex(int i) {
+    if (0 <= i && i < VOLUME) { return blocks[i]; }
+    return Block();
+}
+
+const Block& Chunk::GetBlockByIndex(int i) const {
+    if (0 <= i && i < VOLUME) { return blocks[i]; }
+    return Block();
+}
+
+void Chunk::SetBlockByIndex(int i, Block& block) {
+    if (0 <= i && i < VOLUME) { blocks[i] = block; }
 }

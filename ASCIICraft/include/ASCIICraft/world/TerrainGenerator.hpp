@@ -15,13 +15,13 @@ class FastNoiseLite;
 class TerrainGenerator {
 public:
     // Callback types for World operations
-    using SetBlockQuietCallback = std::function<void(int, int, int, const Block&, std::unordered_set<Chunk*>&)>;
+    using SetBlockCallback = std::function<void(int, int, int, const Block&)>;
     
     TerrainGenerator();
     ~TerrainGenerator();
     
     void GenerateChunk(Chunk* chunk, 
-                      SetBlockQuietCallback setBlockQuiet = nullptr);
+                      SetBlockCallback setBlockQuiet = nullptr);
     
     // Test/debug generation methods
     void GenerateGrassLayerChunk(Chunk* chunk);
@@ -51,13 +51,13 @@ private:
     TerrainParams GetTerrainParams() const;
     
     // Core generation pipeline
-    void GenerateTerrainColumn(Chunk* chunk, const ChunkCoord& coord, const TerrainParams& params,
+    void GenerateTerrainColumns(Chunk* chunk, const ChunkCoord& coord, const TerrainParams& params,
                               std::vector<glm::ivec3>& treePlacementPositions);
     void GenerateTrees(Chunk* chunk, const std::vector<glm::ivec3>& treePlacementPositions,
-                      SetBlockQuietCallback setBlockQuiet);
+                      SetBlockCallback setBlockQuiet);
     
     // Helper functions
-    glm::ivec3 LocalToWorldPos(const ChunkCoord& coord, int localX, int localZ) const;
+    glm::ivec3 LocalToWorldCoord(const ChunkCoord& coord, int localX, int localZ) const;
     BlockType GetBlockTypeAt(int worldX, int worldY, int worldZ, int terrainHeight,
                             const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions);
     
@@ -68,6 +68,5 @@ private:
     BlockType DetermineBlockType(int worldX, int worldY, int worldZ, int depthFromSurface, const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions);
     void CheckTreePlacement(int worldX, int worldY, int worldZ, const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions) const;
 
-    void GenerateTree(int worldX, int worldY, int worldZ, SetBlockQuietCallback setBlockQuiet, 
-        std::unordered_set<Chunk*>& affectedChunks);
+    void GenerateTree(int worldX, int worldY, int worldZ, SetBlockCallback setBlockQuiet);
 };

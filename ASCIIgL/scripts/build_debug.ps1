@@ -9,8 +9,8 @@ if (Test-Path -Path ".\build\bin\Debug") {
     Remove-Item -Recurse -Force ".\build\bin\Debug"
 }
 
-# Regenerate build files with CMake for Visual Studio 2022
-cmake -B build -G "Visual Studio 17 2022"
+# Regenerate build files with CMake for Visual Studio 2026
+cmake -B build -G "Visual Studio 18 2026"
 
 # Build all targets in Debug configuration
 cmake --build build --config Debug

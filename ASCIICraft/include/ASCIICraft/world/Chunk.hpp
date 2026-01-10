@@ -1,66 +1,15 @@
 #pragma once
 
-#include <ASCIICraft/world/Block.hpp>
+#include <unordered_map>
+#include <memory>
+
 #include <ASCIIgL/engine/Mesh.hpp>
 #include <ASCIIgL/engine/Camera3D.hpp>
 
 #include <glm/glm.hpp>
-#include <unordered_map>
-#include <memory>
 
-// Forward declarations
-struct ChunkCoord;
-struct WorldPos;
-
-// Chunk coordinates (world space divided by chunk size)
-struct ChunkCoord {
-    int x, y, z;
-    
-    ChunkCoord() : x(0), y(0), z(0) {}
-    ChunkCoord(int x, int y, int z) : x(x), y(y), z(z) {}
-    
-    bool operator==(const ChunkCoord& other) const {
-        return x == other.x && y == other.y && z == other.z;
-    }
-
-    bool operator!=(const ChunkCoord& other) const {
-        return !(*this == other);
-    }
-
-    ChunkCoord operator+(const ChunkCoord& other) const {
-        return ChunkCoord(x + other.x, y + other.y, z + other.z);
-    }
-
-    ChunkCoord operator-(const ChunkCoord& other) const {
-        return ChunkCoord(x - other.x, y - other.y, z - other.z);
-    }
-
-    std::string ToString() const {
-        return "(" + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z) + ")";
-    }
-};
-
-// World position (block coordinates)
-struct WorldPos {
-    int x, y, z;
-    
-    WorldPos() : x(0), y(0), z(0) {}
-    WorldPos(int x, int y, int z) : x(x), y(y), z(z) {}
-    WorldPos(const glm::vec3& pos) : x(static_cast<int>(pos.x)), y(static_cast<int>(pos.y)), z(static_cast<int>(pos.z)) {}
-    
-    glm::vec3 ToVec3() const {
-        return glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
-    }
-    
-    ChunkCoord ToChunkCoord() const {
-        constexpr int CHUNK_SIZE = 16;
-        return ChunkCoord(
-            x >= 0 ? x / CHUNK_SIZE : (x - CHUNK_SIZE + 1) / CHUNK_SIZE,
-            y >= 0 ? y / CHUNK_SIZE : (y - CHUNK_SIZE + 1) / CHUNK_SIZE,
-            z >= 0 ? z / CHUNK_SIZE : (z - CHUNK_SIZE + 1) / CHUNK_SIZE
-        );
-    }
-};
+#include <ASCIICraft/world/Block.hpp>
+#include <ASCIICraft/world/Coords.hpp>
 
 // Chunk class - contains 16x16x16 blocks
 class Chunk {
@@ -98,10 +47,15 @@ public:
     
     // Utility
     bool IsValidBlockCoord(int x, int y, int z) const;
-    WorldPos ChunkToWorldPos(int x, int y, int z) const;
+    WorldCoord ChunkToWorldCoord(int x, int y, int z) const;
 
     // Logging
     void LogNeighbors() const;
+
+    Block& GetBlockByIndex(int i);
+    const Block& GetBlockByIndex(int i) const;
+
+    void SetBlockByIndex(int i, Block& block);
     
 private:
     ChunkCoord coord;
@@ -120,19 +74,3 @@ private:
     // Helper methods
     int GetBlockIndex(int x, int y, int z) const;
 };
-
-// Hash function specialization for ChunkCoord (needed for unordered_map)
-namespace std {
-    template<>
-    struct hash<ChunkCoord> {
-        size_t operator()(const ChunkCoord& coord) const {
-            // Combine the hash of x, y, z coordinates
-            size_t h1 = hash<int>()(coord.x);
-            size_t h2 = hash<int>()(coord.y);
-            size_t h3 = hash<int>()(coord.z);
-            
-            // Use a simple hash combination technique
-            return h1 ^ (h2 << 1) ^ (h3 << 2);
-        }
-    };
-}

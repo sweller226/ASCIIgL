@@ -14,5 +14,7 @@ namespace MathUtil {
 
 	glm::mat4 CalcModelMatrix(const glm::vec3& position, const glm::vec3& rotation, const glm::vec3& size);
     glm::mat4 CalcModelMatrix(const glm::vec3& position, const float rotation, const glm::vec3& size);
+
+	int FloorDivNegInf(int n, int d);
 };
 } // namespace ASCIIgL
