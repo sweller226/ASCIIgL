@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ASCIICraft/world/Block.hpp>
 
 #include <vector>
@@ -14,7 +16,7 @@ struct CrossChunkEdit {
     packedPos = (static_cast<uint16_t>(x) & 0xF) | ((static_cast<uint16_t>(y) & 0xF) << 4) | ((static_cast<uint16_t>(z) & 0xF) << 8);
   }
 
-  void UnpackPos(int& x, int& y, int& z) {
+  void UnpackPos(int& x, int& y, int& z) const {
     x =  packedPos        & 0xF;      // bits 0–3
     y = (packedPos >> 4)  & 0xF;      // bits 4–7
     z = (packedPos >> 8)  & 0xF;      // bits 8–11

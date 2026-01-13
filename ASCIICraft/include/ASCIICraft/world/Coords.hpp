@@ -9,6 +9,34 @@
 constexpr int CHUNK_SIZE = 16;
 constexpr int REGION_SIZE = 32;
 
+struct RegionCoord {
+    int32_t x, y, z;
+
+    RegionCoord() : x(0), y(0), z(0) {}
+    RegionCoord(int32_t x, int32_t y, int32_t z) : x(x), y(y), z(z) {}
+    RegionCoord(const glm::ivec3& pos) : x(static_cast<int32_t>(pos.x)), y(static_cast<int32_t>(pos.y)), z(static_cast<int32_t>(pos.z)) {}
+
+    bool operator==(const RegionCoord& other) const {
+        return x == other.x && y == other.y && z == other.z;
+    }
+
+    bool operator!=(const RegionCoord& other) const {
+        return !(*this == other);
+    }
+
+    RegionCoord operator+(const RegionCoord& other) const {
+        return RegionCoord(x + other.x, y + other.y, z + other.z);
+    }
+
+    RegionCoord operator-(const RegionCoord& other) const {
+        return RegionCoord(x - other.x, y - other.y, z - other.z);
+    }
+
+    std::string ToString() const {
+        return "(" + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z) + ")";
+    }
+};
+
 // Chunk coordinates (world space divided by chunk size)
 struct ChunkCoord {
     int32_t x, y, z;
@@ -42,7 +70,7 @@ struct ChunkCoord {
     }
 
     RegionCoord ToRegionCoord() const {
-        return glm::ivec3(
+        return RegionCoord(
             ASCIIgL::MathUtil::FloorDivNegInf(x, REGION_SIZE),
             ASCIIgL::MathUtil::FloorDivNegInf(y, REGION_SIZE),
             ASCIIgL::MathUtil::FloorDivNegInf(z, REGION_SIZE)
@@ -69,6 +97,27 @@ struct WorldCoord {
     glm::ivec3 ToVec3() const {
         return glm::ivec3(static_cast<int>(x), static_cast<int>(y), static_cast<int>(z));
     }
+
+    bool operator==(const WorldCoord& other) const {
+        return x == other.x && y == other.y && z == other.z;
+    }
+
+    bool operator!=(const WorldCoord& other) const {
+        return !(*this == other);
+    }
+
+    WorldCoord operator+(const WorldCoord& other) const {
+        return WorldCoord(x + other.x, y + other.y, z + other.z);
+    }
+
+    WorldCoord operator-(const WorldCoord& other) const {
+        return WorldCoord(x - other.x, y - other.y, z - other.z);
+    }
+
+    std::string ToString() const {
+        return "(" + std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(z) + ")";
+    }
+
     
     ChunkCoord ToChunkCoord() const {
         return ChunkCoord(
@@ -85,14 +134,6 @@ struct WorldCoord {
             ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE
         );
     }
-};
-
-struct RegionCoord {
-    int32_t x, y, z;
-
-    RegionCoord() : x(0), y(0), z(0) {}
-    RegionCoord(int32_t x, int32_t y, int32_t z) : x(x), y(y), z(z) {}
-    RegionCoord(const glm::ivec3& pos) : x(static_cast<int32_t>(pos.x)), y(static_cast<int32_t>(pos.y)), z(static_cast<int32_t>(pos.z)) {}
 };
 
 // splitmix64 mixer
@@ -121,6 +162,7 @@ struct hash<ChunkCoord> {
     }
 };
 
+template<>
 struct hash<RegionCoord> {
     size_t operator()(RegionCoord const& c) const noexcept {
         // cast to unsigned to avoid sign-extension

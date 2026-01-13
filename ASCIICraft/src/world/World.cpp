@@ -171,61 +171,87 @@ Chunk* World::GetOrCreateChunk(const ChunkCoord& coord) {
 }
 
 void World::LoadChunk(const ChunkCoord& coord) {
+    ASCIIgL::Logger::Debug("LoadChunk start for " + coord.ToString());
+
     if (coord.y < 0) {
-        return; // Below world bounds
+        ASCIIgL::Logger::Debug("Chunk below world bounds, skipping: " + coord.ToString());
+        return;
     }
 
     if (IsChunkLoaded(coord)) {
-        return; // Already loaded
+        ASCIIgL::Logger::Debug("Chunk already loaded: " + coord.ToString());
+        return;
     }
-    
+
     // Create and store new chunk
     auto chunk = std::make_unique<Chunk>(coord);
     Chunk* chunkPtr = chunk.get();
     loadedChunks[coord] = std::move(chunk);
 
-    // first check if chunk if generated in region file. if so retrieve it
+    // Resolve region
     RegionCoord rp = coord.ToRegionCoord();
+    ASCIIgL::Logger::Debug("Chunk belongs to RegionCoord " + rp.ToString());
+
     if (!regionManager->FilePresent(rp)) {
+        ASCIIgL::Logger::Debug("Region file missing, creating new RegionFile for " + rp.ToString());
         regionManager->AddRegion(RegionFile(rp));
     }
 
-    if (regionManager->AccessRegion(rp).LoadChunk(chunkPtr)) {
-        ASCIIgL::Logger::Debug("Loaded chunk from file at (" + std::to_string(coord.x) + ", " + 
-                  std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
-    } else {
-        // if not in region file, generate terrain
+    // Access region once
+    RegionFile& region = regionManager->AccessRegion(rp);
 
-        // Generate terrain using TerrainGenerator with callbacks for World operations
+    // Try loading chunk from region file
+    if (region.LoadChunk(chunkPtr)) {
+        ASCIIgL::Logger::Debug("Loaded chunk from region file: " + coord.ToString());
+    } else {
+        ASCIIgL::Logger::Debug("Generating chunk procedurally: " + coord.ToString());
+
         auto setBlock = [this](int x, int y, int z, const Block& block) {
             this->SetBlock(x, y, z, block);
         };
-        
+
         terrainGenerator->GenerateChunk(chunkPtr, setBlock);
     }
 
+    // Load metadata (cross‑chunk edits stored in region file)
     auto cachedMetaBucket = std::make_unique<MetaBucket>();
-    regionManager->AccessRegion(rp).LoadMetaData(coord, cachedMetaBucket.get());
+    region.LoadMetaData(coord, cachedMetaBucket.get());
 
-    // apply cached cross chunk edits first
-    for (CrossChunkEdit edit : cachedMetaBucket->edits) {
+    ASCIIgL::Logger::Debug(
+        "Loaded " + std::to_string(cachedMetaBucket->edits.size()) +
+        " cached cross‑chunk edits for " + coord.ToString()
+    );
+
+    // Apply cached edits
+    for (const auto& edit : cachedMetaBucket->edits) {
         int x = 0, y = 0, z = 0;
         edit.UnpackPos(x, y, z);
         chunkPtr->SetBlock(x, y, z, edit.block);
     }
     cachedMetaBucket->edits.clear();
 
+    // Apply in‑memory pending edits
     auto it = crossChunkEdits.find(coord);
-    MetaBucket currBucket;
-    if (it != crossChunkEdits.end()) { currBucket = it->second; }
+    if (it != crossChunkEdits.end()) {
+        MetaBucket& bucket = it->second;
 
-    for (CrossChunkEdit edit : currBucket.edits) {
-        int x = 0, y = 0, z = 0;
-        edit.UnpackPos(x, y, z);
-        chunkPtr->SetBlock(x, y, z, edit.block);
+        ASCIIgL::Logger::Debug(
+            "Applying " + std::to_string(bucket.edits.size()) +
+            " pending in‑memory cross‑chunk edits for " + coord.ToString()
+        );
+
+        for (const auto& edit : bucket.edits) {
+            int x = 0, y = 0, z = 0;
+            edit.UnpackPos(x, y, z);
+            chunkPtr->SetBlock(x, y, z, edit.block);
+        }
+
+        crossChunkEdits.erase(it);
+    } else {
+        ASCIIgL::Logger::Debug("No pending in‑memory cross‑chunk edits for " + coord.ToString());
     }
-    currBucket.edits.clear();
-    crossChunkEdits.erase(it);
+
+    ASCIIgL::Logger::Debug("LoadChunk complete for " + coord.ToString());
 }
 
 void World::UnloadChunk(const ChunkCoord& coord) {

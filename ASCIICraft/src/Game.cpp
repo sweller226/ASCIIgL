@@ -77,11 +77,11 @@ bool Game::Initialize() {
     }
     
     // Initialize game systems
-    world = std::make_unique<World>(12, WorldCoord(0, 90, 0), 16);
+    world = std::make_unique<World>(12, WorldCoord(0, 90, 0), WORLD_LIMIT);
     ASCIIgL::InputManager::GetInst().Initialize();
     
     // Create player at spawn point
-    player = std::make_unique<Player>(world->GetSpawnPoint().ToVec3(), GameMode::Survival);
+    player = std::make_unique<Player>(world->GetSpawnPoint().ToVec3(), GameMode::Spectator);
     
     // Connect player to world
     world->SetPlayer(player.get());

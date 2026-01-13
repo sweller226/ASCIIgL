@@ -12,9 +12,6 @@
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/CrossChunkEdit.hpp>
 
-// Adjust to your region dimensions (chunks per axis)
-constexpr int REGION_SIZE = 16;
-
 #pragma pack(push, 1)
 
 // Region-level metadata
@@ -93,6 +90,13 @@ public:
     explicit RegionFile(const RegionCoord& coord);
     ~RegionFile();
 
+    RegionFile(const RegionFile&) = delete;
+    RegionFile& operator=(const RegionFile&) = delete;
+
+    RegionFile(RegionFile&&) noexcept = default;
+    RegionFile& operator=(RegionFile&&) noexcept = default;
+
+
     bool LoadChunk(Chunk* out);
     bool SaveChunk(const Chunk* data);
 
@@ -134,7 +138,7 @@ public:
 
     static constexpr int MAX_REGIONS = 32; 
 
-    void AddRegion(RegionFile rf);
+    void AddRegion(RegionFile&& rf);
     void RemoveRegion(const RegionCoord& coord);
     RegionFile& AccessRegion(const RegionCoord& coord);
     bool FilePresent(const RegionCoord& coord);

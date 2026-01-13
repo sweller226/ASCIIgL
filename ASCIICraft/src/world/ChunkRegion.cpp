@@ -14,7 +14,7 @@ RegionFile::RegionFile(const RegionCoord& coord) : _coord(coord) {
         std::filesystem::create_directories(regionDir);
     }
 
-    std::string filename = "r-" + std::to_string(coord.x) + "." + std::to_string(coord.y) + "." + std::to_string(coord.z);
+    std::string filename = "r_" + std::to_string(coord.x) + "." + std::to_string(coord.y) + "." + std::to_string(coord.z);
 
     _path = (regionDir / filename).string();
 
@@ -565,7 +565,7 @@ const std::string& RegionFile::GetPath() const {
     return _path;
 }
 
-void RegionManager::AddRegion(RegionFile rf) {
+void RegionManager::AddRegion(RegionFile&& rf) {
     regionList.push_front(std::move(rf));
     regionFiles.emplace(rf.GetRegionCoord(), regionList.begin());
 
