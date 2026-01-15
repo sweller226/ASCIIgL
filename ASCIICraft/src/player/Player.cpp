@@ -34,10 +34,8 @@ Player::Player(const glm::vec3& startPosition, GameMode mode)
     , jumpCooldown(0.0f)
     , lastOnGround(0.0f) {
     
-    ASCIIgL::Logger::Info("Player created at position (" + 
-                 std::to_string(position.x) + ", " + 
-                 std::to_string(position.y) + ", " + 
-                 std::to_string(position.z) + ")");
+    ASCIIgL::Logger::Infof("Player created at position (%d, %d, %d)", position.x, position.y, position.z);
+
 
     switch (mode) {
         case GameMode::Survival:
@@ -124,14 +122,14 @@ void Player::Move(const glm::vec3& direction) {
     // Get current movement speed based on state
     float currentSpeed = walkSpeed;
 
-    ASCIIgL::Logger::Info("Player Move: direction=(" + 
-                  std::to_string(direction.x) + ", " + 
-                  std::to_string(direction.y) + ", " + 
-                  std::to_string(direction.z) + "), state=" + 
-                  std::to_string(static_cast<int>(movementState)) + 
-                  ", flying=" + std::to_string(flying) + 
-                  ", gameMode=" + std::to_string(static_cast<int>(gameMode)));
-    
+    ASCIIgL::Logger::Infof(
+        "Player Move: direction=(%.2f, %.2f, %.2f), state=%d, flying=%d, gameMode=%d",
+        direction.x, direction.y, direction.z,
+        static_cast<int>(movementState),
+        flying ? 1 : 0,
+        static_cast<int>(gameMode)
+    );
+
     switch (movementState) {
         case MovementState::Running:
             currentSpeed = runSpeed;

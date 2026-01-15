@@ -81,7 +81,7 @@ bool Game::Initialize() {
     ASCIIgL::InputManager::GetInst().Initialize();
     
     // Create player at spawn point
-    player = std::make_unique<Player>(world->GetSpawnPoint().ToVec3(), GameMode::Spectator);
+    player = std::make_unique<Player>(world->GetSpawnPoint().ToVec3(), GameMode::Survival);
     
     // Connect player to world
     world->SetPlayer(player.get());
