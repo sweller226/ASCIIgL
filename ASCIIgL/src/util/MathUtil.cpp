@@ -55,4 +55,8 @@ glm::mat4 MathUtil::CalcModelMatrix(const glm::vec3& position, const float rotat
 	return model;
 }
 
+int MathUtil::FloorDivNegInf(int n, int d) {
+	return n >= 0 ? n / d : (n - d + 1) / d;
+}
+
 } // namespace ASCIIgL

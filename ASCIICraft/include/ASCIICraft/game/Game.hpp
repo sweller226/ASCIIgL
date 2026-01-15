@@ -51,7 +51,8 @@ private:
     
     // Constants
     static inline int SCREEN_WIDTH = 550;
-    static inline int SCREEN_HEIGHT = 250;
+    static inline int SCREEN_HEIGHT = 350;
     static constexpr int FONT_SIZE = 4;
     static constexpr float TARGET_FPS = 60.0f;
+    static constexpr int WORLD_LIMIT = 2048; // arbitrarily set the wold limit to 2048 chunks
 };

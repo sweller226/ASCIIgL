@@ -62,6 +62,8 @@ set_target_properties(ASCIIgL PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${ASCIIgL_INCLUDE_DIR}"
     INTERFACE_LINK_DIRECTORIES "${ASCIIgL_LIB_DIR}"
     INTERFACE_LINK_LIBRARIES "glm;$<$<CONFIG:Debug>:tbb12_debug>;$<$<NOT:$<CONFIG:Debug>>:tbb12>"
+    IMPORTED_LOCATION_MINSIZEREL     "${ASCIIgL_LIBRARY_RELEASE}"
+    IMPORTED_LOCATION_RELWITHDEBINFO "${ASCIIgL_LIBRARY_RELEASE}"
 )
 
 # ============================================================================

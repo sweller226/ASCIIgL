@@ -169,6 +169,12 @@ private:
     void DrawModel(const Model& ModelObj);
     void Draw2DQuad(const Texture& tex);
 
+    // =========================================================================
+    // Frame Management
+    // =========================================================================
+    void EndColBuffFrame();  // Presents debug swap chain for RenderDoc
+    void DownloadFramebuffer();
+
 public:
     // =========================================================================
     // Singleton Access (Friend-Accessible Only via Renderer)
@@ -186,12 +192,6 @@ public:
     // Resource cache cleanup (called by resource destructors)
     void ReleaseMeshCache(void* cachePtr);
     void InvalidateTextureCache(const Texture* tex);
-
-    // =========================================================================
-    // Frame Management
-    // =========================================================================
-    void EndColBuffFrame();  // Presents debug swap chain for RenderDoc
-    void DownloadFramebuffer();
     
     // Bind a custom shader program (nullptr to use default)
     void BindShaderProgram(ShaderProgram* program);

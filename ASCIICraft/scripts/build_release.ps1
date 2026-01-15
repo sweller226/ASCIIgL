@@ -9,8 +9,8 @@ if (Test-Path -Path ".\build\bin\Release") {
     Remove-Item -Recurse -Force ".\build\bin\Release"
 }
 
-# Regenerate build files with CMake for Visual Studio 2022
-cmake -B build -G "Visual Studio 17 2022"
+# Regenerate build files with CMake for Visual Studio 2026
+cmake -B build -G "Visual Studio 18 2026"
 
 # Build all targets in Release configuration
 cmake --build build --config Release

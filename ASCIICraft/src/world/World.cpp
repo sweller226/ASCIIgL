@@ -12,6 +12,8 @@
 #include <ASCIIgL/renderer/gpu/Material.hpp>
 
 #include <ASCIICraft/player/Player.hpp>
+#include <ASCIICraft/world/ChunkRegion.hpp>
+#include <ASCIICraft/util/Util.hpp>
 
 // Static member definition - ordered to match face indices in Chunk::GenerateMesh()
 const ChunkCoord World::FACE_NEIGHBOR_OFFSETS[6] = {
@@ -23,12 +25,13 @@ const ChunkCoord World::FACE_NEIGHBOR_OFFSETS[6] = {
     ChunkCoord(-1, 0, 0)   // Face 5: West (X-)
 };
 
-World::World(unsigned int renderDistance, const WorldPos& spawnPoint, unsigned int maxWorldChunkRadius) 
+World::World(unsigned int renderDistance, const WorldCoord& spawnPoint, unsigned int maxWorldChunkRadius) 
     : renderDistance(renderDistance)
     , spawnPoint(spawnPoint)
     , player(nullptr)
     , maxWorldChunkRadius(maxWorldChunkRadius)
-    , terrainGenerator(std::make_unique<TerrainGenerator>()) {
+    , terrainGenerator(std::make_unique<TerrainGenerator>())
+    , regionManager(std::make_unique<RegionManager>()) {
     ASCIIgL::Logger::Info("World created");
 }
 
@@ -105,39 +108,49 @@ void World::GenerateWorld() {
     }
 }
 
-Block World::GetBlock(const WorldPos& pos) {
+Block World::GetBlock(const WorldCoord& pos) {
     return GetBlock(pos.x, pos.y, pos.z);
 }
 
 Block World::GetBlock(int x, int y, int z) {
-    ChunkCoord chunkCoord = WorldPosToChunkCoord(WorldPos(x, y, z));
+    ChunkCoord chunkCoord = WorldCoord(x, y, z).ToChunkCoord();
     
     Chunk* chunk = GetChunk(chunkCoord);
     if (!chunk) {
         return Block(); // Return air block if chunk not loaded
     }
     
-    glm::ivec3 localPos = WorldPosToLocalChunkPos(WorldPos(x, y, z));
+    glm::ivec3 localPos = WorldCoord(x, y, z).ToLocalChunkPos();
     return chunk->GetBlock(localPos.x, localPos.y, localPos.z);
 }
 
-void World::SetBlock(const WorldPos& pos, const Block& block) {
+void World::SetBlock(const WorldCoord& pos, const Block& block) {
     SetBlock(pos.x, pos.y, pos.z, block);
 }
 
 void World::SetBlock(int x, int y, int z, const Block& block) {
-    ChunkCoord chunkCoord = WorldPosToChunkCoord(WorldPos(x, y, z));
+    ChunkCoord chunkCoord = WorldCoord(x, y, z).ToChunkCoord();
     
-    Chunk* chunk = GetOrCreateChunk(chunkCoord);
+    Chunk* chunk = GetChunk(chunkCoord);
     if (!chunk) {
-        ASCIIgL::Logger::Error("Failed to get or create chunk for block placement");
-        return;
-    }
-    
-    glm::ivec3 localPos = WorldPosToLocalChunkPos(WorldPos(x, y, z));
-    chunk->SetBlock(localPos.x, localPos.y, localPos.z, block);
-    
+        CrossChunkEdit crossChunkEdit;
+        crossChunkEdit.PackPos(x, y, z);
+        crossChunkEdit.block = block;
 
+        auto it = crossChunkEdits.find(chunkCoord);
+        if (it == crossChunkEdits.end()) {
+            MetaBucket metaBucket;
+            metaBucket.edits.push_back(crossChunkEdit);
+            crossChunkEdits.insert({chunkCoord, metaBucket});
+            metaTimeTracker.push(chunkCoord);
+        } else {
+            it->second.edits.push_back(crossChunkEdit);
+            it->second.lastTouched = NowSeconds(); // getting curr time in seconds
+        }
+    } else {
+        glm::ivec3 localPos = WorldCoord(x, y, z).ToLocalChunkPos();
+        chunk->SetBlock(localPos.x, localPos.y, localPos.z, block);
+    }
 }
 
 Chunk* World::GetChunk(const ChunkCoord& coord) {
@@ -158,28 +171,87 @@ Chunk* World::GetOrCreateChunk(const ChunkCoord& coord) {
 }
 
 void World::LoadChunk(const ChunkCoord& coord) {
+    ASCIIgL::Logger::Debug("LoadChunk start for " + coord.ToString());
+
     if (coord.y < 0) {
-        return; // Below world bounds
+        ASCIIgL::Logger::Debug("Chunk below world bounds, skipping: " + coord.ToString());
+        return;
     }
 
     if (IsChunkLoaded(coord)) {
-        return; // Already loaded
+        ASCIIgL::Logger::Debug("Chunk already loaded: " + coord.ToString());
+        return;
     }
-    
+
     // Create and store new chunk
     auto chunk = std::make_unique<Chunk>(coord);
     Chunk* chunkPtr = chunk.get();
     loadedChunks[coord] = std::move(chunk);
-    
-    // Generate terrain using TerrainGenerator with callbacks for World operations
-    auto setBlockQuiet = [this](int x, int y, int z, const Block& block, std::unordered_set<Chunk*>& affectedChunks) {
-        this->SetBlockQuiet(x, y, z, block, affectedChunks);
-    };
-    
-    terrainGenerator->GenerateChunk(chunkPtr, setBlockQuiet);
-    
-    ASCIIgL::Logger::Debug("Loaded chunk at (" + std::to_string(coord.x) + ", " + 
-                  std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
+
+    // Resolve region
+    RegionCoord rp = coord.ToRegionCoord();
+    ASCIIgL::Logger::Debug("Chunk belongs to RegionCoord " + rp.ToString());
+
+    if (!regionManager->FilePresent(rp)) {
+        ASCIIgL::Logger::Debug("Region file missing, creating new RegionFile for " + rp.ToString());
+        regionManager->AddRegion(RegionFile(rp));
+    }
+
+    // Access region once
+    RegionFile& region = regionManager->AccessRegion(rp);
+
+    // Try loading chunk from region file
+    if (region.LoadChunk(chunkPtr)) {
+        ASCIIgL::Logger::Debug("Loaded chunk from region file: " + coord.ToString());
+    } else {
+        ASCIIgL::Logger::Debug("Generating chunk procedurally: " + coord.ToString());
+
+        auto setBlock = [this](int x, int y, int z, const Block& block) {
+            this->SetBlock(x, y, z, block);
+        };
+
+        terrainGenerator->GenerateChunk(chunkPtr, setBlock);
+    }
+
+    // Load metadata (cross‑chunk edits stored in region file)
+    auto cachedMetaBucket = std::make_unique<MetaBucket>();
+    region.LoadMetaData(coord, cachedMetaBucket.get());
+
+    ASCIIgL::Logger::Debug(
+        "Loaded " + std::to_string(cachedMetaBucket->edits.size()) +
+        " cached cross‑chunk edits for " + coord.ToString()
+    );
+
+    // Apply cached edits
+    for (const auto& edit : cachedMetaBucket->edits) {
+        int x = 0, y = 0, z = 0;
+        edit.UnpackPos(x, y, z);
+        chunkPtr->SetBlock(x, y, z, edit.block);
+    }
+    cachedMetaBucket->edits.clear();
+
+    // Apply in‑memory pending edits
+    auto it = crossChunkEdits.find(coord);
+    if (it != crossChunkEdits.end()) {
+        MetaBucket& bucket = it->second;
+
+        ASCIIgL::Logger::Debug(
+            "Applying " + std::to_string(bucket.edits.size()) +
+            " pending in‑memory cross‑chunk edits for " + coord.ToString()
+        );
+
+        for (const auto& edit : bucket.edits) {
+            int x = 0, y = 0, z = 0;
+            edit.UnpackPos(x, y, z);
+            chunkPtr->SetBlock(x, y, z, edit.block);
+        }
+
+        crossChunkEdits.erase(it);
+    } else {
+        ASCIIgL::Logger::Debug("No pending in‑memory cross‑chunk edits for " + coord.ToString());
+    }
+
+    ASCIIgL::Logger::Debug("LoadChunk complete for " + coord.ToString());
 }
 
 void World::UnloadChunk(const ChunkCoord& coord) {
@@ -211,7 +283,13 @@ void World::UnloadChunk(const ChunkCoord& coord) {
         }
     }
     
-    // Now safe to unload the chunk
+    // Now safe to unload the 
+    RegionCoord rp = coord.ToRegionCoord();
+    if (!regionManager->FilePresent(rp)) {
+        regionManager->AddRegion(RegionFile(rp));
+    }
+    regionManager->AccessRegion(rp).SaveChunk(it->second.get());
+
     loadedChunks.erase(it);
     ASCIIgL::Logger::Debug("Unloaded chunk at (" + std::to_string(coord.x) + ", " + 
                   std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
@@ -227,11 +305,42 @@ void World::UpdateChunkLoading() {
     }
     
     glm::vec3 playerPos = player->GetPosition();
-    ChunkCoord playerChunk = WorldPosToChunkCoord(WorldPos(playerPos));
+    ChunkCoord playerChunk = WorldCoord(playerPos).ToChunkCoord();
     
     const unsigned int loadRadius = renderDistance;
     const unsigned int unloadRadius = renderDistance + 2;
-    
+
+    // === STEP 0: CACHE OLD METADATA ===
+    const uint32_t now = NowSeconds();
+
+    while (!metaTimeTracker.empty()) {
+        const ChunkCoord& key = metaTimeTracker.front();
+
+        auto it = crossChunkEdits.find(key);
+        if (it == crossChunkEdits.end()) {
+            // Bucket was already removed earlier
+            metaTimeTracker.pop();
+            continue;
+        }
+
+        MetaBucket& bucket = it->second;
+
+        // If it's still too new, stop — queue is time‑ordered
+        if (now - bucket.lastTouched < META_BUCKET_TIME_LIMIT) {
+            break;
+        }
+
+        // Otherwise, it's expired — cache it in region file
+        RegionCoord rp = key.ToRegionCoord();
+        if (!regionManager->FilePresent(rp)) {
+            regionManager->AddRegion(RegionFile(rp));
+        }
+
+        regionManager->AccessRegion(rp).SaveMetaData(key, &it->second);
+        crossChunkEdits.erase(it);
+        metaTimeTracker.pop();
+    }
+
     // === STEP 1: LOAD NEW CHUNKS ===
     std::vector<ChunkCoord> chunksToLoad = GetChunksInRadius(playerChunk, loadRadius);
     
@@ -284,7 +393,7 @@ std::vector<Chunk*> World::GetVisibleChunks(const glm::vec3& playerPos, const gl
     visibleChunks.reserve(loadedChunks.size()); // Pre-allocate to avoid reallocations
     
     // Get player's chunk coordinate for distance calculations
-    ChunkCoord playerChunk = WorldPosToChunkCoord(WorldPos(playerPos));
+    ChunkCoord playerChunk = WorldCoord(playerPos).ToChunkCoord();
     
     // Normalize view direction
     glm::vec3 forward = glm::normalize(viewDir);
@@ -445,19 +554,6 @@ void World::UpdateChunkNeighbors(const ChunkCoord& coord, bool markNeighborsDirt
     }
 }
 
-ChunkCoord World::WorldPosToChunkCoord(const WorldPos& pos) const {
-    return pos.ToChunkCoord();
-}
-
-glm::ivec3 World::WorldPosToLocalChunkPos(const WorldPos& pos) const {
-    constexpr int CHUNK_SIZE = 16;
-    return glm::ivec3(
-        ((pos.x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE,
-        ((pos.y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE,
-        ((pos.z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE
-    );
-}
-
 std::vector<ChunkCoord> World::GetChunksInRadius(const ChunkCoord& center, unsigned int radius) const {
     std::vector<ChunkCoord> chunks;
     
@@ -493,14 +589,3 @@ bool World::IsChunkOutsideWorld(const ChunkCoord& coord) const {
     int distanceFromOrigin = std::max({dx, dy, dz});
     return distanceFromOrigin > maxWorldChunkRadius;
 }
-
-void World::SetBlockQuiet(int x, int y, int z, const Block& block, std::unordered_set<Chunk*>& affectedChunks) {
-    ChunkCoord chunkCoord = WorldPosToChunkCoord(WorldPos(x, y, z));
-    Chunk* chunk = GetChunk(chunkCoord);
-    if (!chunk) return; // Skip if chunk not loaded (tree at edge)
-    
-    glm::ivec3 localPos = WorldPosToLocalChunkPos(WorldPos(x, y, z));
-    chunk->SetBlock(localPos.x, localPos.y, localPos.z, block);
-    affectedChunks.insert(chunk);
-}
-
