@@ -76,6 +76,9 @@ namespace std {
     };
 }
 
+static constexpr uint32_t MAX_CHUNK_BLOB_SIZE = 1u << 20; // 1 MiB
+static constexpr uint32_t MAX_META_BLOB_SIZE  = 1u << 20; // 1 MiB
+
 // Region file interface
 class RegionFile {
 /*
@@ -95,7 +98,6 @@ public:
 
     RegionFile(RegionFile&&) noexcept = default;
     RegionFile& operator=(RegionFile&&) noexcept = default;
-
 
     bool LoadChunk(Chunk* out);
     bool SaveChunk(const Chunk* data);
@@ -120,6 +122,9 @@ private:
              + lc.y * REGION_SIZE
              + lc.z * REGION_SIZE * REGION_SIZE);
     }
+
+    bool openForRead();
+    bool openForReadWrite();
 
     void writeHeaderAndIndex();
     void readHeaderAndIndex();

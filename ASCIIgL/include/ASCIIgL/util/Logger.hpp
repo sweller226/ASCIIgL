@@ -24,6 +24,18 @@ public:
     static void Debug(const std::string& message);
     static void Debug(const std::wstring& message);
 
+    // Formatting helpers (printf-style)
+    static void Errorf(const char* fmt, ...);
+    static void Warningf(const char* fmt, ...);
+    static void Infof(const char* fmt, ...);
+    static void Debugf(const char* fmt, ...);
+
+    // Wide-character printf-style
+    static void Errorf(const wchar_t* fmt, ...);
+    static void Warningf(const wchar_t* fmt, ...);
+    static void Infof(const wchar_t* fmt, ...);
+    static void Debugf(const wchar_t* fmt, ...);
+
     static void Close();
     static void SetLevel(LogLevel level);
     static LogLevel GetLevel();

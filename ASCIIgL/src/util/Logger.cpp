@@ -6,6 +6,9 @@
 #include <locale>
 #include <iomanip>
 #include <chrono>
+#include <cstdarg>
+#include <cstdio>
+#include <vector>
 
 #ifdef _WIN32
     #include <direct.h>
@@ -102,5 +105,113 @@ void Logger::Close() {
         logFile.close();
     }
 }
+
+// ---------- Formatting helpers ----------
+static std::string vformat_narrow(const char* fmt, va_list args) {
+    // Try a small stack buffer first
+    std::vector<char> buf(256);
+    va_list args_copy;
+    va_copy(args_copy, args);
+    int needed = std::vsnprintf(buf.data(), buf.size(), fmt, args_copy);
+    va_end(args_copy);
+
+    if (needed < 0) {
+        // Encoding error; return empty string
+        return std::string();
+    }
+    if (static_cast<size_t>(needed) < buf.size()) {
+        return std::string(buf.data(), static_cast<size_t>(needed));
+    }
+
+    // Need larger buffer
+    buf.resize(static_cast<size_t>(needed) + 1);
+    va_list args_copy2;
+    va_copy(args_copy2, args);
+    int needed2 = std::vsnprintf(buf.data(), buf.size(), fmt, args_copy2);
+    va_end(args_copy2);
+    if (needed2 < 0) return std::string();
+    return std::string(buf.data(), static_cast<size_t>(needed2));
+}
+
+static std::wstring vformat_wide(const wchar_t* fmt, va_list args) {
+    std::vector<wchar_t> buf(256);
+    va_list args_copy;
+    va_copy(args_copy, args);
+    int needed = std::vswprintf(buf.data(), buf.size(), fmt, args_copy);
+    va_end(args_copy);
+
+    if (needed < 0) return std::wstring();
+    if (static_cast<size_t>(needed) < buf.size()) {
+        return std::wstring(buf.data(), static_cast<size_t>(needed));
+    }
+
+    buf.resize(static_cast<size_t>(needed) + 1);
+    va_list args_copy2;
+    va_copy(args_copy2, args);
+    int needed2 = std::vswprintf(buf.data(), buf.size(), fmt, args_copy2);
+    va_end(args_copy2);
+    if (needed2 < 0) return std::wstring();
+    return std::wstring(buf.data(), static_cast<size_t>(needed2));
+}
+
+void Logger::Errorf(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    std::string s = vformat_narrow(fmt, ap);
+    va_end(ap);
+    LogInternal(LogLevel::Error, s);
+}
+void Logger::Warningf(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    std::string s = vformat_narrow(fmt, ap);
+    va_end(ap);
+    LogInternal(LogLevel::Warning, s);
+}
+void Logger::Infof(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    std::string s = vformat_narrow(fmt, ap);
+    va_end(ap);
+    LogInternal(LogLevel::Info, s);
+}
+void Logger::Debugf(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    std::string s = vformat_narrow(fmt, ap);
+    va_end(ap);
+    LogInternal(LogLevel::Debug, s);
+}
+
+// Wide versions
+void Logger::Errorf(const wchar_t* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    std::wstring ws = vformat_wide(fmt, ap);
+    va_end(ap);
+    LogInternal(LogLevel::Error, ws);
+}
+void Logger::Warningf(const wchar_t* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    std::wstring ws = vformat_wide(fmt, ap);
+    va_end(ap);
+    LogInternal(LogLevel::Warning, ws);
+}
+void Logger::Infof(const wchar_t* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    std::wstring ws = vformat_wide(fmt, ap);
+    va_end(ap);
+    LogInternal(LogLevel::Info, ws);
+}
+void Logger::Debugf(const wchar_t* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    std::wstring ws = vformat_wide(fmt, ap);
+    va_end(ap);
+    LogInternal(LogLevel::Debug, ws);
+}
+
 
 } // namespace ASCIIgL

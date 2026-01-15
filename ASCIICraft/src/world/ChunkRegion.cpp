@@ -5,9 +5,66 @@
 #include <cassert>
 #include <limits>
 
+#include <sstream>
+
+#include <ASCIIgL/util/Logger.hpp>
+
+// Small helpers used by the methods below
+static inline uint64_t fileSizeOnDisk(const std::string& path) {
+    std::ifstream in(path, std::ios::binary | std::ios::ate);
+    if (!in.is_open()) return 0;
+    return static_cast<uint64_t>(in.tellg());
+}
+
+static void safeRead(std::fstream& f, char* buffer, std::streamsize count, uint64_t fileSize, uint64_t offset) {
+    if (!f.is_open()) throw std::runtime_error("safeRead: file not open");
+    if (count < 0) throw std::runtime_error("safeRead: negative count");
+
+    // IMPORTANT: do not call read with count == 0 on MSVC debug CRT (it asserts buffer != nullptr)
+    if (count == 0) {
+        ASCIIgL::Logger::Warningf("safeRead: requested count is 0 (offset=%llu)", static_cast<unsigned long long>(offset));
+        return;
+    }
+
+    if (static_cast<uint64_t>(offset) + static_cast<uint64_t>(count) > fileSize) {
+        ASCIIgL::Logger::Errorf("safeRead: read would go past EOF (offset=%llu, count=%lld, fileSize=%llu)",
+                                static_cast<unsigned long long>(offset),
+                                static_cast<long long>(count),
+                                static_cast<unsigned long long>(fileSize));
+        throw std::runtime_error("safeRead: read past EOF");
+    }
+
+    if (buffer == nullptr) {
+        ASCIIgL::Logger::Errorf("safeRead: buffer is nullptr (count=%lld, offset=%llu)", static_cast<long long>(count), static_cast<unsigned long long>(offset));
+        throw std::runtime_error("safeRead: null buffer");
+    }
+
+    f.read(buffer, count);
+    if (f.gcount() != count) {
+        ASCIIgL::Logger::Errorf("safeRead: short read (got=%lld, expected=%lld)", static_cast<long long>(f.gcount()), static_cast<long long>(count));
+        throw std::runtime_error("safeRead: short read");
+    }
+}
+
+
+static void safeWrite(std::fstream& f, const char* buffer, std::streamsize count) {
+    if (!f.is_open()) throw std::runtime_error("safeWrite: file not open");
+    f.write(buffer, count);
+    if (!f.good()) {
+        ASCIIgL::Logger::Error("safeWrite: write failed");
+        throw std::runtime_error("safeWrite: write failed");
+    }
+    f.flush();
+    if (!f.good()) {
+        ASCIIgL::Logger::Error("safeWrite: flush failed");
+        throw std::runtime_error("safeWrite: flush failed");
+    }
+}
+
 RegionFile::RegionFile(const RegionCoord& coord) : _coord(coord) {
     // Ensure chunkIndexes vector is sized before any reads/writes
     chunkIndexes.resize(static_cast<size_t>(REGION_SIZE) * REGION_SIZE * REGION_SIZE);
+    metaIndexes.resize(static_cast<size_t>(REGION_SIZE) * REGION_SIZE * REGION_SIZE);  // ADD THIS LINE
 
     const std::filesystem::path regionDir = "regions";
     if (!std::filesystem::exists(regionDir)) {
@@ -308,120 +365,288 @@ bool RegionFile::LoadChunk(Chunk* out) {
     RegionCoord rp = out->GetCoord().ToRegionCoord();
     glm::ivec3 lp = out->GetCoord().ToLocalRegion(rp);
 
+    ASCIIgL::Logger::Debugf("LoadChunk: rp=(%d,%d,%d), lp=(%d,%d,%d)", rp.x, rp.y, rp.z, lp.x, lp.y, lp.z);
+
     // Validate local coords
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
         lp.x >= REGION_SIZE || lp.y >= REGION_SIZE || lp.z >= REGION_SIZE) {
+        ASCIIgL::Logger::Warning("LoadChunk: local coords out of bounds");
         return false;
     }
 
     uint32_t off = indexOffset(lp);
-    if (off >= chunkIndexes.size()) return false;
+    ASCIIgL::Logger::Debugf("LoadChunk: indexOffset = %u", off);
+
+    if (off >= chunkIndexes.size()) {
+        ASCIIgL::Logger::Warning("LoadChunk: indexOffset out of chunkIndexes range");
+        return false;
+    }
 
     auto& entry = chunkIndexes[off];
-    if (!(entry.flags & 0x1)) return false;
+    ASCIIgL::Logger::Debugf("LoadChunk: entry.flags=%u, entry.offset=%llu, entry.length=%u",
+                            static_cast<unsigned int>(entry.flags),
+                            static_cast<unsigned long long>(entry.offset),
+                            entry.length);
 
-    if (entry.length == 0) return false;
+    if (!(entry.flags & 0x1)) {
+        ASCIIgL::Logger::Debug("LoadChunk: chunk not present (flags)");
+        return false;
+    }
+
+    if (entry.length == 0) {
+        ASCIIgL::Logger::Debug("LoadChunk: chunk length is zero");
+        return false;
+    }
+
+    if (entry.length > MAX_CHUNK_BLOB_SIZE) {
+        ASCIIgL::Logger::Errorf("LoadChunk: chunk length %u exceeds MAX_CHUNK_BLOB_SIZE %u", entry.length, MAX_CHUNK_BLOB_SIZE);
+        return false;
+    }
+
+    uint64_t fsize = fileSizeOnDisk(_path);
+    if (entry.offset > fsize || static_cast<uint64_t>(entry.offset) + entry.length > fsize) {
+        ASCIIgL::Logger::Errorf("LoadChunk: offset+length past EOF (offset=%llu, length=%u, fileSize=%llu)",
+                                static_cast<unsigned long long>(entry.offset),
+                                entry.length,
+                                static_cast<unsigned long long>(fsize));
+        return false;
+    }
+
+    if (!openForRead()) {
+        ASCIIgL::Logger::Error("LoadChunk: openForRead failed");
+        return false;
+    }
+
+    _file.seekg(static_cast<std::streamoff>(entry.offset), std::ios::beg);
+    if (!_file.good()) {
+        ASCIIgL::Logger::Errorf("LoadChunk: seekg failed at offset %llu", static_cast<unsigned long long>(entry.offset));
+        _file.close();
+        throw std::runtime_error("Failed to seek region file for read");
+    }
 
     std::vector<uint8_t> blob;
-    blob.resize(entry.length);
+    try {
+        blob.resize(entry.length);
+    } catch (const std::bad_alloc&) {
+        ASCIIgL::Logger::Errorf("LoadChunk: allocation failed for length %u", entry.length);
+        _file.close();
+        return false;
+    }
+    if (blob.empty() && entry.length != 0) {
+        ASCIIgL::Logger::Errorf("LoadChunk: allocation produced empty buffer for length %u", entry.length);
+        _file.close();
+        return false;
+    }
 
-    _file.open(_path, std::ios::binary | std::ios::in | std::ios::out);
-    _file.seekg(static_cast<std::streamoff>(entry.offset), std::ios::beg);
-    if (!_file.good()) throw std::runtime_error("Failed to seek region _file for read");
+    // after allocating blob (and after verifying entry.length <= MAX_... and file size checks)
+    if (blob.size() == 0) {
+        ASCIIgL::Logger::Errorf("LoadChunk: blob.size() == 0 after allocation (entry.length=%u)", entry.length);
+        _file.close();
+        return false;
+    }
+    if (blob.data() == nullptr) {
+        ASCIIgL::Logger::Errorf("LoadChunk: blob.data() == nullptr (entry.length=%u)", entry.length);
+        _file.close();
+        return false;
+    }
 
-    _file.read(reinterpret_cast<char*>(blob.data()), static_cast<std::streamsize>(blob.size()));
-    if (_file.gcount() != static_cast<std::streamsize>(blob.size())) throw std::runtime_error("Failed to read full chunk blob");
+    safeRead(_file, reinterpret_cast<char*>(blob.data()), static_cast<std::streamsize>(blob.size()), fsize, entry.offset);
+
+    ASCIIgL::Logger::Debugf("LoadChunk: read %zu bytes OK", blob.size());
 
     parseChunkBlob(blob, out);
 
     _file.close();
-
+    ASCIIgL::Logger::Info("LoadChunk: success");
     return true;
 }
+
 
 bool RegionFile::SaveChunk(const Chunk* data) {
     RegionCoord rp = data->GetCoord().ToRegionCoord();
     glm::ivec3 lp = data->GetCoord().ToLocalRegion(rp);
 
+    ASCIIgL::Logger::Debugf("SaveChunk: rp=(%d,%d,%d), lp=(%d,%d,%d)", rp.x, rp.y, rp.z, lp.x, lp.y, lp.z);
+
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
         lp.x >= REGION_SIZE || lp.y >= REGION_SIZE || lp.z >= REGION_SIZE) {
+        ASCIIgL::Logger::Error("SaveChunk: local coords out of bounds");
         throw std::out_of_range("Local chunk coords out of region bounds");
     }
 
     uint32_t off = indexOffset(lp);
-    if (off >= chunkIndexes.size()) throw std::out_of_range("Local chunk coords out of region bounds");
+    ASCIIgL::Logger::Debugf("SaveChunk: indexOffset = %u", off);
+
+    if (off >= chunkIndexes.size()) {
+        ASCIIgL::Logger::Error("SaveChunk: indexOffset out of chunkIndexes range");
+        throw std::out_of_range("Local chunk coords out of region bounds");
+    }
 
     auto& entry = chunkIndexes[off];
 
     std::vector<uint8_t> raw = buildChunkBlob(data);
+    ASCIIgL::Logger::Debugf("SaveChunk: built blob of %zu bytes", raw.size());
 
-    _file.open(_path, std::ios::binary | std::ios::in | std::ios::out);
+    if (raw.empty()) {
+        ASCIIgL::Logger::Warning("SaveChunk: blob size is zero, nothing to write");
+        return false;
+    }
+    if (raw.size() > MAX_CHUNK_BLOB_SIZE) {
+        ASCIIgL::Logger::Errorf("SaveChunk: blob size %zu exceeds MAX_CHUNK_BLOB_SIZE %u", raw.size(), MAX_CHUNK_BLOB_SIZE);
+        throw std::runtime_error("Chunk blob too large");
+    }
+
+    if (!openForReadWrite()) {
+        ASCIIgL::Logger::Error("SaveChunk: openForReadWrite failed");
+        throw std::runtime_error("Failed to open region file for write");
+    }
+
+    // append to EOF
     _file.seekp(0, std::ios::end);
-    if (!_file.good()) throw std::runtime_error("Failed to seek region _file for write");
+    if (!_file.good()) {
+        ASCIIgL::Logger::Error("SaveChunk: seekp failed");
+        _file.close();
+        throw std::runtime_error("Failed to seek region file for write");
+    }
+
     std::streampos p = _file.tellp();
-    if (p == -1) throw std::runtime_error("tellp failed");
+    if (p == static_cast<std::streampos>(-1)) {
+        ASCIIgL::Logger::Error("SaveChunk: tellp failed");
+        _file.close();
+        throw std::runtime_error("tellp failed");
+    }
+
     uint32_t offset = static_cast<uint32_t>(p);
+    ASCIIgL::Logger::Debugf("SaveChunk: writing at offset %u", offset);
 
-    _file.write(reinterpret_cast<const char*>(raw.data()), static_cast<std::streamsize>(raw.size()));
-    _file.flush();
+    safeWrite(_file, reinterpret_cast<const char*>(raw.data()), static_cast<std::streamsize>(raw.size()));
 
-    if (!(entry.flags & 0x1)) header.chunkCount++;
+    if (!(entry.flags & 0x1)) {
+        header.chunkCount++;
+        ASCIIgL::Logger::Debugf("SaveChunk: incremented chunkCount to %u", header.chunkCount);
+    }
 
     entry.offset = offset;
     entry.length = static_cast<uint32_t>(raw.size());
     entry.flags = static_cast<uint8_t>(entry.flags | 0x1);
 
+    ASCIIgL::Logger::Debugf("SaveChunk: updated index entry (offset=%u, length=%u, flags=%u)",
+                            entry.offset, entry.length, static_cast<unsigned int>(entry.flags));
+
+    // Persist header and index tables (must be robust/atomic in writeHeaderAndIndex)
     writeHeaderAndIndex();
 
     _file.close();
-
+    ASCIIgL::Logger::Info("SaveChunk: success");
     return true;
 }
+
 
 bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out) {
     RegionCoord rp = pos.ToRegionCoord();
     glm::ivec3 lp = pos.ToLocalRegion(rp);
 
+    ASCIIgL::Logger::Debugf("LoadMetaData: rp=(%d,%d,%d), lp=(%d,%d,%d)",
+                             rp.x, rp.y, rp.z, lp.x, lp.y, lp.z);
+
     // Validate local coords
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
         lp.x >= REGION_SIZE || lp.y >= REGION_SIZE || lp.z >= REGION_SIZE) {
+        ASCIIgL::Logger::Warning("LoadMetaData: local coords out of bounds");
         return false;
     }
 
     uint32_t off = indexOffset(lp);
-    if (off >= metaIndexes.size()) return false;
+    ASCIIgL::Logger::Debugf("LoadMetaData: indexOffset = %u", off);
 
-    auto& entry = metaIndexes[off];
-    if (!(entry.flags & 0x1)) return false; // not present
-    if (entry.length == 0) return false;
-
-    // Ensure metaStart is sane
-    uint32_t metaBase = header.metaStart;
-    if (metaBase == 0) {
-        // fallback: compute expected metaStart if header wasn't initialized
-        const size_t entryCount = static_cast<size_t>(REGION_SIZE) * REGION_SIZE * REGION_SIZE;
-        const uint32_t headerSize = static_cast<uint32_t>(sizeof(RegionHeader));
-        const uint32_t chunkIndexTableSize = static_cast<uint32_t>(entryCount * sizeof(ChunkIndexEntry));
-        const uint32_t metaIndexTableSize  = static_cast<uint32_t>(entryCount * sizeof(MetaBucketIndexEntry));
-        metaBase = header.chunkStart ? header.metaStart : (headerSize + chunkIndexTableSize + metaIndexTableSize);
+    if (off >= metaIndexes.size()) {
+        ASCIIgL::Logger::Warning("LoadMetaData: indexOffset out of metaIndexes range");
+        return false;
     }
 
-    _file.open(_path, std::ios::binary | std::ios::in | std::ios::out);
+    auto& entry = metaIndexes[off];
+    ASCIIgL::Logger::Debugf("LoadMetaData: entry.flags=%u, entry.offset=%llu, entry.length=%u",
+                            static_cast<unsigned int>(entry.flags),
+                            static_cast<unsigned long long>(entry.offset),
+                            entry.length);
+
+    if (!(entry.flags & 0x1)) {
+        ASCIIgL::Logger::Debug("LoadMetaData: metadata not present");
+        return false;
+    }
+
+    if (entry.length == 0) {
+        ASCIIgL::Logger::Debug("LoadMetaData: metadata length is zero");
+        return false;
+    }
+
+    if (entry.length > MAX_META_BLOB_SIZE) {
+        ASCIIgL::Logger::Errorf("LoadMetaData: metadata length %u exceeds MAX_META_BLOB_SIZE %u",
+                                entry.length, MAX_META_BLOB_SIZE);
+        return false;
+    }
+
+    // If header.metaStart is zero, log fallback but we still treat entry.offset as absolute.
+    if (header.metaStart == 0) {
+        ASCIIgL::Logger::Debug("LoadMetaData: metaStart missing, computing fallback (using absolute offsets)");
+    }
+
+    uint64_t fsize = fileSizeOnDisk(_path);
+    if (entry.offset > fsize || static_cast<uint64_t>(entry.offset) + entry.length > fsize) {
+        ASCIIgL::Logger::Errorf("LoadMetaData: offset+length past EOF (offset=%llu, length=%u, fileSize=%llu)",
+                                static_cast<unsigned long long>(entry.offset),
+                                entry.length,
+                                static_cast<unsigned long long>(fsize));
+        return false;
+    }
+
+    if (!openForRead()) {
+        ASCIIgL::Logger::Error("LoadMetaData: openForRead failed");
+        return false;
+    }
 
     _file.seekg(static_cast<std::streamoff>(entry.offset), std::ios::beg);
-    if (!_file.good()) throw std::runtime_error("Failed to seek region _file for read");
+    if (!_file.good()) {
+        ASCIIgL::Logger::Errorf("LoadMetaData: seekg failed at offset %llu", static_cast<unsigned long long>(entry.offset));
+        _file.close();
+        throw std::runtime_error("Failed to seek region file for read");
+    }
 
     std::vector<uint8_t> blob;
-    blob.resize(entry.length);
-    _file.read(reinterpret_cast<char*>(blob.data()), static_cast<std::streamsize>(blob.size()));
-    if (_file.gcount() != static_cast<std::streamsize>(blob.size()))
-        throw std::runtime_error("Failed to read full meta blob");
+    try {
+        blob.resize(entry.length);
+    } catch (const std::bad_alloc&) {
+        ASCIIgL::Logger::Errorf("LoadMetaData: allocation failed for length %u", entry.length);
+        _file.close();
+        return false;
+    }
+    if (blob.empty() && entry.length != 0) {
+        ASCIIgL::Logger::Errorf("LoadMetaData: allocation produced empty buffer for length %u", entry.length);
+        _file.close();
+        return false;
+    }
 
-    // Parse into MetaBucket (implement parseMetaBlob to match buildMetaBlob)
+    // after allocating blob (and after verifying entry.length <= MAX_... and file size checks)
+    if (blob.size() == 0) {
+        ASCIIgL::Logger::Errorf("LoadMetaData: blob.size() == 0 after allocation (entry.length=%u)", entry.length);
+        _file.close();
+        return false;
+    }
+    if (blob.data() == nullptr) {
+        ASCIIgL::Logger::Errorf("LoadMetaData: blob.data() == nullptr (entry.length=%u)", entry.length);
+        _file.close();
+        return false;
+    }
+
+
+    safeRead(_file, reinterpret_cast<char*>(blob.data()), static_cast<std::streamsize>(blob.size()), fsize, entry.offset);
+
+    ASCIIgL::Logger::Debugf("LoadMetaData: read %zu bytes OK", blob.size());
+
     parseMetaBlob(blob, out);
 
     _file.close();
-
+    ASCIIgL::Logger::Info("LoadMetaData: success");
     return true;
 }
 
@@ -429,57 +654,120 @@ bool RegionFile::SaveMetaData(const ChunkCoord& pos, const MetaBucket* data) {
     RegionCoord rp = pos.ToRegionCoord();
     glm::ivec3 lp = pos.ToLocalRegion(rp);
 
+    ASCIIgL::Logger::Debugf("SaveMetaData: rp=(%d,%d,%d), lp=(%d,%d,%d)",
+                             rp.x, rp.y, rp.z, lp.x, lp.y, lp.z);
+
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
         lp.x >= REGION_SIZE || lp.y >= REGION_SIZE || lp.z >= REGION_SIZE) {
+        ASCIIgL::Logger::Error("SaveMetaData: local coords out of bounds");
         throw std::out_of_range("Local chunk coords out of region bounds");
     }
 
     uint32_t off = indexOffset(lp);
-    if (off >= metaIndexes.size()) throw std::out_of_range("Local chunk coords out of region bounds");
+    ASCIIgL::Logger::Debugf("SaveMetaData: indexOffset = %u", off);
+
+    if (off >= metaIndexes.size()) {
+        ASCIIgL::Logger::Error("SaveMetaData: indexOffset out of metaIndexes range");
+        throw std::out_of_range("Local chunk coords out of region bounds");
+    }
 
     auto& entry = metaIndexes[off];
 
-    // Build serialized meta blob
     std::vector<uint8_t> raw = buildMetaBlob(data);
-    uint32_t newLen = static_cast<uint32_t>(raw.size());
+    ASCIIgL::Logger::Debugf("SaveMetaData: built blob of %zu bytes", raw.size());
 
-    // Ensure header.metaStart is initialized
+    if (raw.empty()) {
+        ASCIIgL::Logger::Warning("SaveMetaData: blob size is zero, nothing to write");
+        return false;
+    }
+    if (raw.size() > MAX_META_BLOB_SIZE) {
+        ASCIIgL::Logger::Errorf("SaveMetaData: meta blob size %zu exceeds MAX_META_BLOB_SIZE %u", raw.size(), MAX_META_BLOB_SIZE);
+        throw std::runtime_error("Meta blob too large");
+    }
+
+    // Ensure header.metaStart is initialized (we keep absolute offsets)
     if (header.metaStart == 0) {
-        // If chunkStart is set, use it; otherwise compute default layout
         const size_t entryCount = static_cast<size_t>(REGION_SIZE) * REGION_SIZE * REGION_SIZE;
         const uint32_t headerSize = static_cast<uint32_t>(sizeof(RegionHeader));
         const uint32_t chunkIndexTableSize = static_cast<uint32_t>(entryCount * sizeof(ChunkIndexEntry));
         const uint32_t metaIndexTableSize  = static_cast<uint32_t>(entryCount * sizeof(MetaBucketIndexEntry));
         header.chunkStart = header.chunkStart ? header.chunkStart : (headerSize + chunkIndexTableSize + metaIndexTableSize);
         header.metaStart = header.chunkStart;
+        ASCIIgL::Logger::Debugf("SaveMetaData: initialized header.metaStart=%u", header.metaStart);
     }
 
-    // Append blob to EOF
-    _file.open(_path, std::ios::binary | std::ios::in | std::ios::out);
+    if (!openForReadWrite()) {
+        ASCIIgL::Logger::Error("SaveMetaData: openForReadWrite failed");
+        throw std::runtime_error("Failed to open region file for write");
+    }
+
     _file.seekp(0, std::ios::end);
-    if (!_file.good()) throw std::runtime_error("Failed to seek region _file for write");
+    if (!_file.good()) {
+        ASCIIgL::Logger::Error("SaveMetaData: seekp failed");
+        _file.close();
+        throw std::runtime_error("Failed to seek region file for write");
+    }
+
     std::streampos p = _file.tellp();
-    if (p == -1) throw std::runtime_error("tellp failed");
-    uint64_t offset = static_cast<uint64_t>(p);
+    if (p == static_cast<std::streampos>(-1)) {
+        ASCIIgL::Logger::Error("SaveMetaData: tellp failed");
+        _file.close();
+        throw std::runtime_error("tellp failed");
+    }
 
-    _file.write(reinterpret_cast<const char*>(raw.data()), static_cast<std::streamsize>(raw.size()));
-    _file.flush();
+    uint64_t offset64 = static_cast<uint64_t>(p);
+    
+    // Check for overflow before assigning to uint32_t
+    if (offset64 > std::numeric_limits<uint32_t>::max()) {
+        ASCIIgL::Logger::Error("SaveMetaData: file offset exceeds 4GB limit");
+        _file.close();
+        throw std::runtime_error("Region file too large (>4GB)");
+    }
+    
+    uint32_t offset = static_cast<uint32_t>(offset64);
+    ASCIIgL::Logger::Debugf("SaveMetaData: writing at offset %u", offset);
 
-    // Update meta index entry
-    // packedCoord: store linear index for now; replace with a packing helper if desired
+    safeWrite(_file, reinterpret_cast<const char*>(raw.data()), static_cast<std::streamsize>(raw.size()));
+
+    // Update meta index entry (store absolute offset)
     entry.packedCoord = off;
-    entry.offset = offset;
-    entry.length = newLen;
+    entry.offset = offset;  // Now safe
+    entry.length = static_cast<uint32_t>(raw.size());
     entry.flags = static_cast<uint8_t>(entry.flags | 0x1);
+
+    ASCIIgL::Logger::Debugf("SaveMetaData: updated index entry (offset=%llu, length=%u, flags=%u)",
+                            static_cast<unsigned long long>(entry.offset),
+                            entry.length,
+                            static_cast<unsigned int>(entry.flags));
 
     // Persist header + both index tables
     writeHeaderAndIndex();
 
     _file.close();
-
+    ASCIIgL::Logger::Info("SaveMetaData: success");
     return true;
 }
 
+
+bool RegionFile::openForRead() {
+    if (_file.is_open()) _file.close();
+    _file.open(_path, std::ios::binary | std::ios::in);
+    if (!_file.is_open()) {
+        ASCIIgL::Logger::Errorf("RegionFile::openForRead failed: %s", _path.c_str());
+        return false;
+    }
+    return true;
+}
+
+bool RegionFile::openForReadWrite() {
+    if (_file.is_open()) _file.close();
+    _file.open(_path, std::ios::binary | std::ios::in | std::ios::out);
+    if (!_file.is_open()) {
+        ASCIIgL::Logger::Errorf("RegionFile::openForReadWrite failed: %s", _path.c_str());
+        return false;
+    }
+    return true;
+}
 
 void RegionFile::parseMetaBlob(const std::vector<uint8_t>& blob, MetaBucket* out) {
     if (!out) throw std::invalid_argument("out is null");
@@ -566,8 +854,9 @@ const std::string& RegionFile::GetPath() const {
 }
 
 void RegionManager::AddRegion(RegionFile&& rf) {
+    RegionCoord coord = rf.GetRegionCoord();  // Get coordinate BEFORE moving
     regionList.push_front(std::move(rf));
-    regionFiles.emplace(rf.GetRegionCoord(), regionList.begin());
+    regionFiles.emplace(coord, regionList.begin());  // Use saved coordinate
 
     // Evict least-recently-used region if over capacity
     if (regionList.size() > MAX_REGIONS) {

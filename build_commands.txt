@@ -1,5 +1,5 @@
 To count # of lines
-Get-ChildItem -Recurse -Include *.cpp,*.hpp | Where-Object { $_.FullName -notmatch '\\(lib|dist|vendor|build)\\' } | ForEach-Object { Get-Content $_ } | Measure-Object -Line
+Get-ChildItem -Recurse -Include *.cpp,*.hpp | Where-Object { $_.FullName -notmatch '\\(lib|dist|vendor|build|libs)\\' } | ForEach-Object { Get-Content $_ } | Measure-Object -Line
 
 ASCIIgL
     Build Release
