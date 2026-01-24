@@ -3,6 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include <Windows.h>
+#include <algorithm>
 
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/screen/Screen.hpp>
@@ -13,65 +14,6 @@
 #include <ASCIIgL/util/MathUtil.hpp>
 
 namespace ASCIIgL {
-
-// =========================================================================
-// Default HLSL Shader Sources
-// =========================================================================
-
-static const char* g_VertexShaderSource = R"(
-cbuffer ConstantBuffer : register(b0)
-{
-    float4x4 mvp;
-};
-
-struct VS_INPUT
-{
-    float3 position : POSITION;   // XYZ from VERTEX data[0-2]
-    float2 texcoord : TEXCOORD0;  // UV from VERTEX data[3-4]
-};
-
-struct PS_INPUT
-{
-    float4 position : SV_POSITION;
-    float2 texcoord : TEXCOORD0;
-};
-
-PS_INPUT main(VS_INPUT input)
-{
-    PS_INPUT output;
-    
-    // Transform position to clip space (add W=1 for homogeneous coordinates)
-    output.position = mul(mvp, float4(input.position, 1.0));
-    
-    // Pass through texture coordinates
-    output.texcoord = input.texcoord;
-    
-    return output;
-}
-)";
-
-static const char* g_PixelShaderSource = R"(
-cbuffer ConstantBuffer : register(b0)
-{
-    float4x4 mvp;
-};
-
-Texture2D diffuseTexture : register(t0);
-SamplerState samplerState : register(s0);
-
-struct PS_INPUT
-{
-    float4 position : SV_POSITION;
-    float2 texcoord : TEXCOORD0;
-};
-
-float4 main(PS_INPUT input) : SV_TARGET
-{
-    // Sample texture
-    float4 color = diffuseTexture.Sample(samplerState, input.texcoord);
-    return color;
-}
-)";
 
 // =========================================================================
 // Destructor
@@ -193,7 +135,7 @@ bool RendererGPU::InitializeRenderTarget() {
     UINT qualityLevel = 0;
     
     if (useMSAA) {
-        sampleCount = std::max(1, std::min(8, msaaSamples));  // Clamp to 1-8 samples
+        sampleCount = std::clamp(msaaSamples, 1, 8);  // Clamp to 1-8 samples
         
         // Check MSAA quality support
         UINT numQualityLevels = 0;
@@ -267,7 +209,7 @@ bool RendererGPU::InitializeDepthStencil() {
     
     UINT sampleCount = 1;
     if (useMSAA) {
-        sampleCount = std::max(1, std::min(8, msaaSamples));
+        sampleCount = std::clamp(msaaSamples, 1, 8);
     }
     
     // Create depth stencil texture (must match render target MSAA settings)
@@ -882,6 +824,7 @@ void RendererGPU::DrawMesh(const Mesh* mesh) {
     _context->IASetVertexBuffers(0, 1, cache->vertexBuffer.GetAddressOf(), &stride, &offset);
     
     // Bind texture
+    if (!mesh->GetTexture()) { return; }
     BindTexture(mesh->GetTexture());
     
     // Draw with or without indices

@@ -2,6 +2,8 @@
 
 #include <memory>
 
+#include <entt/entt.hpp>
+
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
 #include <ASCIIgL/engine/InputManager.hpp>
@@ -39,6 +41,7 @@ private:
     std::unique_ptr<Player> player;
     
     // Resources
+    entt::registry registry;
     std::unique_ptr<ASCIIgL::Texture> blockAtlas;  // Block texture atlas - must persist during game lifetime
     
     // Game state
@@ -47,6 +50,7 @@ private:
     
     // Private methods
     bool LoadResources();
+    void InitializeEntities();
     void RenderPlaying();
     
     // Constants

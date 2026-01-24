@@ -90,9 +90,9 @@ void Player::UpdatePhysics(World* world) {
     // Note: onGround is set in HandleCollisions when hitting floor
 }
 
-void Player::HandleInput(const ASCIIgL::InputManager& input) {
-    ProcessMovementInput(input);
-    ProcessCameraInput(input);
+void Player::HandleInput() {
+    ProcessMovementInput();
+    ProcessCameraInput();
 }
 
 void Player::UpdateCamera() {
@@ -160,10 +160,6 @@ void Player::Move(const glm::vec3& direction) {
     }
 
     RecalculateCameraPosition();
-}
-
-void Player::RecalculateCameraPosition() {
-    camera.setCamPos(position + eyeOffset);
 }
 
 void Player::SetPosition(const glm::vec3& pos) {
@@ -405,7 +401,8 @@ void Player::UpdateMovementState() {
     }
 }
 
-void Player::ProcessMovementInput(const ASCIIgL::InputManager& input) {
+void Player::ProcessMovementInput() {
+    const auto input = ASCIIgL::InputManager::GetInst();
     glm::vec3 moveDirection(0.0f);
 
     // Get camera directions for movement
@@ -466,7 +463,9 @@ void Player::ProcessMovementInput(const ASCIIgL::InputManager& input) {
     Move(moveDirection);
 }
 
-void Player::ProcessCameraInput(const ASCIIgL::InputManager& input) {
+void Player::ProcessCameraInput() {
+    const auto input = ASCIIgL::InputManager::GetInst();
+
     // Use keyboard controls for camera movement (arrow keys only)
     
     float yawDelta = 0.0f;
@@ -489,29 +488,3 @@ void Player::ProcessCameraInput(const ASCIIgL::InputManager& input) {
     // Update camera direction
     camera.setCamDir(camera.GetYaw() + yawDelta, camera.GetPitch() + pitchDelta);
 }
-
-// void Player::ProcessActionInput(const InputManager& input, World& world) {
-//     // Process game mode toggle (for testing - remove later)
-//     // if (input.IsActionJustPressed("toggle_gamemode")) {
-//     //     GameMode newMode = (gameMode == GameMode::Creative) ? GameMode::Survival : GameMode::Creative;
-//     //     SetGameMode(newMode);
-//     // }
-    
-//     // Block interaction
-//     if (input.IsActionPressed("break_block")) {
-//         // Q key - Left click replacement for breaking blocks
-//         // TODO: Implement block breaking when BreakBlock method is available
-//         Logger::Debug("Break block action pressed");
-//     }
-    
-//     if (input.IsActionPressed("place_block")) {
-//         // R key - Right click replacement for placing blocks
-//         // TODO: Implement block placing when PlaceBlock method is available
-//         Logger::Debug("Place block action pressed");
-//     }
-    
-//     // Inventory toggle
-//     if (input.IsActionPressed("open_inventory")) {
-//         Logger::Debug("Inventory toggle pressed");
-//     }
-// }

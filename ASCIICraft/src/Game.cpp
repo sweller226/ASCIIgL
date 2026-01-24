@@ -16,6 +16,12 @@
 #include <ASCIICraft/world/Block.hpp>
 #include <ASCIICraft/gui/GuiManager.hpp>
 
+// ecs components
+#include <ASCIICraft/ecs/components/Transform.hpp>
+#include <ASCIICraft/ecs/components/Velocity.hpp>
+#include <ASCIICraft/ecs/components/PlayerCamera.hpp>
+#include <ASCIICraft/ecs/components/PlayerCamera.hpp>
+
 Game::Game() 
     : gameState(GameState::Playing)
     , isRunning(false) {
@@ -56,6 +62,7 @@ bool Game::Initialize() {
         ASCIIgL::Logger::Error("Failed to initialize screen");
         return false;
     }
+
     SCREEN_WIDTH = ASCIIgL::Screen::GetInst().GetWidth();
     SCREEN_HEIGHT = ASCIIgL::Screen::GetInst().GetHeight();
 
@@ -69,6 +76,10 @@ bool Game::Initialize() {
     ASCIIgL::Renderer::GetInst().SetDiagnosticsEnabled(true);
 
     ASCIIgL::Renderer::GetInst().Initialize(true, 4, false); // Enable antialiasing with 4 samples, not CPU only
+
+    InitializeEntities();
+
+    
 
     // Load resources
     if (!LoadResources()) {
@@ -85,7 +96,6 @@ bool Game::Initialize() {
     
     // Connect player to world
     world->SetPlayer(player.get());
-    world->GenerateWorld();
 
     gameState = GameState::Playing;
     isRunning = true;
@@ -196,7 +206,7 @@ void Game::HandleInput() {
     
     // Process player input
     if (player && gameState == GameState::Playing) {
-        player->HandleInput(ASCIIgL::InputManager::GetInst());
+        player->HandleInput();
     }
     
     // Handle exit input
@@ -239,4 +249,9 @@ bool Game::LoadResources() {
 
 void Game::RenderPlaying() {
     world->Render();
+}
+
+void Game::InitializeEntities() {
+    auto e = registry.create();
+    registry.emplace<Transform>
 }

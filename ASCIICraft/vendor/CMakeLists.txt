@@ -10,5 +10,5 @@ target_include_directories(FastNoiseLite INTERFACE
 # EnTT (header-only)
 add_library(entt INTERFACE)
 target_include_directories(entt INTERFACE
-    ${CMAKE_CURRENT_LIST_DIR}/entt/single_include
+    ${CMAKE_CURRENT_LIST_DIR}/EnTT/entt/src
 )

@@ -7,8 +7,13 @@
 #include <ASCIIgL/engine/InputManager.hpp>
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 
-// Forward declaration
-class World;
+#include <entt/entt.hpp>
+
+#include <ASCIICraft/ecs/components/Transform.hpp>
+#include <ASCIICraft/ecs/components/Velocity.hpp>
+#include <ASCIICraft/ecs/components/PlayerCamera.hpp>
+#include <ASCIICraft/ecs/components/PhysicsBody.hpp>
+#include <ASCIICraft/ecs/components/PlayerController.hpp>
 
 enum class GameMode {
     Survival,
@@ -22,6 +27,36 @@ enum class MovementState {
     Flying,
     Falling,
 };
+
+namespace ecs::components {
+
+struct PlayerManager {
+  entt::entity player{entt::null};
+  void create(entt::registry &r) {
+    player = r.create();
+    r.emplace<components::Transform>(player);
+    r.emplace<components::Velocity>(player);
+    r.emplace<components::PhysicsBody>(player);
+    r.emplace<components::StepPhysics>(player);
+    r.emplace<components::Gravity>(player, DEFAULT_GRAVITY);
+    r.emplace<components::GroundPhysics>(player);
+    r.emplace<components::FlyingPhysics>(player);
+    r.emplace<components::PlayerController>(player);
+  }
+  
+  void destroy(entt::registry &r) {
+    if (player != entt::null) r.destroy(player);
+    player = entt::null;
+  }
+
+  entt::entity get() const { return player; }
+
+  
+  static constexpr glm::vec3 DEFAULT_GRAVITY = glm::vec3(0.0f, -32.0f, 0.0f); // Blocks per second squared
+};
+
+}
+
 
 class Player {
 public:
@@ -39,19 +74,6 @@ public:
     // Movement
     void Move(const glm::vec3& direction);
     void Jump();
-    // void StartSprinting();
-    // void StopSprinting();
-    // void StartSneaking();
-    // void StopSneaking();
-    // void ToggleFlight();
-    void RecalculateCameraPosition();
-
-    // Block interaction
-    // void BreakBlock(World& world);
-    // void PlaceBlock(World& world);
-    // void SelectNextBlock();
-    // void SelectPreviousBlock();
-    // void SelectHotbarSlot(int slot);
 
     // Getters
     const glm::vec3& GetPosition() const { return position; }
@@ -69,10 +91,6 @@ public:
     // Setters
     void SetPosition(const glm::vec3& pos);
     void SetGameMode(GameMode mode);
-
-    // Inventory access
-    // Inventory& GetInventory() { return *inventory; }
-    // const Inventory& GetInventory() const { return *inventory; }
 
     // Respawn
     void Respawn(const glm::vec3& spawnPosition);
@@ -96,26 +114,7 @@ private:
     // State flags
     GameMode gameMode;
     MovementState movementState;
-    bool onGround;
-    bool flying;
-    bool sprinting;
-    bool sneaking;
-    bool jumpPressed;
-
-    // Bounding box for collision
-    glm::vec3 boundingBoxSize;
-    glm::vec3 eyeOffset; // Offset from feet to eyes
-
-    // Block interaction
-    int selectedHotbarSlot;
-    float blockBreakProgress;
-    glm::ivec3 targetBlock;
-    bool isBreakingBlock;
-
-    // Timers
-    float jumpCooldown;
-    float lastOnGround;
-
+    
     // Private helper functions
     void UpdateMovementState();
     void ApplyGravity();
@@ -125,14 +124,8 @@ private:
     glm::vec3 GetBoundingBoxMax() const { return position + boundingBoxSize; }
     
     // Input helpers
-    void ProcessMovementInput(const ASCIIgL::InputManager& input);
-    void ProcessCameraInput(const ASCIIgL::InputManager& input);
-    // void ProcessActionInput(const ASCIIgL::InputManager& input, World* world);
-
-    // Block interaction helpers
-    // glm::ivec3 GetTargetBlock(const World& world) const;
-    // bool CanReachBlock(const glm::ivec3& blockPos) const;
-    // float GetBlockBreakTime() const;
+    void ProcessMovementInput();
+    void ProcessCameraInput();
 
     // Movement constants
     static constexpr float DEFAULT_WALK_SPEED = 4.317f;      // Blocks per second
@@ -140,16 +133,10 @@ private:
     static constexpr float DEFAULT_SNEAK_SPEED = 1.295f;     // Blocks per second
     static constexpr float DEFAULT_FLY_SPEED = 10.89f;       // Blocks per second
     static constexpr float DEFAULT_JUMP_HEIGHT = 1.35f;      // Blocks
-    static constexpr float DEFAULT_GRAVITY = -32.0f;         // Blocks per second squared
     static constexpr float DEFAULT_REACH = 5.0f;             // Blocks
     
     static constexpr float PLAYER_WIDTH = 0.6f;              // Blocks
     static constexpr float PLAYER_HEIGHT = 1.8f;             // Blocks
-    static constexpr float PLAYER_EYE_HEIGHT = 1.62f;        // Blocks from feet to eyes
 
     static constexpr float JUMP_COOLDOWN_MAX = 0.2f;         // Seconds
-
-    static constexpr float CAMERA_NEAR_PLANE = 0.1f;
-    static constexpr float CAMERA_FAR_PLANE = 1000.0f;
-    static constexpr float FOV = 70.0f;                      // Field of view in degrees
 };
