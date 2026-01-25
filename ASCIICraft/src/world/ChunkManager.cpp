@@ -1,6 +1,17 @@
 #include <ASCIICraft/world/ChunkManager.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
+#include <ASCIIgL/renderer/gpu/Material.hpp>
+
+#ifdef max
+#  undef max
+#endif
+
+#include <algorithm>
+#include <cmath>
+
+#include <PlayerManager.hpp>
 
 // Static member definition - ordered to match face indices in Chunk::GenerateMesh()
 const ChunkCoord ChunkManager::FACE_NEIGHBOR_OFFSETS[6] = {
@@ -159,11 +170,11 @@ bool ChunkManager::IsChunkLoaded(const ChunkCoord& coord) const {
 }
 
 void ChunkManager::UpdateChunkLoading() {
-    if (!player) {
+    if (!ecs::managers::GetPlayerPtr(registry)) {
         return;
     }
     
-    glm::vec3 playerPos = player->GetPosition();
+    glm::vec3 playerPos = ecs::managers::GetPlayerPtr(registry)->GetPosition();
     ChunkCoord playerChunk = WorldCoord(playerPos).ToChunkCoord();
     
     const unsigned int loadRadius = renderDistance;
@@ -258,8 +269,8 @@ std::vector<Chunk*> ChunkManager::GetVisibleChunks(const glm::vec3& playerPos, c
     glm::vec3 forward = glm::normalize(viewDir);
     
     // FOV-based frustum culling with safety margin
-    const ASCIIgL::Camera3D& camera = player->GetCamera();
-    float fov = camera.GetFov();
+    const ASCIIgL::Camera3D* camera = ecs::managers::GetPlayerPtr(registry)->GetCamera();
+    float fov = camera->GetFov();
     float extendedFov = fov * 1.5f; // 30° margin for safety
     const float fovHalfAngle = glm::radians(extendedFov * 0.5f);
     const float fovCosine = cos(fovHalfAngle);
@@ -449,32 +460,6 @@ bool ChunkManager::IsChunkOutsideWorld(const ChunkCoord& coord) const {
     return distanceFromOrigin > maxWorldChunkRadius;
 }
 
-// void ChunkManager::GenerateWorld() {
-//     // Generate chunks in the surrounding area (cubic) within world limits
-//     // Cast to signed int to avoid unsigned wraparound issues
-//     int signedRenderDistance = static_cast<int>(renderDistance);
-    
-//     std::vector<ChunkCoord> generatedChunks;
-    
-//     for (int x = -signedRenderDistance; x <= signedRenderDistance; ++x) {
-//         for (int y = -signedRenderDistance; y <= signedRenderDistance; ++y) {  // Now includes Y-axis
-//             for (int z = -signedRenderDistance; z <= signedRenderDistance; ++z) {
-//                 ChunkCoord chunkCoord(x, y, z);  // Full 3D chunk generation
-
-//                 if (!IsChunkOutsideWorld(chunkCoord)) {
-//                     GetOrCreateChunk(chunkCoord);
-//                     generatedChunks.push_back(chunkCoord);
-//                 }
-//             }
-//         }
-//     }
-    
-//     ASCIIgL::Logger::Debug("Updating neighbors for " + std::to_string(generatedChunks.size()) + " chunks");
-//     for (const ChunkCoord& coord : generatedChunks) {
-//         UpdateChunkNeighbors(coord, true);
-//     }
-// }
-
 Block ChunkManager::GetBlock(const WorldCoord& pos) {
     return GetBlock(pos.x, pos.y, pos.z);
 }
@@ -523,4 +508,25 @@ void ChunkManager::SetBlock(int x, int y, int z, const Block& block) {
 void ChunkManager::Update() {
     UpdateChunkLoading();
     RegenerateDirtyChunks();
+}
+
+void ChunkManager::RenderChunks() {
+    const auto player = ecs::managers::GetPlayerPtr(registry);
+    std::vector<Chunk*> visibleChunks = GetVisibleChunks(player->GetPosition(), player->GetCamera()->getCamFront());
+    ASCIIgL::Logger::Debug("Render: visibleChunks = " + std::to_string(visibleChunks.size()));
+
+    // Set up view-projection matrix once
+    glm::mat4 mvp = player->GetCamera()->proj * player->GetCamera()->view * glm::mat4(1.0f);
+    auto mat = ASCIIgL::MaterialLibrary::GetInst().GetDefault();
+    ASCIIgL::RendererGPU::GetInst().BindMaterial(mat.get());
+    mat->SetMatrix4("mvp", mvp);
+    ASCIIgL::RendererGPU::GetInst().UploadMaterialConstants(mat.get());
+    
+    // Render each chunk individually - leverages GPU mesh caching
+    for (Chunk* chunk : visibleChunks) {
+        if (!chunk || !chunk->IsGenerated()) {
+            continue;
+        }
+        chunk->Render();
+    }
 }

@@ -16,30 +16,31 @@
 
 #include <glm/glm.hpp>
 
-// Forward declarations
-class Player;
+#include <entt/entt.hpp>
 
 // Main World class
 class World {
 public:
-    World(const WorldCoord& spawnPoint = WorldCoord(0, 10, 0));
+    World(entt::registry& registry, const WorldCoord& spawnPoint = WorldCoord(0, 10, 0));
     ~World();
     
     // Core world operations
     void Update();
     void Render();
 
-    void SetPlayer(Player* player) { this->player = player; }
-    Player* GetPlayer() const { return player; }
-    
     // World queries
     WorldCoord GetSpawnPoint() const { return spawnPoint; }
     void SetSpawnPoint(const WorldCoord& pos) { spawnPoint = pos; }
 
-private:
-    WorldCoord spawnPoint;
-    Player* player; // Reference to the current player for chunk streaming
+    ChunkManager* GetChunkManager() const { return chunkManager.get(); };
+    ChunkManager* GetChunkManager() { return chunkManager.get(); };
 
+
+private:
+    entt::registry& registry;
+    WorldCoord spawnPoint;
     std::unique_ptr<ChunkManager> chunkManager;
 
 };
+
+World* GetWorldPtr(entt::registry& registry);

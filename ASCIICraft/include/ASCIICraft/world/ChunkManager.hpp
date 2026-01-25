@@ -6,6 +6,8 @@
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/TerrainGenerator.hpp>
 
+#include <entt/entt.hpp>
+
 class ChunkManager {
 public:
     ChunkManager() = default;
@@ -32,7 +34,11 @@ public:
     void SetRenderDistance(unsigned int distance) { renderDistance = distance; }
     unsigned int GetRenderDistance() const { return renderDistance; }
 
+    void RenderChunks();
+    
 private:
+    entt::registry& registry;
+
     // Chunk storage and management
     std::unique_ptr<RegionManager> regionManager;
 

@@ -68,8 +68,8 @@ namespace ecs::systems {
                 ASCIIgL::RendererGPU::GetInst().BindMaterial(mat.get());
 
                 glm::mat4 mvp = glm::mat4(1.0f);
-                if (auto cam = m_active3DCamera.lock()) {
-                    mvp = cam->camera->proj * cam->camera->view * item.modelMatrix;
+                if (m_active3DCamera) {
+                    mvp = m_active3DCamera->camera->proj * m_active3DCamera->camera->view * item.modelMatrix;
                 }
 
                 mat->SetMatrix4("mvp", mvp);
@@ -89,8 +89,8 @@ namespace ecs::systems {
                 ASCIIgL::RendererGPU::GetInst().BindMaterial(mat.get());
 
                 glm::mat4 mvp = glm::mat4(1.0f);
-                if (auto cam = m_active2DCamera.lock()) {
-                    mvp = cam->camera->proj * cam->camera->view * item.modelMatrix;
+                if (m_active2DCamera) {
+                    mvp = m_active2DCamera->camera->proj * m_active2DCamera->camera->view * item.modelMatrix;
                 }
 
                 mat->SetMatrix4("mvp", mvp);
@@ -102,4 +102,14 @@ namespace ecs::systems {
             ASCIIgL::Renderer::GetInst().DrawMesh(meshPtr);
         }
     }
+
+void RenderSystem::SetActive3DCamera(components::PlayerCamera* camera3D) {
+    m_active3DCamera = camera3D;
 }
+
+void RenderSystem::SetActive2DCamera(components::GUICamera* camera2D) {
+    m_active2DCamera = camera2D;
+}
+
+}
+

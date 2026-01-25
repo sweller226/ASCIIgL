@@ -3,16 +3,16 @@
 #include <ASCIIgL/engine/InputManager.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
 
-#include <ASCIICraft/ecs/components/PlayerManager.hpp>
+#include <ASCIICraft/ecs/managers/PlayerManager.hpp>
 
 namespace ecs::systems {
 
 void CameraSystem::Update() {
     const auto &input = ASCIIgL::InputManager::GetInst();
 
-    if (!m_registry.ctx().contains<components::PlayerManager>()) return;
-    auto &pm = m_registry.ctx().get<components::PlayerManager>();
-    auto p_ent = pm.get();
+    if (!m_registry.ctx().contains<managers::PlayerManager>()) return;
+    auto &pm = m_registry.ctx().get<managers::PlayerManager>();
+    auto p_ent = pm.getPlayerEnt();
     if (p_ent == entt::null || !m_registry.valid(p_ent)) return;
 
     // required components

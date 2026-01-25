@@ -8,7 +8,7 @@ public:
     MovementSystem(const MovementSystem&) = delete;
     MovementSystem& operator=(const MovementSystem&) = delete;
 
-    void Update();    
+    void Update();      
 
 private:
     entt::registry &m_registry;

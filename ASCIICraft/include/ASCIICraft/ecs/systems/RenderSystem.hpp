@@ -21,6 +21,8 @@ public:
 
     // Main render entry. Call once per frame after camera is set up.
     void Render();
+    void SetActive3DCamera(components::PlayerCamera* camera3D);
+    void SetActive2DCamera(components::GUICamera* camera2D);
 
 private:
     struct DrawItem {
@@ -32,8 +34,8 @@ private:
     };
 
     entt::registry& m_registry;
-    std::weak_ptr<components::PlayerCamera> m_active3DCamera;
-    std::weak_ptr<components::GUICamera> m_active2DCamera;
+    components::PlayerCamera* m_active3DCamera;
+    components::GUICamera* m_active2DCamera;
     std::vector<DrawItem> m_drawList3D;
     std::vector<DrawItem> m_drawList2D; 
 

@@ -20,11 +20,16 @@
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/Velocity.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
-#include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 
 Game::Game() 
     : gameState(GameState::Playing)
-    , isRunning(false) {
+    , isRunning(false)
+    , movementSystem(registry)
+    , physicsSystem(registry)
+    , renderSystem(registry)
+    , cameraSystem(registry)
+{
+
 }
 
 Game::~Game() {
@@ -35,6 +40,8 @@ bool Game::Initialize() {
     ASCIIgL::Logger::Info("Initializing ASCIICraft...");
 
     ASCIIgL::Logger::Info("Setting up palette and screen...");
+
+    // ASCIIgL initializations
 
     std::array<ASCIIgL::PaletteEntry, 16> paletteEntries = {{
         { {0, 0, 0}, 0x0 },        // #000000 (black)
@@ -77,25 +84,17 @@ bool Game::Initialize() {
 
     ASCIIgL::Renderer::GetInst().Initialize(true, 4, false); // Enable antialiasing with 4 samples, not CPU only
 
-    InitializeEntities();
-
-    
+    // ecs context and system initialization
+    InitializeContext();
+    InitializeSystems();
 
     // Load resources
     if (!LoadResources()) {
         ASCIIgL::Logger::Error("Failed to load resources");
         return false;
     }
-    
-    // Initialize game systems
-    world = std::make_unique<World>(12, WorldCoord(0, 90, 0), WORLD_LIMIT);
+
     ASCIIgL::InputManager::GetInst().Initialize();
-    
-    // Create player at spawn point
-    player = std::make_unique<Player>(world->GetSpawnPoint().ToVec3(), GameMode::Survival);
-    
-    // Connect player to world
-    world->SetPlayer(player.get());
 
     gameState = GameState::Playing;
     isRunning = true;
@@ -154,13 +153,10 @@ void Game::Run() {
 void Game::Update() {
     switch (gameState) {
         case GameState::Playing:
-            // Update player
-            if (player) {
-                player->Update(world.get());
-            }
-            
-            // Update world (chunk loading, physics, etc.)
-            world->Update();
+            GetWorldPtr(registry)->Update();
+            movementSystem.Update();
+            cameraSystem.Update();
+            physicsSystem.Update();
             break;
         case GameState::Exiting:
             isRunning = false;
@@ -204,11 +200,6 @@ void Game::Render() {
 void Game::HandleInput() {
     ASCIIgL::InputManager::GetInst().Update();
     
-    // Process player input
-    if (player && gameState == GameState::Playing) {
-        player->HandleInput();
-    }
-    
     // Handle exit input
     if (ASCIIgL::InputManager::GetInst().IsActionPressed("quit")) {
         gameState = GameState::Exiting;
@@ -221,9 +212,6 @@ void Game::Shutdown() {
     // Clear the block atlas reference before destroying it
     Block::SetTextureAtlas(nullptr);
     
-    // Clean up resources
-    player.reset();
-    world.reset();
     blockAtlas.reset();  // Destroy the texture atlas
     
     // Screen cleanup happens automatically in destructor
@@ -248,10 +236,24 @@ bool Game::LoadResources() {
 }
 
 void Game::RenderPlaying() {
-    world->Render();
+    GetWorldPtr(registry)->Render();
+    renderSystem.Render();
 }
 
-void Game::InitializeEntities() {
-    auto e = registry.create();
-    registry.emplace<Transform>
+void Game::InitializeContext() {
+    // Initialize game systems
+    std::unique_ptr<World> world = std::make_unique<World>(12, WorldCoord(0, 90, 0), WORLD_LIMIT);
+    registry.ctx().emplace<std::unique_ptr<World>>(std::move(world));
+
+    // create manager in ctx (default-constructed)
+    auto &pm = registry.ctx().emplace<ecs::managers::PlayerManager>(registry);
+
+    // now initialize it
+    pm.createPlayerEnt();
+    pm.initializePlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Spectator);
+}
+
+void Game::InitializeSystems() {
+    auto *playerManager = ecs::managers::GetPlayerPtr(registry);
+    renderSystem.SetActive3DCamera(registry.try_get<ecs::components::PlayerCamera>(playerManager->getPlayerEnt()));
 }

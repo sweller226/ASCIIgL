@@ -6,7 +6,7 @@
 
 #include <entt/entt.hpp>
 
-#include <ASCIICraft/ecs/components/PlayerManager.hpp>
+#include <ASCIICraft/ecs/managers/PlayerManager.hpp>
 #include <ASCIICraft/util/Util.hpp>
 
 namespace ecs::systems {
@@ -15,12 +15,16 @@ MovementSystem::MovementSystem(entt::registry &registry) noexcept
   : m_registry(registry)
 {}
 
+void MovementSystem::Update() {
+    ProcessMovementInput();
+}
+
 void MovementSystem::ProcessMovementInput() {
     const auto &input = ASCIIgL::InputManager::GetInst();
 
-    if (!m_registry.ctx().contains<components::PlayerManager>()) return;
-    auto &pm = m_registry.ctx().get<components::PlayerManager>();
-    auto p_ent = pm.get();
+    if (!m_registry.ctx().contains<managers::PlayerManager>()) return;
+    auto &pm = m_registry.ctx().get<managers::PlayerManager>();
+    auto p_ent = pm.getPlayerEnt();
     if (p_ent == entt::null || !m_registry.valid(p_ent)) return;
 
     // required components

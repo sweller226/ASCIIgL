@@ -14,9 +14,11 @@
 #include <ASCIICraft/world/ChunkRegion.hpp>
 #include <ASCIICraft/util/Util.hpp>
 
-World::World(const WorldCoord& spawnPoint)
+#include <entt/entt.hpp>
+
+World::World(entt::registry& registry, const WorldCoord& spawnPoint)
     : spawnPoint(spawnPoint)
-    , player(nullptr) {
+    , registry(registry) {
     ASCIIgL::Logger::Info("World created");
 }
 
@@ -25,10 +27,6 @@ World::~World() {
 }
 
 void World::Update() {
-    if (!player) {
-        return;
-    }
-    
     {
         ASCIIgL::PROFILE_SCOPE("Update.ChunkManagement");
         chunkManager->Update();
@@ -36,26 +34,13 @@ void World::Update() {
 }
 
 void World::Render() {
-    if (!player) {
-        ASCIIgL::Logger::Warning("No player set for world rendering");
-        return;
+    {
+        ASCIIgL::PROFILE_SCOPE("RenderWorld");
+        chunkManager->RenderChunks();
     }
+}
 
-    std::vector<Chunk*> visibleChunks = GetVisibleChunks(player->GetPosition(), player->GetCamera().getCamFront());
-    ASCIIgL::Logger::Debug("Render: visibleChunks = " + std::to_string(visibleChunks.size()));
-
-    // Set up view-projection matrix once
-    glm::mat4 mvp = player->GetCamera().proj * player->GetCamera().view * glm::mat4(1.0f);
-    auto mat = ASCIIgL::MaterialLibrary::GetInst().GetDefault();
-    ASCIIgL::RendererGPU::GetInst().BindMaterial(mat.get());
-    mat->SetMatrix4("mvp", mvp);
-    ASCIIgL::RendererGPU::GetInst().UploadMaterialConstants(mat.get());
-    
-    // Render each chunk individually - leverages GPU mesh caching
-    for (Chunk* chunk : visibleChunks) {
-        if (!chunk || !chunk->IsGenerated()) {
-            continue;
-        }
-        chunk->Render();
-    }
+World* GetWorldPtr(entt::registry& registry) {
+    if (!registry.ctx().contains<std::unique_ptr<World>>()) return nullptr;
+    return registry.ctx().get<std::unique_ptr<World>>().get();
 }

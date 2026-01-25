@@ -9,7 +9,15 @@
 #include <ASCIIgL/engine/InputManager.hpp>
 
 #include <ASCIICraft/world/World.hpp>
-#include <ASCIICraft/player/Player.hpp>
+
+// ecs managers
+#include <ASCIICraft/ecs/managers/PlayerManager.hpp>
+
+// ecs systems
+#include <ASCIICraft/ecs/systems/MovementSystem.hpp> 
+#include <ASCIICraft/ecs/systems/CameraSystem.hpp>
+#include <ASCIICraft/ecs/systems/RenderSystem.hpp> 
+#include <ASCIICraft/ecs/systems/PhysicsSystem.hpp> 
 
 enum class GameState {
     Playing,
@@ -36,13 +44,15 @@ public:
     void HandleInput();
     
 private:
-    // Core systems
-    std::unique_ptr<World> world;
-    std::unique_ptr<Player> player;
-    
     // Resources
     entt::registry registry;
     std::unique_ptr<ASCIIgL::Texture> blockAtlas;  // Block texture atlas - must persist during game lifetime
+
+    // ecs systems
+    ecs::systems::MovementSystem movementSystem;
+    ecs::systems::PhysicsSystem physicsSystem;
+    ecs::systems::CameraSystem cameraSystem;
+    ecs::systems::RenderSystem renderSystem;
     
     // Game state
     GameState gameState;
@@ -50,7 +60,8 @@ private:
     
     // Private methods
     bool LoadResources();
-    void InitializeEntities();
+    void InitializeContext();
+    void InitializeSystems();
     void RenderPlaying();
     
     // Constants
