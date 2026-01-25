@@ -8,7 +8,7 @@
 
 #include <ASCIICraft/world/World.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
-#include <ASCIICraft/ecs/player/Player.hpp>
+#include <ASCIICraft/ecs/components/PlayerManager.hpp>
 
 namespace ecs::systems {
 
@@ -61,6 +61,7 @@ void PhysicsSystem::IntegrateEntities(float dt) {
         auto *stepComp    = m_registry.try_get<components::StepPhysics>(ent);
         auto *groundComp  = m_registry.try_get<components::GroundPhysics>(ent);
         auto *flyingComp  = m_registry.try_get<components::FlyingPhysics>(ent);
+        auto *playerMode  = m_registry.try_get<components::PlayerMode>(ent);
 
         if (gravityComp) {
             bool canFly = flyingComp && flyingComp->enabled;
@@ -70,7 +71,9 @@ void PhysicsSystem::IntegrateEntities(float dt) {
         v.ApplyDamping(dt);
         v.ClampSpeed();
 
-        ResolveAABBAgainstWorld(ent, t, col, v, dt, stepComp, groundComp);
+        if (!(playerMode->gamemode == GameMode::Spectator) && stepComp && groundComp) { 
+            ResolveAABBAgainstWorld(ent, t, col, v, dt, stepComp, groundComp);
+        }
     }
 }
 
