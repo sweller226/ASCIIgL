@@ -30,16 +30,17 @@ struct Collider {
     glm::vec3 localOffset{0.0f};
     uint32_t layer{1};
     uint32_t mask{0xFFFFFFFFu};
+    bool disabled{false};
 };
 
 // --- Material tuning for block surfaces (slipperiness like ice) ---
 struct PhysicsMaterial {
     float friction{0.6f};      // coefficient of friction (0..1+)
-    float slipperiness{0.6f};  // Minecraft uses "slipperiness" per block
 };
 
 struct Gravity {
     glm::vec3 acceleration = glm::vec3(0.0f, -9.81f, 0.0f); // default downward gravity
+    bool enabled{true};
 };
 
 struct StepPhysics {

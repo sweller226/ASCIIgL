@@ -1,11 +1,12 @@
 #include <ASCIICraft/ecs/systems/CameraSystem.hpp>
 
-#include <ASCIIgL/engine/InputManager.hpp>
-#include <ASCIIgL/engine/FPSClock.hpp>
-
 #include <ASCIICraft/ecs/managers/PlayerManager.hpp>
 
 namespace ecs::systems {
+
+CameraSystem::CameraSystem(entt::registry &registry) noexcept : m_registry(registry) {
+
+}
 
 void CameraSystem::Update() {
     const auto &input = ASCIIgL::InputManager::GetInst();
@@ -53,7 +54,7 @@ void CameraSystem::ProcessCameraInput(const ASCIIgL::InputManager &input, compon
     cam.camera->setCamDir(cam.camera->GetYaw() + yawDelta, cam.camera->GetPitch() + pitchDelta);
 }
 
-void CameraSystem::LerpFOV(const ASCIIgL::InputManager &input, components::PlayerCamera &cam, components::PlayerController ctrl, const float dt) {
+void CameraSystem::LerpFOV(const ASCIIgL::InputManager &input, components::PlayerCamera &cam, components::PlayerController &ctrl, const float dt) {
     // Smoothly adjust FOV when sprinting (slight increase for speed effect)
     float targetFOV = cam.FOV;
     if (ctrl.isRunning()) {

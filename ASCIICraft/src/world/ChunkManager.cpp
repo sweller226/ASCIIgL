@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include <PlayerManager.hpp>
+#include <ASCIICraft/ecs/managers/PlayerManager.hpp>
 
 // Static member definition - ordered to match face indices in Chunk::GenerateMesh()
 const ChunkCoord ChunkManager::FACE_NEIGHBOR_OFFSETS[6] = {
@@ -22,6 +22,15 @@ const ChunkCoord ChunkManager::FACE_NEIGHBOR_OFFSETS[6] = {
     ChunkCoord(1, 0, 0),   // Face 4: East (X+)
     ChunkCoord(-1, 0, 0)   // Face 5: West (X-)
 };
+
+ChunkManager::ChunkManager(entt::registry& registry, const unsigned int chunkWorldLimit, const unsigned int renderDistance) 
+    : maxWorldChunkRadius(chunkWorldLimit)
+    , renderDistance(renderDistance)
+    , registry(registry) 
+    , terrainGenerator() {
+        ASCIIgL::Logger::Debug("Chunk manager initialized");
+        regionManager = std::make_unique<RegionManager>();
+}
 
 Chunk* ChunkManager::GetChunk(const ChunkCoord& coord) {
     auto it = loadedChunks.find(coord);
@@ -41,15 +50,12 @@ Chunk* ChunkManager::GetOrCreateChunk(const ChunkCoord& coord) {
 }
 
 void ChunkManager::LoadChunk(const ChunkCoord& coord) {
-    ASCIIgL::Logger::Debug("LoadChunk start for " + coord.ToString());
 
     if (coord.y < 0) {
-        ASCIIgL::Logger::Debug("Chunk below world bounds, skipping: " + coord.ToString());
         return;
     }
 
     if (IsChunkLoaded(coord)) {
-        ASCIIgL::Logger::Debug("Chunk already loaded: " + coord.ToString());
         return;
     }
 
@@ -60,37 +66,43 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
 
     // Resolve region
     RegionCoord rp = coord.ToRegionCoord();
-    ASCIIgL::Logger::Debug("Chunk belongs to RegionCoord " + rp.ToString());
 
     if (!regionManager->FilePresent(rp)) {
-        ASCIIgL::Logger::Debug("Region file missing, creating new RegionFile for " + rp.ToString());
         regionManager->AddRegion(RegionFile(rp));
     }
-
+    
     // Access region once
     RegionFile& region = regionManager->AccessRegion(rp);
 
-    // Try loading chunk from region file
-    if (region.LoadChunk(chunkPtr)) {
-        ASCIIgL::Logger::Debug("Loaded chunk from region file: " + coord.ToString());
+    // Try loading chunk from region file with error handling for corruption
+    bool loadedFromFile = false;
+    try {
+        loadedFromFile = region.LoadChunk(chunkPtr);
+    } catch (const std::exception& e) {
+        ASCIIgL::Logger::Warningf("Failed to load chunk (%d,%d,%d) from region file: %s. Regenerating.",
+                                   coord.x, coord.y, coord.z, e.what());
+        loadedFromFile = false;
+    } catch (...) {
+        ASCIIgL::Logger::Warningf("Failed to load chunk (%d,%d,%d) from region file: unknown error. Regenerating.",
+                                   coord.x, coord.y, coord.z);
+        loadedFromFile = false;
+    }
+
+    if (loadedFromFile) {
+        // Loaded from file - mark as generated so mesh can be built
+        chunkPtr->SetGenerated(true);
     } else {
-        ASCIIgL::Logger::Debug("Generating chunk procedurally: " + coord.ToString());
 
         auto setBlock = [this](int x, int y, int z, const Block& block) {
             this->SetBlock(x, y, z, block);
         };
 
-        terrainGenerator->GenerateChunk(chunkPtr, setBlock);
+        terrainGenerator.GenerateChunk(chunkPtr, setBlock);
     }
 
     // Load metadata (cross‑chunk edits stored in region file)
     auto cachedMetaBucket = std::make_unique<MetaBucket>();
     region.LoadMetaData(coord, cachedMetaBucket.get());
-
-    ASCIIgL::Logger::Debug(
-        "Loaded " + std::to_string(cachedMetaBucket->edits.size()) +
-        " cached cross‑chunk edits for " + coord.ToString()
-    );
 
     // Apply cached edits
     for (const auto& edit : cachedMetaBucket->edits) {
@@ -105,11 +117,6 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
     if (it != crossChunkEdits.end()) {
         MetaBucket& bucket = it->second;
 
-        ASCIIgL::Logger::Debug(
-            "Applying " + std::to_string(bucket.edits.size()) +
-            " pending in‑memory cross‑chunk edits for " + coord.ToString()
-        );
-
         for (const auto& edit : bucket.edits) {
             int x = 0, y = 0, z = 0;
             edit.UnpackPos(x, y, z);
@@ -117,11 +124,7 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
         }
 
         crossChunkEdits.erase(it);
-    } else {
-        ASCIIgL::Logger::Debug("No pending in‑memory cross‑chunk edits for " + coord.ToString());
-    }
-
-    ASCIIgL::Logger::Debug("LoadChunk complete for " + coord.ToString());
+    } else {}
 }
 
 void ChunkManager::UnloadChunk(const ChunkCoord& coord) {
@@ -182,22 +185,28 @@ void ChunkManager::UpdateChunkLoading() {
 
     // === STEP 0: CACHE OLD METADATA ===
     const uint32_t now = NowSeconds();
+    constexpr int MAX_META_SAVES_PER_FRAME = 4;
+    int metaSaveCount = 0;
 
-    while (!metaTimeTracker.empty()) {
-        const ChunkCoord& key = metaTimeTracker.front();
+    // Process queue entries, but check actual timestamps since queue may not be strictly ordered
+    size_t queueSize = metaTimeTracker.size();
+    for (size_t i = 0; i < queueSize && metaSaveCount < MAX_META_SAVES_PER_FRAME; ++i) {
+        const ChunkCoord key = metaTimeTracker.front();
+        metaTimeTracker.pop();
 
         auto it = crossChunkEdits.find(key);
         if (it == crossChunkEdits.end()) {
             // Bucket was already removed earlier
-            metaTimeTracker.pop();
             continue;
         }
 
         MetaBucket& bucket = it->second;
 
-        // If it's still too new, stop — queue is time‑ordered
+        // Check actual timestamp, not queue order
         if (now - bucket.lastTouched < META_BUCKET_TIME_LIMIT) {
-            break;
+            // Still too new, re-add to back of queue for later processing
+            metaTimeTracker.push(key);
+            continue;
         }
 
         // Otherwise, it's expired — cache it in region file
@@ -208,7 +217,7 @@ void ChunkManager::UpdateChunkLoading() {
 
         regionManager->AccessRegion(rp).SaveMetaData(key, &it->second);
         crossChunkEdits.erase(it);
-        metaTimeTracker.pop();
+        metaSaveCount++;
     }
 
     // === STEP 1: LOAD NEW CHUNKS ===
@@ -271,7 +280,7 @@ std::vector<Chunk*> ChunkManager::GetVisibleChunks(const glm::vec3& playerPos, c
     // FOV-based frustum culling with safety margin
     const ASCIIgL::Camera3D* camera = ecs::managers::GetPlayerPtr(registry)->GetCamera();
     float fov = camera->GetFov();
-    float extendedFov = fov * 1.5f; // 30° margin for safety
+    float extendedFov = fov * 1.6f; // 30° margin for safety
     const float fovHalfAngle = glm::radians(extendedFov * 0.5f);
     const float fovCosine = cos(fovHalfAngle);
     
@@ -511,22 +520,71 @@ void ChunkManager::Update() {
 }
 
 void ChunkManager::RenderChunks() {
-    const auto player = ecs::managers::GetPlayerPtr(registry);
-    std::vector<Chunk*> visibleChunks = GetVisibleChunks(player->GetPosition(), player->GetCamera()->getCamFront());
-    ASCIIgL::Logger::Debug("Render: visibleChunks = " + std::to_string(visibleChunks.size()));
+    ASCIIgL::Logger::Debug("ChunkManager::RenderChunks called.");
 
-    // Set up view-projection matrix once
-    glm::mat4 mvp = player->GetCamera()->proj * player->GetCamera()->view * glm::mat4(1.0f);
+    // --- Player retrieval ---
+    const auto player = ecs::managers::GetPlayerPtr(registry);
+    if (!player) {
+        ASCIIgL::Logger::Error("RenderChunks: PlayerManager returned NULL player!");
+        return;
+    }
+
+    glm::vec3 pos = player->GetPosition();
+    ASCIIgL::Logger::Debug("RenderChunks: Player position = (" +
+        std::to_string(pos.x) + ", " +
+        std::to_string(pos.y) + ", " +
+        std::to_string(pos.z) + ")");
+
+    // --- Camera retrieval ---
+    auto* cam = player->GetCamera();
+    if (!cam) {
+        ASCIIgL::Logger::Error("RenderChunks: PlayerCamera is NULL!");
+        return;
+    }
+
+    glm::vec3 camFront = cam->getCamFront();
+    ASCIIgL::Logger::Debug("RenderChunks: Camera front = (" +
+        std::to_string(camFront.x) + ", " +
+        std::to_string(camFront.y) + ", " +
+        std::to_string(camFront.z) + ")");
+
+    // --- Visible chunks ---
+    std::vector<Chunk*> visibleChunks = GetVisibleChunks(pos, camFront);
+    ASCIIgL::Logger::Debug("RenderChunks: visibleChunks.size() = " +
+        std::to_string(visibleChunks.size()));
+
+    // --- Material retrieval ---
     auto mat = ASCIIgL::MaterialLibrary::GetInst().GetDefault();
+    if (!mat) {
+        ASCIIgL::Logger::Error("RenderChunks: Default material is NULL!");
+        return;
+    }
+
+    // --- MVP setup ---
+    glm::mat4 mvp = cam->proj * cam->view * glm::mat4(1.0f);
+    ASCIIgL::Logger::Debug("RenderChunks: MVP matrix computed.");
+
     ASCIIgL::RendererGPU::GetInst().BindMaterial(mat.get());
     mat->SetMatrix4("mvp", mvp);
     ASCIIgL::RendererGPU::GetInst().UploadMaterialConstants(mat.get());
-    
-    // Render each chunk individually - leverages GPU mesh caching
+
+    // --- Render chunks ---
+    int renderedCount = 0;
+
     for (Chunk* chunk : visibleChunks) {
-        if (!chunk || !chunk->IsGenerated()) {
+        if (!chunk) {
+            ASCIIgL::Logger::Debug("RenderChunks: Skipping NULL chunk pointer.");
             continue;
         }
+
+        if (!chunk->IsGenerated()) {
+            ASCIIgL::Logger::Debug("RenderChunks: Skipping ungenerated chunk.");
+            continue;
+        }
+
         chunk->Render();
+        renderedCount++;
     }
+
+    ASCIIgL::Logger::Debug("RenderChunks: Rendered " + std::to_string(renderedCount) + " chunks.");
 }

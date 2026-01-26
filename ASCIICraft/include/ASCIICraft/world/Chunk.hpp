@@ -55,7 +55,7 @@ public:
     Block& GetBlockByIndex(int i);
     const Block& GetBlockByIndex(int i) const;
 
-    void SetBlockByIndex(int i, Block& block);
+    void SetBlockByIndex(int i, const Block& block);
     
 private:
     ChunkCoord coord;

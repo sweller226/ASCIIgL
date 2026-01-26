@@ -16,10 +16,12 @@
 
 #include <entt/entt.hpp>
 
-World::World(entt::registry& registry, const WorldCoord& spawnPoint)
+World::World(entt::registry& registry, const WorldCoord spawnPoint, const unsigned int renderDistance)
     : spawnPoint(spawnPoint)
     , registry(registry) {
     ASCIIgL::Logger::Info("World created");
+
+    chunkManager = std::make_unique<ChunkManager>(registry, WORLD_LIMIT, renderDistance);
 }
 
 World::~World() {
@@ -41,6 +43,20 @@ void World::Render() {
 }
 
 World* GetWorldPtr(entt::registry& registry) {
-    if (!registry.ctx().contains<std::unique_ptr<World>>()) return nullptr;
-    return registry.ctx().get<std::unique_ptr<World>>().get();
+    std::unique_ptr<World>* worldPtr = registry.ctx().find<std::unique_ptr<World>>();
+
+    if (!worldPtr) {
+        ASCIIgL::Logger::Error("World not found in registry context!");
+        return nullptr;
+    }
+
+    if (!worldPtr->get()) {
+        ASCIIgL::Logger::Error("World pointer exists but is NULL!");
+        return nullptr;
+    }
+
+    ASCIIgL::Logger::Debug("World successfully retrieved from context.");
+    World* world = worldPtr->get();
+
+    return world;
 }

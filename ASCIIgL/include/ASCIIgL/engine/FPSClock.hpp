@@ -1,3 +1,5 @@
+#pragma once
+
 #include <ASCIIgL/util/Clock.hpp>
 
 #include <deque>

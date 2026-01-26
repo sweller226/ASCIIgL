@@ -25,7 +25,7 @@ public:
 	unsigned int screenHeight;
 
 	// constructor and destructor
-	Camera3D(glm::vec3 Pposition, float Pfov, float Paspect, glm::vec2 yawPitch, float PzNear, float PzFar);
+	Camera3D(glm::vec3 Pposition, float Pfov, glm::vec2 yawPitch, float PzNear, float PzFar);
 	~Camera3D();
 
 	// each of these output 3d vectors in the front, back, right and left direction

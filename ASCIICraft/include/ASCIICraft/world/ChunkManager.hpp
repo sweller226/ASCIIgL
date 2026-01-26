@@ -1,3 +1,5 @@
+#pragma once
+
 #include <unordered_map>
 #include <queue>
 #include <memory>
@@ -10,7 +12,7 @@
 
 class ChunkManager {
 public:
-    ChunkManager() = default;
+    ChunkManager(entt::registry& registry, const unsigned int chunkWorldLimit, const unsigned int renderDistance);
     ~ChunkManager() = default; // default is fine; list elements are destroyed automatically
 
     void Update();
@@ -50,7 +52,7 @@ private:
     std::queue<ChunkCoord> metaTimeTracker;
 
     // Terrain generation
-    std::unique_ptr<TerrainGenerator> terrainGenerator;
+    TerrainGenerator terrainGenerator;
 
     // Internal methods
     void UpdateChunkNeighbors(const ChunkCoord& coord, bool markNeighborsDirty = true);

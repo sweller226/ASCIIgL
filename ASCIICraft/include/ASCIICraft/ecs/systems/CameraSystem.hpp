@@ -1,4 +1,12 @@
+#pragma once
+
 #include <entt/entt.hpp>
+
+#include <ASCIIgL/engine/InputManager.hpp>
+#include <ASCIIgL/engine/FPSClock.hpp>
+
+#include <ASCIICraft/ecs/components/PlayerController.hpp>
+#include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 
 namespace ecs::systems {
 
@@ -14,7 +22,7 @@ private:
     entt::registry &m_registry;
 
     void ProcessCameraInput(const ASCIIgL::InputManager &input, components::PlayerCamera &cam, const float dt);
-    void LerpFOV(const ASCIIgL::InputManager &input, components::PlayerCamera &cam, components::PlayerController ctrl, const float dt);
+    void LerpFOV(const ASCIIgL::InputManager &input, components::PlayerCamera &cam, components::PlayerController &ctrl, const float dt);
 };
 
 }

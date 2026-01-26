@@ -7,6 +7,7 @@
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
 #include <ASCIIgL/engine/InputManager.hpp>
+#include <ASCIIgL/engine/FPSClock.hpp>
 
 #include <ASCIICraft/world/World.hpp>
 
@@ -69,5 +70,4 @@ private:
     static inline int SCREEN_HEIGHT = 350;
     static constexpr int FONT_SIZE = 4;
     static constexpr float TARGET_FPS = 60.0f;
-    static constexpr int WORLD_LIMIT = 2048; // arbitrarily set the wold limit to 2048 chunks
 };

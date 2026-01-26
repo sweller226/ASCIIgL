@@ -10,11 +10,15 @@
 namespace ecs::components {
 
 struct PlayerCamera {
-    std::unique_ptr<ASCIIgL::Camera3D> camera{nullptr};
+    PlayerCamera() { 
+        camera = std::make_unique<ASCIIgL::Camera3D>(glm::vec3(0, 0, 0), FOV, glm::vec2(0, 0), CAMERA_NEAR_PLANE, CAMERA_FAR_PLANE); 
+    }
+
+    std::unique_ptr<ASCIIgL::Camera3D> camera;
 
     static constexpr float CAMERA_NEAR_PLANE = 0.1f;
     static constexpr float CAMERA_FAR_PLANE = 1000.0f;
-    static constexpr float FOV = 70.0f;                      // Field of view in degrees
+    static constexpr float FOV = 80.0f;                      // Field of view in degrees
 
     static constexpr float PLAYER_EYE_HEIGHT = 1.62f;        // Blocks from feet to eyes
 };

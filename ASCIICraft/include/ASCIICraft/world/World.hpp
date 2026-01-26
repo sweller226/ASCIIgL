@@ -21,7 +21,7 @@
 // Main World class
 class World {
 public:
-    World(entt::registry& registry, const WorldCoord& spawnPoint = WorldCoord(0, 10, 0));
+    World(entt::registry& registry, WorldCoord spawnPoint = WorldCoord(0, 90, 0), unsigned int renderDistance = 8);
     ~World();
     
     // Core world operations
@@ -41,6 +41,7 @@ private:
     WorldCoord spawnPoint;
     std::unique_ptr<ChunkManager> chunkManager;
 
+    const unsigned int WORLD_LIMIT = 2048;
 };
 
 World* GetWorldPtr(entt::registry& registry);

@@ -8,6 +8,7 @@
 #include <ASCIICraft/ecs/components/PhysicsBody.hpp>
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/Velocity.hpp>
+#include <ASCIICraft/ecs/components/PlayerMode.hpp>
 
 namespace ecs::systems {
 
@@ -74,8 +75,10 @@ private:
     entt::registry &m_registry;
     float m_accumulator{0.0f};
 
-    /// Fixed tick rate (20 ticks/sec like Minecraft)
-    static constexpr float FixedDt = 1.0f / 20.0f;
+    /// Fixed tick rate (30 ticks/sec like Minecraft)
+    static constexpr float FixedDt = 1.0f / 30.0f;
+
+    static constexpr float AIR_FRICTION = 1.0f;
 };
 
 } // namespace ecs::systems
