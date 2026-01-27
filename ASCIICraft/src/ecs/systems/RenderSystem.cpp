@@ -69,7 +69,7 @@ namespace ecs::systems {
 
                 glm::mat4 mvp = glm::mat4(1.0f);
                 if (m_active3DCamera) {
-                    mvp = m_active3DCamera->camera->proj * m_active3DCamera->camera->view * item.modelMatrix;
+                    mvp = m_active3DCamera->camera.proj * m_active3DCamera->camera.view * item.modelMatrix;
                 }
 
                 mat->SetMatrix4("mvp", mvp);

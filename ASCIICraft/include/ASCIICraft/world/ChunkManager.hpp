@@ -18,8 +18,8 @@ public:
     void Update();
 
     // Block operations
-    Block GetBlock(const WorldCoord& pos);
-    Block GetBlock(int x, int y, int z);
+    Block& GetBlock(const WorldCoord& pos);
+    Block& GetBlock(int x, int y, int z);
     void SetBlock(const WorldCoord& pos, const Block& block);
     void SetBlock(int x, int y, int z, const Block& block);
 
@@ -28,16 +28,17 @@ public:
     void SetMaxWorldChunkRadius(unsigned int radius) { maxWorldChunkRadius = radius; }
     
     // Rendering support
-    std::vector<Chunk*> GetVisibleChunks(const glm::vec3& playerPos, const glm::vec3& viewDir) const;
-    void BatchInvalidateChunkFaceNeighborMeshes(const ChunkCoord& coord);  // Prevents chain reactions
     void RegenerateDirtyChunks();  // Batch regenerate all dirty chunks
+    void RenderChunks();
     
     // World streaming (based on player position)
     void SetRenderDistance(unsigned int distance) { renderDistance = distance; }
     unsigned int GetRenderDistance() const { return renderDistance; }
 
-    void RenderChunks();
+    std::pair<Block*, WorldCoord> BlockIntersectsView(glm::vec3& lookDir, glm::vec3& headPos, float reach);
+    std::pair<bool, WorldCoord> BlockIntersectsViewForPlacement(glm::vec3& lookDir, glm::vec3& headPos, float reach);
     
+    void BlockUpdateNeighboursDirty(const ChunkCoord& chunkCoord, const glm::ivec3& localPos);
 private:
     entt::registry& registry;
 
@@ -59,8 +60,9 @@ private:
     std::vector<ChunkCoord> GetChunksInRadius(const ChunkCoord& center, unsigned int radius) const;
     bool IsChunkOutsideWorld(const ChunkCoord& coord) const;
 
-    // chunk generation management
-    // void GenerateWorld();
+    // chunk rendering support
+    std::vector<Chunk*> GetVisibleChunks(const glm::vec3& playerPos, const glm::vec3& viewDir) const;
+    void BatchInvalidateChunkFaceNeighborMeshes(const ChunkCoord& coord);  // Prevents chain reactions
 
     // Chunk management
     Chunk* GetChunk(const ChunkCoord& coord);

@@ -30,6 +30,8 @@ void PlayerManager::createPlayerEnt(const glm::vec3& startPosition, GameMode mod
     auto& cam     = registry.emplace<components::PlayerCamera>(p_ent);
     auto& pmode   = registry.emplace<components::PlayerMode>(p_ent);
     auto& col     = registry.emplace<components::Collider>(p_ent);
+    auto& head    = registry.emplace<components::Head>(p_ent);
+    auto& reach   = registry.emplace<components::Reach>(p_ent);
 
     // --- Transform ---
     t.setPosition(startPosition);
@@ -39,7 +41,16 @@ void PlayerManager::createPlayerEnt(const glm::vec3& startPosition, GameMode mod
 
     // --- Camera ---
     glm::vec3 eyePos = startPosition + glm::vec3(0, cam.PLAYER_EYE_HEIGHT, 0);
-    cam.camera->setCamPos(eyePos);
+    glm::vec3 lookDir = glm::vec3(0.0f, 0.0f, -1.0f);
+    cam.camera.setCamPos(eyePos);
+    cam.camera.setCamDir(lookDir);
+
+    // --- Head ---
+    head.lookDir = lookDir;
+    head.relativePos = glm::vec3(0, cam.PLAYER_EYE_HEIGHT, 0);
+
+    // --- Reach ---
+    reach.reach = 5.0f;
 
     // --- Collider defaults ---
     col.halfExtents = DEFAULT_COLLIDER_HALFEXTENTS;
@@ -120,13 +131,7 @@ ASCIIgL::Camera3D* PlayerManager::GetCamera() {
         return nullptr;
     }
 
-    // Check the internal camera pointer
-    if (!camComp->camera) {
-        ASCIIgL::Logger::Error("PlayerManager::GetCamera: PlayerCamera component exists but camera pointer is NULL.");
-        return nullptr;
-    }
-
-    return camComp->camera.get();
+    return &camComp->camera;
 }
 
 

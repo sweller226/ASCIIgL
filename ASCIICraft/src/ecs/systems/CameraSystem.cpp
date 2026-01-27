@@ -2,6 +2,8 @@
 
 #include <ASCIICraft/ecs/managers/PlayerManager.hpp>
 
+#include <ASCIICraft/ecs/components/Head.hpp>
+
 namespace ecs::systems {
 
 CameraSystem::CameraSystem(entt::registry &registry) noexcept : m_registry(registry) {
@@ -28,6 +30,9 @@ void CameraSystem::Update() {
 
     ProcessCameraInput(input, cam, dt);
     LerpFOV(input, cam, ctrl, dt);
+
+    auto &head = m_registry.get<components::Head>(p_ent);
+    head.lookDir = cam.camera.getCamFront();
 }
 
 void CameraSystem::ProcessCameraInput(const ASCIIgL::InputManager &input, components::PlayerCamera &cam, const float dt) {
@@ -51,7 +56,7 @@ void CameraSystem::ProcessCameraInput(const ASCIIgL::InputManager &input, compon
     }
     
     // Update camera direction
-    cam.camera->setCamDir(cam.camera->GetYaw() + yawDelta, cam.camera->GetPitch() + pitchDelta);
+    cam.camera.setCamDir(cam.camera.GetYaw() + yawDelta, cam.camera.GetPitch() + pitchDelta);
 }
 
 void CameraSystem::LerpFOV(const ASCIIgL::InputManager &input, components::PlayerCamera &cam, components::PlayerController &ctrl, const float dt) {
@@ -62,14 +67,14 @@ void CameraSystem::LerpFOV(const ASCIIgL::InputManager &input, components::Playe
     }
     
     // Smoothly interpolate FOV towards target (smooth transition)
-    float currentFOV = cam.camera->GetFov();
+    float currentFOV = cam.camera.GetFov();
     float fovTransitionSpeed = 8.0f; // How fast FOV changes (higher = faster)
     
     // Lerp FOV: currentFOV + (targetFOV - currentFOV) * speed * deltaTime
     float newFOV = currentFOV + (targetFOV - currentFOV) * fovTransitionSpeed * dt;
     
     // Update camera FOV
-    cam.camera->SetFov(newFOV);
+    cam.camera.SetFov(newFOV);
 }
 
 }

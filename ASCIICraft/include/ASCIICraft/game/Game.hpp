@@ -20,6 +20,18 @@
 #include <ASCIICraft/ecs/systems/RenderSystem.hpp> 
 #include <ASCIICraft/ecs/systems/PhysicsSystem.hpp> 
 
+// block update systems
+#include <ASCIICraft/ecs/systems/blockupdate/BlockUpdateSystem.hpp>
+#include <ASCIICraft/ecs/systems/blockupdate/MiningSystem.hpp>
+#include <ASCIICraft/ecs/systems/blockupdate/PlacingSystem.hpp>
+
+// event systems
+#include <ASCIICraft/events/EventBus.hpp>
+
+// events
+#include <ASCIICraft/events/BreakBlockEvent.hpp>
+#include <ASCIICraft/events/PlaceBlockEvent.hpp>
+
 enum class GameState {
     Playing,
     Exiting
@@ -42,19 +54,24 @@ public:
     // Game loop components
     void Update();
     void Render();
-    void HandleInput();
     
 private:
     // Resources
     entt::registry registry;
+    EventBus eventBus;
     std::unique_ptr<ASCIIgL::Texture> blockAtlas;  // Block texture atlas - must persist during game lifetime
 
     // ecs systems
     ecs::systems::MovementSystem movementSystem;
-    ecs::systems::PhysicsSystem physicsSystem;
     ecs::systems::CameraSystem cameraSystem;
+    ecs::systems::PhysicsSystem physicsSystem;
     ecs::systems::RenderSystem renderSystem;
-    
+
+    // block updates
+    ecs::systems::BlockUpdateSystem blockUpdateSystem;
+    ecs::systems::MiningSystem miningSystem;
+    ecs::systems::PlacingSystem placingSystem;
+
     // Game state
     GameState gameState;
     bool isRunning;

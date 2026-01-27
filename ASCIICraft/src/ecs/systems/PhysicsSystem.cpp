@@ -47,7 +47,7 @@ void PhysicsSystem::Update() {
     auto camView = m_registry.view<components::PlayerCamera, components::Transform>();
     for (auto [ent, cam, t] : camView.each()) {
         glm::vec3 renderPos = glm::mix(t.previousPosition, t.position, alpha);
-        cam.camera->setCamPos(renderPos + glm::vec3(0.0f, cam.PLAYER_EYE_HEIGHT, 0.0f));
+        cam.camera.setCamPos(renderPos + glm::vec3(0.0f, cam.PLAYER_EYE_HEIGHT, 0.0f));
     }
 }
 

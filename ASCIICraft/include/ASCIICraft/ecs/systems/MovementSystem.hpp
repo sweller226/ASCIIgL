@@ -18,7 +18,6 @@ private:
     entt::registry &m_registry;
 
     void ProcessMovementInput();
-    void ApplyMoveDir(const glm::vec3& direction);
 };
 
 }

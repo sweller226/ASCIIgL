@@ -469,11 +469,11 @@ bool ChunkManager::IsChunkOutsideWorld(const ChunkCoord& coord) const {
     return distanceFromOrigin > maxWorldChunkRadius;
 }
 
-Block ChunkManager::GetBlock(const WorldCoord& pos) {
+Block& ChunkManager::GetBlock(const WorldCoord& pos) {
     return GetBlock(pos.x, pos.y, pos.z);
 }
 
-Block ChunkManager::GetBlock(int x, int y, int z) {
+Block& ChunkManager::GetBlock(int x, int y, int z) {
     ChunkCoord chunkCoord = WorldCoord(x, y, z).ToChunkCoord();
     
     Chunk* chunk = GetChunk(chunkCoord);
@@ -511,6 +511,9 @@ void ChunkManager::SetBlock(int x, int y, int z, const Block& block) {
     } else {
         glm::ivec3 localPos = WorldCoord(x, y, z).ToLocalChunkPos();
         chunk->SetBlock(localPos.x, localPos.y, localPos.z, block);
+        chunk->SetDirty(true);
+
+        BlockUpdateNeighboursDirty(chunkCoord, localPos);
     }
 }
 
@@ -587,4 +590,90 @@ void ChunkManager::RenderChunks() {
     }
 
     ASCIIgL::Logger::Debug("RenderChunks: Rendered " + std::to_string(renderedCount) + " chunks.");
+}
+
+std::pair<Block*, WorldCoord>  ChunkManager::BlockIntersectsView(glm::vec3& lookDir, glm::vec3& headPos, float reach) {
+    glm::vec3 dir = glm::normalize(lookDir);
+    const float step = 0.1f;
+
+    float dist = 0.0f;
+    while (dist <= reach) {
+        glm::vec3 pos = headPos + dir * dist;
+
+        int bx = static_cast<int>(floor(pos.x));
+        int by = static_cast<int>(floor(pos.y));
+        int bz = static_cast<int>(floor(pos.z));
+
+        Block& block = GetBlock(bx, by, bz);
+
+        if (block.type != BlockType::Air) {
+            // Return pointer + world coordinate of the hit block
+            return { &block, WorldCoord(bx, by, bz) };
+        }
+
+        dist += step;
+    }
+
+    return { nullptr, WorldCoord() };
+}
+
+std::pair<bool, WorldCoord> ChunkManager::BlockIntersectsViewForPlacement(glm::vec3& lookDir, glm::vec3& headPos, float reach) {
+    glm::vec3 dir = glm::normalize(lookDir);
+    const float step = 0.1f;
+
+    float dist = 0.0f;
+
+    // Track the last empty block position
+    WorldCoord lastEmpty;
+
+    while (dist <= reach) {
+        glm::vec3 pos = headPos + dir * dist;
+
+        int bx = static_cast<int>(floor(pos.x));
+        int by = static_cast<int>(floor(pos.y));
+        int bz = static_cast<int>(floor(pos.z));
+
+        Block& block = GetBlock(bx, by, bz);
+
+        if (block.type == BlockType::Air) {
+            // Update last empty block
+            lastEmpty = WorldCoord(bx, by, bz);
+        }
+        else {
+            // Hit a solid block — return the *previous* empty block
+            Block& emptyBlock = GetBlock(lastEmpty.x, lastEmpty.y, lastEmpty.z);
+            return { true, lastEmpty };
+        }
+
+        dist += step;
+    }
+
+    return { false, WorldCoord() };
+}
+
+void ChunkManager::BlockUpdateNeighboursDirty(const ChunkCoord& chunkCoord, const glm::ivec3& localPos) {
+    // Lambda to safely mark a chunk dirty
+    auto mark = [&](const ChunkCoord& cc) {
+        if (Chunk* c = GetChunk(cc)) {
+            c->SetDirty(true);
+        }
+    };
+
+    // X-axis neighbors
+    if (localPos.x == 0)
+        mark(chunkCoord + ChunkCoord(-1, 0, 0));
+    if (localPos.x == CHUNK_SIZE - 1)
+        mark(chunkCoord + ChunkCoord(1, 0, 0));
+
+    // Y-axis neighbors
+    if (localPos.y == 0)
+        mark(chunkCoord + ChunkCoord(0, -1, 0));
+    if (localPos.y == CHUNK_SIZE - 1)
+        mark(chunkCoord + ChunkCoord(0, 1, 0));
+
+    // Z-axis neighbors
+    if (localPos.z == 0)
+        mark(chunkCoord + ChunkCoord(0, 0, -1));
+    if (localPos.z == CHUNK_SIZE - 1)
+        mark(chunkCoord + ChunkCoord(0, 0, 1));
 }

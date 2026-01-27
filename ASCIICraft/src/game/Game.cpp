@@ -26,6 +26,9 @@ Game::Game()
     , physicsSystem(registry)
     , renderSystem(registry)
     , cameraSystem(registry)
+    , blockUpdateSystem(registry, eventBus)
+    , placingSystem(registry, eventBus)
+    , miningSystem(registry, eventBus)
 {
     ASCIIgL::Logger::Debug("Game constructor: systems created, registry bound.");
 }
@@ -122,11 +125,6 @@ void Game::Run() {
         ASCIIgL::FPSClock::GetInst().StartFPSClock();
 
         {
-            ASCIIgL::PROFILE_SCOPE("HandleInput");
-            HandleInput();
-        }
-
-        {
             ASCIIgL::PROFILE_SCOPE("Update");
             Update();
         }
@@ -136,8 +134,9 @@ void Game::Run() {
             Render();
         }
 
-        ASCIIgL::FPSClock::GetInst().EndFPSClock();
+        eventBus.endFrame();
 
+        ASCIIgL::FPSClock::GetInst().EndFPSClock();
         ASCIIgL::Profiler::GetInst().EndFrame();
         frameCounter++;
 
@@ -157,31 +156,49 @@ void Game::Update() {
     ASCIIgL::Logger::Debug("Game::Update - state = " +
         std::to_string(static_cast<int>(gameState)));
 
+    ASCIIgL::InputManager::GetInst().Update();
+
+    if (ASCIIgL::InputManager::GetInst().IsActionPressed("quit")) {
+        ASCIIgL::Logger::Info("Quit action detected. Exiting game...");
+        gameState = GameState::Exiting;
+    }
+
     switch (gameState) {
         case GameState::Playing: {
 
-            ASCIIgL::Logger::Debug("Update: Step 1 - Retrieving world pointer...");
+            ASCIIgL::Logger::Debug("Update: Retrieving world pointer");
             World* world = GetWorldPtr(registry);
+
             if (!world) {
-                ASCIIgL::Logger::Error("Update: World pointer is NULL. Aborting update.");
+                ASCIIgL::Logger::Error("Update aborted: World pointer is null");
                 return;
             }
+            
+            // Block update systems
+            ASCIIgL::Logger::Debug("Update: Running mining system");
+            miningSystem.Update();
+            
+            ASCIIgL::Logger::Debug("Update: Running placement system");
+            placingSystem.Update();
 
-            ASCIIgL::Logger::Debug("Update: Step 2 - Calling world->Update()...");
+            ASCIIgL::Logger::Debug("Update: Running block update system");
+            blockUpdateSystem.Update();
+
+            ASCIIgL::Logger::Debug("Update: Running world update");
             world->Update();
-            ASCIIgL::Logger::Debug("Update: world->Update() completed.");
 
-            ASCIIgL::Logger::Debug("Update: Step 3 - movementSystem.Update()...");
+            // Movement
+            ASCIIgL::Logger::Debug("Update: Running movement system");
             movementSystem.Update();
-            ASCIIgL::Logger::Debug("Update: movementSystem.Update() completed.");
 
-            ASCIIgL::Logger::Debug("Update: Step 4 - cameraSystem.Update()...");
+            // Camera
+            ASCIIgL::Logger::Debug("Update: Running camera system");
             cameraSystem.Update();
-            ASCIIgL::Logger::Debug("Update: cameraSystem.Update() completed.");
 
-            ASCIIgL::Logger::Debug("Update: Step 5 - physicsSystem.Update()...");
+            // Physics
+            ASCIIgL::Logger::Debug("Update: Running physics system");
             physicsSystem.Update();
-            ASCIIgL::Logger::Debug("Update: physicsSystem.Update() completed.");
+
 
             break;
         }
@@ -224,15 +241,6 @@ void Game::Render() {
     {
         ASCIIgL::PROFILE_SCOPE("Render.PixelBufferOutput");
         ASCIIgL::Screen::GetInst().OutputBuffer();
-    }
-}
-
-void Game::HandleInput() {
-    ASCIIgL::InputManager::GetInst().Update();
-
-    if (ASCIIgL::InputManager::GetInst().IsActionPressed("quit")) {
-        ASCIIgL::Logger::Info("Quit action detected. Exiting game...");
-        gameState = GameState::Exiting;
     }
 }
 

@@ -74,11 +74,6 @@ void MovementSystem::ProcessMovementInput() {
         return;
     }
 
-    if (!cam->camera) {
-        ASCIIgL::Logger::Error("MovementSystem::ProcessMovementInput: PlayerCamera.component.camera is NULL.");
-        return;
-    }
-
     ASCIIgL::Logger::Debug("MovementSystem: all components retrieved successfully.");
 
     const float dt = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
@@ -89,8 +84,8 @@ void MovementSystem::ProcessMovementInput() {
 
     // --- input -> desired horizontal direction ---
     ASCIIgL::Logger::Debug("MovementSystem: computing movement direction...");
-    glm::vec3 forward = cam->camera->getCamFrontNoY();
-    glm::vec3 right   = cam->camera->getCamRightNoY();
+    glm::vec3 forward = cam->camera.getCamFrontNoY();
+    glm::vec3 right   = cam->camera.getCamRightNoY();
     glm::vec3 moveDir(0.0f);
 
     if (input.IsActionHeld("move_forward"))  moveDir += forward;

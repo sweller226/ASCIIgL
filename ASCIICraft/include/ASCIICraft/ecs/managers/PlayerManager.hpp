@@ -9,6 +9,7 @@
 
 #include <entt/entt.hpp>
 
+// components
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/Velocity.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
@@ -16,6 +17,8 @@
 #include <ASCIICraft/ecs/components/PlayerController.hpp>
 #include <ASCIICraft/ecs/components/Jump.hpp>
 #include <ASCIICraft/ecs/components/PlayerMode.hpp>
+#include <ASCIICraft/ecs/components/Head.hpp>
+#include <ASCIICraft/ecs/components/Reach.hpp>
 
 namespace ecs::managers {
 
