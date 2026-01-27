@@ -2,15 +2,26 @@
 #include <algorithm>
 
 #include <ASCIIgL/engine/Camera3D.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 
 namespace ASCIIgL {
 
-Camera3D::Camera3D(glm::vec3 Pposition, float Pfov, float Paspect, glm::vec2 yawPitch, float PzNear, float PzFar)
-	: pos(Pposition), fov(Pfov), pitch(yawPitch.y), yaw(yawPitch.x), aspect(Paspect), zNear(PzNear), zFar(PzFar)
+Camera3D::Camera3D(glm::vec3 Pposition, float Pfov, glm::vec2 yawPitch, float PzNear, float PzFar)
+	: pos(Pposition), fov(Pfov), pitch(yawPitch.y), yaw(yawPitch.x), zNear(PzNear), zFar(PzFar)
 {
 	// Calculate initial screen dimensions from aspect ratio (assuming height = 1080 for default)
-	screenHeight = 1080;
-	screenWidth = (unsigned int)(screenHeight * aspect);
+	auto& screen = Screen::GetInst();
+
+	if (!screen.IsInitialized()) {
+		Logger::Warning("Initializing Camera3D before screen. Resorting to defaults.");
+		screenHeight = 500; // defaults if failed
+		screenWidth = 800;
+	}
+
+	screenHeight = screen.GetHeight();
+	screenWidth = screen.GetWidth();
+	aspect = (float)screenWidth / (float)screenHeight;
 	
 	recalculateViewMat(); // this function uses all all class attributes
 	recalculateProjMat(); // calculating the perspective projection

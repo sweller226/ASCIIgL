@@ -52,5 +52,6 @@ public:
 	size_t GetVertexDataSize() const { return vertexData.size(); }
 	bool IsIndexed() const { return !indices.empty(); }
 
+	void ReleaseGpuCache();
 };
 } // namespace ASCIIgL

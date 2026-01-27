@@ -15,4 +15,11 @@ Mesh::~Mesh()
     // The texture should be managed by the owner (e.g., Model class)
 }
 
+void Mesh::ReleaseGpuCache() {
+    if (gpuBufferCache && RendererGPU::GetInst().IsInitialized()) {
+        RendererGPU::GetInst().ReleaseMeshCache(gpuBufferCache);
+        gpuBufferCache = nullptr;
+    }
+}
+
 } // namespace ASCIIgL

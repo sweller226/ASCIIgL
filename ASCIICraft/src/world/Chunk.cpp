@@ -367,15 +367,19 @@ void Chunk::Render() const {
 }
 
 Block& Chunk::GetBlockByIndex(int i) {
+    static Block s_airBlock(BlockType::Air);  // Static fallback for out-of-bounds
     if (0 <= i && i < VOLUME) { return blocks[i]; }
-    return Block();
+    ASCIIgL::Logger::Warning("GetBlockByIndex: index out of bounds");
+    return s_airBlock;
 }
 
 const Block& Chunk::GetBlockByIndex(int i) const {
+    static const Block s_airBlock(BlockType::Air);  // Static fallback for out-of-bounds
     if (0 <= i && i < VOLUME) { return blocks[i]; }
-    return Block();
+    ASCIIgL::Logger::Warning("GetBlockByIndex: index out of bounds");
+    return s_airBlock;
 }
 
-void Chunk::SetBlockByIndex(int i, Block& block) {
+void Chunk::SetBlockByIndex(int i, const Block& block) {
     if (0 <= i && i < VOLUME) { blocks[i] = block; }
 }

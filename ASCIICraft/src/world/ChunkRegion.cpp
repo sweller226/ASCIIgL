@@ -457,7 +457,7 @@ bool RegionFile::LoadChunk(Chunk* out) {
     parseChunkBlob(blob, out);
 
     _file.close();
-    ASCIIgL::Logger::Info("LoadChunk: success");
+    ASCIIgL::Logger::Debug("LoadChunk: success");
     return true;
 }
 
@@ -537,7 +537,7 @@ bool RegionFile::SaveChunk(const Chunk* data) {
     writeHeaderAndIndex();
 
     _file.close();
-    ASCIIgL::Logger::Info("SaveChunk: success");
+    ASCIIgL::Logger::Debug("SaveChunk: success");
     return true;
 }
 
@@ -646,7 +646,7 @@ bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out) {
     parseMetaBlob(blob, out);
 
     _file.close();
-    ASCIIgL::Logger::Info("LoadMetaData: success");
+    ASCIIgL::Logger::Debug("LoadMetaData: success");
     return true;
 }
 
@@ -744,7 +744,7 @@ bool RegionFile::SaveMetaData(const ChunkCoord& pos, const MetaBucket* data) {
     writeHeaderAndIndex();
 
     _file.close();
-    ASCIIgL::Logger::Info("SaveMetaData: success");
+    ASCIIgL::Logger::Debug("SaveMetaData: success");
     return true;
 }
 
