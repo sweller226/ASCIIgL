@@ -11,9 +11,7 @@ namespace ecs::systems {
 
     BlockUpdateSystem::BlockUpdateSystem(entt::registry &registry, EventBus& eventBus) noexcept 
         : m_registry(registry)
-        , eventBus(eventBus) {
-
-    }
+        , eventBus(eventBus) {}
 
     void BlockUpdateSystem::Update() {
         BreakBlockEvents();
@@ -41,5 +39,4 @@ namespace ecs::systems {
             world->GetChunkManager()->SetBlock(e.position, e.block);
         }
     }
-
 }

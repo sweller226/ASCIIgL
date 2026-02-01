@@ -5,9 +5,7 @@
 namespace ecs::managers {
 
 PlayerManager::PlayerManager(entt::registry& registry) 
-    : registry(registry) {
-
-}
+    : registry(registry) {}
 
 PlayerManager::~PlayerManager() {
     destroyPlayerEnt();
@@ -16,13 +14,13 @@ PlayerManager::~PlayerManager() {
 void PlayerManager::createPlayerEnt(const glm::vec3& startPosition, GameMode mode) {
     // Create entity
     p_ent = registry.create();
-
+    
     // --- Core components ---
     auto& t       = registry.emplace<components::Transform>(p_ent);
     auto& vel     = registry.emplace<components::Velocity>(p_ent);
     auto& body    = registry.emplace<components::PhysicsBody>(p_ent);
-    auto& step    = registry.emplace<components::StepPhysics>(p_ent);
     auto& grav    = registry.emplace<components::Gravity>(p_ent);
+    auto& step    = registry.emplace<components::StepPhysics>(p_ent);
     auto& ground  = registry.emplace<components::GroundPhysics>(p_ent);
     auto& flying  = registry.emplace<components::FlyingPhysics>(p_ent);
     auto& ctrl    = registry.emplace<components::PlayerController>(p_ent);

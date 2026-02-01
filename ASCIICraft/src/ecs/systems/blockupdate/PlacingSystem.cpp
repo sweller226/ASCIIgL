@@ -6,11 +6,9 @@
 
 namespace ecs::systems {
     
-    PlacingSystem::PlacingSystem(entt::registry &registry, EventBus& eventBus) noexcept 
+    PlacingSystem::PlacingSystem(entt::registry &registry, EventBus& eventBus) noexcept
         : m_registry(registry)
-        , eventBus(eventBus) {
-
-    }
+        , eventBus(eventBus) {}
 
     void PlacingSystem::Update() {
         PlayerPlace();

@@ -32,7 +32,7 @@ namespace ecs::systems {
         // View for entities that have both Transform and Renderable
         auto view = m_registry.view<components::Transform, components::Renderable>();
 
-        for (auto [ent, t, v] : view.each()) {
+        for (auto [ent, t, r] : view.each()) {
             auto &t = view.get<components::Transform>(ent);
             auto &r = view.get<components::Renderable>(ent);
 
@@ -49,9 +49,9 @@ namespace ecs::systems {
             item.modelMatrix = t.getModel();
             item.layer = r.layer;
 
-            if (v.renderType == components::RenderType::ELEM_3D) {
+            if (r.renderType == components::RenderType::ELEM_3D) {
                 m_drawList3D.push_back(std::move(item));
-            } else if (v.renderType == components::RenderType::ELEM_2D) {
+            } else if (r.renderType == components::RenderType::ELEM_2D) {
                 m_drawList2D.push_back(std::move(item));
             }
         }
