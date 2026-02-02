@@ -11,7 +11,9 @@
 #include <algorithm>
 #include <cmath>
 
-#include <ASCIICraft/ecs/managers/PlayerManager.hpp>
+#include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/ecs/components/Transform.hpp>
+#include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 
 // Static member definition - ordered to match face indices in Chunk::GenerateMesh()
 const ChunkCoord ChunkManager::FACE_NEIGHBOR_OFFSETS[6] = {
@@ -173,11 +175,13 @@ bool ChunkManager::IsChunkLoaded(const ChunkCoord& coord) const {
 }
 
 void ChunkManager::UpdateChunkLoading() {
-    if (!ecs::managers::GetPlayerPtr(registry)) {
+    entt::entity player = ecs::components::GetPlayerEntity(registry);
+    if (player == entt::null) {
         return;
     }
     
-    glm::vec3 playerPos = ecs::managers::GetPlayerPtr(registry)->GetPosition();
+    auto [playerPos, success] = ecs::components::GetPos(player, registry);
+    if (!success) return;
     ChunkCoord playerChunk = WorldCoord(playerPos).ToChunkCoord();
     
     const unsigned int loadRadius = renderDistance;
@@ -278,7 +282,11 @@ std::vector<Chunk*> ChunkManager::GetVisibleChunks(const glm::vec3& playerPos, c
     glm::vec3 forward = glm::normalize(viewDir);
     
     // FOV-based frustum culling with safety margin
-    const ASCIIgL::Camera3D* camera = ecs::managers::GetPlayerPtr(registry)->GetCamera();
+    entt::entity player = ecs::components::GetPlayerEntity(registry);
+    if (player == entt::null) return visibleChunks;
+    
+    const ASCIIgL::Camera3D* camera = ecs::components::GetPlayerCamera(player, registry);
+    if (!camera) return visibleChunks;
     float fov = camera->GetFov();
     float extendedFov = fov * 1.6f; // 30° margin for safety
     const float fovHalfAngle = glm::radians(extendedFov * 0.5f);
@@ -526,20 +534,21 @@ void ChunkManager::RenderChunks() {
     ASCIIgL::Logger::Debug("ChunkManager::RenderChunks called.");
 
     // --- Player retrieval ---
-    const auto player = ecs::managers::GetPlayerPtr(registry);
-    if (!player) {
-        ASCIIgL::Logger::Error("RenderChunks: PlayerManager returned NULL player!");
+    entt::entity player = ecs::components::GetPlayerEntity(registry);
+    if (player == entt::null) {
+        ASCIIgL::Logger::Error("RenderChunks: Player entity not found!");
         return;
     }
 
-    glm::vec3 pos = player->GetPosition();
+    auto [pos, success] = ecs::components::GetPos(player, registry);
+    if (!success) return;
     ASCIIgL::Logger::Debug("RenderChunks: Player position = (" +
         std::to_string(pos.x) + ", " +
         std::to_string(pos.y) + ", " +
         std::to_string(pos.z) + ")");
 
     // --- Camera retrieval ---
-    auto* cam = player->GetCamera();
+    auto* cam = ecs::components::GetPlayerCamera(player, registry);
     if (!cam) {
         ASCIIgL::Logger::Error("RenderChunks: PlayerCamera is NULL!");
         return;

@@ -1,6 +1,11 @@
 #include <ASCIICraft/ecs/systems/blockupdate/MiningSystem.hpp>
 
-#include <ASCIICraft/ecs/managers/PlayerManager.hpp>
+#include <ASCIIgL/engine/InputManager.hpp>
+
+#include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/ecs/components/Transform.hpp>
+#include <ASCIICraft/ecs/components/Head.hpp>
+#include <ASCIICraft/ecs/components/Reach.hpp>
 #include <ASCIICraft/events/BreakBlockEvent.hpp>
 #include <ASCIICraft/world/World.hpp>
 
@@ -17,12 +22,15 @@ namespace ecs::systems {
     }
 
     void MiningSystem::CreativeBreakEvents() {
-        managers::PlayerManager* pm = managers::GetPlayerPtr(m_registry);
+        entt::entity playerEnt = components::GetPlayerEntity(m_registry);
+        if (playerEnt == entt::null) return;
+        
         World* world = GetWorldPtr(m_registry);
 
-        auto& head = m_registry.get<components::Head>(pm->getPlayerEnt());
-        glm::vec3 position = pm->GetPosition();
-        auto& reach = m_registry.get<components::Reach>(pm->getPlayerEnt());
+        auto& head = m_registry.get<components::Head>(playerEnt);
+        auto [position, success] = components::GetPos(playerEnt, m_registry);
+        if (!success) return;
+        auto& reach = m_registry.get<components::Reach>(playerEnt);
 
         const auto& input = ASCIIgL::InputManager::GetInst();
 

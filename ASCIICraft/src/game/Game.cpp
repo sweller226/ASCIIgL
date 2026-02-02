@@ -1,5 +1,7 @@
 #include <ASCIICraft/game/Game.hpp>
 
+#include <ASCIICraft/ecs/components/PlayerTag.hpp>
+
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
@@ -29,6 +31,7 @@ Game::Game()
     , blockUpdateSystem(registry, eventBus)
     , placingSystem(registry, eventBus)
     , miningSystem(registry, eventBus)
+    , playerFactory(registry)
 {
     ASCIIgL::Logger::Debug("Game constructor: systems created, registry bound.");
 }
@@ -283,18 +286,18 @@ void Game::InitializeContext() {
 
     ASCIIgL::Logger::Debug("World created and stored in registry context.");
 
-    auto &pm = registry.ctx().emplace<ecs::managers::PlayerManager>(registry);
-    ASCIIgL::Logger::Debug("PlayerManager created.");
-
-    pm.createPlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Survival);
+    // Create player entity using factory member
+    playerFactory.createPlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Survival);
     ASCIIgL::Logger::Debug("Player entity created");
 }
 
 void Game::InitializeSystems() {
     ASCIIgL::Logger::Debug("Initializing render system camera...");
 
-    auto *playerManager = ecs::managers::GetPlayerPtr(registry);
-    renderSystem.SetActive3DCamera(registry.try_get<ecs::components::PlayerCamera>(playerManager->getPlayerEnt()));
+    entt::entity player = ecs::components::GetPlayerEntity(registry);
+    if (player != entt::null) {
+        renderSystem.SetActive3DCamera(registry.try_get<ecs::components::PlayerCamera>(player));
+    }
 
     ASCIIgL::Logger::Debug("Systems initialized.");
 }

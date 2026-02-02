@@ -1,9 +1,11 @@
 // ecs/components/PlayerCamera.hpp
 #pragma once
 
+#include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/Camera3D.hpp>
 
 #include <glm/vec3.hpp>
+#include <entt/entt.hpp>
 
 namespace ecs::components {
 
@@ -20,6 +22,29 @@ struct PlayerCamera {
 
     static constexpr float PLAYER_EYE_HEIGHT = 1.62f;        // Blocks from feet to eyes
 };
+
+inline ASCIIgL::Camera3D* GetPlayerCamera(entt::entity ent, entt::registry& registry) {
+    // Validate player entity
+    if (ent == entt::null || !registry.valid(ent)) {
+        ASCIIgL::Logger::Error("PlayerFactory::GetPlayerCamera: Player entity is invalid or null.");
+        return nullptr;
+    }
+
+    // Check if the component exists
+    if (!registry.all_of<components::PlayerCamera>(ent)) {
+        ASCIIgL::Logger::Error("PlayerFactory::GetPlayerCamera: PlayerCamera component missing on player entity.");
+        return nullptr;
+    }
+
+    // Retrieve the component safely
+    auto* camComp = registry.try_get<components::PlayerCamera>(ent);
+    if (!camComp) {
+        ASCIIgL::Logger::Error("PlayerFactory::GetPlayerCamera: try_get returned NULL for PlayerCamera.");
+        return nullptr;
+    }
+
+    return &camComp->camera;
+}
 
 }
 

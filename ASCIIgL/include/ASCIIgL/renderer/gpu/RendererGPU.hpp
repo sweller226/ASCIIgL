@@ -191,7 +191,7 @@ public:
     
     // Resource cache cleanup (called by resource destructors)
     void ReleaseMeshCache(void* cachePtr);
-    void InvalidateTextureCache(const Texture* tex);
+    void InvalidateCachedTexture(const Texture* tex);
     
     // Bind a custom shader program (nullptr to use default)
     void BindShaderProgram(ShaderProgram* program);

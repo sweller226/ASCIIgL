@@ -141,7 +141,7 @@ bool RendererGPU::InitializeRenderTarget() {
         UINT numQualityLevels = 0;
         _device->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, sampleCount, &numQualityLevels);
         if (numQualityLevels > 0) {
-            qualityLevel = 0;  // Use highest quality
+            qualityLevel = 0; 
         } else {
             Logger::Warning("[RendererGPU] " + std::to_string(sampleCount) + " x MSAA not supported, falling back to 1x");
             sampleCount = 1;
@@ -797,7 +797,7 @@ void RendererGPU::ReleaseMeshCache(void* cachePtr) {
     delete cache;  // ComPtr automatically releases buffers
 }
 
-void RendererGPU::InvalidateTextureCache(const Texture* tex) {
+void RendererGPU::InvalidateCachedTexture(const Texture* tex) {
     if (!tex) return;
     
     auto it = _textureCache.find(tex);

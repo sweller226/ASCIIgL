@@ -6,7 +6,14 @@
 
 #include <entt/entt.hpp>
 
-#include <ASCIICraft/ecs/managers/PlayerManager.hpp>
+#include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/ecs/components/PlayerCamera.hpp>
+#include <ASCIICraft/ecs/components/PlayerController.hpp>
+#include <ASCIICraft/ecs/components/Jump.hpp>
+#include <ASCIICraft/ecs/components/Velocity.hpp>
+#include <ASCIICraft/ecs/components/PhysicsBody.hpp>
+#include <ASCIICraft/ecs/components/Transform.hpp>
+#include <ASCIICraft/ecs/components/PlayerMode.hpp>
 #include <ASCIICraft/util/Util.hpp>
 
 namespace ecs::systems {
@@ -24,15 +31,14 @@ void MovementSystem::ProcessMovementInput() {
 
     const auto& input = ASCIIgL::InputManager::GetInst();
 
-    // --- PlayerManager in context ---
-    ASCIIgL::Logger::Debug("MovementSystem: checking PlayerManager in context...");
-    auto* pm = m_registry.ctx().find<managers::PlayerManager>();
-    if (!pm) {
-        ASCIIgL::Logger::Error("MovementSystem::ProcessMovementInput: PlayerManager not found in registry context.");
+    // --- Player entity via PlayerTag ---
+    ASCIIgL::Logger::Debug("MovementSystem: checking for player entity...");
+    entt::entity p_ent = components::GetPlayerEntity(m_registry);
+
+    if (p_ent == entt::null) {
+        ASCIIgL::Logger::Error("MovementSystem::ProcessMovementInput: Player entity not found.");
         return;
     }
-
-    entt::entity p_ent = pm->getPlayerEnt();
     ASCIIgL::Logger::Debug("MovementSystem: player entity = " + std::to_string((int)p_ent));
 
     if (p_ent == entt::null || !m_registry.valid(p_ent)) {

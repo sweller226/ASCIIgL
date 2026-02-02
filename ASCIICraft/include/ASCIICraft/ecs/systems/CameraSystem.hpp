@@ -7,16 +7,17 @@
 
 #include <ASCIICraft/ecs/components/PlayerController.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
+#include <ASCIICraft/ecs/systems/ISystem.hpp>
 
 namespace ecs::systems {
 
-class CameraSystem {
+class CameraSystem : public ISystem {
 public:
     explicit CameraSystem(entt::registry &registry) noexcept;
     CameraSystem(const CameraSystem&) = delete;
     CameraSystem& operator=(const CameraSystem&) = delete;
 
-    void Update();    
+    void Update() override;    
 
 private:
     entt::registry &m_registry;

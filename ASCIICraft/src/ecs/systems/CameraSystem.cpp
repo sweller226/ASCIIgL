@@ -1,6 +1,6 @@
 #include <ASCIICraft/ecs/systems/CameraSystem.hpp>
 
-#include <ASCIICraft/ecs/managers/PlayerManager.hpp>
+#include <ASCIICraft/ecs/components/PlayerTag.hpp>
 
 #include <ASCIICraft/ecs/components/Head.hpp>
 
@@ -13,9 +13,8 @@ CameraSystem::CameraSystem(entt::registry &registry) noexcept : m_registry(regis
 void CameraSystem::Update() {
     const auto &input = ASCIIgL::InputManager::GetInst();
 
-    if (!m_registry.ctx().contains<managers::PlayerManager>()) return;
-    auto &pm = m_registry.ctx().get<managers::PlayerManager>();
-    auto p_ent = pm.getPlayerEnt();
+    entt::entity p_ent = components::GetPlayerEntity(m_registry);
+    if (p_ent == entt::null || !m_registry.valid(p_ent)) return;
     if (p_ent == entt::null || !m_registry.valid(p_ent)) return;
 
     // required components

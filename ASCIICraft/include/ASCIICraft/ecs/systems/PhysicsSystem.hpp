@@ -9,10 +9,11 @@
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/Velocity.hpp>
 #include <ASCIICraft/ecs/components/PlayerMode.hpp>
+#include <ASCIICraft/ecs/systems/ISystem.hpp>
 
 namespace ecs::systems {
 
-class PhysicsSystem {
+class PhysicsSystem : public ISystem {
 public:
     explicit PhysicsSystem(entt::registry &registry) noexcept;
     
@@ -24,7 +25,7 @@ public:
     ~PhysicsSystem() = default;
 
     /// Call every frame with frame dt; system accumulates and steps at fixed tick
-    void Update();
+    void Update() override;
 
 private:
     /// Run a single fixed physics step

@@ -11,8 +11,8 @@
 
 #include <ASCIICraft/world/World.hpp>
 
-// ecs managers
-#include <ASCIICraft/ecs/managers/PlayerManager.hpp>
+// ecs factories
+#include <ASCIICraft/ecs/factories/PlayerFactory.hpp>
 
 // ecs systems
 #include <ASCIICraft/ecs/systems/MovementSystem.hpp> 
@@ -71,6 +71,9 @@ private:
     ecs::systems::BlockUpdateSystem blockUpdateSystem;
     ecs::systems::MiningSystem miningSystem;
     ecs::systems::PlacingSystem placingSystem;
+
+    // ecs factories
+    ecs::factories::PlayerFactory playerFactory;
 
     // Game state
     GameState gameState;

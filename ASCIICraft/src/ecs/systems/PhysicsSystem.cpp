@@ -10,7 +10,7 @@
 
 #include <ASCIICraft/world/World.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
-#include <ASCIICraft/ecs/managers/PlayerManager.hpp>
+#include <ASCIICraft/ecs/factories/PlayerFactory.hpp>
 
 namespace ecs::systems {
 

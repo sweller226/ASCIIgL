@@ -19,24 +19,17 @@
 #include <ASCIICraft/ecs/components/PlayerMode.hpp>
 #include <ASCIICraft/ecs/components/Head.hpp>
 #include <ASCIICraft/ecs/components/Reach.hpp>
+#include <ASCIICraft/ecs/components/PlayerTag.hpp>
 
-namespace ecs::managers {
+namespace ecs::factories {
 
-class PlayerManager {
+class PlayerFactory {
   public:
-  PlayerManager(entt::registry& registry);
-  ~PlayerManager();
+  PlayerFactory(entt::registry& registry);
 
   void createPlayerEnt(const glm::vec3& startPosition, GameMode mode);
-  void destroyPlayerEnt();
-
-  entt::entity getPlayerEnt() const { return p_ent; }
-
-  glm::vec3 GetPosition() const;
-  ASCIIgL::Camera3D* GetCamera();
 
   private:
-  entt::entity p_ent{entt::null};
   entt::registry& registry;
 
   static constexpr glm::vec3 DEFAULT_GRAVITY = glm::vec3(0.0f, -32.0f, 0.0f); // Blocks per second squared
@@ -48,7 +41,5 @@ class PlayerManager {
   static constexpr uint32_t  DEFAULT_COLLIDER_MASK        = 0xFFFFFFFFu;
   static constexpr bool      DEFAULT_COLLIDER_DISABLED    = false;
 };
-
-PlayerManager* GetPlayerPtr(entt::registry& registry);
 
 }
