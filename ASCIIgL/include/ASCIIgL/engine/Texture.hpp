@@ -6,8 +6,11 @@
 #include <iostream>
 #include <string>
 #include <memory>
+#include <functional>
 
 namespace ASCIIgL {
+
+using MipFilterFn = std::function<void(const uint8_t* srcData, int srcW, int srcH, uint8_t* dstData, int dstW, int dstH)>;
 
 class Texture // this class loads a texture from a path and holds its data in a 1d buffer
 {
@@ -38,6 +41,24 @@ public:
 	// Fast accessor - returns pointer to raw uint8_t data (RGBA)
 	const uint8_t* GetPixelRGBAPtr(int x, int y) const;
 	const uint8_t* GetDataPtr() const;
+
+	// Mipmap info
+	int GetMipCount() const;
+	bool HasCustomMipmaps() const;
+
+	// Access specific mip level
+	int GetMipWidth(int level) const;
+	int GetMipHeight(int level) const;
+	const uint8_t* GetMipDataPtr(int level) const;
+
+	// Add custom mipmaps (user-supplied)
+	void AddCustomMipLevel(int width, int height, const std::vector<uint8_t>& data);
+
+	// CPU generation
+	// User-defined mip filter function:
+	// srcData: previous level RGBA (0–15), size = srcW * srcH * 4
+	// dstData: next level RGBA (0–15), size = dstW * dstH * 4
+	void GenerateMipmapsCPU(int maxLevels = -1, MipFilterFn filter = nullptr); // -1 = generate until 1x1
 
 private:
 	// Forward declaration for PIMPL pattern

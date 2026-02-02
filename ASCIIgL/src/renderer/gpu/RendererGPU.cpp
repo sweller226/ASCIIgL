@@ -339,61 +339,103 @@ bool RendererGPU::InitializeStagingTexture() {
 // Texture Management
 // =========================================================================
 
-bool RendererGPU::CreateTextureFromASCIIgLTexture(const Texture* tex, ID3D11ShaderResourceView** srv) {
+bool RendererGPU::CreateTextureFromASCIIgLTexture(const Texture* tex, ID3D11ShaderResourceView** srv)
+{
     if (!tex) return false;
 
-    // Get texture dimensions and data
-    int width = tex->GetWidth();
-    int height = tex->GetHeight();
-    const uint8_t* data = tex->GetDataPtr();
+    const int baseW = tex->GetWidth();
+    const int baseH = tex->GetHeight();
+    const uint8_t* baseData = tex->GetDataPtr();
 
-    if (!data) return false;  // Check if pointer is null
+    if (!baseData) return false;
 
-    // Convert from 0-15 range to 0-255 range for GPU
-    const size_t pixelCount = width * height * 4;
-    std::vector<uint8_t> gpuData(pixelCount);
-    for (size_t i = 0; i < pixelCount; ++i) {
-        // Convert 0-15 to 0-255: value * 17 (since 15 * 17 = 255)
-        gpuData[i] = data[i] * 17;
+    const bool hasCustom = tex->HasCustomMipmaps();
+    const int mipCount = tex->GetMipCount();
+
+    // -----------------------------
+    // Convert mip 0 to 0–255 range
+    // -----------------------------
+    auto ConvertToGPU = [&](const uint8_t* src, int w, int h) {
+        size_t count = w * h * 4;
+        std::vector<uint8_t> out(count);
+        for (size_t i = 0; i < count; ++i)
+            out[i] = src[i] * 17; // 0–15 → 0–255
+        return out;
+    };
+
+    // -----------------------------
+    // Create texture description
+    // -----------------------------
+    D3D11_TEXTURE2D_DESC desc = {};
+    desc.Width = baseW;
+    desc.Height = baseH;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    if (hasCustom) {
+        desc.MipLevels = mipCount;
+        desc.MiscFlags = 0; // no auto-mips
+    } else {
+        desc.MipLevels = 0; // auto-generate
+        desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
+        desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
     }
 
-    // Create texture with auto-generated mipmaps to reduce distant shimmering
-    D3D11_TEXTURE2D_DESC texDesc = {};
-    texDesc.Width = width;
-    texDesc.Height = height;
-    texDesc.MipLevels = 0;  // Auto-generate all mip levels
-    texDesc.ArraySize = 1;
-    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    texDesc.SampleDesc.Count = 1;
-    texDesc.SampleDesc.Quality = 0;
-    texDesc.Usage = D3D11_USAGE_DEFAULT;  // Default usage for mipmap generation
-    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;  // RTV needed for GenerateMips
-    texDesc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;  // Enable mipmap generation
-
-    // Create the texture without initial data (for mipmap generation)
     ComPtr<ID3D11Texture2D> texture;
-    HRESULT hr = _device->CreateTexture2D(&texDesc, nullptr, &texture);
+    HRESULT hr = _device->CreateTexture2D(&desc, nullptr, &texture);
     if (FAILED(hr)) {
-        std::ostringstream ss;
-        ss << std::hex << hr;
-        Logger::Error("[RendererGPU] Failed to create texture: 0x" + ss.str());
+        Logger::Error("[RendererGPU] Failed to create texture");
         return false;
     }
 
-    // Upload base mip level (level 0) manually
-    _context->UpdateSubresource(texture.Get(), 0, nullptr, gpuData.data(), width * 4, 0);
-    
-    // Create shader resource view first
+    // -----------------------------
+    // Upload mip 0
+    // -----------------------------
+    {
+        auto gpuData = ConvertToGPU(baseData, baseW, baseH);
+        _context->UpdateSubresource(texture.Get(), 0, nullptr, gpuData.data(), baseW * 4, 0);
+    }
+
+    // -----------------------------
+    // Upload custom mipmaps
+    // -----------------------------
+    if (hasCustom) {
+        for (int level = 1; level < mipCount; ++level) {
+            int w = tex->GetMipWidth(level);
+            int h = tex->GetMipHeight(level);
+            const uint8_t* mipData = tex->GetMipDataPtr(level);
+
+            auto gpuData = ConvertToGPU(mipData, w, h);
+
+            _context->UpdateSubresource(
+                texture.Get(),
+                level,
+                nullptr,
+                gpuData.data(),
+                w * 4,
+                0
+            );
+        }
+    }
+
+    // -----------------------------
+    // Create SRV
+    // -----------------------------
     hr = _device->CreateShaderResourceView(texture.Get(), nullptr, srv);
     if (FAILED(hr)) {
-        std::ostringstream ss;
-        ss << std::hex << hr;
-        Logger::Error("[RendererGPU] Failed to create SRV: 0x" + ss.str());
+        Logger::Error("[RendererGPU] Failed to create SRV");
         return false;
     }
 
-    // Auto-generate mipmaps from base level
-    _context->GenerateMips(*srv);
+    // -----------------------------
+    // Auto-generate GPU mipmaps if needed
+    // -----------------------------
+    if (!hasCustom) {
+        _context->GenerateMips(*srv);
+    }
 
     return true;
 }
