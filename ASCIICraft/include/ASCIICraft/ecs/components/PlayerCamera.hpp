@@ -16,7 +16,7 @@ struct PlayerCamera {
     
     ASCIIgL::Camera3D camera;
 
-    static constexpr float CAMERA_NEAR_PLANE = 0.1f;
+    static constexpr float CAMERA_NEAR_PLANE = 0.02f;
     static constexpr float CAMERA_FAR_PLANE = 1000.0f;
     static constexpr float FOV = 80.0f;                      // Field of view in degrees
 

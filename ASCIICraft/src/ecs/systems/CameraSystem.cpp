@@ -48,10 +48,10 @@ void CameraSystem::ProcessCameraInput(const ASCIIgL::InputManager &input, compon
         yawDelta += input.GetMouseSensitivity() * dt;
     }
     if (input.IsActionHeld("camera_up")) {
-        pitchDelta += input.GetMouseSensitivity() * dt;
+        pitchDelta += input.GetMouseSensitivity() * 0.8f * dt;
     }
     if (input.IsActionHeld("camera_down")) {
-        pitchDelta -= input.GetMouseSensitivity() * dt;
+        pitchDelta -= input.GetMouseSensitivity() * 0.8f * dt;
     }
     
     // Update camera direction
