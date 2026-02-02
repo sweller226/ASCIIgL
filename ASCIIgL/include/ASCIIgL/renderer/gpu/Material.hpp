@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 
 #include <ASCIIgL/renderer/gpu/Shader.hpp>
+#include <ASCIIgL/engine/TextureArray.hpp>
 
 #ifdef _WIN32
 #include <d3d11.h>
@@ -30,9 +31,10 @@ struct TextureSlot {
     std::string name;           // Uniform name in shader (e.g., "diffuseTexture")
     uint32_t slot;              // Texture slot index (t0, t1, etc.)
     const Texture* texture;     // Currently bound texture (not owned)
+    const TextureArray* textureArray; // Currently bound texture array (not owned)
     
     TextureSlot(const std::string& name, uint32_t slot)
-        : name(name), slot(slot), texture(nullptr) {}
+        : name(name), slot(slot), texture(nullptr), textureArray(nullptr) {}
 };
 
 // =========================================================================
@@ -97,6 +99,12 @@ public:
     
     // Add a texture slot (for custom shaders with multiple textures)
     void AddTextureSlot(const std::string& name, uint32_t slot);
+
+    // TextureArray support
+    void SetTextureArray(const std::string& name, const TextureArray* textureArray);
+    void SetTextureArray(uint32_t slot, const TextureArray* textureArray);
+    const TextureArray* GetTextureArray(const std::string& name) const;
+    const TextureArray* GetTextureArray(uint32_t slot) const;
 
     // =========================================================================
     // Shader Program Access

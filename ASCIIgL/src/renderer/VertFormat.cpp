@@ -231,6 +231,14 @@ const VertFormat& PosColor() {
     return format;
 }
 
+const VertFormat& PosUVLayer() {
+    static VertFormat format = VertFormat::Builder()
+        .AddFloat3(VertexElementSemantic::Position)    // XYZ (12 bytes)
+        .AddFloat3(VertexElementSemantic::TexCoord0)   // UV + Layer (12 bytes)
+        .Build();
+    return format;
+}
+
 } // namespace VertFormats
 
 } // namespace ASCIIgL

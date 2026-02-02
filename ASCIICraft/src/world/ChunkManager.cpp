@@ -486,7 +486,9 @@ Block& ChunkManager::GetBlock(int x, int y, int z) {
     
     Chunk* chunk = GetChunk(chunkCoord);
     if (!chunk) {
-        return Block(); // Return air block if chunk not loaded
+        // Return reference to static air block (avoids dangling reference)
+        static Block airBlock(BlockType::Air);
+        return airBlock;
     }
     
     glm::ivec3 localPos = WorldCoord(x, y, z).ToLocalChunkPos();
@@ -566,19 +568,18 @@ void ChunkManager::RenderChunks() {
         std::to_string(visibleChunks.size()));
 
     // --- Material retrieval ---
-    auto mat = ASCIIgL::MaterialLibrary::GetInst().GetDefault();
+    auto mat = ASCIIgL::MaterialLibrary::GetInst().Get("blockMaterial");
     if (!mat) {
-        ASCIIgL::Logger::Error("RenderChunks: Default material is NULL!");
+        ASCIIgL::Logger::Error("RenderChunks: blockMaterial not found!");
         return;
     }
 
     // --- MVP setup ---
     glm::mat4 mvp = cam->proj * cam->view * glm::mat4(1.0f);
-    ASCIIgL::Logger::Debug("RenderChunks: MVP matrix computed.");
-
-    ASCIIgL::RendererGPU::GetInst().BindMaterial(mat.get());
     mat->SetMatrix4("mvp", mvp);
-    ASCIIgL::RendererGPU::GetInst().UploadMaterialConstants(mat.get());
+
+    // Bind material (shader + constants + textures)
+    ASCIIgL::RendererGPU::GetInst().BindMaterial(mat.get());
 
     // --- Render chunks ---
     int renderedCount = 0;
@@ -597,6 +598,8 @@ void ChunkManager::RenderChunks() {
         chunk->Render();
         renderedCount++;
     }
+
+    ASCIIgL::RendererGPU::GetInst().UnbindTextureArray();
 
     ASCIIgL::Logger::Debug("RenderChunks: Rendered " + std::to_string(renderedCount) + " chunks.");
 }

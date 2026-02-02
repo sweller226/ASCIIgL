@@ -8,9 +8,9 @@
 #include <memory>
 #include <functional>
 
-namespace ASCIIgL {
+#include <ASCIIgL/engine/MipFilters.hpp>
 
-using MipFilterFn = std::function<void(const uint8_t* srcData, int srcW, int srcH, uint8_t* dstData, int dstW, int dstH)>;
+namespace ASCIIgL {
 
 class Texture // this class loads a texture from a path and holds its data in a 1d buffer
 {
@@ -56,9 +56,12 @@ public:
 
 	// CPU generation
 	// User-defined mip filter function:
-	// srcData: previous level RGBA (0–15), size = srcW * srcH * 4
-	// dstData: next level RGBA (0–15), size = dstW * dstH * 4
-	void GenerateMipmapsCPU(int maxLevels = -1, MipFilterFn filter = nullptr); // -1 = generate until 1x1
+	// srcData: previous level RGBA (0–255), size = srcW * srcH * 4
+	// dstData: next level RGBA (0–255), size = dstW * dstH * 4
+	void GenerateMipmapsCPU(int maxLevels = -1, MipFilters::MipFilterFn filter = nullptr); // -1 = generate until 1x1
+
+	// Replace base mip level with new data (used for atlas padding expansion)
+	void ReplaceBaseLevel(int newWidth, int newHeight, std::vector<uint8_t>&& newData);
 
 private:
 	// Forward declaration for PIMPL pattern

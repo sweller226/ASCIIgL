@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 
-#include <ASCIIgL/engine/Texture.hpp>
+#include <ASCIIgL/engine/TextureArray.hpp>
 
 // Block types
 enum class BlockType : uint8_t {
@@ -24,6 +24,16 @@ enum class BlockType : uint8_t {
     Bedrock = 17,
 };
 
+// Block face indices
+enum class BlockFace : uint8_t {
+    Top = 0,
+    Bottom = 1,
+    North = 2,   // Front (+Z)
+    South = 3,   // Back (-Z)
+    East = 4,    // Right (+X)
+    West = 5     // Left (-X)
+};
+
 // Individual block data
 struct Block {
     BlockType type;
@@ -36,33 +46,23 @@ struct Block {
         return type != BlockType::Air;
     }
     
-    // Get UV coordinates for texture atlas (Minecraft Beta 1.7.3)
-    glm::vec4 GetTextureUV(int face = 0) const;
+    // Get texture layer index for a block face (for Texture2DArray)
+    int GetTextureLayer(BlockFace face) const;
     
-    // Static texture atlas management
-    static void SetTextureAtlas(ASCIIgL::Texture* atlas);
-    static ASCIIgL::Texture* GetTextureAtlas();
-    static bool HasTextureAtlas();
+    // Static texture array management
+    static void SetTextureArray(ASCIIgL::TextureArray* texArray);
+    static ASCIIgL::TextureArray* GetTextureArray();
+    static bool HasTextureArray();
 
 private:
-    static ASCIIgL::Texture* textureAtlas;  // Global texture atlas for all blocks
+    static ASCIIgL::TextureArray* blockTextureArray;
 };
 
-// Block face indices for GetTextureUV
-enum class BlockFace {
-    Top = 0,
-    Bottom = 1,
-    North = 2,   // Front
-    South = 3,   // Back  
-    East = 4,    // Right
-    West = 5     // Left
-};
-
-// Texture atlas helper functions
+// Texture array helper functions
 namespace BlockTextures {
-    // Get UV coordinates for a specific tile in the 16x16 atlas
-    glm::vec4 GetTileUV(int tileX, int tileY);
+    // Get texture layer index for a specific tile coordinate
+    int GetTileLayer(int tileX, int tileY);
     
-    // Get texture coordinates for block faces (returns vec4: minU, minV, maxU, maxV)
-    glm::vec4 GetBlockFaceUV(BlockType blockType, BlockFace face);
+    // Get texture layer for a block face
+    int GetBlockFaceLayer(BlockType blockType, BlockFace face);
 }

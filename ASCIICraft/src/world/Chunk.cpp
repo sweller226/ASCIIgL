@@ -54,15 +54,15 @@ void Chunk::GenerateMesh() {
     std::vector<std::byte> vertices;
     std::vector<int> indices;
 
-    // Get the block texture atlas
-    if (!Block::HasTextureAtlas()) {
-        ASCIIgL::Logger::Warning("No texture atlas available for chunk mesh generation");
+    // Get the block texture array
+    if (!Block::HasTextureArray()) {
+        ASCIIgL::Logger::Warning("No texture array available for chunk mesh generation");
         return;
     }
 
     ASCIIgL::Logger::Debug("Generating mesh for chunk at (" + std::to_string(coord.x) + ", " + std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
     
-    ASCIIgL::Texture* blockAtlas = Block::GetTextureAtlas();
+    ASCIIgL::TextureArray* blockTextures = Block::GetTextureArray();
 
     // Face normal vectors for cube faces
     const glm::vec3 faceNormals[6] = {
@@ -215,11 +215,11 @@ void Chunk::GenerateMesh() {
                         continue;
                     }
                     
-                    // Get texture coordinates for this block face
-                    glm::vec4 blockTextureUV = block.GetTextureUV(face);
+                    // Get texture layer index for this block face
+                    int textureLayer = block.GetTextureLayer(static_cast<BlockFace>(face));
                     
                     // Indexed rendering: generate 4 unique vertices
-                    int baseVertexIndex = vertices.size() / ASCIIgL::VertFormats::PosUV().GetStride();
+                    int baseVertexIndex = vertices.size() / ASCIIgL::VertFormats::PosUVLayer().GetStride();
                     
                     for (int vertIdx = 0; vertIdx < 4; vertIdx++) {
                         // World position (chunk-relative + block position)
@@ -229,21 +229,19 @@ void Chunk::GenerateMesh() {
                             coord.z * SIZE + z
                         ) + faceVerticesIndexed[face][vertIdx];
                         
-                        // UV coordinates (map face UV to block's texture UV)
+                        // Simple 0-1 UVs + layer index for Texture2DArray
                         glm::vec2 faceUV = faceUVsIndexed[vertIdx];
-                        glm::vec2 textureUV = glm::vec2(
-                            blockTextureUV.x + faceUV.x * (blockTextureUV.z - blockTextureUV.x),
-                            blockTextureUV.w - faceUV.y * (blockTextureUV.w - blockTextureUV.y)
-                        );
+                        float u = faceUV.x;
+                        float v = 1.0f - faceUV.y;
                         
-                        ASCIIgL::VertStructs::PosUV vertex = {
+                        ASCIIgL::VertStructs::PosUVLayer vertex = {
                             WorldCoord.x, WorldCoord.y, WorldCoord.z,  // XYZ
-                            textureUV.x, textureUV.y             // UV
+                            u, v, static_cast<float>(textureLayer)     // UV + Layer
                         };
                         
                         // Append bytes to vertices vector
                         const auto* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
-                        vertices.insert(vertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUV));
+                        vertices.insert(vertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUVLayer));
                     }
                     
                     // Add indices for this face (2 triangles)
@@ -257,42 +255,9 @@ void Chunk::GenerateMesh() {
     
     // Create the mesh
     if (!vertices.empty()) {
-        if (blockAtlas) {
-            int width = 0;
-            try {
-                width = blockAtlas->GetWidth();
-            } catch (const std::exception& e) {
-                ASCIIgL::Logger::Error("  Exception in GetWidth(): " + std::string(e.what()));
-                mesh.reset();
-                hasMesh = false;
-                SetDirty(false);
-                return;
-            } catch (...) {
-                ASCIIgL::Logger::Error("  Unknown exception in GetWidth()!");
-                mesh.reset();
-                hasMesh = false;
-                SetDirty(false);
-                return;
-            }
-            
-            int height = 0;
-            try {
-                height = blockAtlas->GetHeight();
-            } catch (const std::exception& e) {
-                ASCIIgL::Logger::Error("  Exception in GetHeight(): " + std::string(e.what()));
-                mesh.reset();
-                hasMesh = false;
-                SetDirty(false);
-                return;
-            } catch (...) {
-                ASCIIgL::Logger::Error("  Unknown exception in GetHeight()!");
-                mesh.reset();
-                hasMesh = false;
-                SetDirty(false);
-                return;
-            }
-        } else {
-            ASCIIgL::Logger::Error("  Block atlas is nullptr!");
+        // Validate texture array
+        if (!blockTextures || !blockTextures->IsValid()) {
+            ASCIIgL::Logger::Error("  Block texture array is invalid!");
             mesh.reset();
             hasMesh = false;
             SetDirty(false);
@@ -300,7 +265,8 @@ void Chunk::GenerateMesh() {
         }
         
         if (!indices.empty()) {
-            mesh = std::make_unique<ASCIIgL::Mesh>(std::move(vertices), ASCIIgL::VertFormats::PosUV(), std::move(indices), blockAtlas);
+            // Use the new constructor that accepts TextureArray*
+            mesh = std::make_unique<ASCIIgL::Mesh>(std::move(vertices), ASCIIgL::VertFormats::PosUVLayer(), std::move(indices), blockTextures);
             ASCIIgL::Logger::Debug("Indexed mesh created successfully with " + std::to_string(vertices.size()) + " bytes and " + std::to_string(indices.size()) + " indices");
         }
 
@@ -358,7 +324,7 @@ void Chunk::LogNeighbors() const {
 }
 
 void Chunk::Render() const {
-    if (!hasMesh || !mesh || !mesh->GetTexture()) {
+    if (!hasMesh || !mesh) {
         return;
     }
     

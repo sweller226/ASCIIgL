@@ -48,5 +48,3 @@ ASCIICraft
 
     Rebuild Library
     ./scripts/build_ASCIIgL_ASCIICraft.ps1
-
-

@@ -492,6 +492,54 @@ UniformBufferLayout GetDefaultUniformLayout() {
         .Build();
 }
 
+// Texture array shader sources for Texture2DArray rendering
+const char* GetTextureArrayVertexShaderSource() {
+    return R"(
+cbuffer ConstantBuffer : register(b0)
+{
+    float4x4 mvp;
+};
+
+struct VS_INPUT
+{
+    float3 position : POSITION;
+    float3 texcoord : TEXCOORD0;  // UV + Layer index
+};
+
+struct PS_INPUT
+{
+    float4 position : SV_POSITION;
+    float3 texcoord : TEXCOORD0;  // UV + Layer passed to pixel shader
+};
+
+PS_INPUT main(VS_INPUT input)
+{
+    PS_INPUT output;
+    output.position = mul(mvp, float4(input.position, 1.0));
+    output.texcoord = input.texcoord;
+    return output;
+}
+)";
+}
+
+const char* GetTextureArrayPixelShaderSource() {
+    return R"(
+Texture2DArray blockTextures : register(t0);
+SamplerState samplerState : register(s0);
+
+struct PS_INPUT
+{
+    float4 position : SV_POSITION;
+    float3 texcoord : TEXCOORD0;  // UV.xy + Layer.z
+};
+
+float4 main(PS_INPUT input) : SV_TARGET
+{
+    return blockTextures.Sample(samplerState, input.texcoord);
+}
+)";
+}
+
 } // namespace DefaultShaders
 
 } // namespace ASCIIgL

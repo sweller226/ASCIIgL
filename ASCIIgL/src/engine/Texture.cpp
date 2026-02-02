@@ -6,38 +6,6 @@
 
 namespace ASCIIgL {
 
-static void BoxFilter(
-    const uint8_t* srcData, int srcW, int srcH,
-    uint8_t* dstData, int dstW, int dstH)
-{
-    for (int y = 0; y < dstH; ++y) {
-        for (int x = 0; x < dstW; ++x) {
-
-            int sx = x * 2;
-            int sy = y * 2;
-
-            auto sample = [&](int px, int py) {
-                px = std::min(srcW - 1, px);
-                py = std::min(srcH - 1, py);
-                size_t idx = (py * srcW + px) * 4;
-                return &srcData[idx];
-            };
-
-            const uint8_t* p00 = sample(sx,     sy);
-            const uint8_t* p10 = sample(sx + 1, sy);
-            const uint8_t* p01 = sample(sx,     sy + 1);
-            const uint8_t* p11 = sample(sx + 1, sy + 1);
-
-            size_t di = (y * dstW + x) * 4;
-
-            for (int c = 0; c < 4; ++c) {
-                dstData[di + c] =
-                    (p00[c] + p10[c] + p01[c] + p11[c]) / 4;
-            }
-        }
-    }
-}
-
 // PIMPL Implementation class that contains all stb_image-related code
 class Texture::Impl {
 public:
@@ -47,7 +15,7 @@ public:
     struct MipLevel {
         int width;
         int height;
-        std::vector<uint8_t> data; // RGBA8 in your 0–15 format
+        std::vector<uint8_t> data; // RGBA8 in 0–255 format
     };
 
     std::vector<MipLevel> mipChain; // mipChain[0] = base level
@@ -64,7 +32,9 @@ public:
     bool HasCustomMipmaps() const;
     void AddCustomMipLevel(int w, int h, const std::vector<uint8_t>& d);
 
-    void GenerateMipmapsCPU(int maxLevels, MipFilterFn filter = BoxFilter);
+    void GenerateMipmapsCPU(int maxLevels, MipFilters::MipFilterFn filter = MipFilters::BoxFilter);
+    
+    void ReplaceBaseLevel(int newWidth, int newHeight, std::vector<uint8_t>&& newData);
 };
 
 Texture::Impl::Impl(const std::string& path)
@@ -86,7 +56,7 @@ Texture::Impl::Impl(const std::string& path)
         return;
     }
 
-    // Convert from 0-255 to 0-15 range and store in mipChain[0]
+    // Store raw 0-255 values (full 8-bit precision)
     const size_t bufferSize = _width * _height * 4;
 
     MipLevel base;
@@ -94,10 +64,8 @@ Texture::Impl::Impl(const std::string& path)
     base.height = _height;
     base.data.resize(bufferSize);
 
-    for (size_t i = 0; i < bufferSize; ++i) {
-        // Convert 0-255 to 0-15: (value * 15 + 127) / 255
-        base.data[i] = (tempRGBABuffer[i] * 15 + 127) / 255;
-    }
+    // Copy raw data - keep full 8-bit precision
+    std::memcpy(base.data.data(), tempRGBABuffer, bufferSize);
 
     mipChain.clear();
     mipChain.push_back(std::move(base));
@@ -108,7 +76,7 @@ Texture::Impl::Impl(const std::string& path)
     Logger::Info("TEXTURE: Successfully loaded '" + path + "'");
     Logger::Debug("TEXTURE: Dimensions: " + std::to_string(_width) + "x" + std::to_string(_height));
     Logger::Debug("TEXTURE: Original channels: " + std::to_string(_bpp));
-    Logger::Debug("TEXTURE: RGBA buffer size: " + std::to_string(bufferSize) + " bytes (0-15 range)");
+    Logger::Debug("TEXTURE: RGBA buffer size: " + std::to_string(bufferSize) + " bytes (0-255 range)");
 }
 
 glm::vec3 Texture::Impl::GetPixelRGB(int x, int y) const {
@@ -152,12 +120,11 @@ void Texture::Impl::AddCustomMipLevel(int w, int h, const std::vector<uint8_t>& 
     hasCustomMipmaps = true;
 }   
 
-void Texture::Impl::GenerateMipmapsCPU(int maxLevels, MipFilterFn filter) {
+void Texture::Impl::GenerateMipmapsCPU(int maxLevels, MipFilters::MipFilterFn filter) {
     if (mipChain.empty()) return;
 
     // Clear any previously generated mips (keep only base level)
     mipChain.resize(1);
-    hasCustomMipmaps = false;
 
     int w = mipChain[0].width;
     int h = mipChain[0].height;
@@ -178,7 +145,7 @@ void Texture::Impl::GenerateMipmapsCPU(int maxLevels, MipFilterFn filter) {
 
     // Use default BoxFilter if none provided
     if (!filter)
-        filter = BoxFilter;
+        filter = MipFilters::BoxFilter;
 
     for (int level = 1; level < maxLevels; ++level) {
         const MipLevel& prev = mipChain[level - 1];
@@ -197,6 +164,10 @@ void Texture::Impl::GenerateMipmapsCPU(int maxLevels, MipFilterFn filter) {
 
         mipChain.push_back(std::move(next));
     }
+    
+    // Mark as having custom mipmaps if we generated more than just base level
+    // This prevents GPU from regenerating them
+    hasCustomMipmaps = (mipChain.size() > 1);
 }
 
 // Texture public interface implementation
@@ -268,8 +239,31 @@ void Texture::AddCustomMipLevel(int w, int h, const std::vector<uint8_t>& d) {
     pImpl->AddCustomMipLevel(w, h, d);
 }
 
-void Texture::GenerateMipmapsCPU(int maxLevels, MipFilterFn filter) {
+void Texture::GenerateMipmapsCPU(int maxLevels, MipFilters::MipFilterFn filter) {
     pImpl->GenerateMipmapsCPU(maxLevels, filter);
+}
+
+void Texture::Impl::ReplaceBaseLevel(int newWidth, int newHeight, std::vector<uint8_t>&& newData) {
+    // Clear all mip levels and replace with new base
+    mipChain.clear();
+    hasCustomMipmaps = false;
+    
+    MipLevel base;
+    base.width = newWidth;
+    base.height = newHeight;
+    base.data = std::move(newData);
+    
+    mipChain.push_back(std::move(base));
+    
+    // Update cached dimensions
+    _width = newWidth;
+    _height = newHeight;
+    
+    Logger::Debug("TEXTURE: Base level replaced with " + std::to_string(newWidth) + "x" + std::to_string(newHeight));
+}
+
+void Texture::ReplaceBaseLevel(int newWidth, int newHeight, std::vector<uint8_t>&& newData) {
+    pImpl->ReplaceBaseLevel(newWidth, newHeight, std::move(newData));
 }
 
 } // namespace ASCIIgL

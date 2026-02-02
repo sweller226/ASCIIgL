@@ -7,7 +7,10 @@
 #include <ASCIIgL/renderer/Palette.hpp>
 
 #include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
+
 #include <ASCIIgL/renderer/gpu/Material.hpp>
+#include <ASCIIgL/engine/TextureLibrary.hpp>
+#include <ASCIIgL/engine/MipFilters.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
@@ -250,8 +253,12 @@ void Game::Render() {
 void Game::Shutdown() {
     ASCIIgL::Logger::Info("Shutting down ASCIICraft...");
 
-    Block::SetTextureAtlas(nullptr);
-    blockAtlas.reset();
+    Block::SetTextureArray(nullptr);
+    // blockShaderProgram is now managed by MaterialLibrary/Material
+    
+    // Clear libraries if we want to release all resources on shutdown
+    ASCIIgL::MaterialLibrary::GetInst().Clear();
+    ASCIIgL::TextureLibrary::GetInst().ClearTextureArrays();
 
     ASCIIgL::Logger::Info("ASCIICraft shutdown complete");
 }
@@ -259,21 +266,77 @@ void Game::Shutdown() {
 bool Game::LoadResources() {
     ASCIIgL::Logger::Info("Loading game resources...");
 
-    blockAtlas = std::make_unique<ASCIIgL::Texture>("res/textures/terrain.png");
-    if (!blockAtlas) {
-        ASCIIgL::Logger::Error("Failed to load block texture atlas");
+    // Load block textures via TextureLibrary which takes ownership
+    auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray("res/textures/terrain.png", 16);
+    
+    if (!blockTextureArray || !blockTextureArray->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to load block texture array");
         return false;
     }
 
-    Block::SetTextureAtlas(blockAtlas.get());
+    // Set static pointer for block system
+    Block::SetTextureArray(blockTextureArray.get());
+    
+    // Create texture array shader program
+    auto vs = ASCIIgL::Shader::CreateFromSource(
+        ASCIIgL::DefaultShaders::GetTextureArrayVertexShaderSource(),
+        ASCIIgL::ShaderType::Vertex
+    );
+    
+    auto ps = ASCIIgL::Shader::CreateFromSource(
+        ASCIIgL::DefaultShaders::GetTextureArrayPixelShaderSource(),
+        ASCIIgL::ShaderType::Pixel
+    );
+    
+    if (!vs || !vs->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile texture array vertex shader: " + vs->GetCompileError());
+        return false;
+    }
+    
+    if (!ps || !ps->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile texture array pixel shader: " + ps->GetCompileError());
+        return false;
+    }
+    
+    // Create shader program and move to properties
+    auto blockShaderProgram = ASCIIgL::ShaderProgram::Create(
+        std::move(vs),
+        std::move(ps),
+        ASCIIgL::VertFormats::PosUVLayer(),
+        ASCIIgL::DefaultShaders::GetDefaultUniformLayout()
+    );
+    
+    if (!blockShaderProgram || !blockShaderProgram->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to create texture array shader program");
+        return false;
+    }
+
+    // Create material and register it
+    std::shared_ptr<ASCIIgL::ShaderProgram> sharedProgram = std::move(blockShaderProgram);
+    auto blockMaterial = ASCIIgL::Material::Create(sharedProgram);
+    
+    if (!blockMaterial) {
+        ASCIIgL::Logger::Error("Failed to create block material");
+        return false;
+    }
+    
+    // Set texture array (weak reference inside Material, owned by TextureLibrary)
+    // Set texture array (weak reference inside Material, owned by TextureLibrary)
+    blockMaterial->SetTextureArray(0, blockTextureArray.get());
+
+    // Register 
+    ASCIIgL::MaterialLibrary::GetInst().Register("blockMaterial", std::move(blockMaterial));
 
     ASCIIgL::Logger::Info("Resources loaded successfully");
     return true;
 }
 
 void Game::RenderPlaying() {
+    ASCIIgL::Logger::Debug("RenderPlaying: binding shader and texture array");
+    
     ASCIIgL::Logger::Debug("RenderPlaying: rendering world");
     GetWorldPtr(registry)->Render();
+    
     ASCIIgL::Logger::Debug("RenderPlaying: rendering systems");
     renderSystem.Render();
 }

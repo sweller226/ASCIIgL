@@ -202,6 +202,49 @@ void Material::AddTextureSlot(const std::string& name, uint32_t slot) {
     _textureSlots.emplace_back(name, slot);
 }
 
+void Material::SetTextureArray(const std::string& name, const TextureArray* textureArray) {
+    for (auto& slot : _textureSlots) {
+        if (slot.name == name) {
+            slot.textureArray = textureArray;
+            return;
+        }
+    }
+    
+    // Warn if not found (or should we add it? typically slots match shader registers)
+    Logger::Warning("Texture slot '" + name + "' not found in material");
+}
+
+void Material::SetTextureArray(uint32_t slot, const TextureArray* textureArray) {
+    for (auto& texSlot : _textureSlots) {
+        if (texSlot.slot == slot) {
+            texSlot.textureArray = textureArray;
+            return;
+        }
+    }
+
+    // Add a new slot if not found
+    _textureSlots.emplace_back("texture" + std::to_string(slot), slot);
+    _textureSlots.back().textureArray = textureArray;
+}
+
+const TextureArray* Material::GetTextureArray(const std::string& name) const {
+    for (const auto& slot : _textureSlots) {
+        if (slot.name == name) {
+            return slot.textureArray;
+        }
+    }
+    return nullptr;
+}
+
+const TextureArray* Material::GetTextureArray(uint32_t slot) const {
+    for (const auto& texSlot : _textureSlots) {
+        if (texSlot.slot == slot) {
+            return texSlot.textureArray;
+        }
+    }
+    return nullptr;
+}
+
 // =========================================================================
 // Shader Program Management
 // =========================================================================

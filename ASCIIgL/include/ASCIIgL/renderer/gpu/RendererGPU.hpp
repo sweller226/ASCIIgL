@@ -21,6 +21,7 @@
 #include <ASCIIgL/engine/Mesh.hpp>
 #include <ASCIIgL/engine/Model.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
+#include <ASCIIgL/engine/TextureArray.hpp>
 #include <ASCIIgL/engine/Camera3D.hpp>
 #include <ASCIIgL/engine/Camera2D.hpp>
 
@@ -107,6 +108,9 @@ private:
     // Texture cache: Maps Texture* -> ShaderResourceView
     // Prevents recreating GPU textures every draw call
     std::unordered_map<const Texture*, ComPtr<ID3D11ShaderResourceView>> _textureCache;
+    
+    // Texture array cache: Maps TextureArray* -> ShaderResourceView
+    std::unordered_map<const TextureArray*, ComPtr<ID3D11ShaderResourceView>> _textureArrayCache;
 
     // =========================================================================
     // Rasterizer State
@@ -146,11 +150,14 @@ private:
     bool InitializeDebugSwapChain();  // For RenderDoc support
 
     // =========================================================================
-    // Texture Management
+    // Texture Management (Internal)
     // =========================================================================
     bool CreateTextureFromASCIIgLTexture(const Texture* tex, ID3D11ShaderResourceView** srv);
-    void BindTexture(const Texture* tex);
-    void UnbindTexture();
+    bool CreateTextureArraySRV(const TextureArray* texArray, ID3D11ShaderResourceView** srv);
+    // Removed private BindTexture since public one covers it, or update it here.
+    // To match previous usage, we can leave it but update signature or use the public one.
+    // For consistency with public API changes:
+
 
     // =========================================================================
     // Cleanup
@@ -207,6 +214,16 @@ public:
 
     // Helper: Upload material's constant buffer
     void UploadMaterialConstants(Material* material);
+
+    // =========================================================================
+    // Texture Management (Public)
+    // =========================================================================
+    void BindTexture(const Texture* tex, int slot = 0);
+    void BindTextureArray(const TextureArray* texArray, int slot = 0);
+    
+    // Unbind any texture
+    void UnbindTexture(int slot = 0);
+    void UnbindTextureArray(int slot = 0);
 };
 
 } // namespace ASCIIgL

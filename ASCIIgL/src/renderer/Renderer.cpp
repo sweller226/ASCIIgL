@@ -87,14 +87,10 @@ void Renderer::DrawMesh(const Mesh* mesh) {
         return;
     }
     
-    if (mesh->GetTexture()) {
-        if (_cpu_only) {
-            _rendererCPU->DrawMesh(mesh);
-        } else {
-            _rendererGPU->DrawMesh(mesh);
-        }
+    if (_cpu_only) {
+        _rendererCPU->DrawMesh(mesh);
     } else {
-        Logger::Warning("DrawMesh: mesh texture is null");
+        _rendererGPU->DrawMesh(mesh);
     }
 }
 
@@ -406,6 +402,9 @@ void Renderer::OverwritePxBuffWithColBuff() {
     const size_t unrollFactor = 4;
     const size_t unrolledEnd = (bufferSize / unrollFactor) * unrollFactor;
     
+    // Lambda to convert 0-255 to 0-15 for LUT indexing
+    auto to16 = [](int v) { return (v * 15 + 127) / 255; };
+    
     size_t i = 0;
     for (; i < unrolledEnd; i += unrollFactor) {
         const auto& color0 = _color_buffer[i];
@@ -413,11 +412,16 @@ void Renderer::OverwritePxBuffWithColBuff() {
         const auto& color2 = _color_buffer[i + 2];
         const auto& color3 = _color_buffer[i + 3];
         
+        // Convert 0-255 to 0-15 for LUT indexing
+        const int r0 = to16(color0.r), g0 = to16(color0.g), b0 = to16(color0.b);
+        const int r1 = to16(color1.r), g1 = to16(color1.g), b1 = to16(color1.b);
+        const int r2 = to16(color2.r), g2 = to16(color2.g), b2 = to16(color2.b);
+        const int r3 = to16(color3.r), g3 = to16(color3.g), b3 = to16(color3.b);
 
-        const int index0 = (color0.r * _rgbLUTDepth * _rgbLUTDepth) + (color0.g * _rgbLUTDepth) + color0.b;
-        const int index1 = (color1.r * _rgbLUTDepth * _rgbLUTDepth) + (color1.g * _rgbLUTDepth) + color1.b;
-        const int index2 = (color2.r * _rgbLUTDepth * _rgbLUTDepth) + (color2.g * _rgbLUTDepth) + color2.b;
-        const int index3 = (color3.r * _rgbLUTDepth * _rgbLUTDepth) + (color3.g * _rgbLUTDepth) + color3.b;
+        const int index0 = (r0 * _rgbLUTDepth * _rgbLUTDepth) + (g0 * _rgbLUTDepth) + b0;
+        const int index1 = (r1 * _rgbLUTDepth * _rgbLUTDepth) + (g1 * _rgbLUTDepth) + b1;
+        const int index2 = (r2 * _rgbLUTDepth * _rgbLUTDepth) + (g2 * _rgbLUTDepth) + b2;
+        const int index3 = (r3 * _rgbLUTDepth * _rgbLUTDepth) + (g3 * _rgbLUTDepth) + b3;
         
         pixelBuffer[i] = _colorLUT[index0];
         pixelBuffer[i + 1] = _colorLUT[index1];
@@ -427,7 +431,8 @@ void Renderer::OverwritePxBuffWithColBuff() {
     
     for (; i < bufferSize; ++i) {
         const auto& color = _color_buffer[i];
-        const int index = (color.r * _rgbLUTDepth * _rgbLUTDepth) + (color.g * _rgbLUTDepth) + color.b;
+        const int r = to16(color.r), g = to16(color.g), b = to16(color.b);
+        const int index = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
         pixelBuffer[i] = _colorLUT[index];
     }
 }
@@ -518,8 +523,10 @@ CHAR_INFO Renderer::GetCharInfo(const glm::ivec3& rgb) {
         PrecomputeColorLUT();
     }
 
-    // Pre-computed _rgbLUTDepth squared for faster indexing
-    const int index = (rgb.r * _rgbLUTDepth * _rgbLUTDepth) + (rgb.g * _rgbLUTDepth) + rgb.b;
+    // Convert 0-255 to 0-15 for LUT indexing
+    auto to16 = [](int v) { return (v * 15 + 127) / 255; };
+    const int r = to16(rgb.r), g = to16(rgb.g), b = to16(rgb.b);
+    const int index = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
 
     return _colorLUT[index];
 }
@@ -553,7 +560,7 @@ bool Renderer::GetCCW() const {
 }
 
 void Renderer::SetBackgroundCol(const glm::ivec3& col) {
-    _background_col = glm::clamp(col, glm::ivec3(0), glm::ivec3(15));
+    _background_col = glm::clamp(col, glm::ivec3(0), glm::ivec3(255));
 }
 
 glm::ivec3 Renderer::GetBackgroundCol() const {

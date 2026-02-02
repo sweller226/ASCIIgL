@@ -54,9 +54,10 @@ private:
     bool _cpu_only = false;
 
     // =========================================================================
-    // Buffers
+    // Buffers and buffer methods
     // =========================================================================
     std::vector<glm::ivec4> _color_buffer;
+    void OverwritePxBuffWithColBuff();
 
     // =========================================================================
     // Antialiasing
@@ -164,7 +165,6 @@ public:
     // =========================================================================
     // Buffer and Diagnostics
     // =========================================================================
-    void OverwritePxBuffWithColBuff();
     void BeginColBuffFrame();
     void EndColBuffFrame();
     void TestRenderFont();

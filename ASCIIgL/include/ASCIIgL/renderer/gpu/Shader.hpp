@@ -213,6 +213,10 @@ namespace DefaultShaders {
     const char* GetUnlitColorVertexShaderSource();
     const char* GetUnlitColorPixelShaderSource();
     
+    // Texture array shader (for Texture2DArray - PosUVLayer format)
+    const char* GetTextureArrayVertexShaderSource();
+    const char* GetTextureArrayPixelShaderSource();
+    
     // Get the default uniform layout (just MVP matrix)
     UniformBufferLayout GetDefaultUniformLayout();
 }

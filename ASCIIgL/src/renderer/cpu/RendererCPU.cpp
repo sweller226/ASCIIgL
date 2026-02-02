@@ -90,7 +90,11 @@ VertStructs::PosWUVInvW RendererCPU::HomogenousPlaneIntersect(const VertStructs:
 // =============================================================================
 
 void RendererCPU::DrawMesh(const Mesh* mesh) {
-    RenderTriangles(mesh->GetVertices(), mesh->GetVertFormat(), mesh->GetTexture());
+    if (mesh->GetTexture()) {
+        RenderTriangles(mesh->GetVertices(), mesh->GetVertFormat(), mesh->GetTexture());
+    } else {
+        Logger::Warning("DrawMesh: mesh texture is null");
+    }
 }
 
 
@@ -422,10 +426,10 @@ void RendererCPU::DrawTileTextured(const Tile& tile, const std::vector<VertStruc
 void RendererCPU::DrawTileWireframe(const Tile& tile, const std::vector<VertStructs::PosWUVInvW>& raster_triangles) {
     // Draw wireframe for each triangle in the tile
     for (int triIndex : tile.tri_indices_encapsulated) {
-        _renderer->DrawTriangleWireframeColBuff(raster_triangles[triIndex].GetXY(), raster_triangles[triIndex + 1].GetXY(), raster_triangles[triIndex + 2].GetXY(), glm::ivec3(15));
+        _renderer->DrawTriangleWireframeColBuff(raster_triangles[triIndex].GetXY(), raster_triangles[triIndex + 1].GetXY(), raster_triangles[triIndex + 2].GetXY(), glm::ivec3(255));
     }
     for (int triIndex : tile.tri_indices_partial) {
-        DrawTriangleWireframeColBuffPartial(tile, raster_triangles[triIndex].GetXY(), raster_triangles[triIndex + 1].GetXY(), raster_triangles[triIndex + 2].GetXY(), glm::ivec4(15));
+        DrawTriangleWireframeColBuffPartial(tile, raster_triangles[triIndex].GetXY(), raster_triangles[triIndex + 1].GetXY(), raster_triangles[triIndex + 2].GetXY(), glm::ivec4(255));
     }
 }
 

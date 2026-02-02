@@ -1,0 +1,51 @@
+﻿-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26200.
+-- Created local glm::glm INTERFACE target with include dir: C:/Users/Skwig/Dev/Projects/ASCIIgL/ASCIIgL/vendor/glm
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: C:/Users/Skwig/Dev/Projects/ASCIIgL/ASCIIgL/build
+MSBuild version 18.0.5+e22287bf1 for .NET Framework
+
+  Copying res folder to build directories
+  Material.cpp
+  RendererGPU.cpp
+  Generating Code...
+  ASCIIgL.vcxproj -> C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIIgL\build\lib\Release\ASCIIgL.lib
+-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26200.
+-- Created local glm::glm INTERFACE target with include dir: C:/Users/Skwig/Dev/Projects/ASCIIgL/ASCIIgL/vendor/glm
+-- Configuring done (0.0s)
+-- Generating done (0.1s)
+-- Build files have been written to: C:/Users/Skwig/Dev/Projects/ASCIIgL/ASCIIgL/build
+MSBuild version 18.0.5+e22287bf1 for .NET Framework
+
+  Copying res folder to build directories
+  Camera2D.cpp
+  Camera3D.cpp
+  Collision.cpp
+  FPSClock.cpp
+  InputManager.cpp
+  Mesh.cpp
+  Model.cpp
+  Texture.cpp
+  TextureArray.cpp
+  TextureLibrary.cpp
+  Palette.cpp
+  Renderer.cpp
+  VertFormat.cpp
+  RendererCPU.cpp
+  TileManager.cpp
+  VertexShaderCPU.cpp
+  Material.cpp
+  RendererGPU.cpp
+  Shader.cpp
+  Screen.cpp
+  Generating Code...
+  Compiling...
+  ScreenWinImpl.cpp
+  Clock.cpp
+  Logger.cpp
+  MathUtil.cpp
+  Profiler.cpp
+  stb_image.cpp
+  tiny_obj_loader.cpp
+  Generating Code...
+  ASCIIgL.vcxproj -> C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIIgL\build\lib\Debug\ASCIIgL.lib

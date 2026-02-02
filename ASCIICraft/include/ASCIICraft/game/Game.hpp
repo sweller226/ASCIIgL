@@ -5,9 +5,10 @@
 #include <entt/entt.hpp>
 
 #include <ASCIIgL/renderer/screen/Screen.hpp>
-#include <ASCIIgL/engine/Texture.hpp>
+#include <ASCIIgL/engine/TextureArray.hpp>
 #include <ASCIIgL/engine/InputManager.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
+#include <ASCIIgL/renderer/gpu/Shader.hpp>
 
 #include <ASCIICraft/world/World.hpp>
 
@@ -59,8 +60,7 @@ private:
     // Resources
     entt::registry registry;
     EventBus eventBus;
-    std::unique_ptr<ASCIIgL::Texture> blockAtlas;  // Block texture atlas - must persist during game lifetime
-
+    
     // ecs systems
     ecs::systems::MovementSystem movementSystem;
     ecs::systems::CameraSystem cameraSystem;

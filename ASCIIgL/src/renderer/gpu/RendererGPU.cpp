@@ -353,13 +353,12 @@ bool RendererGPU::CreateTextureFromASCIIgLTexture(const Texture* tex, ID3D11Shad
     const int mipCount = tex->GetMipCount();
 
     // -----------------------------
-    // Convert mip 0 to 0–255 range
+    // Texture data is already 0–255
     // -----------------------------
-    auto ConvertToGPU = [&](const uint8_t* src, int w, int h) {
+    auto GetTextureData = [&](const uint8_t* src, int w, int h) {
         size_t count = w * h * 4;
         std::vector<uint8_t> out(count);
-        for (size_t i = 0; i < count; ++i)
-            out[i] = src[i] * 17; // 0–15 → 0–255
+        std::memcpy(out.data(), src, count);  // Data is already 0–255
         return out;
     };
 
@@ -395,7 +394,7 @@ bool RendererGPU::CreateTextureFromASCIIgLTexture(const Texture* tex, ID3D11Shad
     // Upload mip 0
     // -----------------------------
     {
-        auto gpuData = ConvertToGPU(baseData, baseW, baseH);
+        auto gpuData = GetTextureData(baseData, baseW, baseH);
         _context->UpdateSubresource(texture.Get(), 0, nullptr, gpuData.data(), baseW * 4, 0);
     }
 
@@ -408,7 +407,7 @@ bool RendererGPU::CreateTextureFromASCIIgLTexture(const Texture* tex, ID3D11Shad
             int h = tex->GetMipHeight(level);
             const uint8_t* mipData = tex->GetMipDataPtr(level);
 
-            auto gpuData = ConvertToGPU(mipData, w, h);
+            auto gpuData = GetTextureData(mipData, w, h);
 
             _context->UpdateSubresource(
                 texture.Get(),
@@ -440,9 +439,9 @@ bool RendererGPU::CreateTextureFromASCIIgLTexture(const Texture* tex, ID3D11Shad
     return true;
 }
 
-void RendererGPU::BindTexture(const Texture* tex) {
+void RendererGPU::BindTexture(const Texture* tex, int slot) {
     if (!tex) {
-        UnbindTexture();
+        UnbindTexture(slot);
         return;
     }
 
@@ -451,7 +450,12 @@ void RendererGPU::BindTexture(const Texture* tex) {
     if (it != _textureCache.end()) {
         // Texture already uploaded - just bind it
         _currentTextureSRV = it->second;
-        _context->PSSetShaderResources(0, 1, it->second.GetAddressOf());
+        // Bind to specific slot
+        ID3D11ShaderResourceView* srvs[] = { it->second.Get() };
+        _context->PSSetShaderResources(slot, 1, srvs);
+        
+        ID3D11SamplerState* samplers[] = { _samplerLinear.Get() };
+        _context->PSSetSamplers(slot, 1, samplers);
         return;
     }
 
@@ -460,14 +464,159 @@ void RendererGPU::BindTexture(const Texture* tex) {
     if (CreateTextureFromASCIIgLTexture(tex, &srv)) {
         _currentTextureSRV.Attach(srv);
         _textureCache[tex] = _currentTextureSRV;  // Cache for future use
-        _context->PSSetShaderResources(0, 1, &srv);
+        
+        // Bind to specific slot
+        ID3D11ShaderResourceView* srvs[] = { srv };
+        _context->PSSetShaderResources(slot, 1, srvs);
+        
+        ID3D11SamplerState* samplers[] = { _samplerLinear.Get() };
+        _context->PSSetSamplers(slot, 1, samplers);
     }
 }
 
-void RendererGPU::UnbindTexture() {
-    _currentTextureSRV.Reset();
-    ID3D11ShaderResourceView* nullSRV = nullptr;
-    _context->PSSetShaderResources(0, 1, &nullSRV);
+bool RendererGPU::CreateTextureArraySRV(const TextureArray* texArray, ID3D11ShaderResourceView** srv) {
+    if (!texArray || !texArray->IsValid()) return false;
+
+    const int layerCount = texArray->GetLayerCount();
+    const int tileSize = texArray->GetTileSize();
+    const bool hasCustom = texArray->HasCustomMipmaps();
+    const int mipCount = texArray->GetMipCount();
+
+    Logger::Debug("[RendererGPU] Creating Texture2DArray: " + std::to_string(layerCount) + " layers, " +
+                  std::to_string(tileSize) + "x" + std::to_string(tileSize) + ", " +
+                  std::to_string(mipCount) + " mip levels");
+
+    // Create texture description for Texture2DArray
+    D3D11_TEXTURE2D_DESC desc = {};
+    desc.Width = tileSize;
+    desc.Height = tileSize;
+    desc.ArraySize = layerCount;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    if (hasCustom) {
+        desc.MipLevels = mipCount;
+        desc.MiscFlags = 0;
+    } else {
+        desc.MipLevels = 0;
+        desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
+        desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+    }
+
+    ComPtr<ID3D11Texture2D> texture;
+    HRESULT hr = _device->CreateTexture2D(&desc, nullptr, &texture);
+    if (FAILED(hr)) {
+        Logger::Error("[RendererGPU] Failed to create Texture2DArray");
+        return false;
+    }
+
+    // Calculate actual mip levels for GPU texture
+    int actualMipLevels = mipCount;
+    if (!hasCustom) {
+        // When GPU auto-generates mipmaps, calculate the actual mip count
+        // MipLevels = floor(log2(max(width, height))) + 1
+        int size = tileSize;
+        actualMipLevels = 1;
+        while (size > 1) {
+            size /= 2;
+            actualMipLevels++;
+        }
+    }
+
+    Logger::Debug("[RendererGPU] Actual GPU mip levels: " + std::to_string(actualMipLevels));
+
+    // Upload layers
+    for (int layer = 0; layer < layerCount; ++layer) {
+        if (hasCustom) {
+            // Upload all custom mip levels
+            for (int mip = 0; mip < mipCount; ++mip) {
+                const uint8_t* data = texArray->GetLayerData(layer, mip);
+                if (!data) continue;
+
+                int mipW = texArray->GetMipWidth(mip);
+                int mipH = texArray->GetMipHeight(mip);
+
+                UINT subresource = D3D11CalcSubresource(mip, layer, actualMipLevels);
+                _context->UpdateSubresource(texture.Get(), subresource, nullptr, data, mipW * 4, 0);
+            }
+        } else {
+            // Only upload base mip level (mip 0) - GPU will generate the rest
+            const uint8_t* data = texArray->GetLayerData(layer, 0);
+            if (!data) continue;
+
+            UINT subresource = D3D11CalcSubresource(0, layer, actualMipLevels);
+            _context->UpdateSubresource(texture.Get(), subresource, nullptr, data, tileSize * 4, 0);
+        }
+    }
+
+    // Create SRV for Texture2DArray
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+    srvDesc.Texture2DArray.MostDetailedMip = 0;
+    srvDesc.Texture2DArray.MipLevels = hasCustom ? mipCount : -1;
+    srvDesc.Texture2DArray.FirstArraySlice = 0;
+    srvDesc.Texture2DArray.ArraySize = layerCount;
+
+    hr = _device->CreateShaderResourceView(texture.Get(), &srvDesc, srv);
+    if (FAILED(hr)) {
+        Logger::Error("[RendererGPU] Failed to create Texture2DArray SRV");
+        return false;
+    }
+
+    // Auto-generate GPU mipmaps if needed
+    if (!hasCustom) {
+        _context->GenerateMips(*srv);
+    }
+
+    Logger::Info("[RendererGPU] Successfully created Texture2DArray");
+    return true;
+}
+
+void RendererGPU::BindTextureArray(const TextureArray* texArray, int slot) {
+    if (!_initialized || !texArray || !texArray->IsValid()) {
+        UnbindTextureArray(slot);
+        return;
+    }
+
+    ComPtr<ID3D11ShaderResourceView> srv;
+    
+    auto it = _textureArrayCache.find(texArray);
+    if (it != _textureArrayCache.end()) {
+        srv = it->second;
+    } else {
+        ID3D11ShaderResourceView* rawSRV = nullptr;
+        if (CreateTextureArraySRV(texArray, &rawSRV)) {
+            srv.Attach(rawSRV);
+            _textureArrayCache[texArray] = srv;
+        }
+    }
+
+    if (srv) {
+        _currentTextureSRV = srv; // Note: tracking current only works well for singe slot, might need array if tracking per slot
+        
+        // Bind texture and sampler to pixel shader
+        ID3D11ShaderResourceView* srvs[] = { srv.Get() };
+        _context->PSSetShaderResources(slot, 1, srvs);
+        
+        ID3D11SamplerState* samplers[] = { _samplerLinear.Get() };
+        _context->PSSetSamplers(slot, 1, samplers);
+    }
+}
+
+void RendererGPU::UnbindTexture(int slot) {
+    if (!_initialized) return;
+    ID3D11ShaderResourceView* nullSRVs[] = { nullptr };
+    _context->PSSetShaderResources(slot, 1, nullSRVs);
+    if (slot == 0) _currentTextureSRV = nullptr;
+}
+
+void RendererGPU::UnbindTextureArray(int slot) {
+    if (!_initialized) return;
+    ID3D11ShaderResourceView* nullSRVs[] = { nullptr };
+    _context->PSSetShaderResources(slot, 1, nullSRVs);
 }
 
 bool RendererGPU::InitializeDebugSwapChain() {
@@ -560,8 +709,8 @@ void RendererGPU::InitializeQuadMeshes() {
     std::vector<int> ccwIndicesCopy = CCWindices;
     std::vector<int> cwIndicesCopy = CWindices;
     
-    _quadMeshCCW = new Mesh(std::move(ccwVertexData), VertFormats::PosUV(), std::move(ccwIndicesCopy), nullptr);
-    _quadMeshCW = new Mesh(std::move(cwVertexData), VertFormats::PosUV(), std::move(cwIndicesCopy), nullptr);
+    _quadMeshCCW = new Mesh(std::move(ccwVertexData), VertFormats::PosUV(), std::move(ccwIndicesCopy), static_cast<Texture*>(nullptr));
+    _quadMeshCW = new Mesh(std::move(cwVertexData), VertFormats::PosUV(), std::move(cwIndicesCopy), static_cast<Texture*>(nullptr));
 
     Logger::Debug("[RendererGPU] Static quad meshes created (CCW and CW)");
 }
@@ -693,19 +842,19 @@ void RendererGPU::DownloadFramebuffer()
         return;
     }
 
-    // Copy pixels to color buffer (convert 0-255 to 0-15 for terminal palette)
+    // Copy pixels to color buffer (keep 0-255, convert to 0-15 at LUT lookup)
     uint8_t* src = static_cast<uint8_t*>(mapped.pData);
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             uint8_t* pixel = src + y * mapped.RowPitch + x * 4; // RGBA
             int index = y * width + x;
             
-            // Convert 0-255 to 0-15 (4-bit color)
+            // Keep 0-255 precision in color buffer
             _renderer->_color_buffer[index] = glm::ivec4(
-                pixel[0] / 17,  // R
-                pixel[1] / 17,  // G
-                pixel[2] / 17,  // B
-                pixel[3] / 17   // A
+                pixel[0],  // R (0-255)
+                pixel[1],  // G (0-255)
+                pixel[2],  // B (0-255)
+                pixel[3]   // A (0-255)
             );
         }
     }
@@ -853,6 +1002,7 @@ void RendererGPU::InvalidateCachedTexture(const Texture* tex) {
 // PUBLIC HIGH-LEVEL DRAWING FUNCTIONS
 // =============================================================================
 
+// must bind texture before calling this
 void RendererGPU::DrawMesh(const Mesh* mesh) {
     if (!_initialized || !mesh) return;
     
@@ -864,10 +1014,6 @@ void RendererGPU::DrawMesh(const Mesh* mesh) {
     UINT stride = mesh->GetVertFormat().GetStride();
     UINT offset = 0;
     _context->IASetVertexBuffers(0, 1, cache->vertexBuffer.GetAddressOf(), &stride, &offset);
-    
-    // Bind texture
-    if (!mesh->GetTexture()) { return; }
-    BindTexture(mesh->GetTexture());
     
     // Draw with or without indices
     if (cache->indexBuffer && cache->indexCount > 0) {
@@ -942,9 +1088,9 @@ void RendererGPU::BindMaterial(Material* material) {
     // Bind textures
     for (const auto& slot : material->_textureSlots) {
         if (slot.texture) {
-            BindTexture(slot.texture);
-            // If we had multiple texture slots, we'd set them to different registers
-            // For now, we only support slot 0 (diffuse)
+            BindTexture(slot.texture, slot.slot);
+        } else if (slot.textureArray) {
+            BindTextureArray(slot.textureArray, slot.slot);
         }
     }
     
