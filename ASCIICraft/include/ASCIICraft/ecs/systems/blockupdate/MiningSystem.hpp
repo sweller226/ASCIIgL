@@ -9,9 +9,7 @@ namespace ecs::systems {
 
 class MiningSystem : public ISystem {
 public:
-    explicit MiningSystem(entt::registry &registry, EventBus& eventBus) noexcept;
-    MiningSystem(const MiningSystem&) = delete;
-    MiningSystem& operator=(const MiningSystem&) = delete;
+    explicit MiningSystem(entt::registry &registry, EventBus& eventBus);
 
     void Update() override;
 

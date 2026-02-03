@@ -9,7 +9,7 @@
 
 namespace ecs::systems {
 
-    BlockUpdateSystem::BlockUpdateSystem(entt::registry &registry, EventBus& eventBus) noexcept 
+    BlockUpdateSystem::BlockUpdateSystem(entt::registry &registry, EventBus& eventBus) 
         : m_registry(registry)
         , eventBus(eventBus) {}
 

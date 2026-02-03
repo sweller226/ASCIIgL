@@ -7,10 +7,8 @@ namespace ecs::systems {
 
 class BlockUpdateSystem : public ISystem {
 public:
-    explicit BlockUpdateSystem(entt::registry &registry, EventBus& eventBus) noexcept;
-    BlockUpdateSystem(const BlockUpdateSystem&) = delete;
-    BlockUpdateSystem& operator=(const BlockUpdateSystem&) = delete;
-
+    explicit BlockUpdateSystem(entt::registry &registry, EventBus& eventBus);
+    
     void Update() override;
 
 private:

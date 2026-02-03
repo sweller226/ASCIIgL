@@ -13,9 +13,7 @@ namespace ecs::systems {
 
 class CameraSystem : public ISystem {
 public:
-    explicit CameraSystem(entt::registry &registry) noexcept;
-    CameraSystem(const CameraSystem&) = delete;
-    CameraSystem& operator=(const CameraSystem&) = delete;
+    explicit CameraSystem(entt::registry &registry);
 
     void Update() override;    
 

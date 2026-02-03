@@ -16,8 +16,7 @@ namespace ecs::systems {
 
 class RenderSystem {
 public:
-    explicit RenderSystem(entt::registry& registry)
-        : m_registry(registry) {}
+    explicit RenderSystem(entt::registry& registry);
 
     // Main render entry. Call once per frame after camera is set up.
     void Render();

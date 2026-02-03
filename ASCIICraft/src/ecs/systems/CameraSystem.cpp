@@ -6,7 +6,7 @@
 
 namespace ecs::systems {
 
-CameraSystem::CameraSystem(entt::registry &registry) noexcept : m_registry(registry) {
+CameraSystem::CameraSystem(entt::registry &registry) : m_registry(registry) {
 
 }
 

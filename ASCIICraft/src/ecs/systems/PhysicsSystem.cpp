@@ -14,7 +14,7 @@
 
 namespace ecs::systems {
 
-PhysicsSystem::PhysicsSystem(entt::registry &registry) noexcept
+PhysicsSystem::PhysicsSystem(entt::registry &registry)
   : m_registry(registry)
   , m_accumulator(0.0f)
 {}

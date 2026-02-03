@@ -11,7 +11,7 @@
 
 namespace ecs::systems {
     
-    PlacingSystem::PlacingSystem(entt::registry &registry, EventBus& eventBus) noexcept
+    PlacingSystem::PlacingSystem(entt::registry &registry, EventBus& eventBus)
         : m_registry(registry)
         , eventBus(eventBus) {}
 

@@ -18,7 +18,7 @@
 
 namespace ecs::systems {
 
-MovementSystem::MovementSystem(entt::registry &registry) noexcept
+MovementSystem::MovementSystem(entt::registry &registry)
   : m_registry(registry)
 {}
 

@@ -11,7 +11,7 @@
 
 namespace ecs::systems {
     
-    MiningSystem::MiningSystem(entt::registry &registry, EventBus& eventBus) noexcept 
+    MiningSystem::MiningSystem(entt::registry &registry, EventBus& eventBus) 
         : m_registry(registry)
         , eventBus(eventBus) {
 

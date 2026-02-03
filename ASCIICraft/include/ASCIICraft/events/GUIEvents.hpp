@@ -1,0 +1,61 @@
+#pragma once
+
+#include <string>
+#include <glm/vec2.hpp>
+#include <entt/entt.hpp>
+
+namespace events {
+
+/// Emitted when a GUI slot is clicked
+struct SlotClickedEvent {
+    entt::entity slot;
+    int slotIndex;
+    int mouseButton;  // 0 = left, 1 = right, 2 = middle
+};
+
+/// Emitted when mouse hovers over a slot
+struct SlotHoveredEvent {
+    entt::entity slot;
+    int slotIndex;
+};
+
+/// Emitted when mouse leaves a slot
+struct SlotUnhoveredEvent {
+    entt::entity slot;
+    int slotIndex;
+};
+
+/// Emitted when a GUI button is clicked
+struct ButtonClickedEvent {
+    entt::entity button;
+    std::string actionId;
+    int mouseButton;  // 0 = left, 1 = right
+};
+
+/// Emitted when a button is hovered/selected
+struct ButtonHoveredEvent {
+    entt::entity button;
+    std::string actionId;
+};
+
+/// Emitted when a panel is opened
+struct PanelOpenedEvent {
+    std::string panelId;
+    entt::entity panel;
+};
+
+/// Emitted when a panel is closed
+struct PanelClosedEvent {
+    std::string panelId;
+    entt::entity panel;
+};
+
+/// Emitted when any GUI element is clicked
+struct GUIClickEvent {
+    entt::entity element;
+    glm::vec2 clickPosition;
+    int mouseButton;
+};
+
+} // namespace events
+

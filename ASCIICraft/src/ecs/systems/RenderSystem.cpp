@@ -5,6 +5,8 @@
 #include <ASCIIgL/renderer/Renderer.hpp>
 
 namespace ecs::systems {
+    RenderSystem::RenderSystem(entt::registry& registry)
+        : m_registry(registry) {}
 
     void RenderSystem::Render() {
 

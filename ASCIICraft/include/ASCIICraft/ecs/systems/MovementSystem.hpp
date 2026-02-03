@@ -10,9 +10,7 @@ namespace ecs::systems {
 
 class MovementSystem : public ISystem {
 public:
-    explicit MovementSystem(entt::registry &registry) noexcept;
-    MovementSystem(const MovementSystem&) = delete;
-    MovementSystem& operator=(const MovementSystem&) = delete;
+    explicit MovementSystem(entt::registry &registry);
 
     void Update() override;      
 

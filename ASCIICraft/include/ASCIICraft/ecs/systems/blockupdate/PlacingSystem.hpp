@@ -9,9 +9,7 @@ namespace ecs::systems {
 
 class PlacingSystem : public ISystem {
 public:
-    explicit PlacingSystem(entt::registry &registry, EventBus& eventBus) noexcept;
-    PlacingSystem(const PlacingSystem&) = delete;
-    PlacingSystem& operator=(const PlacingSystem&) = delete;
+    explicit PlacingSystem(entt::registry &registry, EventBus& eventBus);
 
     void Update() override;
 
