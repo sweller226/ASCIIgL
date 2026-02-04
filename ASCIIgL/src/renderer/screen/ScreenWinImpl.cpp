@@ -470,14 +470,11 @@ void ScreenWinImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOutput) 
         // - Foreground/background overrides are set to match index 0
         //   so that attribute 0x0 displays correctly
         
-        // Helper lambda to convert palette RGB (0-15) to hex color string
+        // Helper lambda to convert palette RGB (0-255) to hex color string
         auto toHex = [&palette](int paletteIdx) -> std::string {
             glm::ivec3 rgb = palette.GetRGB(paletteIdx);
-            int r = (rgb.r * 255) / 15;
-            int g = (rgb.g * 255) / 15;
-            int b = (rgb.b * 255) / 15;
             char hexColor[8];
-            snprintf(hexColor, sizeof(hexColor), "#%02X%02X%02X", r, g, b);
+            snprintf(hexColor, sizeof(hexColor), "#%02X%02X%02X", rgb.r, rgb.g, rgb.b);
             return std::string(hexColor);
         };
         

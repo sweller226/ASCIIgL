@@ -468,9 +468,9 @@ void Renderer::PrecomputeColorLUT() {
                         for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
                             float coverage = _charCoverage[charIdx];
                             
-                            // Convert palette colors from 0-15 to 0.0-1.0 for comparison
-                            glm::vec3 fgColor = glm::vec3(palette.GetRGB(fgIdx)) * invPaletteDepth;
-                            glm::vec3 bgColor = glm::vec3(palette.GetRGB(bgIdx)) * invPaletteDepth;
+                            // Get palette colors normalized to 0.0-1.0 for comparison
+                            glm::vec3 fgColor = palette.GetRGBNormalized(fgIdx);
+                            glm::vec3 bgColor = palette.GetRGBNormalized(bgIdx);
                             
                             glm::vec3 simulatedColor = coverage * fgColor + (1.0f - coverage) * bgColor;
                             glm::vec3 diff = rgb - simulatedColor;

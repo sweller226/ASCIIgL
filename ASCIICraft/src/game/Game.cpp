@@ -1,6 +1,7 @@
 #include <ASCIICraft/game/Game.hpp>
 
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/rendering/Shaders.hpp>
 
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
@@ -49,27 +50,20 @@ bool Game::Initialize() {
 
     ASCIIgL::Logger::Debug("Setting up palette and screen...");
 
-    // ASCIIgL initializations
-    std::array<ASCIIgL::PaletteEntry, 16> paletteEntries = {{
-        {{0, 0, 0}, 0x0},
-        {{3, 0, 0}, 0x1},
-        {{4, 0, 0}, 0x2},
-        {{5, 0, 0}, 0x3},
-        {{7, 0, 0}, 0x4},
-        {{8, 1, 0}, 0x5},
-        {{9, 1, 0}, 0x6},
-        {{11, 1, 0}, 0x7},
-        {{12, 1, 0}, 0x8},
-        {{13, 1, 0}, 0x9},
-        {{15, 1, 0}, 0xA},
-        {{15, 2, 1}, 0xB},
-        {{15, 3, 2}, 0xC},
-        {{15, 4, 3}, 0xD},
-        {{15, 6, 5}, 0xE},
-        {{15, 7, 7}, 0xF},
-    }};
+    ASCIIgL::Palette grayPalette(glm::ivec3(0, 0, 0), glm::ivec3(170, 170, 170));
 
-    ASCIIgL::Palette gamePalette = ASCIIgL::Palette(paletteEntries);
+    // 1. Classic Green Phosphor (P1) - IBM/DEC terminals
+    ASCIIgL::Palette greenPalette(glm::ivec3(0, 0, 0), glm::ivec3(51, 255, 51));
+    // 2. Warm Amber (P3) - Commodore/Apple monitors
+    ASCIIgL::Palette warmAmberPalette(glm::ivec3(0, 0, 0), glm::ivec3(255, 176, 0));
+    // 3. Cool Blue (Cyan-ish) - Vintage terminal aesthetic
+    ASCIIgL::Palette coolBluePalette(glm::ivec3(0, 0, 0), glm::ivec3(100, 200, 255));
+    // 4. Soft Sepia - Warm paper-like tone
+    ASCIIgL::Palette sepiaPalette(glm::ivec3(0, 0, 0), glm::ivec3(200, 178, 140));
+    // 5. Purple/Magenta - Retro vaporwave aesthetic
+    ASCIIgL::Palette purplePalette(glm::ivec3(0, 0, 0), glm::ivec3(200, 100, 255));
+
+    ASCIIgL::Palette gamePalette = sepiaPalette;
 
     ASCIIgL::Logger::Debug("Initializing screen...");
     if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
@@ -277,37 +271,37 @@ bool Game::LoadResources() {
     // Set static pointer for block system
     Block::SetTextureArray(blockTextureArray.get());
     
-    // Create texture array shader program
+    // Create gradient mapping shader program
     auto vs = ASCIIgL::Shader::CreateFromSource(
-        ASCIIgL::DefaultShaders::GetTextureArrayVertexShaderSource(),
+        ASCIICraft::TerrainShaders::GetTerrainVSSource(),
         ASCIIgL::ShaderType::Vertex
     );
     
     auto ps = ASCIIgL::Shader::CreateFromSource(
-        ASCIIgL::DefaultShaders::GetTextureArrayPixelShaderSource(),
+        ASCIICraft::TerrainShaders::GetTerrainPSSource(),
         ASCIIgL::ShaderType::Pixel
     );
     
     if (!vs || !vs->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile texture array vertex shader: " + vs->GetCompileError());
+        ASCIIgL::Logger::Error("Failed to compile gradient map vertex shader: " + vs->GetCompileError());
         return false;
     }
     
     if (!ps || !ps->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile texture array pixel shader: " + ps->GetCompileError());
+        ASCIIgL::Logger::Error("Failed to compile gradient map pixel shader: " + ps->GetCompileError());
         return false;
     }
     
-    // Create shader program and move to properties
+    // Create shader program with gradient map uniform layout
     auto blockShaderProgram = ASCIIgL::ShaderProgram::Create(
         std::move(vs),
         std::move(ps),
         ASCIIgL::VertFormats::PosUVLayer(),
-        ASCIIgL::DefaultShaders::GetDefaultUniformLayout()
+        ASCIICraft::TerrainShaders::GetUniformLayout()
     );
     
     if (!blockShaderProgram || !blockShaderProgram->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to create texture array shader program");
+        ASCIIgL::Logger::Error("Failed to create gradient map shader program");
         return false;
     }
 
@@ -321,10 +315,15 @@ bool Game::LoadResources() {
     }
     
     // Set texture array (weak reference inside Material, owned by TextureLibrary)
-    // Set texture array (weak reference inside Material, owned by TextureLibrary)
     blockMaterial->SetTextureArray(0, blockTextureArray.get());
+    
+    // Set gradient colors (dark to bright, normalized 0-1 range)
+    // These correspond to palette colors: dark end = black, bright end = white
+    auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
+    blockMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(0), 1.0f));  // Black
+    blockMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(15), 1.0f));  // Bright (matches palette)
 
-    // Register 
+    // Register material
     ASCIIgL::MaterialLibrary::GetInst().Register("blockMaterial", std::move(blockMaterial));
 
     ASCIIgL::Logger::Info("Resources loaded successfully");
