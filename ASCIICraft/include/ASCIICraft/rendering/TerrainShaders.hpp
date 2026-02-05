@@ -2,8 +2,6 @@
 
 #include <ASCIIgL/renderer/gpu/Shader.hpp>
 
-namespace ASCIICraft {
-
 // =========================================================================
 // Shader Sources
 // =========================================================================
@@ -20,8 +18,6 @@ namespace TerrainShaders {
     const char* GetTerrainPSSource();
     
     // Uniform layout including gradient parameters (MVP + gradient colors)
-    ASCIIgL::UniformBufferLayout GetUniformLayout();
+    ASCIIgL::UniformBufferLayout GetTerrainPSUniformLayout();
 
 } // namespace TerrainShaders
-
-} // namespace ASCIICraft

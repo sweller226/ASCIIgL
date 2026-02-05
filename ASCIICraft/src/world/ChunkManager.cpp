@@ -578,6 +578,14 @@ void ChunkManager::RenderChunks() {
     glm::mat4 mvp = cam->proj * cam->view * glm::mat4(1.0f);
     mat->SetMatrix4("mvp", mvp);
 
+    // --- Fog Parameters ---
+    float chunkRenderDist = static_cast<float>(renderDistance * Chunk::SIZE);
+    float fogEnd = chunkRenderDist - (Chunk::SIZE * 0.5f); // Fade out fully before strict cutoff
+    float fogStart = fogEnd - (Chunk::SIZE * 1.0f);        // Start fading 3 chunks earlier
+    
+    mat->SetFloat3("cameraPos", pos);
+    mat->SetFloat4("fogParams", glm::vec4(fogStart, fogEnd, 0.0f, 0.0f));
+
     // Bind material (shader + constants + textures)
     ASCIIgL::RendererGPU::GetInst().BindMaterial(mat.get());
 

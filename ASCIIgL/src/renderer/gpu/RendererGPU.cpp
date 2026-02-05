@@ -738,12 +738,12 @@ void RendererGPU::BeginColBuffFrame() {
 
     Logger::Debug("BeginFrame: Clearing render target and setting up pipeline");
 
-    // Clear render target (convert 0-15 integer color to 0-1 float)
+    // Clear render target (convert 0-255 integer color to 0-1 float)
     glm::ivec3 bgCol = _renderer->GetBackgroundCol();
     float clear_color[4] = { 
-        static_cast<float>(bgCol.x) / 15.0f, 
-        static_cast<float>(bgCol.y) / 15.0f, 
-        static_cast<float>(bgCol.z) / 15.0f, 
+        static_cast<float>(bgCol.x) / 255.0f, 
+        static_cast<float>(bgCol.y) / 255.0f, 
+        static_cast<float>(bgCol.z) / 255.0f, 
         1.0f 
     };
     _context->ClearRenderTargetView(_renderTargetView.Get(), clear_color);

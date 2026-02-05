@@ -1,7 +1,7 @@
 #include <ASCIICraft/game/Game.hpp>
 
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
-#include <ASCIICraft/rendering/Shaders.hpp>
+#include <ASCIICraft/rendering/TerrainShaders.hpp>
 
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
@@ -50,57 +50,46 @@ bool Game::Initialize() {
 
     ASCIIgL::Logger::Debug("Setting up palette and screen...");
 
+    float lowLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(18, 18, 18));
+    float highLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(210, 210, 210));
+
     // gray
     ASCIIgL::Palette grayPalette(
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(0, 0, 0)),
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(200, 200, 200)),
-        glm::ivec3(200, 200, 200)
+        lowLight,
+        highLight,
+        glm::ivec3(205, 205, 205)
     );
 
     // silver blue
     ASCIIgL::Palette silverBluePalette(
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(10, 12, 15)),
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(190, 205, 230)),
+        lowLight,
+        highLight,
         glm::ivec3(190, 205, 230)
-    );
-
-    // soft moss
-    ASCIIgL::Palette softMossPalette(
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(8, 12, 10)),
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(185, 215, 195)),
-        glm::ivec3(185, 215, 195)
     );
 
     // frost cyan
     ASCIIgL::Palette frostCyanPalette(
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(5, 10, 12)),
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(200, 230, 245)),
+        lowLight,
+        highLight,
         glm::ivec3(200, 230, 245)
     );
 
     // warm beige
     ASCIIgL::Palette warmBeigePalette(
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(10, 8, 7)),
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(220, 205, 180)),
+        lowLight,
+        highLight,
         glm::ivec3(220, 205, 180)
     );
 
     // slate
     ASCIIgL::Palette slatePalette(
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(6, 7, 9)),
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(180, 200, 230)),
+        lowLight,
+        highLight,
         glm::ivec3(180, 200, 230)
     );
 
-    // muted violet
-    ASCIIgL::Palette mutedVioletPalette(
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(8, 6, 10)),
-        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(190, 170, 215)),
-        glm::ivec3(190, 170, 215)
-    );
-
     // choose your active palette
-    ASCIIgL::Palette gamePalette = slatePalette;
+    ASCIIgL::Palette gamePalette = frostCyanPalette;
 
     ASCIIgL::Logger::Debug("Initializing screen...");
     if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
@@ -115,7 +104,7 @@ bool Game::Initialize() {
     ASCIIgL::FPSClock::GetInst().Initialize(static_cast<unsigned int>(TARGET_FPS), 1.0f);
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
 
-    ASCIIgL::Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(1));
+    ASCIIgL::Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(0));
     ASCIIgL::Renderer::GetInst().SetWireframe(false);
     ASCIIgL::Renderer::GetInst().SetBackfaceCulling(true);
     ASCIIgL::Renderer::GetInst().SetCCW(true);
@@ -313,12 +302,12 @@ bool Game::LoadResources() {
     
     // Create gradient mapping shader program
     auto vs = ASCIIgL::Shader::CreateFromSource(
-        ASCIICraft::TerrainShaders::GetTerrainVSSource(),
+        TerrainShaders::GetTerrainVSSource(),
         ASCIIgL::ShaderType::Vertex
     );
     
     auto ps = ASCIIgL::Shader::CreateFromSource(
-        ASCIICraft::TerrainShaders::GetTerrainPSSource(),
+        TerrainShaders::GetTerrainPSSource(),
         ASCIIgL::ShaderType::Pixel
     );
     
@@ -337,7 +326,7 @@ bool Game::LoadResources() {
         std::move(vs),
         std::move(ps),
         ASCIIgL::VertFormats::PosUVLayer(),
-        ASCIICraft::TerrainShaders::GetUniformLayout()
+        TerrainShaders::GetTerrainPSUniformLayout()
     );
     
     if (!blockShaderProgram || !blockShaderProgram->IsValid()) {

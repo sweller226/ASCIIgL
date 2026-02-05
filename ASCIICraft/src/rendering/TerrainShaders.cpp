@@ -1,6 +1,4 @@
-#include <ASCIICraft/rendering/Shaders.hpp>
-
-namespace ASCIICraft {
+#include <ASCIICraft/rendering/TerrainShaders.hpp>
 
 namespace TerrainShaders {
 
@@ -12,6 +10,7 @@ cbuffer ConstantBuffer : register(b0)
     float4x4 mvp;
     float4 gradientStart;   // Start color of gradient (dark)
     float4 gradientEnd;     // End color of gradient (bright)
+    float3 cameraPos;       // Camera world position for fog calculation
 };
 
 struct VS_INPUT
@@ -24,6 +23,7 @@ struct PS_INPUT
 {
     float4 position : SV_POSITION;
     float3 texcoord : TEXCOORD0;  // UV + Layer passed to pixel shader
+    float dist : TEXCOORD1;       // Distance from camera
 };
 
 PS_INPUT main(VS_INPUT input)
@@ -31,6 +31,7 @@ PS_INPUT main(VS_INPUT input)
     PS_INPUT output;
     output.position = mul(mvp, float4(input.position, 1.0));
     output.texcoord = input.texcoord;
+    output.dist = distance(input.position, cameraPos);
     return output;
 }
 )";
@@ -46,12 +47,15 @@ cbuffer ConstantBuffer : register(b0)
     float4x4 mvp;
     float4 gradientStart;   // Start color of gradient (dark), alpha = unused
     float4 gradientEnd;     // End color of gradient (bright), alpha = unused
+    float3 cameraPos;       // Unused in PS but part of CBuffer layout
+    float4 fogParams;       // x=start, y=end
 };
 
 struct PS_INPUT
 {
     float4 position : SV_POSITION;
     float3 texcoord : TEXCOORD0;  // UV.xy + Layer.z
+    float dist : TEXCOORD1;       // Distance from camera
 };
 
 float4 main(PS_INPUT input) : SV_TARGET
@@ -78,21 +82,26 @@ float4 main(PS_INPUT input) : SV_TARGET
     
     // Reconstruct color = hue direction * brightness
     float3 mappedColor = hue * brightness;
+
+    // === Fog Application ===
+    // Simple linear fog: fades to gradientStart (darkest color) at distance
+    float fogFactor = saturate((input.dist - fogParams.x) / (fogParams.y - fogParams.x));
+    float3 finalColor = lerp(mappedColor, gradientStart.rgb, fogFactor); // Fade to dark/background
     
     // Preserve original alpha
-    return float4(mappedColor, texColor.a);
+    return float4(finalColor, texColor.a);
 }
 )";
 }
 
-ASCIIgL::UniformBufferLayout GetUniformLayout() {
+ASCIIgL::UniformBufferLayout GetTerrainPSUniformLayout() {
     return ASCIIgL::UniformBufferLayout::Builder()
         .Add("mvp", ASCIIgL::UniformType::Mat4)
         .Add("gradientStart", ASCIIgL::UniformType::Float4)
         .Add("gradientEnd", ASCIIgL::UniformType::Float4)
+        .Add("cameraPos", ASCIIgL::UniformType::Float3)
+        .Add("fogParams", ASCIIgL::UniformType::Float4)
         .Build();
 }
 
 } // namespace TerrainShaders
-
-} // namespace ASCIICraft

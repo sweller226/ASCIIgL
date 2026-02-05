@@ -225,10 +225,10 @@ void Renderer::DrawClippedLinePxBuff(int x0, int y0, int x1, int y1, int minX, i
 
 void Renderer::DrawScreenBorderPxBuff(const unsigned short col) {
     // DRAWING BORDERS
-    DrawLinePxBuff(0, 0, Screen::GetInst().GetWidth() - 1, 0, _charRamp[8], col);
-    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, 0, Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, _charRamp[8], col);
-    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, _charRamp[8], col);
-    DrawLinePxBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, _charRamp[8], col);
+    DrawLinePxBuff(0, 0, Screen::GetInst().GetWidth() - 1, 0, _charRamp.back(), col);
+    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, 0, Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, _charRamp.back(), col);
+    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, _charRamp.back(), col);
+    DrawLinePxBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, _charRamp.back(), col);
 }
 
 // =============================================================================
@@ -479,7 +479,7 @@ void Renderer::PrecomputeColorLUT() {
                     // lie on the same hue line. Comparing by luminance is faster
                     // and more accurate than RGB distance.
                     
-                    float targetLuminance = PaletteUtil::sRGB255_Luminance(targetSRGB);
+                    float targetLuminance = PaletteUtil::sRGB1_Luminance(targetSRGB);
                     
                     for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
                         float fgLuminance = palette.GetLuminance(fgIdx);
@@ -721,13 +721,6 @@ void Renderer::TestRenderColorDiscrete() {
         CHAR_INFO charInfo;
         charInfo.Char.UnicodeChar = 'B';
         charInfo.Attributes = palette.GetFgColor(colorIdx) | palette.GetBgColor(colorIdx);
-        std::wstringstream ss;
-        ss << L"Color " << colorIdx << L" RGB: ("
-           << palette.GetRGB(colorIdx).r << L", "
-           << palette.GetRGB(colorIdx).g << L", "
-           << palette.GetRGB(colorIdx).b << L") "
-           << "FG: " << palette.GetFgColor(colorIdx) << L" | BG: " << palette.GetBgColor(colorIdx);
-        Logger::Debug(ss.str());
 
         for (int y = startY; y < endY; ++y) {
             for (int x = startX; x < endX; ++x) {
