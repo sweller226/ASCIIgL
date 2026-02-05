@@ -4,6 +4,67 @@
 
 namespace ASCIIgL {
 
+namespace PaletteUtil {
+
+    // sRGB → Linear (float 0–1)
+    float sRGB255ToLinear1(float s) {
+        s /= 255.0f;
+        return (s <= 0.04045f)
+            ? (s / 12.92f)
+            : std::pow((s + 0.055f) / 1.055f, 2.4f);
+    }
+
+    // sRGB → Linear (ivec3 0–255)
+    glm::vec3 sRGB255ToLinear1(const glm::ivec3& c) {
+        return glm::vec3(
+            sRGB255ToLinear1(c.r),
+            sRGB255ToLinear1(c.g),
+            sRGB255ToLinear1(c.b)
+        );
+    }
+
+    // Luminance (sRGB input)
+    float sRGB255_Luminance(const glm::ivec3& c) {
+        glm::vec3 lin = sRGB255ToLinear1(c);
+        return 0.2126f * lin.r + 0.7152f * lin.g + 0.0722f * lin.b;
+    }
+
+    // Linear luminance (vec3 only)
+    float LinearRGB_Luminance(const glm::vec3& c) {
+        return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+    }
+
+    // Linear → sRGB (float 0–1 → 0–255)
+    float Linear1ToSrgb255(float c) {
+        float s = (c <= 0.0031308f)
+            ? (12.92f * c)
+            : (1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f);
+
+        return glm::clamp(s * 255.0f, 0.0f, 255.0f);
+    }
+
+    // Linear → sRGB (vec3 0–1 → 0–255)
+    glm::vec3 Linear1ToSrgb255(const glm::vec3& c) {
+        return glm::vec3(
+            Linear1ToSrgb255(c.r),
+            Linear1ToSrgb255(c.g),
+            Linear1ToSrgb255(c.b)
+        );
+    }
+}
+
+PaletteEntry::PaletteEntry(const glm::ivec3& rgbVal, unsigned short hexVal)
+    : rgb(rgbVal)
+    , rgb16(rgbVal.r / 17, rgbVal.g / 17, rgbVal.b / 17)
+    , normalized(glm::vec3(rgbVal) / 255.0f)
+    , luminance(PaletteUtil::sRGB255_Luminance(glm::vec3(rgbVal)))
+    , hex(hexVal) {}
+
+PaletteEntry::PaletteEntry() : rgb(0, 0, 0), rgb16(0, 0, 0), normalized(0.0f), luminance(0.0f), hex(0) {}
+
+PaletteEntry::PaletteEntry(int r, int g, int b, unsigned short hexVal)
+    : PaletteEntry(glm::ivec3(r, g, b), hexVal) {}
+
 Palette::Palette() {
     // 16-color palette in 0-255 range:
     // - Index 0-15: Standard 16 colors (mapped to attributes 0x0-0xF)
@@ -35,62 +96,47 @@ Palette::Palette(std::array<PaletteEntry, 16> customEntries) {
     }
 }
 
-Palette::Palette(const glm::ivec3& darkColor, const glm::ivec3& lightColor) {
+Palette::Palette(float darkL, float lightL, const glm::ivec3& hueDir)
+{
+    glm::vec3 hueDirLinear = PaletteUtil::sRGB255ToLinear1(hueDir);
+
     constexpr float gamma = 2.2f;
     constexpr float invGamma = 1.0f / gamma;
 
-    // Extract hue direction from the light color
-    glm::vec3 hue = glm::normalize(glm::vec3(lightColor));
-
-    // Compute max brightness (length of the light color vector)
-    float maxBrightness = glm::length(glm::vec3(lightColor));
-
-    // Compute min brightness from darkColor (usually 0)
-    float minBrightness = glm::length(glm::vec3(darkColor));
+    glm::vec3 hue = glm::normalize(hueDirLinear);
 
     for (int i = 0; i < 16; ++i) {
         float t = static_cast<float>(i) / 15.0f;
-
-        // Perceptual brightness interpolation
         float L = std::pow(t, invGamma);
 
-        // Interpolate brightness only (monochrome ramp)
-        float brightness = glm::mix(minBrightness, maxBrightness, L);
+        float Y = glm::mix(darkL, lightL, L);
 
-        // Reconstruct color along the hue direction
-        glm::vec3 colorF = hue * brightness;
+        glm::vec3 colorLin = hue * Y;
 
-        // Clamp and convert to integers
-        glm::ivec3 color(
-            static_cast<int>(glm::clamp(colorF.r, 0.0f, 255.0f)),
-            static_cast<int>(glm::clamp(colorF.g, 0.0f, 255.0f)),
-            static_cast<int>(glm::clamp(colorF.b, 0.0f, 255.0f))
-        );
+        glm::ivec3 color = PaletteUtil::Linear1ToSrgb255(colorLin);
 
         entries[i] = PaletteEntry(color, static_cast<unsigned short>(i));
     }
 }
 
-
 glm::ivec3 Palette::GetRGB(unsigned int idx) const {
     if (idx >= COLOR_COUNT) return glm::ivec3(0);
-    return entries[idx].rgb;  // Returns 0-255 range
+    return entries[idx].rgb;  // Cached 0-255 range
 }
 
 glm::ivec3 Palette::GetRGB16(unsigned int idx) const {
     if (idx >= COLOR_COUNT) return glm::ivec3(0);
-    // Convert from 0-255 to 0-15 for terminal character attributes
-    return glm::ivec3(
-        entries[idx].rgb.r / 17,  // 255/15 ≈ 17
-        entries[idx].rgb.g / 17,
-        entries[idx].rgb.b / 17
-    );
+    return entries[idx].rgb16;  // Cached 0-15 range
 }
 
 glm::vec3 Palette::GetRGBNormalized(unsigned int idx) const {
     if (idx >= COLOR_COUNT) return glm::vec3(0.0f);
-    // Convert from 0-255 to 0.0-1.0 for shaders
-    return glm::vec3(entries[idx].rgb) / 255.0f;
+    return entries[idx].normalized;  // Cached 0.0-1.0 range
+}
+
+float Palette::GetLuminance(unsigned int idx) const {
+    if (idx >= COLOR_COUNT) return 0.0f;
+    return entries[idx].luminance;  // Cached luminance (Rec. 709)
 }
 
 unsigned short Palette::GetHex(unsigned int idx) const {

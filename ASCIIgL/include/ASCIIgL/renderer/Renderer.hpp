@@ -21,6 +21,12 @@
 
 namespace ASCIIgL {
 
+// Palette matching mode for color LUT computation
+enum class PaletteMode {
+    Monochrome,   // Single hue - compare by luminance only (fast)
+    MultiColor    // Full color - linearized sRGB comparison (accurate)
+};
+
 class RendererCPU;
 class RendererGPU;
 
@@ -77,6 +83,7 @@ private:
     };
 
     void PrecomputeColorLUT();
+    PaletteMode _paletteMode = PaletteMode::MultiColor;
     bool _colorLUTComputed = false;
     static constexpr unsigned int _rgbLUTDepth = 16;
     std::array<CHAR_INFO, _rgbLUTDepth*_rgbLUTDepth*_rgbLUTDepth> _colorLUT;
@@ -161,6 +168,10 @@ public:
     bool GetDiagnosticsEnabled() const;
     
     bool GetCpuOnly() const;
+
+    // Palette Mode for Color LUT
+    void SetPaletteMode(PaletteMode mode);
+    PaletteMode GetPaletteMode() const;
     
     // =========================================================================
     // Buffer and Diagnostics

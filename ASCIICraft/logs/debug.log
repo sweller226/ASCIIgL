@@ -1,0 +1,31 @@
+[2026-02-04 15:53:19] [INFO] ASCIICraft starting...
+[2026-02-04 15:53:19] [INFO] Initializing ASCIICraft...
+[2026-02-04 15:53:19] [INFO] Initializing Screen...
+[2026-02-04 15:53:19] [INFO] Attempting to modify Windows Terminal settings.json file directly.
+[2026-02-04 15:53:19] [INFO] Found Windows Terminal settings at: C:\Users\Skwig\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+[2026-02-04 15:53:19] [INFO] Successfully modified Windows Terminal settings.json
+[2026-02-04 15:53:19] [INFO] Max console window size: 65x10
+[2026-02-04 15:53:19] [INFO] Requested height 350 exceeds maximum, adjusting to 10
+[2026-02-04 15:53:19] [INFO] Requested screen width 550 exceeds maximum, adjusting to 65
+[2026-02-04 15:53:19] [INFO] Screen dimensions automatically adjusted to 65x10
+[2026-02-04 15:53:19] [INFO] Attempting to modify Windows Terminal settings.json file directly.
+[2026-02-04 15:53:19] [INFO] Found Windows Terminal settings at: C:\Users\Skwig\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+[2026-02-04 15:53:19] [INFO] Successfully modified Windows Terminal settings.json
+[2026-02-04 15:53:19] [INFO] Attempting to modify Windows Terminal color scheme.
+[2026-02-04 15:53:19] [INFO] Found Windows Terminal settings at: C:\Users\Skwig\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+[2026-02-04 15:53:19] [INFO] Successfully modified Windows Terminal color scheme with 16 colors.
+[2026-02-04 15:53:19] [INFO] Enabled Virtual Terminal Processing mode.
+[2026-02-04 15:53:19] [INFO] Initializing Renderer...
+[2026-02-04 15:53:19] [INFO] Initializing RendererGPU...
+[2026-02-04 15:53:19] [INFO] [RendererGPU] Initializing DirectX 11...
+[2026-02-04 15:53:19] [INFO] [RendererGPU] Device created with feature level: 11.1
+[2026-02-04 15:53:19] [INFO] [RendererGPU] Render target initialized: 65x10 with 4x MSAA
+[2026-02-04 15:53:19] [INFO] World created
+[2026-02-04 15:53:19] [INFO] Loading game resources...
+[2026-02-04 15:53:19] [INFO] TEXTURE_ARRAY: Loading from atlas: res/textures/terrain.png
+[2026-02-04 15:53:19] [INFO] TEXTURE_ARRAY: Successfully loaded 256 layers
+[2026-02-04 15:53:19] [INFO] Resources loaded successfully
+[2026-02-04 15:53:19] [INFO] ASCIICraft initialized successfully!
+[2026-02-04 15:53:19] [INFO] Starting game loop...
+[2026-02-04 15:53:21] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-02-04 15:53:21] [INFO] [RendererGPU] Successfully created Texture2DArray

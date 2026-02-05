@@ -50,20 +50,57 @@ bool Game::Initialize() {
 
     ASCIIgL::Logger::Debug("Setting up palette and screen...");
 
-    ASCIIgL::Palette grayPalette(glm::ivec3(0, 0, 0), glm::ivec3(170, 170, 170));
+    // gray
+    ASCIIgL::Palette grayPalette(
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(0, 0, 0)),
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(200, 200, 200)),
+        glm::ivec3(200, 200, 200)
+    );
 
-    // 1. Classic Green Phosphor (P1) - IBM/DEC terminals
-    ASCIIgL::Palette greenPalette(glm::ivec3(0, 0, 0), glm::ivec3(51, 255, 51));
-    // 2. Warm Amber (P3) - Commodore/Apple monitors
-    ASCIIgL::Palette warmAmberPalette(glm::ivec3(0, 0, 0), glm::ivec3(255, 176, 0));
-    // 3. Cool Blue (Cyan-ish) - Vintage terminal aesthetic
-    ASCIIgL::Palette coolBluePalette(glm::ivec3(0, 0, 0), glm::ivec3(100, 200, 255));
-    // 4. Soft Sepia - Warm paper-like tone
-    ASCIIgL::Palette sepiaPalette(glm::ivec3(0, 0, 0), glm::ivec3(200, 178, 140));
-    // 5. Purple/Magenta - Retro vaporwave aesthetic
-    ASCIIgL::Palette purplePalette(glm::ivec3(0, 0, 0), glm::ivec3(200, 100, 255));
+    // silver blue
+    ASCIIgL::Palette silverBluePalette(
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(10, 12, 15)),
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(190, 205, 230)),
+        glm::ivec3(190, 205, 230)
+    );
 
-    ASCIIgL::Palette gamePalette = sepiaPalette;
+    // soft moss
+    ASCIIgL::Palette softMossPalette(
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(8, 12, 10)),
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(185, 215, 195)),
+        glm::ivec3(185, 215, 195)
+    );
+
+    // frost cyan
+    ASCIIgL::Palette frostCyanPalette(
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(5, 10, 12)),
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(200, 230, 245)),
+        glm::ivec3(200, 230, 245)
+    );
+
+    // warm beige
+    ASCIIgL::Palette warmBeigePalette(
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(10, 8, 7)),
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(220, 205, 180)),
+        glm::ivec3(220, 205, 180)
+    );
+
+    // slate
+    ASCIIgL::Palette slatePalette(
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(6, 7, 9)),
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(180, 200, 230)),
+        glm::ivec3(180, 200, 230)
+    );
+
+    // muted violet
+    ASCIIgL::Palette mutedVioletPalette(
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(8, 6, 10)),
+        ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(190, 170, 215)),
+        glm::ivec3(190, 170, 215)
+    );
+
+    // choose your active palette
+    ASCIIgL::Palette gamePalette = slatePalette;
 
     ASCIIgL::Logger::Debug("Initializing screen...");
     if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
@@ -83,6 +120,9 @@ bool Game::Initialize() {
     ASCIIgL::Renderer::GetInst().SetBackfaceCulling(true);
     ASCIIgL::Renderer::GetInst().SetCCW(true);
     ASCIIgL::Renderer::GetInst().SetDiagnosticsEnabled(true);
+    
+    // Using a monochromatic gradient palette, so use Monochrome optimization
+    ASCIIgL::Renderer::GetInst().SetPaletteMode(ASCIIgL::PaletteMode::Monochrome);
 
     ASCIIgL::Logger::Debug("Initializing renderer...");
     ASCIIgL::Renderer::GetInst().Initialize(true, 4, false);

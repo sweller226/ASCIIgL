@@ -445,42 +445,95 @@ void Renderer::PrecomputeColorLUT() {
     Palette& palette = Screen::GetInst().GetPalette();
     if (_colorLUTComputed) return;
     
+    // Use the configured palette mode
+    PaletteMode mode = _paletteMode;
+    
     const float invPaletteDepth = 1.0f / 15.0f;
+    
+    // sRGB to linear conversion (IEC 61966-2-1)
+    auto srgbToLinear = [](float s) {
+        return s <= 0.04045f ? s / 12.92f : std::pow((s + 0.055f) / 1.055f, 2.4f);
+    };
+    
+    auto srgbToLinearVec = [&srgbToLinear](const glm::vec3& c) {
+        return glm::vec3(srgbToLinear(c.r), srgbToLinear(c.g), srgbToLinear(c.b));
+    };
     
     // Precompute all possible RGB combinations
     for (int r = 0; r < static_cast<int>(_rgbLUTDepth); ++r) {
         for (int g = 0; g < static_cast<int>(_rgbLUTDepth); ++g) {
             for (int b = 0; b < static_cast<int>(_rgbLUTDepth); ++b) {
-                // Convert discrete RGB to normalized [0,1] range
-                glm::vec3 rgb(
-                    r*invPaletteDepth,
-                    g*invPaletteDepth,
-                    b*invPaletteDepth
+                // Convert discrete RGB to normalized [0,1] sRGB range
+                glm::vec3 targetSRGB(
+                    r * invPaletteDepth,
+                    g * invPaletteDepth,
+                    b * invPaletteDepth
                 );
 
-                // Find best match using original algorithm
                 float minError = FLT_MAX;
                 int bestFgIndex = 0, bestBgIndex = 0, bestCharIndex = 0;
 
-                // 16-color palette: all indices 0-15 can be used for both fg and bg
-                for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
-                    for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
-                        for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
-                            float coverage = _charCoverage[charIdx];
+                if (mode == PaletteMode::Monochrome) {
+                    // ===== MONOCHROME PATH: Compare by luminance only =====
+                    // For monochrome palettes (grayscale, amber, sepia), all colors
+                    // lie on the same hue line. Comparing by luminance is faster
+                    // and more accurate than RGB distance.
+                    
+                    float targetLuminance = PaletteUtil::sRGB255_Luminance(targetSRGB);
+                    
+                    for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
+                        float fgLuminance = palette.GetLuminance(fgIdx);
+                        
+                        for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
+                            float bgLuminance = palette.GetLuminance(bgIdx);
                             
-                            // Get palette colors normalized to 0.0-1.0 for comparison
-                            glm::vec3 fgColor = palette.GetRGBNormalized(fgIdx);
-                            glm::vec3 bgColor = palette.GetRGBNormalized(bgIdx);
-                            
-                            glm::vec3 simulatedColor = coverage * fgColor + (1.0f - coverage) * bgColor;
-                            glm::vec3 diff = rgb - simulatedColor;
-                            float error = glm::dot(diff, diff);
+                            for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
+                                float coverage = _charCoverage[charIdx];
+                                
+                                // Simulate luminance as weighted blend
+                                float simLuminance = coverage * fgLuminance + (1.0f - coverage) * bgLuminance;
+                                float error = std::abs(targetLuminance - simLuminance);
 
-                            if (error < minError) {
-                                minError = error;
-                                bestFgIndex = fgIdx;
-                                bestBgIndex = bgIdx;
-                                bestCharIndex = charIdx;
+                                if (error < minError) {
+                                    minError = error;
+                                    bestFgIndex = fgIdx;
+                                    bestBgIndex = bgIdx;
+                                    bestCharIndex = charIdx;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // ===== MULTICOLOR PATH: Linearized sRGB with weighted distance =====
+                    // For full-color palettes, linearize sRGB before comparison and use
+                    // perceptually weighted Euclidean distance (green-sensitive).
+                    
+                    glm::vec3 targetLinear = srgbToLinearVec(targetSRGB);
+                    
+                    for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
+                        glm::vec3 fgLinear = srgbToLinearVec(palette.GetRGBNormalized(fgIdx));
+                        
+                        for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
+                            glm::vec3 bgLinear = srgbToLinearVec(palette.GetRGBNormalized(bgIdx));
+                            
+                            for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
+                                float coverage = _charCoverage[charIdx];
+                                
+                                // Simulate color in linear space
+                                glm::vec3 simLinear = coverage * fgLinear + (1.0f - coverage) * bgLinear;
+                                glm::vec3 diff = targetLinear - simLinear;
+                                
+                                // Weighted Euclidean distance (Rec. 709 luminance weights)
+                                float error = 0.2126f * diff.r * diff.r 
+                                            + 0.7152f * diff.g * diff.g 
+                                            + 0.0722f * diff.b * diff.b;
+
+                                if (error < minError) {
+                                    minError = error;
+                                    bestFgIndex = fgIdx;
+                                    bestBgIndex = bgIdx;
+                                    bestCharIndex = charIdx;
+                                }
                             }
                         }
                     }
@@ -493,17 +546,7 @@ void Renderer::PrecomputeColorLUT() {
                 unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
                 unsigned short combinedColor = fgColor | bgColor;
 
-
                 if (fgColor > 0xF || bgColor > 0xF0) {
-                    std::wstringstream ss;
-                    ss << L"PrecomputeColorLUT: Invalid color at index " << index 
-                       << L" RGB(" << r << L"," << g << L"," << b << L")"
-                       << L" FG:0x" << std::hex << fgColor 
-                       << L" BG:0x" << bgColor
-                       << L" fgIdx:" << std::dec << bestFgIndex 
-                       << L" bgIdx:" << bestBgIndex;
-                    Logger::Error(ss.str());
-                    
                     // Clamp to valid range
                     fgColor = fgColor & 0xF;
                     bgColor = bgColor & 0xF0;
@@ -728,6 +771,17 @@ void Renderer::EndColBuffFrame() {
     }
 
     OverwritePxBuffWithColBuff();
+}
+
+void Renderer::SetPaletteMode(PaletteMode mode) {
+    if (_paletteMode != mode) {
+        _paletteMode = mode;
+        _colorLUTComputed = false; // Invalidate LUT to force recomputation
+    }
+}
+
+PaletteMode Renderer::GetPaletteMode() const {
+    return _paletteMode;
 }
 
 } // namespace ASCIIgL
