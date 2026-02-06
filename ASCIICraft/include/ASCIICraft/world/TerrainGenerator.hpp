@@ -25,7 +25,6 @@ public:
     
     // Test/debug generation methods
     void GenerateGrassLayerChunk(Chunk* chunk);
-    void GenerateRandomBlockChunk(Chunk* chunk);
     void GenerateOneBlockGrassChunk(Chunk* chunk);
 
 private:

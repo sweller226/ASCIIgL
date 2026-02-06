@@ -46,6 +46,8 @@ public:
     
     // Generate CPU mipmaps for all layers
     void GenerateMipmapsCPU(int maxLevels = -1, MipFilters::MipFilterFn filter = nullptr);
+
+    static int GetLayerFromAtlasXY(int x, int y, int atlasSize);
     
 private:
     class Impl;

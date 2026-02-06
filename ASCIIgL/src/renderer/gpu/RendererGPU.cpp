@@ -81,9 +81,6 @@ void RendererGPU::Initialize() {
         // Non-fatal - continue without swap chain
     }
 
-    // Initialize static quad meshes for 2D rendering
-    InitializeQuadMeshes();
-
     _initialized = true;
     Logger::Debug("RendererGPU initialization complete - Device, Shaders, Buffers ready");
 }
@@ -670,62 +667,6 @@ bool RendererGPU::InitializeDebugSwapChain() {
     return true;
 }
 
-void RendererGPU::InitializeQuadMeshes() {
-    // Quad vertices as PosUV format (XYZ + UV = 5 floats = 20 bytes per vertex)
-    // Counter-clockwise winding
-    const VertStructs::PosUV CCWquadVerts[] = {
-        {{-1.0f, -1.0f, 0.0f, 0.0f, 0.0f}},  // 0: bottom-left
-        {{-1.0f,  1.0f, 0.0f, 0.0f, 1.0f}},  // 1: top-left
-        {{ 1.0f,  1.0f, 0.0f, 1.0f, 1.0f}},  // 2: top-right
-        {{ 1.0f, -1.0f, 0.0f, 1.0f, 0.0f}}   // 3: bottom-right
-    };
-
-    // Clockwise winding (same vertices, different index order)
-    const VertStructs::PosUV CWquadVerts[] = {
-        {{-1.0f, -1.0f, 0.0f, 0.0f, 0.0f}},  // 0: bottom-left
-        {{-1.0f,  1.0f, 0.0f, 0.0f, 1.0f}},  // 1: top-left
-        {{ 1.0f,  1.0f, 0.0f, 1.0f, 1.0f}},  // 2: top-right
-        {{ 1.0f, -1.0f, 0.0f, 1.0f, 0.0f}}   // 3: bottom-right
-    };
-
-    const std::vector<int> CCWindices = {
-        0, 1, 2,  // Triangle 1: bottom-left → top-left → top-right
-        0, 2, 3   // Triangle 2: bottom-left → top-right → bottom-right
-    };
-
-    const std::vector<int> CWindices = {
-        0, 2, 1,  // Triangle 1: bottom-left → top-right → top-left
-        0, 3, 2   // Triangle 2: bottom-left → bottom-right → top-right
-    };
-
-    // Convert to byte vectors
-    const auto* ccwBytes = reinterpret_cast<const std::byte*>(CCWquadVerts);
-    const auto* cwBytes = reinterpret_cast<const std::byte*>(CWquadVerts);
-    
-    std::vector<std::byte> ccwVertexData(ccwBytes, ccwBytes + sizeof(CCWquadVerts));
-    std::vector<std::byte> cwVertexData(cwBytes, cwBytes + sizeof(CWquadVerts));
-
-    // Create meshes (without texture - texture will be set per draw call)
-    std::vector<int> ccwIndicesCopy = CCWindices;
-    std::vector<int> cwIndicesCopy = CWindices;
-    
-    _quadMeshCCW = new Mesh(std::move(ccwVertexData), VertFormats::PosUV(), std::move(ccwIndicesCopy), static_cast<Texture*>(nullptr));
-    _quadMeshCW = new Mesh(std::move(cwVertexData), VertFormats::PosUV(), std::move(cwIndicesCopy), static_cast<Texture*>(nullptr));
-
-    Logger::Debug("[RendererGPU] Static quad meshes created (CCW and CW)");
-}
-
-void RendererGPU::CleanupQuadMeshes() {
-    if (_quadMeshCCW) {
-        delete _quadMeshCCW;
-        _quadMeshCCW = nullptr;
-    }
-    if (_quadMeshCW) {
-        delete _quadMeshCW;
-        _quadMeshCW = nullptr;
-    }
-}
-
 // =========================================================================
 // Rendering Pipeline
 // =========================================================================
@@ -885,9 +826,6 @@ void RendererGPU::Shutdown()
 {
     if (!_initialized) return;
 
-    // Clean up static quad meshes
-    CleanupQuadMeshes();
-
     // Release all COM objects (ComPtr handles this automatically)
     _textureCache.clear();  // Clear texture cache
     _currentTextureSRV.Reset();
@@ -1028,23 +966,6 @@ void RendererGPU::DrawModel(const Model& ModelObj) {
     for (size_t i = 0; i < ModelObj.meshes.size(); i++) {
         DrawMesh(ModelObj.meshes[i]);
     }
-}
-
-void RendererGPU::Draw2DQuad(const Texture& tex) {
-    if (!_initialized || (!_quadMeshCCW && !_quadMeshCW)) return;
-
-    // Select appropriate quad mesh
-    Mesh* quadMesh = _renderer->_ccw ? _quadMeshCCW : _quadMeshCW;
-    
-    // Temporarily set texture on mesh
-    Texture* originalTexture = quadMesh->texture;
-    quadMesh->texture = const_cast<Texture*>(&tex);
-    
-    // Draw using cached mesh
-    DrawMesh(quadMesh);
-    
-    // Restore original texture (nullptr)
-    quadMesh->texture = originalTexture;
 }
 
 // =========================================================================

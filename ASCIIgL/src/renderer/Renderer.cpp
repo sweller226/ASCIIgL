@@ -103,14 +103,6 @@ void Renderer::DrawModel(const Model& ModelObj) {
     }
 }
 
-void Renderer::Draw2DQuad(const Texture& tex) {
-    if (_cpu_only) {
-        _rendererCPU->Draw2DQuad(tex);
-    } else {
-        _rendererGPU->Draw2DQuad(tex);
-    }
-}
-
 // =============================================================================
 // TRIANGLE RASTERIZATION - WIREFRAME (PIXEL BUFFER)
 // =============================================================================

@@ -6,8 +6,9 @@
 #include <typeindex>
 #include <any>
 
-// Forward declarations
-namespace ASCIIgL { class Mesh; class Texture; }
+#include <ASCIIgL/engine/Mesh.hpp>
+
+#include <ASCIICraft/world/Block.hpp>
 
 namespace ecs::data {
 
@@ -63,12 +64,13 @@ struct ItemDefinition {
     bool isStackable = true;              // Can this item stack at all?
     
     // Visuals
-    std::shared_ptr<ASCIIgL::Mesh> droppedMesh;   // Mesh for dropped item entity
-    ASCIIgL::Texture* iconTexture = nullptr;      // Inventory icon texture
+    std::shared_ptr<ASCIIgL::Mesh> mesh; // PosUVLayer
+    bool is2DIcon = false;                // If true, use icon texture array instead of block texture array
 
     // ========================================================================
     // ECS-Style Property System
     // ========================================================================
+
 private:
     std::unordered_map<std::type_index, std::any> properties;
 
@@ -117,7 +119,7 @@ public:
     ItemRegistry& operator=(const ItemRegistry&) = delete;
 
     /// Register a new item definition. Returns false if ID or name already exists.
-    bool registerItem(const ItemDefinition& def);
+    bool RegisterItem(const ItemDefinition& def);
 
     /// Look up by numeric ID
     const ItemDefinition* getById(int id) const;
@@ -133,6 +135,20 @@ public:
 
     /// Clear all registrations (useful for reloading)
     void clear();
+
+    static std::shared_ptr<ASCIIgL::Mesh> GetQuadItemMesh(int layerID);
+    static std::shared_ptr<ASCIIgL::Mesh> GetQuadItemMesh(int x, int y, int atlas_size = 16);
+
+    static std::string MakeItemName(const std::string& name);
+    static ItemDefinition MakeItemDef(
+        int id,
+        const std::string& name,
+        const std::string& displayName,
+        int maxStackSize,
+        bool isStackable,
+        std::shared_ptr<ASCIIgL::Mesh> mesh,
+        bool is2DIcon = false
+    );
 
 private:
     ItemRegistry() = default;

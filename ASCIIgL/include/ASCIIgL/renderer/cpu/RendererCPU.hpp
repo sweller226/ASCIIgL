@@ -21,6 +21,8 @@
 
 namespace ASCIIgL {
 
+using V = VertStructs::PosWUVInvW;
+
 // Forward declaration
 class Renderer;
 
@@ -75,36 +77,37 @@ private:
     // =========================================================================
     // Clipping Stage
     // =========================================================================
-    VertStructs::PosWUVInvW HomogenousPlaneIntersect(const VertStructs::PosWUVInvW& vert2, const VertStructs::PosWUVInvW& vert1, int component, bool Near);
-    void ClipTriAgainstPlane(const VertStructs::PosWUVInvW& vert1, const VertStructs::PosWUVInvW& vert2, const VertStructs::PosWUVInvW& vert3, std::vector<VertStructs::PosWUVInvW>& output, int component, bool Near);
-    void ClippingHelper(std::vector<VertStructs::PosWUVInvW>& vertices, std::vector<VertStructs::PosWUVInvW>& clipped);
-    void ClippingHelperThreaded(std::vector<VertStructs::PosWUVInvW>& vertices, std::vector<VertStructs::PosWUVInvW>& clipped);
-    void ClippingHelperSingleThreaded(std::vector<VertStructs::PosWUVInvW>& vertices, std::vector<VertStructs::PosWUVInvW>& clipped);
+
+    V HomogenousPlaneIntersect(const V& vert2, const V& vert1, int component, bool Near);
+    void ClipTriAgainstPlane(const V& vert1, const V& vert2, const V& vert3, std::vector<V>& output, int component, bool Near);
+    void ClippingHelper(std::vector<V>& vertices, std::vector<V>& clipped);
+    void ClippingHelperThreaded(std::vector<V>& vertices, std::vector<V>& clipped);
+    void ClippingHelperSingleThreaded(std::vector<V>& vertices, std::vector<V>& clipped);
 
     // =========================================================================
     // Backface Culling Stage
     // =========================================================================
-    bool BackFaceCull(const VertStructs::PosWUVInvW& vert1, const VertStructs::PosWUVInvW& vert2, const VertStructs::PosWUVInvW& vert3, bool CCW);
-    void BackFaceCullHelper(std::vector<VertStructs::PosWUVInvW>& vertices);
+    bool BackFaceCull(const V& vert1, const V& vert2, const V& vert3, bool CCW);
+    void BackFaceCullHelper(std::vector<V>& vertices);
 
     // =========================================================================
     // Transformation Stage
     // =========================================================================
-    void PerspectiveAndViewportTransform(std::vector<VertStructs::PosWUVInvW>& raster_triangles);
+    void PerspectiveAndViewportTransform(std::vector<V>& raster_triangles);
 
     // =========================================================================
     // Tile-Based Rasterization
     // =========================================================================
-    void DrawTiles(const std::vector<VertStructs::PosWUVInvW>& raster_triangles, const Texture* tex);
-    void DrawTileTextured(const Tile& tile, const std::vector<VertStructs::PosWUVInvW>& raster_triangles, const Texture* tex);
-    void DrawTileWireframe(const Tile& tile, const std::vector<VertStructs::PosWUVInvW>& raster_triangles);
+    void DrawTiles(const std::vector<V>& raster_triangles, const Texture* tex);
+    void DrawTileTextured(const Tile& tile, const std::vector<V>& raster_triangles, const Texture* tex);
+    void DrawTileWireframe(const Tile& tile, const std::vector<V>& raster_triangles);
 
     // =========================================================================
     // Triangle Rasterization Functions
     // =========================================================================
-    void DrawTriangleTexturedImpl(const VertStructs::PosWUVInvW& v1, const VertStructs::PosWUVInvW& v2, const VertStructs::PosWUVInvW& v3, const Texture* tex, int minX, int maxX, int minY, int maxY);
-    void DrawTriangleTexturedPartial(const Tile& tile, const VertStructs::PosWUVInvW& vert1, const VertStructs::PosWUVInvW& vert2, const VertStructs::PosWUVInvW& vert3, const Texture* tex);
-    void DrawTriangleTextured(const VertStructs::PosWUVInvW& vert1, const VertStructs::PosWUVInvW& vert2, const VertStructs::PosWUVInvW& vert3, const Texture* tex);
+    void DrawTriangleTexturedImpl(const V& v1, const V& v2, const V& v3, const Texture* tex, int minX, int maxX, int minY, int maxY);
+    void DrawTriangleTexturedPartial(const Tile& tile, const V& vert1, const V& vert2, const V& vert3, const Texture* tex);
+    void DrawTriangleTextured(const V& vert1, const V& vert2, const V& vert3, const Texture* tex);
     void DrawTriangleWireframeColBuffPartial(const Tile& tile, const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, const glm::vec4& col);
 
     // =========================================================================
@@ -122,7 +125,6 @@ private:
     // =========================================================================
     void DrawMesh(const Mesh* mesh);
     void DrawModel(const Model& ModelObj);
-    void Draw2DQuad(const Texture& tex);
 
     // ========================================================================
     // Mid-level API - Rendering Pipelines (Friend-Accessible Only via Renderer)
@@ -131,6 +133,11 @@ private:
     void RenderTriangles(const std::vector<std::byte>& vertices, const VertFormat& format, const Texture* tex);
 
 public:
+    // =========================================================================
+    // High-Level Drawing API - CPU only api
+    // =========================================================================
+    void Draw2DQuad(const Texture& tex);
+
     // =========================================================================
     // Singleton Access
     // =========================================================================

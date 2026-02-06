@@ -253,71 +253,6 @@ void TerrainGenerator::GenerateGrassLayerChunk(Chunk* chunk) {
     chunk->SetDirty(true);
 }
 
-void TerrainGenerator::GenerateRandomBlockChunk(Chunk* chunk) {
-    if (!chunk) return;
-    
-    ChunkCoord coord = chunk->GetCoord();
-
-    // Define available block types (excluding Air and Bedrock for now)
-    static const std::vector<BlockType> blockTypes = {
-        BlockType::Stone,
-        BlockType::Dirt,
-        BlockType::Grass,
-        BlockType::Wood,
-        BlockType::Leaves,
-        BlockType::Gravel,
-        BlockType::Coal_Ore,
-        BlockType::Iron_Ore,
-        BlockType::Diamond_Ore,
-        BlockType::Cobblestone,
-        BlockType::Crafting_Table,
-        BlockType::Wood_Planks,
-        BlockType::Furnace,
-        BlockType::Bedrock,
-    };
-    
-    // Use chunk coordinates as seed for consistent generation
-    std::srand(coord.x * 1000 + coord.y * 100 + coord.z * 10);
-    
-    if (coord.y == 0) {
-        // Generate random blocks at y=0 chunks with some structure
-        for (int x = 0; x < Chunk::SIZE; ++x) {
-            for (int z = 0; z < Chunk::SIZE; ++z) {
-                // Create some variation: 80% chance of blocks, 20% air
-                if (std::rand() % 100 < 80) {
-                    // Pick a random block type
-                    BlockType randomBlock = blockTypes[std::rand() % blockTypes.size()];
-                    chunk->SetBlock(x, 0, z, Block(randomBlock));
-                    
-                    // Sometimes add a second layer for variety
-                    if (std::rand() % 100 < 30) {
-                        BlockType secondBlock = blockTypes[std::rand() % blockTypes.size()];
-                        chunk->SetBlock(x, 1, z, Block(secondBlock));
-                    }
-                }
-                // 20% chance remains Air (empty space)
-            }
-        }
-    } else if (coord.y > 0) {
-        // Upper chunks: more sparse, mostly air with occasional blocks
-        for (int x = 0; x < Chunk::SIZE; ++x) {
-            for (int z = 0; z < Chunk::SIZE; ++z) {
-                for (int y = 0; y < Chunk::SIZE; ++y) {
-                    // Only 10% chance of blocks in upper chunks
-                    if (std::rand() % 100 < 10) {
-                        BlockType randomBlock = blockTypes[std::rand() % blockTypes.size()];
-                        chunk->SetBlock(x, y, z, Block(randomBlock));
-                    }
-                }
-            }
-        }
-    }
-    
-    // Mark chunk as generated and dirty (mesh will be generated in RegenerateDirtyChunks)
-    chunk->SetGenerated(true);
-    chunk->SetDirty(true);
-}
-
 void TerrainGenerator::GenerateOneBlockGrassChunk(Chunk* chunk) {
     if (!chunk) return;
 
@@ -337,7 +272,7 @@ void TerrainGenerator::GenerateTree(int worldX, int worldY, int worldZ, SetBlock
     // Generate trunk
     setBlock(worldX, worldY - 1, worldZ, Block(BlockType::Dirt));
     for (int i = 0; i < TRUNK_HEIGHT; ++i) {
-        setBlock(worldX, worldY + i, worldZ, Block(BlockType::Wood));
+        setBlock(worldX, worldY + i, worldZ, Block(BlockType::Oak_Log));
     }
     
     const int leafBaseY = worldY + LEAF_BASE_OFFSET;
@@ -347,7 +282,7 @@ void TerrainGenerator::GenerateTree(int worldX, int worldY, int worldZ, SetBlock
         for (int dx = -LEAF_RADIUS; dx <= LEAF_RADIUS; ++dx) {
             for (int dz = -LEAF_RADIUS; dz <= LEAF_RADIUS; ++dz) {
                 if (std::abs(dx) == LEAF_RADIUS && std::abs(dz) == LEAF_RADIUS) continue; // Skip corners
-                setBlock(worldX + dx, leafBaseY + dy, worldZ + dz, Block(BlockType::Leaves));
+                setBlock(worldX + dx, leafBaseY + dy, worldZ + dz, Block(BlockType::Oak_Leaves));
             }
         }
     }
@@ -355,15 +290,15 @@ void TerrainGenerator::GenerateTree(int worldX, int worldY, int worldZ, SetBlock
     // Third layer (Y+5): 3x3
     for (int dx = -1; dx <= 1; ++dx) {
         for (int dz = -1; dz <= 1; ++dz) {
-            setBlock(worldX + dx, leafBaseY + 2, worldZ + dz, Block(BlockType::Leaves));
+            setBlock(worldX + dx, leafBaseY + 2, worldZ + dz, Block(BlockType::Oak_Leaves));
         }
     }
     
     // Top layer (Y+6): Crown
     const int crownY = leafBaseY + 3;
-    setBlock(worldX, crownY, worldZ, Block(BlockType::Leaves));
-    setBlock(worldX, crownY, worldZ + 1, Block(BlockType::Leaves));
-    setBlock(worldX, crownY, worldZ - 1, Block(BlockType::Leaves));
-    setBlock(worldX + 1, crownY, worldZ, Block(BlockType::Leaves));
-    setBlock(worldX - 1, crownY, worldZ, Block(BlockType::Leaves));
+    setBlock(worldX, crownY, worldZ, Block(BlockType::Oak_Leaves));
+    setBlock(worldX, crownY, worldZ + 1, Block(BlockType::Oak_Leaves));
+    setBlock(worldX, crownY, worldZ - 1, Block(BlockType::Oak_Leaves));
+    setBlock(worldX + 1, crownY, worldZ, Block(BlockType::Oak_Leaves));
+    setBlock(worldX - 1, crownY, worldZ, Block(BlockType::Oak_Leaves));
 }

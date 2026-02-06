@@ -1,4 +1,5 @@
 #include <ASCIICraft/ecs/components/Inventory.hpp>
+
 #include <ASCIICraft/ecs/data/ItemRegistry.hpp>
 
 namespace ecs::components {

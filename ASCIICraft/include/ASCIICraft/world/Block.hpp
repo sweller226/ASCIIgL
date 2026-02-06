@@ -4,24 +4,47 @@
 #include <glm/glm.hpp>
 
 #include <ASCIIgL/engine/TextureArray.hpp>
+#include <ASCIIgL/engine/Mesh.hpp>
 
 // Block types
 enum class BlockType : uint8_t {
-    Air = 0,
-    Stone = 1,
-    Dirt = 2,
-    Grass = 3,
-    Wood = 4,
-    Leaves = 5,
-    Gravel = 8,
-    Coal_Ore = 9,
-    Iron_Ore = 10,
-    Diamond_Ore = 12,
-    Cobblestone = 13,
-    Crafting_Table = 14,
-    Wood_Planks = 15,
-    Furnace = 16,
-    Bedrock = 17,
+    Air,
+    
+    // Terrain
+    Bedrock,
+    Stone,
+    Cobblestone,
+    Dirt,
+    Grass,
+    Gravel,
+    Sand,
+    Sandstone,
+    Clay,
+
+    // Ores
+    Coal_Ore,
+    Iron_Ore,
+    Gold_Ore,
+    Diamond_Ore,
+
+    // Wood & Plants
+    Oak_Log,
+    Oak_Leaves,
+    Oak_Planks,
+    Spruce_Log,
+    Spruce_Leaves,
+    Spruce_Planks,
+
+    // Utility Blocks
+    Crafting_Table,
+    Furnace,
+
+    // Special Blocks
+    TNT,
+    Obsidian,
+    Mossy_Cobblestone,
+    Bookshelf,
+    Wool,
 };
 
 // Block face indices
@@ -60,9 +83,8 @@ private:
 
 // Texture array helper functions
 namespace BlockTextures {
-    // Get texture layer index for a specific tile coordinate
-    int GetTileLayer(int tileX, int tileY);
-    
     // Get texture layer for a block face
     int GetBlockFaceLayer(BlockType blockType, BlockFace face);
+
+    std::shared_ptr<ASCIIgL::Mesh> GetBlockMesh(BlockType blockType);
 }

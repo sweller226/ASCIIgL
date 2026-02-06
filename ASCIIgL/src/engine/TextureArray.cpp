@@ -253,4 +253,8 @@ void TextureArray::GenerateMipmapsCPU(int maxLevels, MipFilters::MipFilterFn fil
     pImpl->GenerateMipmapsCPU(maxLevels, filter);
 }
 
+int TextureArray::GetLayerFromAtlasXY(int x, int y, int atlasSize) {
+    return (y * atlasSize) + x;
+}
+
 } // namespace ASCIIgL

@@ -84,6 +84,7 @@ private:
     void InitializeContext();
     void InitializeSystems();
     void RenderPlaying();
+    void InitializeItemDefinitions();
     
     // Constants
     static inline int SCREEN_WIDTH = 550;

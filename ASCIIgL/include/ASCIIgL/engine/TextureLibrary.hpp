@@ -16,16 +16,16 @@ public:
         return inst;
     }
 
-    std::shared_ptr<TextureArray> LoadTextureArray(const std::string& path, int tileSize);
-    std::shared_ptr<Texture> LoadTexture(const std::string& path);
+    std::shared_ptr<TextureArray> LoadTextureArray(const std::string& path, int tileSize, const std::string& savedName = "");
+    std::shared_ptr<Texture> LoadTexture(const std::string& path, const std::string& savedName = "");
 
-    std::shared_ptr<TextureArray> GetTextureArray(const std::string& path) const;
-    std::shared_ptr<Texture> GetTexture(const std::string& path) const;
-    bool HasTextureArray(const std::string& path) const;
-    bool HasTexture(const std::string& path) const;
+    std::shared_ptr<TextureArray> GetTextureArray(const std::string& savedName) const;
+    std::shared_ptr<Texture> GetTexture(const std::string& savedName) const;
+    bool HasTextureArray(const std::string& savedName) const;
+    bool HasTexture(const std::string& savedName) const;
 
-    void RemoveTextureArray(const std::string& path);
-    void RemoveTexture(const std::string& path);
+    void RemoveTextureArray(const std::string& savedName);
+    void RemoveTexture(const std::string& savedName);
     void ClearTextureArrays();
     void ClearTextures();
 

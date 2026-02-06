@@ -4,6 +4,10 @@
 #include <string>
 #include <unordered_map>
 
+#include <ASCIICraft/ecs/data/ItemRegistry.hpp>
+
+#include <ASCIIgL/engine/Mesh.hpp>
+
 namespace ecs::components {
 
 /// Represents a single stack of items in an inventory slot.

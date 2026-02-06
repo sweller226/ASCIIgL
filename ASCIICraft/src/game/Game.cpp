@@ -1,15 +1,11 @@
 #include <ASCIICraft/game/Game.hpp>
 
-#include <ASCIICraft/ecs/components/PlayerTag.hpp>
-#include <ASCIICraft/rendering/TerrainShaders.hpp>
-
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
-
 #include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
-
 #include <ASCIIgL/renderer/gpu/Material.hpp>
+
 #include <ASCIIgL/engine/TextureLibrary.hpp>
 #include <ASCIIgL/engine/MipFilters.hpp>
 
@@ -19,11 +15,17 @@
 #include <ASCIIgL/util/Profiler.hpp>
 
 #include <ASCIICraft/world/Block.hpp>
+#include <ASCIICraft/ecs/data/ItemRegistry.hpp>
 
 // ecs components
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/Velocity.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
+#include <ASCIICraft/ecs/components/PlayerTag.hpp>
+
+// shaders
+#include <ASCIICraft/rendering/TerrainShaders.hpp>
+#include <ASCIICraft/rendering/GUIShaders.hpp>
 
 Game::Game()
     : gameState(GameState::Playing)
@@ -89,7 +91,7 @@ bool Game::Initialize() {
     );
 
     // choose your active palette
-    ASCIIgL::Palette gamePalette = frostCyanPalette;
+    ASCIIgL::Palette gamePalette = slatePalette;
 
     ASCIIgL::Logger::Debug("Initializing screen...");
     if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
@@ -118,6 +120,9 @@ bool Game::Initialize() {
 
     ASCIIgL::Logger::Debug("Initializing ECS context...");
     InitializeContext();
+
+    ASCIIgL::Logger::Debug("Initializing item definitions...");
+    InitializeItemDefinitions();
 
     ASCIIgL::Logger::Debug("Initializing ECS systems...");
     InitializeSystems();
@@ -290,8 +295,8 @@ bool Game::LoadResources() {
     ASCIIgL::Logger::Info("Loading game resources...");
 
     // Load block textures via TextureLibrary which takes ownership
-    auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray("res/textures/terrain.png", 16);
-    
+    auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray("res/textures/terrain.png", 16, "terrainTextureArray");
+
     if (!blockTextureArray || !blockTextureArray->IsValid()) {
         ASCIIgL::Logger::Error("Failed to load block texture array");
         return false;
@@ -301,30 +306,30 @@ bool Game::LoadResources() {
     Block::SetTextureArray(blockTextureArray.get());
     
     // Create gradient mapping shader program
-    auto vs = ASCIIgL::Shader::CreateFromSource(
+    auto terrainVS = ASCIIgL::Shader::CreateFromSource(
         TerrainShaders::GetTerrainVSSource(),
         ASCIIgL::ShaderType::Vertex
     );
     
-    auto ps = ASCIIgL::Shader::CreateFromSource(
+    auto terrainPS = ASCIIgL::Shader::CreateFromSource(
         TerrainShaders::GetTerrainPSSource(),
         ASCIIgL::ShaderType::Pixel
     );
     
-    if (!vs || !vs->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile gradient map vertex shader: " + vs->GetCompileError());
+    if (!terrainVS || !terrainVS->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile gradient map vertex shader: " + terrainVS->GetCompileError());
         return false;
     }
     
-    if (!ps || !ps->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile gradient map pixel shader: " + ps->GetCompileError());
+    if (!terrainPS || !terrainPS->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile gradient map pixel shader: " + terrainPS->GetCompileError());
         return false;
     }
     
     // Create shader program with gradient map uniform layout
     auto blockShaderProgram = ASCIIgL::ShaderProgram::Create(
-        std::move(vs),
-        std::move(ps),
+        std::move(terrainVS),
+        std::move(terrainPS),
         ASCIIgL::VertFormats::PosUVLayer(),
         TerrainShaders::GetTerrainPSUniformLayout()
     );
@@ -334,8 +339,10 @@ bool Game::LoadResources() {
         return false;
     }
 
+    std::shared_ptr<ASCIIgL::ShaderProgram> sharedProgram;
+
     // Create material and register it
-    std::shared_ptr<ASCIIgL::ShaderProgram> sharedProgram = std::move(blockShaderProgram);
+    sharedProgram = std::move(blockShaderProgram);
     auto blockMaterial = ASCIIgL::Material::Create(sharedProgram);
     
     if (!blockMaterial) {
@@ -354,6 +361,55 @@ bool Game::LoadResources() {
 
     // Register material
     ASCIIgL::MaterialLibrary::GetInst().Register("blockMaterial", std::move(blockMaterial));
+
+    auto inventoryTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray("res/textures/gui/inventory.png", 16, "inventoryTextureArray");
+    if (!inventoryTextureArray || !inventoryTextureArray->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to load inventory texture array");
+        return false;
+    }
+
+    auto guiVS = ASCIIgL::Shader::CreateFromSource(
+        GUIShaders::GetGUIVSSource(),
+        ASCIIgL::ShaderType::Vertex
+    );
+
+    auto guiPS = ASCIIgL::Shader::CreateFromSource(
+        GUIShaders::GetGUIPSSource(),
+        ASCIIgL::ShaderType::Pixel
+    );
+
+    if (!guiVS || !guiVS->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile GUI vertex shader: " + guiVS->GetCompileError());
+        return false;
+    }
+
+    if (!guiPS || !guiPS->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile GUI pixel shader: " + guiPS->GetCompileError());
+        return false;
+    }
+
+    auto guiShaderProgram = ASCIIgL::ShaderProgram::Create(
+        std::move(guiVS),
+        std::move(guiPS),
+        ASCIIgL::VertFormats::PosUV(),
+        GUIShaders::GetGUIPSUniformLayout()
+    );
+
+    if (!guiShaderProgram || !guiShaderProgram->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to create GUI shader program");
+        return false;
+    }
+
+    sharedProgram = std::move(guiShaderProgram);
+    auto guiMaterial = ASCIIgL::Material::Create(sharedProgram);
+    
+    if (!guiMaterial) {
+        ASCIIgL::Logger::Error("Failed to create GUI material");
+        return false;
+    }
+    
+    // Register material
+    ASCIIgL::MaterialLibrary::GetInst().Register("guiMaterial", std::move(guiMaterial));
 
     ASCIIgL::Logger::Info("Resources loaded successfully");
     return true;
@@ -391,4 +447,416 @@ void Game::InitializeSystems() {
     }
 
     ASCIIgL::Logger::Debug("Systems initialized.");
+}
+
+void Game::InitializeItemDefinitions() {
+    auto& registry = ecs::data::ItemRegistry::Instance();
+
+    using ir = ecs::data::ItemRegistry;
+    using id = ecs::data::ItemDefinition;
+
+    // === Terrain ===
+    {
+        ir::ItemDef stone = ir::MakeItemDef(
+            1, "stone", "Stone", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Stone), false
+        );
+        stone.set(PlaceableProperty{ 1 });
+        registry.RegisterItem(stone);
+
+        ir::ItemDef cobblestone = ir::MakeItemDef(
+            2, "cobblestone", "Cobblestone", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Cobblestone), false
+        );
+        cobblestone.set(PlaceableProperty{ 2 });
+        registry.RegisterItem(cobblestone);
+
+        ir::ItemDef dirt = ir::MakeItemDef(
+            3, "dirt", "Dirt", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Dirt), false
+        );
+        dirt.set(PlaceableProperty{ 3 });
+        registry.RegisterItem(dirt);
+
+        ir::ItemDef grass = ir::MakeItemDef(
+            4, "grass", "Grass Block", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Grass), false
+        );
+        grass.set(PlaceableProperty{ 4 });
+        registry.RegisterItem(grass);
+
+        ir::ItemDef gravel = ir::MakeItemDef(
+            5, "gravel", "Gravel", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Gravel), false
+        );
+        gravel.set(PlaceableProperty{ 5 });
+        registry.RegisterItem(gravel);
+
+        ir::ItemDef sand = ir::MakeItemDef(
+            6, "sand", "Sand", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Sand), false
+        );
+        sand.set(PlaceableProperty{ 6 });
+        registry.RegisterItem(sand);
+
+        ir::ItemDef sandstone = ir::MakeItemDef(
+            7, "sandstone", "Sandstone", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Sandstone), false
+        );
+        sandstone.set(PlaceableProperty{ 7 });
+        registry.RegisterItem(sandstone);
+
+        ir::ItemDef clay = ir::MakeItemDef(
+            8, "clay", "Clay", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Clay), false
+        );
+        clay.set(PlaceableProperty{ 8 });
+        registry.RegisterItem(clay);
+
+        ir::ItemDef bedrock = ir::MakeItemDef(
+            9, "bedrock", "Bedrock", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Bedrock), false
+        );
+        bedrock.set(PlaceableProperty{ 9 });
+        registry.RegisterItem(bedrock);
+    }
+
+    // === Ores ===
+    {
+        ir::ItemDef coalOre = ir::MakeItemDef(
+            10, "coal_ore", "Coal Ore", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Coal_Ore), false
+        );
+        coalOre.set(PlaceableProperty{ 10 });
+        registry.RegisterItem(coalOre);
+
+        ir::ItemDef ironOre = ir::MakeItemDef(
+            11, "iron_ore", "Iron Ore", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Iron_Ore), false
+        );
+        ironOre.set(PlaceableProperty{ 11 });
+        registry.RegisterItem(ironOre);
+
+        ir::ItemDef goldOre = ir::MakeItemDef(
+            12, "gold_ore", "Gold Ore", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Gold_Ore), false
+        );
+        goldOre.set(PlaceableProperty{ 12 });
+        registry.RegisterItem(goldOre);
+
+        ir::ItemDef diamondOre = ir::MakeItemDef(
+            13, "diamond_ore", "Diamond Ore", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Diamond_Ore), false
+        );
+        diamondOre.set(PlaceableProperty{ 13 });
+        registry.RegisterItem(diamondOre);
+    }
+
+    // === Wood & Plants ===
+    {
+        ir::ItemDef oakLog = ir::MakeItemDef(
+            14, "oak_log", "Oak Log", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Oak_Log), false
+        );
+        oakLog.set(PlaceableProperty{ 14 });
+        registry.RegisterItem(oakLog);
+
+        ir::ItemDef oakLeaves = ir::MakeItemDef(
+            15, "oak_leaves", "Oak Leaves", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Oak_Leaves), false
+        );
+        oakLeaves.set(PlaceableProperty{ 15 });
+        registry.RegisterItem(oakLeaves);
+
+        ir::ItemDef oakPlanks = ir::MakeItemDef(
+            16, "oak_planks", "Oak Planks", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Oak_Planks), false
+        );
+        oakPlanks.set(PlaceableProperty{ 16 });
+        registry.RegisterItem(oakPlanks);
+
+        ir::ItemDef spruceLog = ir::MakeItemDef(
+            17, "spruce_log", "Spruce Log", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Spruce_Log), false
+        );
+        spruceLog.set(PlaceableProperty{ 17 });
+        registry.RegisterItem(spruceLog);
+
+        ir::ItemDef spruceLeaves = ir::MakeItemDef(
+            18, "spruce_leaves", "Spruce Leaves", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Spruce_Leaves), false
+        );
+        spruceLeaves.set(PlaceableProperty{ 18 });
+        registry.RegisterItem(spruceLeaves);
+
+        ir::ItemDef sprucePlanks = ir::MakeItemDef(
+            19, "spruce_planks", "Spruce Planks", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Spruce_Planks), false
+        );
+        sprucePlanks.set(PlaceableProperty{ 19 });
+        registry.RegisterItem(sprucePlanks);
+    }
+
+    // === Utility Blocks ===
+    {
+        ir::ItemDef craftingTable = ir::MakeItemDef(
+            20, "crafting_table", "Crafting Table", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Crafting_Table), false
+        );
+        craftingTable.set(PlaceableProperty{ 20 });
+        registry.RegisterItem(craftingTable);
+
+        ir::ItemDef furnace = ir::MakeItemDef(
+            21, "furnace", "Furnace", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Furnace), false
+        );
+        furnace.set(PlaceableProperty{ 21 });
+        registry.RegisterItem(furnace);
+    }
+
+    // === Special Blocks ===
+    {
+        ir::ItemDef tnt = ir::MakeItemDef(
+            22, "tnt", "TNT", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::TNT), false
+        );
+        tnt.set(PlaceableProperty{ 22 });
+        registry.RegisterItem(tnt);
+
+        ir::ItemDef obsidian = ir::MakeItemDef(
+            23, "obsidian", "Obsidian", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Obsidian), false
+        );
+        obsidian.set(PlaceableProperty{ 23 });
+        registry.RegisterItem(obsidian);
+
+        ir::ItemDef mossyCobble = ir::MakeItemDef(
+            24, "mossy_cobblestone", "Mossy Cobblestone", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Mossy_Cobblestone), false
+        );
+        mossyCobble.set(PlaceableProperty{ 24 });
+        registry.RegisterItem(mossyCobble);
+
+        ir::ItemDef bookshelf = ir::MakeItemDef(
+            25, "bookshelf", "Bookshelf", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Bookshelf), false
+        );
+        bookshelf.set(PlaceableProperty{ 25 });
+        registry.RegisterItem(bookshelf);
+
+        ir::ItemDef wool = ir::MakeItemDef(
+            26, "wool", "Wool", 64, true,
+            BlockTextures::GetBlockMesh(BlockType::Wool), false
+        );
+        wool.set(PlaceableProperty{ 26 });
+        registry.RegisterItem(wool);
+    }
+
+    // === Resources / Materials ===
+    {
+        ir::ItemDef coal = ir::MakeItemDef(
+            263, "coal", "Coal", 64, true,
+            ir::GetQuadItemMesh(7, 10), true
+        );
+        registry.RegisterItem(coal);
+
+        ir::ItemDef diamond = ir::MakeItemDef(
+            264, "diamond", "Diamond", 64, true,
+            ir::GetQuadItemMesh(8, 10), true
+        );
+        registry.RegisterItem(diamond);
+
+        ir::ItemDef ironIngot = ir::MakeItemDef(
+            265, "iron_ingot", "Iron Ingot", 64, true,
+            ir::GetQuadItemMesh(9, 10), true
+        );
+        registry.RegisterItem(ironIngot);
+
+        ir::ItemDef goldIngot = ir::MakeItemDef(
+            266, "gold_ingot", "Gold Ingot", 64, true,
+            ir::GetQuadItemMesh(10, 10), true
+        );
+        registry.RegisterItem(goldIngot);
+
+        ir::ItemDef stick = ir::MakeItemDef(
+            280, "stick", "Stick", 64, true,
+            ir::GetQuadItemMesh(5, 9), true
+        );
+        registry.RegisterItem(stick);
+    }
+
+    // === Tools ===
+
+    // Swords
+    {
+        ir::ItemDef woodenSword = ir::MakeItemDef(
+            268, "wooden_sword", "Wooden Sword", 1, false,
+            ir::GetQuadItemMesh(0, 4), true
+        );
+        woodenSword.set(WeaponProperty{ 4.0f, 1.6f });
+        woodenSword.set(ToolProperty{ 2.0f, 1, 60 });
+        registry.RegisterItem(woodenSword);
+
+        ir::ItemDef stoneSword = ir::MakeItemDef(
+            272, "stone_sword", "Stone Sword", 1, false,
+            ir::GetQuadItemMesh(1, 4), true
+        );
+        stoneSword.set(WeaponProperty{ 5.0f, 1.6f });
+        stoneSword.set(ToolProperty{ 4.0f, 2, 132 });
+        registry.RegisterItem(stoneSword);
+
+        ir::ItemDef ironSword = ir::MakeItemDef(
+            267, "iron_sword", "Iron Sword", 1, false,
+            ir::GetQuadItemMesh(2, 4), true
+        );
+        ironSword.set(WeaponProperty{ 6.0f, 1.6f });
+        ironSword.set(ToolProperty{ 6.0f, 3, 251 });
+        registry.RegisterItem(ironSword);
+
+        ir::ItemDef diamondSword = ir::MakeItemDef(
+            276, "diamond_sword", "Diamond Sword", 1, false,
+            ir::GetQuadItemMesh(3, 4), true
+        );
+        diamondSword.set(WeaponProperty{ 7.0f, 1.6f });
+        diamondSword.set(ToolProperty{ 8.0f, 4, 1562 });
+        registry.RegisterItem(diamondSword);
+
+        ir::ItemDef goldSword = ir::MakeItemDef(
+            283, "gold_sword", "Golden Sword", 1, false,
+            ir::GetQuadItemMesh(4, 4), true
+        );
+        goldSword.set(WeaponProperty{ 4.0f, 1.6f });
+        goldSword.set(ToolProperty{ 12.0f, 1, 33 });
+        registry.RegisterItem(goldSword);
+    }
+
+    // Shovels
+    {
+        ir::ItemDef woodenShovel = ir::MakeItemDef(
+            269, "wooden_shovel", "Wooden Shovel", 1, false,
+            ir::GetQuadItemMesh(0, 5), true
+        );
+        woodenShovel.set(ToolProperty{ 2.0f, 1, 60 });
+        woodenShovel.set(WeaponProperty{ 1.0f, 1.6f });
+        registry.RegisterItem(woodenShovel);
+
+        ir::ItemDef stoneShovel = ir::MakeItemDef(
+            273, "stone_shovel", "Stone Shovel", 1, false,
+            ir::GetQuadItemMesh(1, 5), true
+        );
+        stoneShovel.set(ToolProperty{ 4.0f, 2, 132 });
+        stoneShovel.set(WeaponProperty{ 2.0f, 1.6f });
+        registry.RegisterItem(stoneShovel);
+
+        ir::ItemDef ironShovel = ir::MakeItemDef(
+            256, "iron_shovel", "Iron Shovel", 1, false,
+            ir::GetQuadItemMesh(2, 5), true
+        );
+        ironShovel.set(ToolProperty{ 6.0f, 3, 251 });
+        ironShovel.set(WeaponProperty{ 3.0f, 1.6f });
+        registry.RegisterItem(ironShovel);
+
+        ir::ItemDef diamondShovel = ir::MakeItemDef(
+            277, "diamond_shovel", "Diamond Shovel", 1, false,
+            ir::GetQuadItemMesh(3, 5), true
+        );
+        diamondShovel.set(ToolProperty{ 8.0f, 4, 1562 });
+        diamondShovel.set(WeaponProperty{ 4.0f, 1.6f });
+        registry.RegisterItem(diamondShovel);
+
+        ir::ItemDef goldShovel = ir::MakeItemDef(
+            284, "gold_shovel", "Golden Shovel", 1, false,
+            ir::GetQuadItemMesh(4, 5), true
+        );
+        goldShovel.set(ToolProperty{ 12.0f, 1, 33 });
+        goldShovel.set(WeaponProperty{ 1.0f, 1.6f });
+        registry.RegisterItem(goldShovel);
+    }
+
+    // Pickaxes
+    {
+        ir::ItemDef woodenAxe = ir::MakeItemDef(
+            271, "wooden_axe", "Wooden Axe", 1, false,
+            ir::GetQuadItemMesh(0, 7), true
+        );
+        woodenAxe.set(ToolProperty{ 2.0f, 1, 60 });
+        woodenAxe.set(WeaponProperty{ 3.0f, 1.6f });
+        registry.RegisterItem(woodenAxe);
+
+        ir::ItemDef stoneAxe = ir::MakeItemDef(
+            275, "stone_axe", "Stone Axe", 1, false,
+            ir::GetQuadItemMesh(1, 7), true
+        );
+        stoneAxe.set(ToolProperty{ 4.0f, 2, 132 });
+        stoneAxe.set(WeaponProperty{ 4.0f, 1.6f });
+        registry.RegisterItem(stoneAxe);
+
+        ir::ItemDef ironAxe = ir::MakeItemDef(
+            258, "iron_axe", "Iron Axe", 1, false,
+            ir::GetQuadItemMesh(2, 7), true
+        );
+        ironAxe.set(ToolProperty{ 6.0f, 3, 251 });
+        ironAxe.set(WeaponProperty{ 5.0f, 1.6f });
+        registry.RegisterItem(ironAxe);
+
+        ir::ItemDef diamondAxe = ir::MakeItemDef(
+            279, "diamond_axe", "Diamond Axe", 1, false,
+            ir::GetQuadItemMesh(3, 7), true
+        );
+        diamondAxe.set(ToolProperty{ 8.0f, 4, 1562 });
+        diamondAxe.set(WeaponProperty{ 6.0f, 1.6f });
+        registry.RegisterItem(diamondAxe);
+
+        ir::ItemDef goldAxe = ir::MakeItemDef(
+            286, "gold_axe", "Golden Axe", 1, false,
+            ir::GetQuadItemMesh(4, 7), true
+        );
+        goldAxe.set(ToolProperty{ 12.0f, 1, 33 });
+        goldAxe.set(WeaponProperty{ 3.0f, 1.6f });
+        registry.RegisterItem(goldAxe);
+    }
+
+    // Axes
+    {
+        ir::ItemDef woodenAxe = ir::MakeItemDef(
+            271, "wooden_axe", "Wooden Axe", 1, false,
+            ir::GetQuadItemMesh(0, 7), true
+        );
+        woodenAxe.set(ToolProperty{ 2.0f, 1, 60 });
+        woodenAxe.set(WeaponProperty{ 3.0f, 1.6f });
+        registry.RegisterItem(woodenAxe);
+
+        ir::ItemDef stoneAxe = ir::MakeItemDef(
+            275, "stone_axe", "Stone Axe", 1, false,
+            ir::GetQuadItemMesh(1, 7), true
+        );
+        stoneAxe.set(ToolProperty{ 4.0f, 2, 132 });
+        stoneAxe.set(WeaponProperty{ 4.0f, 1.6f });
+        registry.RegisterItem(stoneAxe);
+
+        ir::ItemDef ironAxe = ir::MakeItemDef(
+            258, "iron_axe", "Iron Axe", 1, false,
+            ir::GetQuadItemMesh(2, 7), true
+        );
+        ironAxe.set(ToolProperty{ 6.0f, 3, 251 });
+        ironAxe.set(WeaponProperty{ 5.0f, 1.6f });
+        registry.RegisterItem(ironAxe);
+
+        ir::ItemDef diamondAxe = ir::MakeItemDef(
+            279, "diamond_axe", "Diamond Axe", 1, false,
+            ir::GetQuadItemMesh(3, 7), true
+        );
+        diamondAxe.set(ToolProperty{ 8.0f, 4, 1562 });
+        diamondAxe.set(WeaponProperty{ 6.0f, 1.6f });
+        registry.RegisterItem(diamondAxe);
+
+        ir::ItemDef goldAxe = ir::MakeItemDef(
+            286, "gold_axe", "Golden Axe", 1, false,
+            ir::GetQuadItemMesh(4, 7), true
+        );
+        goldAxe.set(ToolProperty{ 12.0f, 1, 33 });
+        goldAxe.set(WeaponProperty{ 3.0f, 1.6f });
+        registry.RegisterItem(goldAxe);
+    }
+
 }

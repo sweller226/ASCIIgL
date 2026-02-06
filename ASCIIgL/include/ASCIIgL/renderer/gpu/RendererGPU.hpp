@@ -120,14 +120,6 @@ private:
     ComPtr<ID3D11RasterizerState> _rasterizerStates[8];
 
     // =========================================================================
-    // Static Quad Meshes (for 2D rendering)
-    // =========================================================================
-    Mesh* _quadMeshCCW = nullptr;
-    Mesh* _quadMeshCW = nullptr;
-    void InitializeQuadMeshes();
-    void CleanupQuadMeshes();
-
-    // =========================================================================
     // Staging Texture (for GPU->CPU framebuffer download)
     // =========================================================================
     ComPtr<ID3D11Texture2D> _stagingTexture;
@@ -174,7 +166,6 @@ private:
     // =========================================================================
     void DrawMesh(const Mesh* mesh);
     void DrawModel(const Model& ModelObj);
-    void Draw2DQuad(const Texture& tex);
 
     // =========================================================================
     // Frame Management

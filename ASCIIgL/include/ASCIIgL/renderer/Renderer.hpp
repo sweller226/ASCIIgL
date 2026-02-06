@@ -136,7 +136,6 @@ public:
     // =========================================================================
     void DrawMesh(const Mesh* mesh);
     void DrawModel(const Model& ModelObj);
-    void Draw2DQuad(const Texture& tex);
 
     // =========================================================================
     // Low-Level Drawing API - Primitives, No pipeline involved
