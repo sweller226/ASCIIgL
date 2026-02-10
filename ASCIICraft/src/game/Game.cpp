@@ -94,7 +94,7 @@ bool Game::Initialize() {
     );
 
     // choose your active palette
-    ASCIIgL::Palette gamePalette = grayPalette;
+    ASCIIgL::Palette gamePalette = silverBluePalette;
 
     ASCIIgL::Logger::Debug("Initializing screen...");
     if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
