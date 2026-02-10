@@ -19,7 +19,8 @@
 #include <ASCIICraft/ecs/systems/MovementSystem.hpp> 
 #include <ASCIICraft/ecs/systems/CameraSystem.hpp>
 #include <ASCIICraft/ecs/systems/RenderSystem.hpp> 
-#include <ASCIICraft/ecs/systems/PhysicsSystem.hpp> 
+#include <ASCIICraft/ecs/systems/PhysicsSystem.hpp>
+#include <ASCIICraft/ecs/systems/GUISystem.hpp> 
 
 // block update systems
 #include <ASCIICraft/ecs/systems/blockupdate/BlockUpdateSystem.hpp>
@@ -66,6 +67,7 @@ private:
     ecs::systems::CameraSystem cameraSystem;
     ecs::systems::PhysicsSystem physicsSystem;
     ecs::systems::RenderSystem renderSystem;
+    ecs::systems::GUISystem guiSystem;
 
     // block updates
     ecs::systems::BlockUpdateSystem blockUpdateSystem;

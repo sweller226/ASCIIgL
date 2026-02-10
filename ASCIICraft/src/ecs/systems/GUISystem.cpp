@@ -12,7 +12,8 @@
 #include <ASCIICraft/ecs/components/Renderable.hpp>
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 
-#include <ASCIICraft/ecs/data/ItemRegistry.hpp>
+#include <ASCIICraft/ecs/data/ItemIndex.hpp>
+#include <ASCIICraft/ecs/components/ItemVisual.hpp>
 
 #include <ASCIIgL/engine/InputManager.hpp>
 
@@ -73,6 +74,14 @@ void GUISystem::ProcessCursorInput() {
     
     auto& cursor = registry.get<GUICursor>(cursorEntity);
     auto& input = ASCIIgL::InputManager::GetInst();
+    
+    // Toggle inventory on 'E' — always active regardless of panel state
+    if (input.IsKeyPressed(ASCIIgL::Key::E)) {
+        TogglePanel("inventory");
+    }
+    
+    // All remaining cursor input only applies when a panel is open
+    if (!IsBlockingInput()) return;
     
     // Arrow key cursor movement
     if (input.IsKeyHeld(ASCIIgL::Key::LEFT)) {
@@ -324,9 +333,11 @@ void GUISystem::SyncInventorySlots() {
             // Could set to an empty slot mesh
         } else {
             // Could set to item icon mesh from registry
-            const auto* def = ecs::data::ItemRegistry::Instance().getById(itemStack.itemId);
-            if (def) {
-                // renderable.mesh = def->iconMesh; // Would need icon mesh in ItemDefinition
+            const auto& itemIndex = registry.ctx().get<ecs::data::ItemIndex>();
+            auto proto = itemIndex.Resolve(itemStack.itemId);
+            if (proto != entt::null) {
+                // auto* visual = registry.try_get<ItemVisual>(proto);
+                // renderable.mesh = visual->mesh; // Would set item icon mesh
             }
         }
     }

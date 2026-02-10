@@ -11,7 +11,10 @@
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 
 // Data
-#include <ASCIICraft/ecs/data/ItemRegistry.hpp>
+#include <ASCIICraft/ecs/data/ItemIndex.hpp>
+#include <ASCIICraft/ecs/components/ItemVisual.hpp>
+#include <ASCIICraft/ecs/components/Stackable.hpp>
+#include <ASCIICraft/ecs/components/ItemId.hpp>
 
 namespace ecs::factories {
 
@@ -46,12 +49,16 @@ entt::entity ItemFactory::createDroppedItem(
     registry.emplace<Gravity>(entity);
     registry.emplace<GroundPhysics>(entity);
 
-    // Rendering - try registry mesh if none provided
+    // Rendering - try prototype entity mesh if none provided
     std::shared_ptr<ASCIIgL::Mesh> finalMesh = mesh;
     if (!finalMesh) {
-        const auto* def = data::ItemRegistry::Instance().getById(itemStack.itemId);
-        if (def && def->mesh) {
-            finalMesh = def->mesh;
+        auto& itemIndex = registry.ctx().get<data::ItemIndex>();
+        auto proto = itemIndex.Resolve(itemStack.itemId);
+        if (proto != entt::null) {
+            auto* visual = registry.try_get<components::ItemVisual>(proto);
+            if (visual && visual->mesh) {
+                finalMesh = visual->mesh;
+            }
         }
     }
 
@@ -87,17 +94,24 @@ entt::entity ItemFactory::createDroppedItemById(
     const glm::vec3& velocity,
     const DroppedItemConfig& config
 ) {
-    // Look up item in registry
-    const auto* def = data::ItemRegistry::Instance().getById(itemId);
-    if (!def) {
+    // Look up item in ItemIndex
+    auto& itemIndex = registry.ctx().get<data::ItemIndex>();
+    auto proto = itemIndex.Resolve(itemId);
+    if (proto == entt::null) {
         return entt::null; // Item not registered
     }
 
-    // Create ItemStack from registry definition
-    components::ItemStack stack = components::ItemStack::fromRegistry(itemId, count);
+    // Create ItemStack from prototype definition
+    auto* stackable = registry.try_get<components::Stackable>(proto);
+    components::ItemStack stack;
+    stack.itemId = itemId;
+    stack.count = count;
+    stack.maxStackSize = stackable ? stackable->maxStackSize : 1;
 
-    // Use registry mesh
-    return createDroppedItem(stack, position, velocity, def->mesh, config);
+    // Use prototype mesh
+    auto* visual = registry.try_get<components::ItemVisual>(proto);
+    std::shared_ptr<ASCIIgL::Mesh> defMesh = (visual && visual->mesh) ? visual->mesh : nullptr;
+    return createDroppedItem(stack, position, velocity, defMesh, config);
 }
 
 entt::entity ItemFactory::createDroppedItemByName(
@@ -108,13 +122,20 @@ entt::entity ItemFactory::createDroppedItemByName(
     const DroppedItemConfig& config
 ) {
     // Look up item by name
-    const auto* def = data::ItemRegistry::Instance().getByName(itemName);
-    if (!def) {
+    auto& itemIndex = registry.ctx().get<data::ItemIndex>();
+    auto proto = itemIndex.Resolve(itemName);
+    if (proto == entt::null) {
         return entt::null; // Item not registered
     }
 
+    // Get numeric ID from prototype
+    auto* itemIdComp = registry.try_get<components::ItemId>(proto);
+    if (!itemIdComp) {
+        return entt::null;
+    }
+
     // Delegate to ID-based creation
-    return createDroppedItemById(def->id, count, position, velocity, config);
+    return createDroppedItemById(itemIdComp->numericId, count, position, velocity, config);
 }
 
 } // namespace ecs::factories

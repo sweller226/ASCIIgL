@@ -4,7 +4,7 @@
 #include <string>
 #include <unordered_map>
 
-#include <ASCIICraft/ecs/data/ItemRegistry.hpp>
+#include <entt/entt.hpp>
 
 #include <ASCIIgL/engine/Mesh.hpp>
 
@@ -25,7 +25,7 @@ struct ItemStack {
     /// Create an ItemStack from a registered item definition.
     /// Automatically sets maxStackSize from the registry.
     /// Returns an empty stack if the item ID is not registered.
-    static ItemStack fromRegistry(int id, int count = 1);
+    static ItemStack fromRegistry(entt::registry& reg, int id, int count = 1);
 };
 
 /// Pure data inventory component holding multiple item slots.

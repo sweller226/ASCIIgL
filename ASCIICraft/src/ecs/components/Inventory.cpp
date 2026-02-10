@@ -1,17 +1,20 @@
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 
-#include <ASCIICraft/ecs/data/ItemRegistry.hpp>
+#include <ASCIICraft/ecs/data/ItemIndex.hpp>
+#include <ASCIICraft/ecs/components/Stackable.hpp>
 
 namespace ecs::components {
 
-ItemStack ItemStack::fromRegistry(int id, int count) {
+ItemStack ItemStack::fromRegistry(entt::registry& reg, int id, int count) {
     ItemStack stack;
     
-    const auto* def = ecs::data::ItemRegistry::Instance().getById(id);
-    if (def) {
+    auto& itemIndex = reg.ctx().get<ecs::data::ItemIndex>();
+    auto proto = itemIndex.Resolve(id);
+    if (proto != entt::null) {
+        auto* stackable = reg.try_get<Stackable>(proto);
         stack.itemId = id;
         stack.count = count;
-        stack.maxStackSize = def->maxStackSize;
+        stack.maxStackSize = stackable ? stackable->maxStackSize : 1;
     }
     // If not found, returns empty stack (itemId = -1)
     
