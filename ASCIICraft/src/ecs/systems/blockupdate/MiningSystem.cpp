@@ -8,6 +8,7 @@
 #include <ASCIICraft/ecs/components/Reach.hpp>
 #include <ASCIICraft/events/BreakBlockEvent.hpp>
 #include <ASCIICraft/world/World.hpp>
+#include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
 
 namespace ecs::systems {
     
@@ -35,13 +36,12 @@ namespace ecs::systems {
         const auto& input = ASCIIgL::InputManager::GetInst();
 
         if (input.IsActionPressed("interact_left")) {
-            BreakBlockEvent event;
-
             auto rayCast = world->GetChunkManager()->BlockIntersectsView(head.lookDir, head.relativePos + position, reach.reach);
-            event.block = rayCast.first;
-            event.position = rayCast.second;
 
-            if (event.block) {
+            if (rayCast.first != blockstate::BlockStateRegistry::AIR_STATE_ID) {
+                BreakBlockEvent event;
+                event.stateId = rayCast.first;
+                event.position = rayCast.second;
                 eventBus.emit(event);
             }
         }

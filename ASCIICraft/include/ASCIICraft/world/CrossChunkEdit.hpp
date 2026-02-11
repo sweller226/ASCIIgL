@@ -1,7 +1,6 @@
 #pragma once
 
-#include <ASCIICraft/world/Block.hpp>
-
+#include <cstdint>
 #include <vector>
 
 #include <ASCIICraft/util/Util.hpp>
@@ -9,8 +8,8 @@
 constexpr int META_BUCKET_TIME_LIMIT = 300;
 
 struct CrossChunkEdit {
-  uint16_t packedPos;   // 4 bits x, 4 bits y, 4 bits z, 4 reserved (example)
-  Block block;
+  uint16_t packedPos;   // 4 bits x, 4 bits y, 4 bits z, 4 reserved
+  uint32_t stateId;     // blockstate ID
 
   void PackPos(int x, int y, int z) { 
     packedPos = (static_cast<uint16_t>(x) & 0xF) | ((static_cast<uint16_t>(y) & 0xF) << 4) | ((static_cast<uint16_t>(z) & 0xF) << 8);
@@ -28,6 +27,6 @@ struct MetaBucket {
     edits = {};
     lastTouched = NowSeconds();
   }
-  std::vector<CrossChunkEdit> edits; // small-vector optimized
-  uint32_t lastTouched; // timer so we know when to cache the meta bucket, I might just make it 5 minutes (300s)
+  std::vector<CrossChunkEdit> edits;
+  uint32_t lastTouched;
 };

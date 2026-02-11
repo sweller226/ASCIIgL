@@ -301,10 +301,7 @@ void RegionFile::parseChunkBlob(const std::vector<uint8_t>& blob, Chunk* out) {
         uint16_t idx = indices[i];
         if (idx >= palette.size()) throw std::runtime_error("palette index out of range");
         const SerializedBlock& sb = palette[idx];
-        Block b;
-        b.type = static_cast<BlockType>(sb.type);
-        b.metadata = sb.metadata;
-        out->SetBlockByIndex(static_cast<int>(i), b);
+        out->SetBlockStateByIndex(static_cast<int>(i), sb.stateId);
     }
 }
 
@@ -315,8 +312,8 @@ std::vector<uint8_t> RegionFile::buildChunkBlob(const Chunk* data) {
     std::vector<uint16_t> indices(Chunk::VOLUME);
 
     for (int i = 0; i < static_cast<int>(Chunk::VOLUME); ++i) {
-        Block b = data->GetBlockByIndex(i);
-        SerializedBlock key{ static_cast<uint8_t>(b.type), b.metadata };
+        uint32_t stateId = data->GetBlockStateByIndex(i);
+        SerializedBlock key{ stateId };
         auto it = paletteMap.find(key);
         if (it == paletteMap.end()) {
             uint16_t id = static_cast<uint16_t>(palette.size());
@@ -803,9 +800,8 @@ void RegionFile::parseMetaBlob(const std::vector<uint8_t>& blob, MetaBucket* out
         pos += perEntry;
 
         CrossChunkEdit e;
-        e.packedPos = se.pos;                 // native endianness
-        e.block.type = static_cast<BlockType>(se.type);
-        e.block.metadata = se.metadata;
+        e.packedPos = se.pos;
+        e.stateId = se.stateId;
 
         out->edits.push_back(e);
     }
@@ -834,9 +830,8 @@ std::vector<uint8_t> RegionFile::buildMetaBlob(const MetaBucket* data) {
         arr.reserve(count);
         for (const CrossChunkEdit& e : data->edits) {
             SerializedEdit se;
-            se.type = static_cast<uint8_t>(e.block.type);
-            se.metadata = e.block.metadata;
-            se.pos = e.packedPos; // native endianness
+            se.stateId = e.stateId;
+            se.pos = e.packedPos;
             arr.push_back(se);
         }
         append_raw(arr.data(), arr.size() * sizeof(SerializedEdit));

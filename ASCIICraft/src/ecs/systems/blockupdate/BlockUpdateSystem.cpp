@@ -2,10 +2,11 @@
 
 // events
 #include <ASCIICraft/events/BreakBlockEvent.hpp>
-#include <ASCIICraft/events/placeBlockEvent.hpp>
+#include <ASCIICraft/events/PlaceBlockEvent.hpp>
 
 // world and chunk
 #include <ASCIICraft/world/World.hpp>
+#include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
 
 namespace ecs::systems {
 
@@ -23,9 +24,9 @@ namespace ecs::systems {
         World* world = GetWorldPtr(m_registry);
 
         for (auto& e : events) {
-            if (!e.block) { continue; }
+            if (e.stateId == blockstate::BlockStateRegistry::AIR_STATE_ID) { continue; }
 
-            world->GetChunkManager()->SetBlock(e.position, Block(BlockType::Air));
+            world->GetChunkManager()->SetBlockState(e.position, blockstate::BlockStateRegistry::AIR_STATE_ID);
         }
     }
     
@@ -34,9 +35,9 @@ namespace ecs::systems {
         World* world = GetWorldPtr(m_registry);
 
         for (auto& e : events) {
-            if (e.block.type == BlockType::Air) { continue; }
+            if (e.stateId == blockstate::BlockStateRegistry::AIR_STATE_ID) { continue; }
 
-            world->GetChunkManager()->SetBlock(e.position, e.block);
+            world->GetChunkManager()->SetBlockState(e.position, e.stateId);
         }
     }
 }

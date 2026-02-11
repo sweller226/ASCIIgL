@@ -83,10 +83,12 @@ private:
     
     // Private methods
     bool LoadResources();
-    void InitializeContext();
+    void InitializeWorld();
+    void InitializePlayer();
     void InitializeSystems();
     void RenderPlaying();
     void InitializeItemDefinitions();
+    void InitializeBlockStates();
     
     // Constants
     static inline int SCREEN_WIDTH = 550;

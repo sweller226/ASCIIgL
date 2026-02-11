@@ -60,7 +60,7 @@ private:
     
     /// Binary search to find maximum safe movement distance before collision
     /// @return Maximum safe distance in range [0, maxDistance]
-    [[nodiscard]] float BinarySearchCollision(
+    float BinarySearchCollision(
         const glm::vec3 &startPos, 
         const glm::vec3 &direction,
         float maxDistance,

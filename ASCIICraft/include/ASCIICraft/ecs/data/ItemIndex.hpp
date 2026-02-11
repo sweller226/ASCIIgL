@@ -9,6 +9,7 @@
 #include <ASCIICraft/ecs/components/ItemProperties.hpp>
 
 namespace ASCIIgL { class Mesh; }
+namespace blockstate { struct BlockState; }
 
 namespace ecs::data {
 
@@ -72,6 +73,9 @@ public:
 
     /// Create a quad mesh for a 2D item icon from atlas grid coordinates.
     static std::shared_ptr<ASCIIgL::Mesh> GetQuadItemMesh(int x, int y, int atlas_size = 16);
+
+    /// Create a 3D block-preview cube mesh from a BSR BlockState's face texture layers.
+    static std::shared_ptr<ASCIIgL::Mesh> GetBlockMeshFromState(const blockstate::BlockState& state);
 
     /// Construct a registry name with "minecraft:" prefix.
     static std::string MakeItemName(const std::string& name);

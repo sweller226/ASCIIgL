@@ -3,24 +3,16 @@
 namespace ecs::factories::gui {
 
 entt::entity InventoryGUIFactory::Create(entt::registry& registry, entt::entity owner) {
-    return Create(registry, owner, Config{});
-}
+    // Static Minecraft inventory layout: 9 columns x 4 rows
+    constexpr int columns    = 9;
+    constexpr int rows       = 4;
+    constexpr float slotSize    = 32.0f;
+    constexpr float slotSpacing = 4.0f;
+    constexpr float padding     = 16.0f;
 
-entt::entity InventoryGUIFactory::Create(
-    entt::registry& registry,
-    entt::entity inventoryOwner,
-    const Config& config
-) {
-    currentConfig = config;
-    
     // Calculate panel size based on grid
-    float panelWidth = config.padding * 2 + 
-                       config.columns * config.slotSize + 
-                       (config.columns - 1) * config.slotSpacing;
-    
-    float panelHeight = config.padding * 2 + 
-                        config.rows * config.slotSize + 
-                        (config.rows - 1) * config.slotSpacing;
+    constexpr float panelWidth  = padding * 2 + columns * slotSize + (columns - 1) * slotSpacing;
+    constexpr float panelHeight = padding * 2 + rows * slotSize + (rows - 1) * slotSpacing;
 
     // Create root panel using base class helper
     entt::entity panel = CreatePanelEntity(
@@ -36,30 +28,30 @@ entt::entity InventoryGUIFactory::Create(
     );
 
     // Create slot entities using base class helper
-    for (int row = 0; row < config.rows; ++row) {
-        for (int col = 0; col < config.columns; ++col) {
-            int slotIndex = row * config.columns + col;
-            
+    for (int row = 0; row < rows; ++row) {
+        for (int col = 0; col < columns; ++col) {
+            int slotIndex = row * columns + col;
+
             // Calculate offset from panel center
-            float startX = -panelWidth / 2.0f + config.padding + config.slotSize / 2.0f;
-            float startY = -panelHeight / 2.0f + config.padding + config.slotSize / 2.0f;
-            
-            float offsetX = startX + col * (config.slotSize + config.slotSpacing);
-            float offsetY = startY + row * (config.slotSize + config.slotSpacing);
-            
+            float startX = -panelWidth / 2.0f + padding + slotSize / 2.0f;
+            float startY = -panelHeight / 2.0f + padding + slotSize / 2.0f;
+
+            float offsetX = startX + col * (slotSize + slotSpacing);
+            float offsetY = startY + row * (slotSize + slotSpacing);
+
             CreateSlotEntity(
                 registry,
                 panel,          // parentPanel
                 slotIndex,
-                inventoryOwner,
+                owner,
                 0.5f, 0.5f,     // anchor
                 offsetX, offsetY,
-                config.slotSize,
+                slotSize,
                 101             // layer (above panel)
             );
         }
     }
-    
+
     return panel;
 }
 

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ASCIICraft/world/Block.hpp>
+#include <cstdint>
 #include <ASCIICraft/world/Coords.hpp>
 
 struct PlaceBlockEvent {
-    Block block;
+    uint32_t stateId;    // blockstate to place
     WorldCoord position;
 };

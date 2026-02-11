@@ -4,30 +4,31 @@
 #include <memory>
 #include <functional>
 #include <unordered_set>
+#include <cstdint>
 
 #include <glm/glm.hpp>
 
+#include <entt/entt.hpp>
+
 #include <ASCIICraft/world/Chunk.hpp>
-#include <ASCIICraft/world/Block.hpp>
 
 class FastNoiseLite;
 
 class TerrainGenerator {
 public:
-    // Callback types for World operations
-    using SetBlockCallback = std::function<void(int, int, int, const Block&)>;
+    // Callback types for World operations (uses blockstate IDs)
+    using SetBlockCallback = std::function<void(int, int, int, uint32_t)>;
     
-    TerrainGenerator();
+    TerrainGenerator(entt::registry &registry);
     ~TerrainGenerator();
     
     void GenerateChunk(Chunk* chunk, 
                       SetBlockCallback setBlockQuiet = nullptr);
-    
-    // Test/debug generation methods
-    void GenerateGrassLayerChunk(Chunk* chunk);
-    void GenerateOneBlockGrassChunk(Chunk* chunk);
 
 private:
+    entt::registry &m_registry;
+    blockstate::BlockStateRegistry* m_bsr;
+
     struct TerrainParams {
         int BASE_HEIGHT, MIN_TERRAIN_HEIGHT, MAX_TERRAIN_HEIGHT, DIRT_DEPTH;
         float AMPLITUDE;
@@ -42,7 +43,7 @@ private:
     std::unique_ptr<FastNoiseLite> caveNoise1;
     std::unique_ptr<FastNoiseLite> caveNoise2;
     std::unique_ptr<FastNoiseLite> treeNoise;
-    std::unique_ptr<FastNoiseLite> forestDensityNoise;  // For forest regions
+    std::unique_ptr<FastNoiseLite> forestDensityNoise;
 
     bool noiseInitialized;
 
@@ -57,14 +58,14 @@ private:
     
     // Helper functions
     glm::ivec3 LocalToWorldCoord(const ChunkCoord& coord, int localX, int localZ) const;
-    BlockType GetBlockTypeAt(int worldX, int worldY, int worldZ, int terrainHeight,
+    uint32_t GetBlockStateAt(int worldX, int worldY, int worldZ, int terrainHeight,
                             const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions);
     
     // Terrain calculation
     int CalculateTerrainHeight(int worldX, int worldZ, const TerrainParams& params) const;
     
     bool ShouldCarveCave(int worldX, int worldY, int worldZ, int depthFromSurface, const TerrainParams& params) const;
-    BlockType DetermineBlockType(int worldX, int worldY, int worldZ, int depthFromSurface, const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions);
+    uint32_t DetermineBlockState(int worldX, int worldY, int worldZ, int depthFromSurface, const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions);
     void CheckTreePlacement(int worldX, int worldY, int worldZ, const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions) const;
 
     void GenerateTree(int worldX, int worldY, int worldZ, SetBlockCallback setBlockQuiet);

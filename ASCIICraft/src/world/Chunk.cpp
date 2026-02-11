@@ -7,6 +7,9 @@
 #include <ASCIIgL/renderer/VertFormat.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/engine/TextureLibrary.hpp>
+
+
 
 // Chunk constructor
 Chunk::Chunk(const ChunkCoord& coord) 
@@ -15,8 +18,8 @@ Chunk::Chunk(const ChunkCoord& coord)
     , dirty(true)
     , hasMesh(false) {
     
-    // Initialize all blocks to air
-    std::fill(blocks, blocks + VOLUME, Block(BlockType::Air));
+    // Initialize all blocks to air (stateId 0)
+    std::fill(blocks, blocks + VOLUME, blockstate::BlockStateRegistry::AIR_STATE_ID);
     
     // Initialize neighbor pointers to nullptr
     for (int i = 0; i < 6; ++i) {
@@ -25,28 +28,33 @@ Chunk::Chunk(const ChunkCoord& coord)
 }
 
 // Block access methods
-Block& Chunk::GetBlock(int x, int y, int z) {
+uint32_t Chunk::GetBlockState(int x, int y, int z) const {
     assert(IsValidBlockCoord(x, y, z) && "Block coordinates out of range");
     return blocks[GetBlockIndex(x, y, z)];
 }
 
-const Block& Chunk::GetBlock(int x, int y, int z) const {
-    assert(IsValidBlockCoord(x, y, z) && "Block coordinates out of range");
-    return blocks[GetBlockIndex(x, y, z)];
-}
-
-void Chunk::SetBlock(int x, int y, int z, const Block& block) {
+void Chunk::SetBlockState(int x, int y, int z, uint32_t stateId) {
     assert(IsValidBlockCoord(x, y, z) && "Block coordinates out of range");
     
     int index = GetBlockIndex(x, y, z);
-    if (blocks[index].type != block.type || blocks[index].metadata != block.metadata) {
-        blocks[index] = block;
+    if (blocks[index] != stateId) {
+        blocks[index] = stateId;
         InvalidateMesh();
     }
 }
 
+uint32_t Chunk::GetBlockStateByIndex(int i) const {
+    if (0 <= i && i < VOLUME) { return blocks[i]; }
+    ASCIIgL::Logger::Warning("GetBlockStateByIndex: index out of bounds");
+    return blockstate::BlockStateRegistry::AIR_STATE_ID;
+}
+
+void Chunk::SetBlockStateByIndex(int i, uint32_t stateId) {
+    if (0 <= i && i < VOLUME) { blocks[i] = stateId; }
+}
+
 // Mesh generation
-void Chunk::GenerateMesh() {
+void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
     if (!generated) {
         return; // Can't generate mesh for ungenerated chunk
     }
@@ -55,14 +63,15 @@ void Chunk::GenerateMesh() {
     std::vector<int> indices;
 
     // Get the block texture array
-    if (!Block::HasTextureArray()) {
+    auto blockTexturesPtr = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
+    if (!blockTexturesPtr) {
         ASCIIgL::Logger::Warning("No texture array available for chunk mesh generation");
         return;
     }
 
     ASCIIgL::Logger::Debug("Generating mesh for chunk at (" + std::to_string(coord.x) + ", " + std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
     
-    ASCIIgL::TextureArray* blockTextures = Block::GetTextureArray();
+    ASCIIgL::TextureArray* blockTextures = blockTexturesPtr.get();
 
     // Face normal vectors for cube faces
     const glm::vec3 faceNormals[6] = {
@@ -72,42 +81,6 @@ void Chunk::GenerateMesh() {
         glm::vec3(0, 0, -1),  // South (Back)
         glm::vec3(1, 0, 0),   // East (Right)
         glm::vec3(-1, 0, 0)   // West (Left)
-    };
-    
-    // Face vertex offsets for cube
-    // Non-indexed: each face is 2 triangles = 6 vertices
-    // Indexed: each face is 4 unique vertices
-    const glm::vec3 faceVertices[6][6] = {
-        // Top face (Y+)
-        {
-            glm::vec3(0, 1, 0), glm::vec3(0, 1, 1), glm::vec3(1, 1, 1),
-            glm::vec3(0, 1, 0), glm::vec3(1, 1, 1), glm::vec3(1, 1, 0)
-        },
-        // Bottom face (Y-)
-        {
-            glm::vec3(0, 0, 1), glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
-            glm::vec3(0, 0, 1), glm::vec3(1, 0, 0), glm::vec3(1, 0, 1)
-        },
-        // North face (Z+)
-        {
-            glm::vec3(0, 0, 1), glm::vec3(1, 0, 1), glm::vec3(1, 1, 1),
-            glm::vec3(0, 0, 1), glm::vec3(1, 1, 1), glm::vec3(0, 1, 1)
-        },
-        // South face (Z-)
-        {
-            glm::vec3(1, 0, 0), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0),
-            glm::vec3(1, 0, 0), glm::vec3(0, 1, 0), glm::vec3(1, 1, 0)
-        },
-        // East face (X+)
-        {
-            glm::vec3(1, 0, 1), glm::vec3(1, 0, 0), glm::vec3(1, 1, 0),
-            glm::vec3(1, 0, 1), glm::vec3(1, 1, 0), glm::vec3(1, 1, 1)
-        },
-        // West face (X-)
-        {
-            glm::vec3(0, 0, 0), glm::vec3(0, 0, 1), glm::vec3(0, 1, 1),
-            glm::vec3(0, 0, 0), glm::vec3(0, 1, 1), glm::vec3(0, 1, 0)
-        }
     };
     
     // For indexed rendering, we need 4 unique vertices per face
@@ -126,12 +99,6 @@ void Chunk::GenerateMesh() {
         { glm::vec3(0, 0, 0), glm::vec3(0, 0, 1), glm::vec3(0, 1, 1), glm::vec3(0, 1, 0) }
     };
     
-    // UV coordinates for face (2 triangles = 6 vertices)
-    const glm::vec2 faceUVs[6] = {
-        glm::vec2(0, 0), glm::vec2(1, 0), glm::vec2(1, 1),
-        glm::vec2(0, 0), glm::vec2(1, 1), glm::vec2(0, 1)
-    };
-    
     // UV coordinates for indexed rendering (4 corners)
     const glm::vec2 faceUVsIndexed[4] = {
         glm::vec2(0, 0), glm::vec2(1, 0), glm::vec2(1, 1), glm::vec2(0, 1)
@@ -144,10 +111,11 @@ void Chunk::GenerateMesh() {
     for (int x = 0; x < SIZE; x++) {
         for (int y = 0; y < SIZE; y++) {
             for (int z = 0; z < SIZE; z++) {
-                const Block& block = GetBlock(x, y, z);
+                uint32_t stateId = GetBlockState(x, y, z);
+                const auto& state = bsr.GetState(stateId);
                 
-                if (!block.IsSolid()) {
-                    continue; // Skip air blocks
+                if (!state.isSolid) {
+                    continue; // Skip air / non-solid blocks
                 }
                 
                 // Check each face of the block
@@ -169,7 +137,8 @@ void Chunk::GenerateMesh() {
                     // Check if neighbor is air (either in this chunk or neighboring chunk)
                     if (IsValidBlockCoord(neighborX, neighborY, neighborZ)) {
                         // Neighbor is within this chunk
-                        shouldRenderFace = !GetBlock(neighborX, neighborY, neighborZ).IsSolid();
+                        uint32_t neighborStateId = GetBlockState(neighborX, neighborY, neighborZ);
+                        shouldRenderFace = !bsr.GetState(neighborStateId).isSolid;
                     } else {
                         // Neighbor is in adjacent chunk - check neighboring chunk for face culling
                         shouldRenderFace = true; // Default to render if we can't determine neighbor state
@@ -204,8 +173,8 @@ void Chunk::GenerateMesh() {
                             // CRITICAL: Check for null pointer before accessing neighbor
                             if (neighborChunk != nullptr && neighborChunk->IsGenerated()) {
                                 // Check if the neighbor block in adjacent chunk is solid
-                                const Block& neighborBlock = neighborChunk->GetBlock(localX, localY, localZ);
-                                shouldRenderFace = !neighborBlock.IsSolid();
+                                uint32_t neighborStateId = neighborChunk->GetBlockState(localX, localY, localZ);
+                                shouldRenderFace = !bsr.GetState(neighborStateId).isSolid;
                             }
                             // If neighbor is null or not generated, render the face (conservative approach)
                         }
@@ -215,8 +184,8 @@ void Chunk::GenerateMesh() {
                         continue;
                     }
                     
-                    // Get texture layer index for this block face
-                    int textureLayer = block.GetTextureLayer(static_cast<BlockFace>(face));
+                    // Get texture layer index for this block face from blockstate
+                    int textureLayer = state.faceTextureLayers[face];
                     
                     // Indexed rendering: generate 4 unique vertices
                     int baseVertexIndex = vertices.size() / ASCIIgL::VertFormats::PosUVLayer().GetStride();
@@ -330,22 +299,4 @@ void Chunk::Render() const {
     
     // Use DrawMesh instead of batching - leverages GPU mesh caching
     ASCIIgL::Renderer::GetInst().DrawMesh(mesh.get());
-}
-
-Block& Chunk::GetBlockByIndex(int i) {
-    static Block s_airBlock(BlockType::Air);  // Static fallback for out-of-bounds
-    if (0 <= i && i < VOLUME) { return blocks[i]; }
-    ASCIIgL::Logger::Warning("GetBlockByIndex: index out of bounds");
-    return s_airBlock;
-}
-
-const Block& Chunk::GetBlockByIndex(int i) const {
-    static const Block s_airBlock(BlockType::Air);  // Static fallback for out-of-bounds
-    if (0 <= i && i < VOLUME) { return blocks[i]; }
-    ASCIIgL::Logger::Warning("GetBlockByIndex: index out of bounds");
-    return s_airBlock;
-}
-
-void Chunk::SetBlockByIndex(int i, const Block& block) {
-    if (0 <= i && i < VOLUME) { blocks[i] = block; }
 }

@@ -8,6 +8,7 @@
 #include <ASCIICraft/ecs/components/Reach.hpp>
 #include <ASCIICraft/events/PlaceBlockEvent.hpp>
 #include <ASCIICraft/world/World.hpp>
+#include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
 
 namespace ecs::systems {
     
@@ -33,13 +34,16 @@ namespace ecs::systems {
         const auto& input = ASCIIgL::InputManager::GetInst();
 
         if (input.IsActionPressed("interact_right")) {
-            PlaceBlockEvent event;
-
             auto rayCast = world->GetChunkManager()->BlockIntersectsViewForPlacement(head.lookDir, head.relativePos + position, reach.reach);
-            event.block = Block(BlockType::Bedrock);
-            event.position = rayCast.second;
 
             if (rayCast.first) {
+                // Get the default state for bedrock from the registry
+                auto* bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
+                if (!bsr) return;
+
+                PlaceBlockEvent event;
+                event.stateId = bsr->GetDefaultState(bsr->GetTypeId("bedrock"));
+                event.position = rayCast.second;
                 eventBus.emit(event);
             }
         }
