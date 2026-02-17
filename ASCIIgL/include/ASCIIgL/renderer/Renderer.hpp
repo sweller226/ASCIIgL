@@ -29,6 +29,7 @@
 
 #include <ASCIIgL/renderer/Palette.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
+#include <ASCIIgL/renderer/Shader.hpp>  // for UniformValue, UniformDescriptor
 
 namespace ASCIIgL {
 
@@ -52,6 +53,24 @@ class Renderer
     friend class Shader;
     friend class ShaderProgram;
     friend class Material;
+
+public:
+    // =========================================================================
+    // Draw Call Queue Types
+    // =========================================================================
+    struct UniformOverride {
+        const UniformDescriptor* desc = nullptr;  // layout metadata (offset/size/type)
+        UniformValue             value;          // concrete value to write
+    };
+
+    struct DrawCall {
+        const Mesh*   mesh        = nullptr;
+        Material*     material    = nullptr;   // non-owning
+        int           layer       = 0;
+        bool          transparent = false;     // false = opaque pass, true = transparent pass
+        float         sortKey     = 0.0f;      // used for transparent sorting (e.g. depth or layer)
+        std::vector<UniformOverride> overrides; // per-draw uniform overrides
+    };
 
 private:
     bool _initialized = false;
@@ -227,6 +246,20 @@ private:
     // Frame Management (Internal)
     // =========================================================================
     void DownloadFramebuffer();
+    void BeginColBuffFrame();
+    void EndColBuffFrame();
+
+    // Immediate GPU draw primitive, used internally by the draw-call system.
+    void DrawMesh(const Mesh* mesh);
+
+    // =========================================================================
+    // Draw Call Queues
+    // =========================================================================
+    std::vector<DrawCall> _opaqueDraws;
+    std::vector<DrawCall> _transparentDraws;
+    void SortOpaqueDraws();
+    void SortTransparentDraws();
+    void ExecuteDrawList(const std::vector<DrawCall>& list);
 
 public:
     // =========================================================================
@@ -244,10 +277,15 @@ public:
     bool IsInitialized() const;
 
     // =========================================================================
-    // Drawing API
+    // Drawing API (queued)
     // =========================================================================
-    void DrawMesh(const Mesh* mesh);
-    void DrawModel(const Model& ModelObj);
+    // Enqueue all meshes of a model as draw calls using the given material and MVP.
+    void DrawModel(const Model& model,
+                   Material* material,
+                   const glm::mat4& mvp,
+                   int layer,
+                   bool transparent,
+                   float sortKey = 0.0f);
 
     // =========================================================================
     // Low-Level Drawing API - Primitives, No pipeline involved
@@ -301,11 +339,6 @@ public:
     // =========================================================================
     // Buffer and Diagnostics
     // =========================================================================
-    void BeginColBuffFrame();
-    void EndColBuffFrame();
-    void TestRenderFont();
-    void TestRenderColorDiscrete();
-    void TestRenderColorContinuous();
     std::vector<glm::ivec4>& GetColorBuffer();
 
     // =========================================================================
@@ -347,6 +380,18 @@ public:
 
     /// Set alpha blending on/off. Use true for 2D GUI so transparent PNG regions blend correctly.
     void SetBlendEnabled(bool enabled);
+
+    // =========================================================================
+    // Draw Call Queue API / GPU Frame
+    // =========================================================================
+    // Clears internal draw queues and begins the GPU render pass for this frame.
+    void BeginGpuFrame();
+    // Enqueue a draw call; actual GPU draws are issued during FlushDraws().
+    void SubmitDraw(const DrawCall& call);
+    // Execute queued draws in two passes: opaque then transparent.
+    void FlushDraws();
+    // End the GPU render pass for this frame (resolve + download).
+    void EndGpuFrame();
 };
 
 } // namespace ASCIIgL

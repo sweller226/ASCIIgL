@@ -2,7 +2,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
-#include <ASCIIgL/renderer/Renderer.hpp>
+#include <ASCIIgL/renderer/Shader.hpp>   // UniformDescriptor, UniformValue
 #include <ASCIIgL/util/Logger.hpp>
 
 namespace ecs::systems {
@@ -91,57 +91,52 @@ namespace ecs::systems {
     }
 
     void RenderSystem::BatchAndDraw() {
-        const ASCIIgL::Mesh* lastMesh = nullptr;
-        const ASCIIgL::Material* lastMaterial = nullptr;
-        std::string lastMaterialName;
-
-        // Draw 3D first so that 2D GUI is drawn on top (order is critical for visibility).
+        // 3D: enqueue as opaque draws
         for (const auto& item : m_drawList3D) {
             const ASCIIgL::Mesh* meshPtr = item.mesh.get();
-            
+            if (!meshPtr) continue;
+
             // Get material: use item.material if provided, else fall back to materialName lookup
             std::shared_ptr<ASCIIgL::Material> mat = item.material;
             if (!mat && !item.materialName.empty()) {
                 mat = ASCIIgL::MaterialLibrary::GetInst().Get(item.materialName);
             }
             if (!mat) mat = ASCIIgL::MaterialLibrary::GetInst().GetDefault();
+            if (!mat) continue;
 
-            bool materialChanged = (mat.get() != lastMaterial);
-            if (materialChanged) {
-                lastMaterial = mat.get();
-                lastMaterialName = item.materialName;
-            }
+            ASCIIgL::Renderer::DrawCall dc;
+            dc.mesh        = meshPtr;
+            dc.material    = mat.get();
+            dc.layer       = item.layer;
+            dc.transparent = false;       // world geometry is opaque by default
+            dc.sortKey     = 0.0f;        // not needed for opaque
 
-            // Set MVP on material (changes every item)
+            // Compute MVP for 3D
             glm::mat4 mvp = glm::mat4(1.0f);
             if (m_active3DCamera) {
-                mvp = m_active3DCamera->camera.proj * m_active3DCamera->camera.view * item.modelMatrix;
-            }
-            mat->SetMatrix4("mvp", mvp);
-
-            // BindMaterial uploads constants, so only call UploadMaterialConstants if material didn't change
-            // (MVP changes every item, so we always need to upload after setting it)
-            if (materialChanged) {
-                ASCIIgL::Renderer::GetInst().BindMaterial(mat.get());
-                lastMesh = meshPtr;
-            } else {
-                // Material already bound, just upload updated constants (MVP)
-                ASCIIgL::Renderer::GetInst().UploadMaterialConstants(mat.get());
+                mvp = m_active3DCamera->camera.proj *
+                      m_active3DCamera->camera.view *
+                      item.modelMatrix;
             }
 
-            ASCIIgL::Renderer::GetInst().DrawMesh(meshPtr);
+            // Per-draw uniform override for MVP
+            if (const ASCIIgL::UniformDescriptor* mvpDesc = mat->GetUniformDescriptor("mvp")) {
+                ASCIIgL::Renderer::UniformOverride ov;
+                ov.desc  = mvpDesc;
+                ov.value = ASCIIgL::UniformValue(mvp);
+                dc.overrides.push_back(std::move(ov));
+            }
+
+            ASCIIgL::Renderer::GetInst().SubmitDraw(dc);
         }
 
-        // Then 2D (depth test and blend remain on for both 3D and 2D).
-        lastMesh = nullptr;
-        lastMaterial = nullptr;
-        lastMaterialName.clear();
-        
+        // 2D GUI: enqueue as transparent draws so they are rendered after opaque
         if (!m_active2DCamera && !m_drawList2D.empty()) {
             ASCIIgL::Logger::Warning("RenderSystem: drawing 2D with null camera (GUI may be wrong)");
         }
         for (const auto& item : m_drawList2D) {
             const ASCIIgL::Mesh* meshPtr = item.mesh.get();
+            if (!meshPtr) continue;
             
             // Get material: use item.material if provided, else fall back to materialName lookup
             std::shared_ptr<ASCIIgL::Material> mat = item.material;
@@ -149,31 +144,34 @@ namespace ecs::systems {
                 mat = ASCIIgL::MaterialLibrary::GetInst().Get(item.materialName);
             }
             if (!mat) mat = ASCIIgL::MaterialLibrary::GetInst().GetDefault();
+            if (!mat) continue;
 
-            bool materialChanged = (mat.get() != lastMaterial);
-            if (materialChanged) {
-                lastMaterial = mat.get();
-                lastMaterialName = item.materialName;
-            }
+            ASCIIgL::Renderer::DrawCall dc;
+            dc.mesh        = meshPtr;
+            dc.material    = mat.get();
+            dc.layer       = item.layer;
+            dc.transparent = true;        // GUI/2D treated as transparent pass
 
-            // Set MVP on material (changes every item)
+            // For now, use layer as sort key for 2D ordering
+            dc.sortKey = static_cast<float>(item.layer);
+
+            // Compute MVP for 2D
             glm::mat4 mvp = glm::mat4(1.0f);
             if (m_active2DCamera) {
-                mvp = m_active2DCamera->proj * m_active2DCamera->view * item.modelMatrix;
-            }
-            mat->SetMatrix4("mvp", mvp);
-
-            // BindMaterial uploads constants, so only call UploadMaterialConstants if material didn't change
-            // (MVP changes every item, so we always need to upload after setting it)
-            if (materialChanged) {
-                ASCIIgL::Renderer::GetInst().BindMaterial(mat.get());
-                lastMesh = meshPtr;
-            } else {
-                // Material already bound, just upload updated constants (MVP)
-                ASCIIgL::Renderer::GetInst().UploadMaterialConstants(mat.get());
+                mvp = m_active2DCamera->proj *
+                      m_active2DCamera->view *
+                      item.modelMatrix;
             }
 
-            ASCIIgL::Renderer::GetInst().DrawMesh(meshPtr);
+            // Per-draw uniform override for MVP
+            if (const ASCIIgL::UniformDescriptor* mvpDesc = mat->GetUniformDescriptor("mvp")) {
+                ASCIIgL::Renderer::UniformOverride ov;
+                ov.desc  = mvpDesc;
+                ov.value = ASCIIgL::UniformValue(mvp);
+                dc.overrides.push_back(std::move(ov));
+            }
+
+            ASCIIgL::Renderer::GetInst().SubmitDraw(dc);
         }
     }
 

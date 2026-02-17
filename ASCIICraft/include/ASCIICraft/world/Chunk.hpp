@@ -37,12 +37,39 @@ public:
     
     // Mesh generation for rendering (needs registry for texture/solidity lookups)
     void GenerateMesh(const blockstate::BlockStateRegistry& bsr);
-    bool HasMesh() const { return hasMesh; }
-    ASCIIgL::Mesh* GetMesh() const { return mesh.get(); }
-    void InvalidateMesh() { hasMesh = false; dirty = true; }
-    
-    // Rendering
-    void Render() const;
+
+    // Mesh access
+    bool HasOpaqueMesh() const { return hasOpaqueMesh; }
+    bool HasTransparentMesh() const {
+        for (bool h : hasTransparentMesh) {
+            if (h) return true;
+        }
+        return false;
+    }
+    bool HasMesh() const { return HasOpaqueMesh() || HasTransparentMesh(); }
+
+    ASCIIgL::Mesh* GetOpaqueMesh() const { return opaqueMesh.get(); }
+
+    // Transparent meshes are pre-baked for multiple view directions (variants).
+    static constexpr int TRANSPARENT_VARIANT_COUNT = 6; // +X, -X, +Y, -Y, +Z, -Z
+
+    bool HasTransparentMeshVariant(int idx) const {
+        return (idx >= 0 && idx < TRANSPARENT_VARIANT_COUNT) ? hasTransparentMesh[idx] : false;
+    }
+
+    ASCIIgL::Mesh* GetTransparentMeshVariant(int idx) const {
+        return (idx >= 0 && idx < TRANSPARENT_VARIANT_COUNT) ? transparentMeshes[idx].get() : nullptr;
+    }
+
+    void InvalidateMesh() {
+        hasOpaqueMesh = false;
+        opaqueMesh.reset();
+        for (int i = 0; i < TRANSPARENT_VARIANT_COUNT; ++i) {
+            hasTransparentMesh[i] = false;
+            transparentMeshes[i].reset();
+        }
+        dirty = true;
+    }
     
     // Neighbor access for mesh generation
     void SetNeighbor(int direction, Chunk* neighbor);
@@ -61,10 +88,13 @@ private:
     
     bool generated;
     bool dirty;
-    bool hasMesh;
-    
-    // Mesh data for rendering
-    std::unique_ptr<ASCIIgL::Mesh> mesh;
+
+    // Mesh data for rendering (split into opaque and multiple transparent variants)
+    bool hasOpaqueMesh;
+    bool hasTransparentMesh[TRANSPARENT_VARIANT_COUNT];
+
+    std::unique_ptr<ASCIIgL::Mesh> opaqueMesh;
+    std::unique_ptr<ASCIIgL::Mesh> transparentMeshes[TRANSPARENT_VARIANT_COUNT];
     
     // Neighbor chunks (6 directions: +X, -X, +Y, -Y, +Z, -Z)
     Chunk* neighbors[6];

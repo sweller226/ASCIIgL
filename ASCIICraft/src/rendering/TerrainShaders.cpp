@@ -63,6 +63,10 @@ float4 main(PS_INPUT input) : SV_TARGET
     // Sample the texture array
     float4 texColor = blockTextures.Sample(samplerState, input.texcoord);
     
+    // Binary alpha test (cutout): discard pixels below threshold (e.g. leaves, grass)
+    static const float ALPHA_CUTOFF = 0.5;
+    clip(texColor.a - ALPHA_CUTOFF);
+    
     // Compute luminance using standard coefficients (Rec. 709)
     float luminance = dot(texColor.rgb, float3(0.2126, 0.7152, 0.0722));
     

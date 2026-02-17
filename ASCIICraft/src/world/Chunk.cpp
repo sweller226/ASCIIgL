@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <numeric>  // std::iota
 
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
@@ -16,11 +17,16 @@ Chunk::Chunk(const ChunkCoord& coord)
     : coord(coord)
     , generated(false)
     , dirty(true)
-    , hasMesh(false) {
+    , hasOpaqueMesh(false) {
     
     // Initialize all blocks to air (stateId 0)
     std::fill(blocks, blocks + VOLUME, blockstate::BlockStateRegistry::AIR_STATE_ID);
     
+    // Initialize transparent mesh flags
+    for (int i = 0; i < TRANSPARENT_VARIANT_COUNT; ++i) {
+        hasTransparentMesh[i] = false;
+    }
+
     // Initialize neighbor pointers to nullptr
     for (int i = 0; i < 6; ++i) {
         neighbors[i] = nullptr;
@@ -53,14 +59,22 @@ void Chunk::SetBlockStateByIndex(int i, uint32_t stateId) {
     if (0 <= i && i < VOLUME) { blocks[i] = stateId; }
 }
 
-// Mesh generation
+    // Mesh generation
 void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
     if (!generated) {
         return; // Can't generate mesh for ungenerated chunk
     }
 
-    std::vector<std::byte> vertices;
-    std::vector<int> indices;
+    // Separate geometry buffers for opaque faces and collect transparent faces for multi-view variants
+    std::vector<std::byte> verticesOpaque;
+    std::vector<int> indicesOpaque;
+
+    struct TransparentFace {
+        int x, y, z;
+        int faceIndex;    // 0..5
+        int textureLayer; // atlas layer for this face
+    };
+    std::vector<TransparentFace> transparentFaces;
 
     // Get the block texture array
     auto blockTexturesPtr = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
@@ -117,6 +131,9 @@ void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
                 if (!state.isSolid) {
                     continue; // Skip air / non-solid blocks
                 }
+
+                const auto renderMode = state.renderMode;
+                const bool blockIsTranslucent = (renderMode == blockstate::RenderMode::Translucent);
                 
                 // Check each face of the block
                 for (int face = 0; face < 6; face++) {
@@ -134,11 +151,16 @@ void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
                         case 5: neighborX--; break; // West
                     }
                     
-                    // Check if neighbor is air (either in this chunk or neighboring chunk)
+                    // Check if neighbor is air / non-occluding (either in this chunk or neighboring chunk)
                     if (IsValidBlockCoord(neighborX, neighborY, neighborZ)) {
                         // Neighbor is within this chunk
                         uint32_t neighborStateId = GetBlockState(neighborX, neighborY, neighborZ);
-                        shouldRenderFace = !bsr.GetState(neighborStateId).isSolid;
+                        const auto& neighborState = bsr.GetState(neighborStateId);
+                        // Only fully opaque neighbors occlude; cutout and translucent do NOT cull this face.
+                        bool neighborOccludes =
+                            neighborState.isSolid &&
+                            neighborState.renderMode == blockstate::RenderMode::Opaque;
+                        shouldRenderFace = !neighborOccludes;
                     } else {
                         // Neighbor is in adjacent chunk - check neighboring chunk for face culling
                         shouldRenderFace = true; // Default to render if we can't determine neighbor state
@@ -172,9 +194,14 @@ void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
                             Chunk* neighborChunk = GetNeighbor(neighborChunkDir);
                             // CRITICAL: Check for null pointer before accessing neighbor
                             if (neighborChunk != nullptr && neighborChunk->IsGenerated()) {
-                                // Check if the neighbor block in adjacent chunk is solid
+                                // Check if the neighbor block in adjacent chunk is solid/occluding
                                 uint32_t neighborStateId = neighborChunk->GetBlockState(localX, localY, localZ);
-                                shouldRenderFace = !bsr.GetState(neighborStateId).isSolid;
+                                const auto& neighborState = bsr.GetState(neighborStateId);
+                                // Only fully opaque neighbors occlude; cutout and translucent do NOT cull this face.
+                                bool neighborOccludes =
+                                    neighborState.isSolid &&
+                                    neighborState.renderMode == blockstate::RenderMode::Opaque;
+                                shouldRenderFace = !neighborOccludes;
                             }
                             // If neighbor is null or not generated, render the face (conservative approach)
                         }
@@ -186,65 +213,177 @@ void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
                     
                     // Get texture layer index for this block face from blockstate
                     int textureLayer = state.faceTextureLayers[face];
-                    
-                    // Indexed rendering: generate 4 unique vertices
-                    int baseVertexIndex = vertices.size() / ASCIIgL::VertFormats::PosUVLayer().GetStride();
-                    
-                    for (int vertIdx = 0; vertIdx < 4; vertIdx++) {
-                        // World position (chunk-relative + block position)
-                        glm::vec3 WorldCoord = glm::vec3(
-                            coord.x * SIZE + x,
-                            coord.y * SIZE + y, 
-                            coord.z * SIZE + z
-                        ) + faceVerticesIndexed[face][vertIdx];
-                        
-                        // Simple 0-1 UVs + layer index for Texture2DArray
-                        glm::vec2 faceUV = faceUVsIndexed[vertIdx];
-                        float u = faceUV.x;
-                        float v = 1.0f - faceUV.y;
-                        
-                        ASCIIgL::VertStructs::PosUVLayer vertex = {
-                            WorldCoord.x, WorldCoord.y, WorldCoord.z,  // XYZ
-                            u, v, static_cast<float>(textureLayer)     // UV + Layer
-                        };
-                        
-                        // Append bytes to vertices vector
-                        const auto* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
-                        vertices.insert(vertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUVLayer));
-                    }
-                    
-                    // Add indices for this face (2 triangles)
-                    for (int i = 0; i < 6; i++) {
-                        indices.push_back(baseVertexIndex + faceIndices[i]);
+
+                    if (blockIsTranslucent) {
+                        // Collect translucent faces; we'll build direction-specific meshes later.
+                        TransparentFace tf;
+                        tf.x = x;
+                        tf.y = y;
+                        tf.z = z;
+                        tf.faceIndex = face;
+                        tf.textureLayer = textureLayer;
+                        transparentFaces.push_back(tf);
+                    } else {
+                        // Opaque and cutout faces are emitted directly into the opaque mesh.
+                        std::vector<std::byte>& vertices = verticesOpaque;
+                        std::vector<int>& indices = indicesOpaque;
+
+                        int baseVertexIndex = static_cast<int>(vertices.size()) / ASCIIgL::VertFormats::PosUVLayer().GetStride();
+
+                        for (int vertIdx = 0; vertIdx < 4; vertIdx++) {
+                            glm::vec3 WorldCoord = glm::vec3(
+                                coord.x * SIZE + x,
+                                coord.y * SIZE + y, 
+                                coord.z * SIZE + z
+                            ) + faceVerticesIndexed[face][vertIdx];
+
+                            glm::vec2 faceUV = faceUVsIndexed[vertIdx];
+                            float u = faceUV.x;
+                            float v = 1.0f - faceUV.y;
+
+                            ASCIIgL::VertStructs::PosUVLayer vertex = {
+                                WorldCoord.x, WorldCoord.y, WorldCoord.z,
+                                u, v, static_cast<float>(textureLayer)
+                            };
+
+                            const auto* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
+                            vertices.insert(vertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUVLayer));
+                        }
+
+                        for (int i = 0; i < 6; i++) {
+                            indices.push_back(baseVertexIndex + faceIndices[i]);
+                        }
                     }
                 }
             }
         }
     }
     
-    // Create the mesh
-    if (!vertices.empty()) {
+    // Create meshes
+    opaqueMesh.reset();
+    for (int i = 0; i < TRANSPARENT_VARIANT_COUNT; ++i) {
+        transparentMeshes[i].reset();
+        hasTransparentMesh[i] = false;
+    }
+    hasOpaqueMesh = false;
+
+    if (!verticesOpaque.empty()) {
         // Validate texture array
         if (!blockTextures || !blockTextures->IsValid()) {
             ASCIIgL::Logger::Error("  Block texture array is invalid!");
-            mesh.reset();
-            hasMesh = false;
             SetDirty(false);
             return;
         }
         
-        if (!indices.empty()) {
-            // Use the new constructor that accepts TextureArray*
-            mesh = std::make_unique<ASCIIgL::Mesh>(std::move(vertices), ASCIIgL::VertFormats::PosUVLayer(), std::move(indices), blockTextures);
-            ASCIIgL::Logger::Debug("Indexed mesh created successfully with " + std::to_string(vertices.size()) + " bytes and " + std::to_string(indices.size()) + " indices");
+        if (!indicesOpaque.empty()) {
+            opaqueMesh = std::make_unique<ASCIIgL::Mesh>(
+                std::move(verticesOpaque),
+                ASCIIgL::VertFormats::PosUVLayer(),
+                std::move(indicesOpaque),
+                blockTextures
+            );
+            ASCIIgL::Logger::Debug("Opaque chunk mesh created with " +
+                std::to_string(opaqueMesh ? opaqueMesh->GetVertexCount() : 0) + " vertices");
+            hasOpaqueMesh = (opaqueMesh != nullptr);
+        }
+    }
+
+    // Build transparent meshes for multiple canonical view directions if we have faces
+    if (!transparentFaces.empty()) {
+        if (!blockTextures || !blockTextures->IsValid()) {
+            ASCIIgL::Logger::Error("  Block texture array is invalid for transparent mesh!");
+            SetDirty(false);
+            return;
         }
 
-        hasMesh = true;
-    } else {
-        mesh.reset();
-        hasMesh = false;
+        // Canonical view directions: +X, -X, +Y, -Y, +Z, -Z
+        const glm::vec3 viewDirs[TRANSPARENT_VARIANT_COUNT] = {
+            glm::vec3( 1,  0,  0),
+            glm::vec3(-1,  0,  0),
+            glm::vec3( 0,  1,  0),
+            glm::vec3( 0, -1,  0),
+            glm::vec3( 0,  0,  1),
+            glm::vec3( 0,  0, -1)
+        };
+
+        for (int v = 0; v < TRANSPARENT_VARIANT_COUNT; ++v) {
+            std::vector<std::byte> verticesVariant;
+            std::vector<int> indicesVariant;
+
+            // Order faces back-to-front along this canonical view direction
+            std::vector<size_t> order(transparentFaces.size());
+            std::iota(order.begin(), order.end(), 0);
+
+            const glm::vec3 D = glm::normalize(viewDirs[v]);
+
+            std::sort(order.begin(), order.end(),
+                [&](size_t a, size_t b) {
+                    const auto& fa = transparentFaces[a];
+                    const auto& fb = transparentFaces[b];
+
+                    glm::vec3 centerA(
+                        coord.x * SIZE + fa.x + 0.5f,
+                        coord.y * SIZE + fa.y + 0.5f,
+                        coord.z * SIZE + fa.z + 0.5f
+                    );
+
+                    glm::vec3 centerB(
+                        coord.x * SIZE + fb.x + 0.5f,
+                        coord.y * SIZE + fb.y + 0.5f,
+                        coord.z * SIZE + fb.z + 0.5f
+                    );
+
+                    float da = glm::dot(centerA, D);
+                    float db = glm::dot(centerB, D);
+                    // Farther along D drawn first -> sort descending
+                    return da > db;
+                });
+
+            for (size_t idx : order) {
+                const auto& tf = transparentFaces[idx];
+
+                int face = tf.faceIndex;
+                int textureLayer = tf.textureLayer;
+
+                int baseVertexIndex = static_cast<int>(verticesVariant.size()) / ASCIIgL::VertFormats::PosUVLayer().GetStride();
+
+                for (int vertIdx = 0; vertIdx < 4; ++vertIdx) {
+                    glm::vec3 WorldCoord = glm::vec3(
+                        coord.x * SIZE + tf.x,
+                        coord.y * SIZE + tf.y,
+                        coord.z * SIZE + tf.z
+                    ) + faceVerticesIndexed[face][vertIdx];
+
+                    glm::vec2 faceUV = faceUVsIndexed[vertIdx];
+                    float u = faceUV.x;
+                    float v = 1.0f - faceUV.y;
+
+                    ASCIIgL::VertStructs::PosUVLayer vertex = {
+                        WorldCoord.x, WorldCoord.y, WorldCoord.z,
+                        u, v, static_cast<float>(textureLayer)
+                    };
+
+                    const auto* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
+                    verticesVariant.insert(verticesVariant.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUVLayer));
+                }
+
+                for (int i = 0; i < 6; ++i) {
+                    indicesVariant.push_back(baseVertexIndex + faceIndices[i]);
+                }
+            }
+
+            if (!verticesVariant.empty() && !indicesVariant.empty()) {
+                transparentMeshes[v] = std::make_unique<ASCIIgL::Mesh>(
+                    std::move(verticesVariant),
+                    ASCIIgL::VertFormats::PosUVLayer(),
+                    std::move(indicesVariant),
+                    blockTextures
+                );
+                hasTransparentMesh[v] = (transparentMeshes[v] != nullptr);
+            }
+        }
     }
-    
+
     SetDirty(false);
 }
 
@@ -292,11 +431,4 @@ void Chunk::LogNeighbors() const {
     }
 }
 
-void Chunk::Render() const {
-    if (!hasMesh || !mesh) {
-        return;
-    }
-    
-    // Use DrawMesh instead of batching - leverages GPU mesh caching
-    ASCIIgL::Renderer::GetInst().DrawMesh(mesh.get());
-}
+// Rendering is now handled by ChunkManager via Renderer draw-call queue.

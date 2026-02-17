@@ -113,6 +113,16 @@ public:
     std::shared_ptr<ShaderProgram> GetShaderProgram() const { return _program; }
     void SetShaderProgram(std::shared_ptr<ShaderProgram> program);
 
+    // Access layout metadata for a given uniform (offset, size, type, etc.).
+    // Returns nullptr if no shader program is set or the uniform doesn't exist.
+    const UniformDescriptor* GetUniformDescriptor(const std::string& name) const;
+
+    // Apply a single uniform override directly into this material's packed
+    // constant buffer using a known UniformDescriptor (no name lookup).
+    // Does NOT touch _uniformValues or _uniformsDirty; intended for
+    // per-draw overrides when you already have a base buffer.
+    void ApplyUniformOverride(const UniformDescriptor& desc, const UniformValue& value);
+
     // =========================================================================
     // State Management
     // =========================================================================

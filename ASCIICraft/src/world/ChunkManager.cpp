@@ -626,11 +626,13 @@ void ChunkManager::RenderChunks() {
     mat->SetFloat3("cameraPos", pos);
     mat->SetFloat4("fogParams", glm::vec4(fogStart, fogEnd, 0.0f, 0.0f));
 
-    // Bind material (shader + constants + textures)
-    ASCIIgL::Renderer::GetInst().BindMaterial(mat.get());
+    // --- Prepare renderer draw-calls ---
+    ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
 
-    // --- Render chunks ---
     int renderedCount = 0;
+
+    // Precompute normalized camera forward for transparent depth sorting
+    glm::vec3 camDir = glm::normalize(camFront);
 
     for (Chunk* chunk : visibleChunks) {
         if (!chunk) {
@@ -643,13 +645,66 @@ void ChunkManager::RenderChunks() {
             continue;
         }
 
-        chunk->Render();
-        renderedCount++;
+        // Opaque part
+        if (chunk->HasOpaqueMesh() && chunk->GetOpaqueMesh()) {
+            ASCIIgL::Renderer::DrawCall dc;
+            dc.mesh        = chunk->GetOpaqueMesh();
+            dc.material    = mat.get();
+            dc.layer       = 0;           // world geometry layer
+            dc.transparent = false;       // opaque pass
+            dc.sortKey     = 0.0f;        // not used for opaque
+
+            renderer.SubmitDraw(dc);
+            renderedCount++;
+        }
+
+        // Transparent part: choose the variant whose canonical direction best matches the camera view
+        if (chunk->HasTransparentMesh()) {
+            // Canonical directions for transparent variants (must match Chunk::TRANSPARENT_VARIANT_COUNT order)
+            const glm::vec3 viewDirs[Chunk::TRANSPARENT_VARIANT_COUNT] = {
+                glm::vec3( 1,  0,  0),
+                glm::vec3(-1,  0,  0),
+                glm::vec3( 0,  1,  0),
+                glm::vec3( 0, -1,  0),
+                glm::vec3( 0,  0,  1),
+                glm::vec3( 0,  0, -1)
+            };
+
+            int bestIdx = 0;
+            float bestDot = -1.0f;
+            for (int i = 0; i < Chunk::TRANSPARENT_VARIANT_COUNT; ++i) {
+                if (!chunk->HasTransparentMeshVariant(i)) continue;
+                float d = glm::dot(camDir, glm::normalize(viewDirs[i]));
+                if (d > bestDot) {
+                    bestDot = d;
+                    bestIdx = i;
+                }
+            }
+
+            if (chunk->HasTransparentMeshVariant(bestIdx)) {
+                // Use view-space depth along camera forward as coarse sort key between chunks
+                glm::vec3 chunkCenter(
+                    chunk->GetCoord().x * Chunk::SIZE + Chunk::SIZE * 0.5f,
+                    chunk->GetCoord().y * Chunk::SIZE + Chunk::SIZE * 0.5f,
+                    chunk->GetCoord().z * Chunk::SIZE + Chunk::SIZE * 0.5f
+                );
+                glm::vec3 toChunk = chunkCenter - pos;
+                float depth = glm::dot(toChunk, camDir); // positive = in front of camera
+
+                ASCIIgL::Renderer::DrawCall dc;
+                dc.mesh        = chunk->GetTransparentMeshVariant(bestIdx);
+                dc.material    = mat.get();
+                dc.layer       = 0;           // world geometry layer
+                dc.transparent = true;        // transparent pass
+                dc.sortKey     = depth;       // back-to-front sorting using view depth
+
+                renderer.SubmitDraw(dc);
+                renderedCount++;
+            }
+        }
     }
 
-    ASCIIgL::Renderer::GetInst().UnbindTextureArray();
-
-    ASCIIgL::Logger::Debug("RenderChunks: Rendered " + std::to_string(renderedCount) + " chunks.");
+    ASCIIgL::Logger::Debug("RenderChunks: Enqueued " + std::to_string(renderedCount) + " chunk draw calls.");
 }
 
 std::pair<uint32_t, WorldCoord> ChunkManager::BlockIntersectsView(glm::vec3& lookDir, glm::vec3& headPos, float reach) {

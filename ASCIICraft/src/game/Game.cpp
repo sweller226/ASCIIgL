@@ -267,9 +267,9 @@ void Game::Render() {
     ASCIIgL::Logger::Debug("Game::Render called.");
 
     {
-        ASCIIgL::PROFILE_SCOPE("Clear Px Buff/Begin Frame");
+        ASCIIgL::PROFILE_SCOPE("Clear Px Buff/Begin GPU Frame");
         ASCIIgL::Screen::GetInst().ClearPixelBuffer();
-        ASCIIgL::Renderer::GetInst().BeginColBuffFrame();
+        ASCIIgL::Renderer::GetInst().BeginGpuFrame();
     }
 
     // All GPU draws: 2D must be drawn after 3D so the GUI is on top (see RenderSystem::BatchAndDraw).
@@ -282,9 +282,12 @@ void Game::Render() {
             break;
     }
 
+    // Execute queued GPU draws in two passes (opaque, then transparent)
+    ASCIIgL::Renderer::GetInst().FlushDraws();
+
     {
-        ASCIIgL::PROFILE_SCOPE("Render.EndColBuffFrame");
-        ASCIIgL::Renderer::GetInst().EndColBuffFrame();
+        ASCIIgL::PROFILE_SCOPE("Render.EndGpuFrame");
+        ASCIIgL::Renderer::GetInst().EndGpuFrame();
     }
 
     {
@@ -537,20 +540,33 @@ void Game::InitializeBlockStates() {
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:air"), [](blockstate::BlockState& s) {
         s.isSolid = false;
         s.isTransparent = true;
+        s.renderMode = blockstate::RenderMode::Translucent;
     });
 
     // === Terrain ===
     bsr.RegisterType("minecraft:bedrock", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:bedrock"), [&](blockstate::BlockState& s) { allFaces(s, L(1, 1)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:bedrock"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(1, 1));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:stone", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:stone"), [&](blockstate::BlockState& s) { allFaces(s, L(1, 0)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:stone"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(1, 0));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:cobblestone", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:cobblestone"), [&](blockstate::BlockState& s) { allFaces(s, L(0, 1)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:cobblestone"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(0, 1));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:dirt", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:dirt"), [&](blockstate::BlockState& s) { allFaces(s, L(2, 0)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:dirt"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(2, 0));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:grass", {});
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:grass"), [&](blockstate::BlockState& s) {
@@ -560,32 +576,57 @@ void Game::InitializeBlockStates() {
         s.faceTextureLayers[3] = L(3, 0); // South
         s.faceTextureLayers[4] = L(3, 0); // East
         s.faceTextureLayers[5] = L(3, 0); // West
+        s.renderMode = blockstate::RenderMode::Opaque;
     });
 
     bsr.RegisterType("minecraft:gravel", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:gravel"), [&](blockstate::BlockState& s) { allFaces(s, L(3, 1)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:gravel"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(3, 1));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:sand", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:sand"), [&](blockstate::BlockState& s) { allFaces(s, L(2, 1)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:sand"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(2, 1));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:sandstone", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:sandstone"), [&](blockstate::BlockState& s) { allFaces(s, L(2, 2)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:sandstone"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(2, 2));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:clay", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:clay"), [&](blockstate::BlockState& s) { allFaces(s, L(4, 1)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:clay"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(4, 1));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     // === Ores ===
     bsr.RegisterType("minecraft:coal_ore", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:coal_ore"), [&](blockstate::BlockState& s) { allFaces(s, L(2, 2)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:coal_ore"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(2, 2));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:iron_ore", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:iron_ore"), [&](blockstate::BlockState& s) { allFaces(s, L(1, 2)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:iron_ore"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(1, 2));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:gold_ore", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:gold_ore"), [&](blockstate::BlockState& s) { allFaces(s, L(0, 2)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:gold_ore"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(0, 2));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:diamond_ore", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:diamond_ore"), [&](blockstate::BlockState& s) { allFaces(s, L(3, 2)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:diamond_ore"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(3, 2));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     // === Wood & Plants ===
     bsr.RegisterType("minecraft:oak_log", {});
@@ -596,13 +637,22 @@ void Game::InitializeBlockStates() {
         s.faceTextureLayers[3] = L(4, 1);
         s.faceTextureLayers[4] = L(4, 1);
         s.faceTextureLayers[5] = L(4, 1);
+        s.renderMode = blockstate::RenderMode::Opaque;
     });
 
     bsr.RegisterType("minecraft:oak_leaves", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:oak_leaves"), [&](blockstate::BlockState& s) { allFaces(s, L(4, 3)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:oak_leaves"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(4, 3));
+        s.isSolid = true;
+        s.isTransparent = false;                  // treat as cutout, not blended
+        s.renderMode = blockstate::RenderMode::Cutout;
+    });
 
     bsr.RegisterType("minecraft:oak_planks", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:oak_planks"), [&](blockstate::BlockState& s) { allFaces(s, L(4, 0)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:oak_planks"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(4, 0));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:spruce_log", {});
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:spruce_log"), [&](blockstate::BlockState& s) {
@@ -612,13 +662,22 @@ void Game::InitializeBlockStates() {
         s.faceTextureLayers[3] = L(4, 1);
         s.faceTextureLayers[4] = L(4, 1);
         s.faceTextureLayers[5] = L(4, 1);
+        s.renderMode = blockstate::RenderMode::Opaque;
     });
 
     bsr.RegisterType("minecraft:spruce_leaves", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:spruce_leaves"), [&](blockstate::BlockState& s) { allFaces(s, L(5, 3)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:spruce_leaves"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(5, 3));
+        s.isSolid = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+    });
 
     bsr.RegisterType("minecraft:spruce_planks", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:spruce_planks"), [&](blockstate::BlockState& s) { allFaces(s, L(5, 0)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:spruce_planks"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(5, 0));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     // === Utility Blocks ===
     bsr.RegisterType("minecraft:crafting_table", {});
@@ -629,6 +688,7 @@ void Game::InitializeBlockStates() {
         s.faceTextureLayers[3] = L(11, 3); // South
         s.faceTextureLayers[4] = L(12, 3); // East
         s.faceTextureLayers[5] = L(12, 3); // West
+        s.renderMode = blockstate::RenderMode::Opaque;
     });
 
     bsr.RegisterType("minecraft:furnace", {});
@@ -639,17 +699,27 @@ void Game::InitializeBlockStates() {
         s.faceTextureLayers[3] = L(13, 2); // South (side)
         s.faceTextureLayers[4] = L(13, 2); // East (side)
         s.faceTextureLayers[5] = L(13, 2); // West (side)
+        s.renderMode = blockstate::RenderMode::Opaque;
     });
 
     // === Special Blocks ===
     bsr.RegisterType("minecraft:tnt", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:tnt"), [&](blockstate::BlockState& s) { allFaces(s, L(8, 0)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:tnt"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(8, 0));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:obsidian", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:obsidian"), [&](blockstate::BlockState& s) { allFaces(s, L(5, 2)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:obsidian"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(5, 2));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:mossy_cobblestone", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:mossy_cobblestone"), [&](blockstate::BlockState& s) { allFaces(s, L(0, 3)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:mossy_cobblestone"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(0, 3));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     bsr.RegisterType("minecraft:bookshelf", {});
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:bookshelf"), [&](blockstate::BlockState& s) {
@@ -659,10 +729,14 @@ void Game::InitializeBlockStates() {
         s.faceTextureLayers[3] = L(3, 3);
         s.faceTextureLayers[4] = L(3, 3);
         s.faceTextureLayers[5] = L(3, 3);
+        s.renderMode = blockstate::RenderMode::Opaque;
     });
 
     bsr.RegisterType("minecraft:wool", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:wool"), [&](blockstate::BlockState& s) { allFaces(s, L(0, 4)); });
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:wool"), [&](blockstate::BlockState& s) {
+        allFaces(s, L(0, 4));
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
 
     ASCIIgL::Logger::Info("BlockStateRegistry: " +
         std::to_string(bsr.GetTotalTypeCount()) + " types, " +

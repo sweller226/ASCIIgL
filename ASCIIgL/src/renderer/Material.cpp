@@ -116,6 +116,27 @@ bool Material::HasUniform(const std::string& name) const {
     return _uniformValues.find(name) != _uniformValues.end();
 }
 
+const UniformDescriptor* Material::GetUniformDescriptor(const std::string& name) const {
+    if (!_program || !_program->IsValid()) {
+        return nullptr;
+    }
+    const auto& layout = _program->GetUniformLayout();
+    return layout.GetUniform(name);
+}
+
+void Material::ApplyUniformOverride(const UniformDescriptor& desc, const UniformValue& value) {
+    if (_constantBufferData.empty()) {
+        return;
+    }
+
+    std::visit([this, &desc](auto&& val) {
+        using T = std::decay_t<decltype(val)>;
+        if (desc.offset + sizeof(T) <= _constantBufferData.size()) {
+            std::memcpy(_constantBufferData.data() + desc.offset, &val, sizeof(T));
+        }
+    }, value);
+}
+
 // =========================================================================
 // Constant Buffer Data Packing
 // =========================================================================
