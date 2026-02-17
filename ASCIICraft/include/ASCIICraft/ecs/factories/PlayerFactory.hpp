@@ -4,7 +4,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <ASCIIgL/engine/Camera3D.hpp>
-#include <ASCIIgL/engine/InputManager.hpp>
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 
 #include <entt/entt.hpp>
@@ -20,6 +19,7 @@
 #include <ASCIICraft/ecs/components/Head.hpp>
 #include <ASCIICraft/ecs/components/Reach.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/ecs/components/PlayerInput.hpp>
 
 namespace ecs::factories {
 

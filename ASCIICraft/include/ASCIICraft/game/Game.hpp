@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <functional>
 
 #include <entt/entt.hpp>
 
@@ -16,11 +17,12 @@
 #include <ASCIICraft/ecs/factories/PlayerFactory.hpp>
 
 // ecs systems
-#include <ASCIICraft/ecs/systems/MovementSystem.hpp> 
+#include <ASCIICraft/ecs/systems/MovementSystem.hpp>
 #include <ASCIICraft/ecs/systems/CameraSystem.hpp>
-#include <ASCIICraft/ecs/systems/RenderSystem.hpp> 
+#include <ASCIICraft/ecs/systems/InputSystem.hpp>
+#include <ASCIICraft/ecs/systems/RenderSystem.hpp>
 #include <ASCIICraft/ecs/systems/PhysicsSystem.hpp>
-#include <ASCIICraft/ecs/systems/GUISystem.hpp> 
+#include <ASCIICraft/gui/GuiManager.hpp>
 
 // block update systems
 #include <ASCIICraft/ecs/systems/blockupdate/BlockUpdateSystem.hpp>
@@ -33,6 +35,7 @@
 // events
 #include <ASCIICraft/events/BreakBlockEvent.hpp>
 #include <ASCIICraft/events/PlaceBlockEvent.hpp>
+#include <ASCIICraft/events/InputEvents.hpp>
 
 enum class GameState {
     Playing,
@@ -46,7 +49,7 @@ public:
     
     // Core game functions
     bool Initialize();
-    void Run();
+    void Run(std::function<bool()> shouldExternalExit);
     void Shutdown();
     
     // Game state management
@@ -62,12 +65,14 @@ private:
     entt::registry registry;
     EventBus eventBus;
     
-    // ecs systems
+    // ecs systems (inputSystem first so others can take a reference)
+    ecs::systems::InputSystem inputSystem;
     ecs::systems::MovementSystem movementSystem;
     ecs::systems::CameraSystem cameraSystem;
     ecs::systems::PhysicsSystem physicsSystem;
     ecs::systems::RenderSystem renderSystem;
-    ecs::systems::GUISystem guiSystem;
+
+    ASCIICraft::gui::GuiManager guiManager;
 
     // block updates
     ecs::systems::BlockUpdateSystem blockUpdateSystem;
@@ -79,7 +84,8 @@ private:
 
     // Game state
     GameState gameState;
-    bool isRunning;
+    std::function<bool()> shouldExternalExit;
+    bool shouldInternalExit;
     
     // Private methods
     bool LoadResources();

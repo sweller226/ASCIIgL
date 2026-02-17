@@ -1,64 +1,53 @@
 #include <ASCIICraft/ecs/systems/CameraSystem.hpp>
 
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
-
 #include <ASCIICraft/ecs/components/Head.hpp>
 
 namespace ecs::systems {
 
-CameraSystem::CameraSystem(entt::registry &registry) : m_registry(registry) {
-
-}
+CameraSystem::CameraSystem(entt::registry& registry, ASCIICraft::IGameInputSource& input)
+    : m_registry(registry)
+    , m_input(input)
+{}
 
 void CameraSystem::Update() {
-    const auto &input = ASCIIgL::InputManager::GetInst();
-
     entt::entity p_ent = components::GetPlayerEntity(m_registry);
     if (p_ent == entt::null || !m_registry.valid(p_ent)) return;
-    if (p_ent == entt::null || !m_registry.valid(p_ent)) return;
 
-    // required components
-    if (!m_registry.all_of<
-        components::PlayerCamera
-    >(p_ent)) return;
+    if (!m_registry.all_of<components::PlayerCamera, components::PlayerController>(p_ent)) return;
 
-    auto &cam = m_registry.get<components::PlayerCamera>(p_ent);
-    auto &ctrl = m_registry.get<components::PlayerController>(p_ent);
-    
+    auto& cam = m_registry.get<components::PlayerCamera>(p_ent);
+    auto& ctrl = m_registry.get<components::PlayerController>(p_ent);
     const float dt = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
 
-    ProcessCameraInput(input, cam, dt);
-    LerpFOV(input, cam, ctrl, dt);
+    ProcessCameraInput(cam, dt);
+    LerpFOV(cam, ctrl, dt);
 
-    auto &head = m_registry.get<components::Head>(p_ent);
+    auto& head = m_registry.get<components::Head>(p_ent);
     head.lookDir = cam.camera.getCamFront();
 }
 
-void CameraSystem::ProcessCameraInput(const ASCIIgL::InputManager &input, components::PlayerCamera &cam, const float dt) {
-    // Use keyboard controls for camera movement (arrow keys only)
-    
+void CameraSystem::ProcessCameraInput(components::PlayerCamera& cam, float dt) {
     float yawDelta = 0.0f;
     float pitchDelta = 0.0f;
 
-    // Arrow keys for camera rotation
-    if (input.IsActionHeld("camera_left")) {
-        yawDelta -= input.GetMouseSensitivity() * dt;
+    if (m_input.IsActionHeld("camera_left")) {
+        yawDelta -= m_input.GetMouseSensitivity() * dt;
     }
-    if (input.IsActionHeld("camera_right")) {
-        yawDelta += input.GetMouseSensitivity() * dt;
+    if (m_input.IsActionHeld("camera_right")) {
+        yawDelta += m_input.GetMouseSensitivity() * dt;
     }
-    if (input.IsActionHeld("camera_up")) {
-        pitchDelta += input.GetMouseSensitivity() * 0.8f * dt;
+    if (m_input.IsActionHeld("camera_up")) {
+        pitchDelta += m_input.GetMouseSensitivity() * 0.8f * dt;
     }
-    if (input.IsActionHeld("camera_down")) {
-        pitchDelta -= input.GetMouseSensitivity() * 0.8f * dt;
+    if (m_input.IsActionHeld("camera_down")) {
+        pitchDelta -= m_input.GetMouseSensitivity() * 0.8f * dt;
     }
-    
-    // Update camera direction
+
     cam.camera.setCamDir(cam.camera.GetYaw() + yawDelta, cam.camera.GetPitch() + pitchDelta);
 }
 
-void CameraSystem::LerpFOV(const ASCIIgL::InputManager &input, components::PlayerCamera &cam, components::PlayerController &ctrl, const float dt) {
+void CameraSystem::LerpFOV(components::PlayerCamera& cam, components::PlayerController& ctrl, float dt) {
     // Smoothly adjust FOV when sprinting (slight increase for speed effect)
     float targetFOV = cam.FOV;
     if (ctrl.isRunning()) {

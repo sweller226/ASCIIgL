@@ -77,9 +77,6 @@ public:
     /// Create a 3D block-preview cube mesh from a BSR BlockState's face texture layers.
     static std::shared_ptr<ASCIIgL::Mesh> GetBlockMeshFromState(const blockstate::BlockState& state);
 
-    /// Construct a registry name with "minecraft:" prefix.
-    static std::string MakeItemName(const std::string& name);
-
     /// Get the current next ID value (useful for inspecting the counter).
     int GetNextId() const { return nextId; }
 

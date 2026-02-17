@@ -82,7 +82,10 @@ private:
     ComPtr<ID3D11Texture2D> _depthStencilBuffer;
     ComPtr<ID3D11DepthStencilView> _depthStencilView;
     ComPtr<ID3D11DepthStencilState> _depthStencilState;
-    
+    ComPtr<ID3D11DepthStencilState> _depthStencilStateNoTest;  // Depth disabled for 2D overlay
+    ComPtr<ID3D11BlendState> _blendStateOpaque;   // No blending (default)
+    ComPtr<ID3D11BlendState> _blendStateAlpha;   // Alpha blending for GUI (SrcAlpha, InvSrcAlpha)
+
     // Debug swap chain for RenderDoc support
     ComPtr<IDXGISwapChain> _debugSwapChain;
     HWND _debugWindow = nullptr;
@@ -138,6 +141,7 @@ private:
     bool InitializeDepthStencil();
     bool InitializeSamplers();
     bool InitializeRasterizerStates();
+    bool InitializeBlendStates();
     bool InitializeStagingTexture();
     bool InitializeDebugSwapChain();  // For RenderDoc support
 
@@ -215,6 +219,12 @@ public:
     // Unbind any texture
     void UnbindTexture(int slot = 0);
     void UnbindTextureArray(int slot = 0);
+
+    /// Set depth test on/off. Use false for 2D overlay (GUI) so it is not clipped by 3D depth buffer.
+    void SetDepthTestEnabled(bool enabled);
+
+    /// Set alpha blending on/off. Use true for 2D GUI so transparent PNG regions blend correctly.
+    void SetBlendEnabled(bool enabled);
 };
 
 } // namespace ASCIIgL

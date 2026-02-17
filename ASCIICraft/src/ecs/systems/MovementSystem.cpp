@@ -1,6 +1,7 @@
 #include <ASCIICraft/ecs/systems/MovementSystem.hpp>
 
-#include <ASCIIgL/engine/InputManager.hpp>
+#include <ASCIICraft/events/EventBus.hpp>
+#include <ASCIICraft/events/InputEvents.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 
@@ -18,8 +19,10 @@
 
 namespace ecs::systems {
 
-MovementSystem::MovementSystem(entt::registry &registry)
-  : m_registry(registry)
+MovementSystem::MovementSystem(entt::registry& registry, ASCIICraft::IGameInputSource& input, EventBus& eventBus)
+    : m_registry(registry)
+    , m_input(input)
+    , m_eventBus(eventBus)
 {}
 
 void MovementSystem::Update() {
@@ -27,19 +30,13 @@ void MovementSystem::Update() {
 }
 
 void MovementSystem::ProcessMovementInput() {
-    ASCIIgL::Logger::Debug("MovementSystem::ProcessMovementInput: begin");
-
-    const auto& input = ASCIIgL::InputManager::GetInst();
-
     // --- Player entity via PlayerTag ---
-    ASCIIgL::Logger::Debug("MovementSystem: checking for player entity...");
     entt::entity p_ent = components::GetPlayerEntity(m_registry);
 
     if (p_ent == entt::null) {
         ASCIIgL::Logger::Error("MovementSystem::ProcessMovementInput: Player entity not found.");
         return;
     }
-    ASCIIgL::Logger::Debug("MovementSystem: player entity = " + std::to_string((int)p_ent));
 
     if (p_ent == entt::null || !m_registry.valid(p_ent)) {
         ASCIIgL::Logger::Error("MovementSystem::ProcessMovementInput: player entity is null or invalid.");
@@ -47,7 +44,6 @@ void MovementSystem::ProcessMovementInput() {
     }
 
     // --- Required components check ---
-    ASCIIgL::Logger::Debug("MovementSystem: checking required components on player...");
 
     if (!m_registry.all_of<
         components::PlayerCamera,
@@ -80,24 +76,18 @@ void MovementSystem::ProcessMovementInput() {
         return;
     }
 
-    ASCIIgL::Logger::Debug("MovementSystem: all components retrieved successfully.");
-
     const float dt = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
     const float currentTime = NowSeconds();
 
-    ASCIIgL::Logger::Debug("MovementSystem: dt = " + std::to_string(dt) +
-                           ", time = " + std::to_string(currentTime));
-
     // --- input -> desired horizontal direction ---
-    ASCIIgL::Logger::Debug("MovementSystem: computing movement direction...");
     glm::vec3 forward = cam->camera.getCamFrontNoY();
     glm::vec3 right   = cam->camera.getCamRightNoY();
     glm::vec3 moveDir(0.0f);
 
-    if (input.IsActionHeld("move_forward"))  moveDir += forward;
-    if (input.IsActionHeld("move_backward")) moveDir -= forward;
-    if (input.IsActionHeld("move_left"))     moveDir -= right;
-    if (input.IsActionHeld("move_right"))    moveDir += right;
+    if (m_input.IsActionHeld("move_forward"))  moveDir += forward;
+    if (m_input.IsActionHeld("move_backward")) moveDir -= forward;
+    if (m_input.IsActionHeld("move_left"))     moveDir -= right;
+    if (m_input.IsActionHeld("move_right"))   moveDir += right;
 
     glm::vec2 moveXZ(moveDir.x, moveDir.z);
     float moveLen = glm::length(moveXZ);
@@ -106,9 +96,9 @@ void MovementSystem::ProcessMovementInput() {
     // --- movement state ---
     if (pmode->gamemode == GameMode::Spectator) {
         ctrl->movementState = MovementState::Flying;
-    } else if (input.IsActionHeld("sprint") && moveLen > 0.01f && !(ctrl->movementState == MovementState::Sneaking)) {
+    } else if (m_input.IsActionHeld("sprint") && moveLen > 0.01f && !(ctrl->movementState == MovementState::Sneaking)) {
         ctrl->movementState = MovementState::Running;
-    } else if (input.IsActionHeld("sneak") && !ctrl->isFlying() && (pmode->gamemode != GameMode::Spectator)) {
+    } else if (m_input.IsActionHeld("sneak") && !ctrl->isFlying() && (pmode->gamemode != GameMode::Spectator)) {
         ctrl->movementState = MovementState::Sneaking;
     } else {
         ctrl->movementState = MovementState::Walking;
@@ -134,19 +124,16 @@ void MovementSystem::ProcessMovementInput() {
             break;
     }
 
-    ASCIIgL::Logger::Debug("MovementSystem: movementState = " +
-        std::to_string((int)ctrl->movementState) +
-        ", targetSpeed = " + std::to_string(targetSpeed));
-
     glm::vec3 desiredHoriz(moveXZ.x * targetSpeed, 0.0f, moveXZ.y * targetSpeed);
 
     // --- jump cooldown ---
     jump->jumpCooldown = std::max(0.0f, jump->jumpCooldown - dt);
 
-    // --- jump buffer ---
+    // --- jump buffer (from discrete JumpPressedEvent; InputSystem emits when jump is pressed and not blocking) ---
     jump->jumpBufferTimer = std::max(0.0f, jump->jumpBufferTimer - dt);
-    if (input.IsActionPressed("jump")) {
+    for ([[maybe_unused]] const auto& e : m_eventBus.view<events::JumpPressedEvent>()) {
         jump->jumpBufferTimer = jump->JUMP_BUFFER_MAX;
+        break;
     }
 
     // --- ground / coyote time ---
@@ -201,12 +188,11 @@ void MovementSystem::ProcessMovementInput() {
 
     // --- flying / spectator vertical control ---
     if (ctrl->isFlying() || pmode->gamemode == GameMode::Spectator) {
-        if (input.IsActionHeld("jump"))       vel->linear.y = targetSpeed;
-        else if (input.IsActionHeld("sneak")) vel->linear.y = -targetSpeed;
+        if (m_input.IsActionHeld("jump"))       vel->linear.y = targetSpeed;
+        else if (m_input.IsActionHeld("sneak")) vel->linear.y = -targetSpeed;
         else                                  vel->linear.y = 0.0f;
     }
 
-    ASCIIgL::Logger::Debug("MovementSystem::ProcessMovementInput: end");
 }
 
 

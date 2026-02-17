@@ -9,15 +9,15 @@ namespace ecs::systems {
 
 class MiningSystem : public ISystem {
 public:
-    explicit MiningSystem(entt::registry &registry, EventBus& eventBus);
+    MiningSystem(entt::registry& registry, EventBus& eventBus);
 
     void Update() override;
 
 private:
-    entt::registry &m_registry;
-    EventBus &eventBus;
+    entt::registry& m_registry;
+    EventBus& m_eventBus;
 
-    void CreativeBreakEvents(); // temp simple insta break
+    void CreativeBreakEvents();
 };
 
 }

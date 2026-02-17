@@ -2,26 +2,26 @@
 
 #include <entt/entt.hpp>
 
-#include <ASCIIgL/engine/InputManager.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
-
 #include <ASCIICraft/ecs/components/PlayerController.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 #include <ASCIICraft/ecs/systems/ISystem.hpp>
+#include <ASCIICraft/input/IGameInputSource.hpp>
 
 namespace ecs::systems {
 
 class CameraSystem : public ISystem {
 public:
-    explicit CameraSystem(entt::registry &registry);
+    CameraSystem(entt::registry& registry, ASCIICraft::IGameInputSource& input);
 
-    void Update() override;    
+    void Update() override;
 
 private:
-    entt::registry &m_registry;
+    entt::registry& m_registry;
+    ASCIICraft::IGameInputSource& m_input;
 
-    void ProcessCameraInput(const ASCIIgL::InputManager &input, components::PlayerCamera &cam, const float dt);
-    void LerpFOV(const ASCIIgL::InputManager &input, components::PlayerCamera &cam, components::PlayerController &ctrl, const float dt);
+    void ProcessCameraInput(components::PlayerCamera& cam, float dt);
+    void LerpFOV(components::PlayerCamera& cam, components::PlayerController& ctrl, float dt);
 };
 
 }

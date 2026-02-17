@@ -15,13 +15,13 @@ namespace ASCIIgL {
 Material::Material() = default;
 Material::~Material() = default;
 
-std::unique_ptr<Material> Material::Create(std::shared_ptr<ShaderProgram> program) {
+std::unique_ptr<Material> Material::Create(std::unique_ptr<ShaderProgram> program) {
     auto material = std::unique_ptr<Material>(new Material());
-    material->_program = program;
+    material->_program = std::move(program);
     
-    if (program && program->IsValid()) {
+    if (material->_program && material->_program->IsValid()) {
         // Initialize constant buffer data with the correct size
-        const auto& layout = program->GetUniformLayout();
+        const auto& layout = material->_program->GetUniformLayout();
         material->_constantBufferData.resize(layout.GetSize(), std::byte{0});
         
         // Add default texture slot for diffuse texture
@@ -56,9 +56,7 @@ std::unique_ptr<Material> Material::CreateDefault() {
         return nullptr;
     }
     
-    // Convert unique_ptr to shared_ptr
-    std::shared_ptr<ShaderProgram> sharedProgram = std::move(program);
-    return Create(sharedProgram);
+    return Create(std::move(program));
 }
 
 // =========================================================================

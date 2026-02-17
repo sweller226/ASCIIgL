@@ -34,7 +34,10 @@ void Camera2D::setScreenDimensions(unsigned int width, unsigned int height)
 
 void Camera2D::recalculateProjMat()
 {
-	proj = glm::ortho(0.0f, (float)screenWidth, (float)screenHeight, 0.0f, -100.0f, 100.0f);
+	// Avoid zero dimensions (would produce invalid/undefined NDC). Ortho maps [0,w] x [0,h] to NDC [-1,1].
+	float w = static_cast<float>(screenWidth > 0u ? screenWidth : 1u);
+	float h = static_cast<float>(screenHeight > 0u ? screenHeight : 1u);
+	proj = glm::ortho(0.0f, w, h, 0.0f, -100.0f, 100.0f);
 }
 
 } // namespace ASCIIgL

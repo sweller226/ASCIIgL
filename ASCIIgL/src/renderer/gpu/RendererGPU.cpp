@@ -56,6 +56,7 @@ void RendererGPU::Initialize() {
         return;
     }
 
+    Logger::Info("[RendererGPU] Initializing depth stencil...");
     if (!InitializeDepthStencil()) {
         Logger::Error("[RendererGPU] Failed to initialize depth stencil");
         return;
@@ -71,6 +72,12 @@ void RendererGPU::Initialize() {
         return;
     }
 
+    Logger::Info("[RendererGPU] Initializing blend states...");
+    if (!InitializeBlendStates()) {
+        Logger::Error("[RendererGPU] Failed to initialize blend states");
+        return;
+    }
+
     if (!InitializeStagingTexture()) {
         Logger::Error("[RendererGPU] Failed to initialize staging texture");
         return;
@@ -80,6 +87,8 @@ void RendererGPU::Initialize() {
         Logger::Error("[RendererGPU] Failed to initialize debug swap chain (non-fatal)");
         // Non-fatal - continue without swap chain
     }
+
+    // Pipeline state (depth + blend) is set in BeginColBuffFrame when RTV is bound.
 
     _initialized = true;
     Logger::Debug("RendererGPU initialization complete - Device, Shaders, Buffers ready");
@@ -253,6 +262,17 @@ bool RendererGPU::InitializeDepthStencil() {
         return false;
     }
 
+    // No-depth state for 2D overlay (GUI)
+    dsDesc.DepthEnable = FALSE;
+    dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+    hr = _device->CreateDepthStencilState(&dsDesc, &_depthStencilStateNoTest);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] Failed to create no-depth stencil state: 0x" + ss.str());
+        return false;
+    }
+
     return true;
 }
 
@@ -303,6 +323,46 @@ bool RendererGPU::InitializeRasterizerStates() {
             Logger::Error("[RendererGPU] Failed to create rasterizer state " + std::to_string(i) + ": 0x" + ss.str());
             return false;
         }
+    }
+
+    return true;
+}
+
+bool RendererGPU::InitializeBlendStates() {
+    // Opaque: no blending (default for 3D)
+    D3D11_BLEND_DESC opaqueDesc = {};
+    opaqueDesc.AlphaToCoverageEnable = FALSE;
+    opaqueDesc.IndependentBlendEnable = FALSE;
+    opaqueDesc.RenderTarget[0].BlendEnable = FALSE;
+    opaqueDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+    HRESULT hr = _device->CreateBlendState(&opaqueDesc, &_blendStateOpaque);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] Failed to create opaque blend state: 0x" + ss.str());
+        return false;
+    }
+
+    // Alpha: blend for GUI (transparent PNG regions)
+    D3D11_BLEND_DESC alphaDesc = {};
+    alphaDesc.AlphaToCoverageEnable = FALSE;
+    alphaDesc.IndependentBlendEnable = FALSE;
+    alphaDesc.RenderTarget[0].BlendEnable = TRUE;
+    alphaDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+    alphaDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    alphaDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+    alphaDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+    alphaDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+    alphaDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    alphaDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+    hr = _device->CreateBlendState(&alphaDesc, &_blendStateAlpha);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[RendererGPU] Failed to create alpha blend state: 0x" + ss.str());
+        return false;
     }
 
     return true;
@@ -703,8 +763,10 @@ void RendererGPU::BeginColBuffFrame() {
     viewport.MaxDepth = 1.0f;
     _context->RSSetViewports(1, &viewport);
 
-    // Set depth stencil state
+    // Set depth stencil and blend state (on for both 3D and 2D)
     _context->OMSetDepthStencilState(_depthStencilState.Get(), 0);
+    const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    _context->OMSetBlendState(_blendStateAlpha.Get(), blendFactor, 0xFFFFFFFF);
 
     // Set rasterizer state based on wireframe, backface culling, and CCW modes
     bool wireframe = Renderer::GetInst().GetWireframe();
@@ -819,6 +881,21 @@ void RendererGPU::DownloadFramebuffer()
 }
 
 // =========================================================================
+// Depth test (for 2D overlay)
+// =========================================================================
+
+void RendererGPU::SetDepthTestEnabled(bool enabled) {
+    ID3D11DepthStencilState* state = enabled ? _depthStencilState.Get() : _depthStencilStateNoTest.Get();
+    _context->OMSetDepthStencilState(state, 0);
+}
+
+void RendererGPU::SetBlendEnabled(bool enabled) {
+    ID3D11BlendState* state = enabled ? _blendStateAlpha.Get() : _blendStateOpaque.Get();
+    const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    _context->OMSetBlendState(state, blendFactor, 0xFFFFFFFF);
+}
+
+// =========================================================================
 // Cleanup
 // =========================================================================
 
@@ -839,6 +916,9 @@ void RendererGPU::Shutdown()
         state.Reset();
     }
 
+    _blendStateAlpha.Reset();
+    _blendStateOpaque.Reset();
+    _depthStencilStateNoTest.Reset();
     _depthStencilState.Reset();
     _depthStencilView.Reset();
     _depthStencilBuffer.Reset();

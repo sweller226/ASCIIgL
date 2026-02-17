@@ -27,6 +27,7 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     auto& col     = registry.emplace<components::Collider>(p_ent);
     auto& head    = registry.emplace<components::Head>(p_ent);
     auto& reach   = registry.emplace<components::Reach>(p_ent);
+    auto& input   = registry.emplace<components::PlayerInput>(p_ent);
 
     // --- Transform ---
     t.setPosition(position);

@@ -6,11 +6,13 @@
 
 namespace events {
 
-/// Emitted when a GUI slot is clicked
+/// Emitted when a GUI slot is clicked (OOP or ECS). For OOP, slot is entt::null; use inventoryOwner + slotIndex.
 struct SlotClickedEvent {
-    entt::entity slot;
-    int slotIndex;
-    int mouseButton;  // 0 = left, 1 = right, 2 = middle
+    entt::entity slot = entt::null;           // ECS slot entity, or null for OOP
+    entt::entity inventoryOwner = entt::null;  // Entity with Inventory (required for OOP)
+    int slotIndex = -1;
+    int mouseButton = 0;  // 0 = left, 1 = right, 2 = middle
+    bool shift = false;
 };
 
 /// Emitted when mouse hovers over a slot

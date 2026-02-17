@@ -9,15 +9,15 @@ namespace ecs::systems {
 
 class PlacingSystem : public ISystem {
 public:
-    explicit PlacingSystem(entt::registry &registry, EventBus& eventBus);
+    PlacingSystem(entt::registry& registry, EventBus& eventBus);
 
     void Update() override;
 
 private:
-    entt::registry &m_registry;
-    EventBus &eventBus;
+    entt::registry& m_registry;
+    EventBus& m_eventBus;
 
-    void PlayerPlace(); // temp simple insta break
+    void PlayerPlace();
 };
 
 }

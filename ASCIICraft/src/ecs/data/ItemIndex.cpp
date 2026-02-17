@@ -28,10 +28,9 @@ entt::entity ItemIndex::RegisterBlockItem(
     std::shared_ptr<ASCIIgL::Mesh> mesh, int maxStack
 ) {
     auto e = reg.create();
-    std::string regName = MakeItemName(name);
-    int id = RegisterNext(regName, e);
+    int id = RegisterNext(name, e);
     reg.emplace<components::ItemDefinitionTag>(e);
-    reg.emplace<components::ItemId>(e, id, regName, display);
+    reg.emplace<components::ItemId>(e, id, name, display);
     reg.emplace<components::Stackable>(e, maxStack);
     reg.emplace<components::ItemVisual>(e, std::move(mesh), false);
     reg.emplace<components::PlaceableProperty>(e, id);  // blockId == itemId
@@ -44,12 +43,11 @@ entt::entity ItemIndex::RegisterResourceItem(
     std::shared_ptr<ASCIIgL::Mesh> mesh, int maxStack
 ) {
     auto e = reg.create();
-    std::string regName = MakeItemName(name);
     reg.emplace<components::ItemDefinitionTag>(e);
-    reg.emplace<components::ItemId>(e, id, regName, display);
+    reg.emplace<components::ItemId>(e, id, name, display);
     reg.emplace<components::Stackable>(e, maxStack);
     reg.emplace<components::ItemVisual>(e, std::move(mesh), true);
-    Register(id, regName, e);
+    Register(id, name, e);
     return e;
 }
 
@@ -60,13 +58,12 @@ entt::entity ItemIndex::RegisterToolItem(
     components::ToolProperty tool, components::WeaponProperty weapon
 ) {
     auto e = reg.create();
-    std::string regName = MakeItemName(name);
     reg.emplace<components::ItemDefinitionTag>(e);
-    reg.emplace<components::ItemId>(e, id, regName, display);
+    reg.emplace<components::ItemId>(e, id, name, display);
     reg.emplace<components::ItemVisual>(e, std::move(mesh), true);
     reg.emplace<components::ToolProperty>(e, tool);
     reg.emplace<components::WeaponProperty>(e, weapon);
-    Register(id, regName, e);
+    Register(id, name, e);
     return e;
 }
 
@@ -224,10 +221,6 @@ std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetBlockMeshFromState(const blockstate
 std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetQuadItemMesh(int x, int y, int ATLAS_SIZE) {
     int layer = ASCIIgL::TextureArray::GetLayerFromAtlasXY(x, y, ATLAS_SIZE);
     return ItemIndex::GetQuadItemMesh(layer);
-}
-
-std::string ItemIndex::MakeItemName(const std::string& name) {
-    return "minecraft:" + name;
 }
 
 } // namespace ecs::data

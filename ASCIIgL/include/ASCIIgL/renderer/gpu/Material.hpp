@@ -46,7 +46,7 @@ class Material {
 
 public:
     // Create a material from a shader program
-    static std::unique_ptr<Material> Create(std::shared_ptr<ShaderProgram> program);
+    static std::unique_ptr<Material> Create(std::unique_ptr<ShaderProgram> program);
     
     // Create with default shader (convenience)
     static std::unique_ptr<Material> CreateDefault();
