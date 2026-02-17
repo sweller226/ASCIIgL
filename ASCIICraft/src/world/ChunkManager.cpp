@@ -623,8 +623,13 @@ void ChunkManager::RenderChunks() {
     float fogEnd = chunkRenderDist - (Chunk::SIZE * 0.5f); // Fade out fully before strict cutoff
     float fogStart = fogEnd - (Chunk::SIZE * 1.0f);        // Start fading 3 chunks earlier
     
+    // Get background color and normalize to 0-1 range for shader
+    glm::ivec3 bgCol = ASCIIgL::Renderer::GetInst().GetBackgroundCol();
+    glm::vec3 fogColor = glm::vec3(bgCol) / 255.0f;
+    
     mat->SetFloat3("cameraPos", pos);
     mat->SetFloat4("fogParams", glm::vec4(fogStart, fogEnd, 0.0f, 0.0f));
+    mat->SetFloat3("fogColor", fogColor);
 
     // --- Prepare renderer draw-calls ---
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();

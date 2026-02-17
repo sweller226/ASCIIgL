@@ -1,15 +1,18 @@
-#include <ASCIICraft/ecs/systems/InputSystem.hpp>
+#include <ASCIICraft/input/InputSystem.hpp>
 
 #include <ASCIICraft/events/EventBus.hpp>
 #include <ASCIICraft/events/InputEvents.hpp>
 #include <ASCIIgL/engine/InputManager.hpp>
 
-namespace ecs::systems {
+namespace ASCIICraft::input {
 
-InputSystem::InputSystem(entt::registry& registry, EventBus& eventBus)
-    : m_registry(registry)
-    , m_eventBus(eventBus)
+InputSystem::InputSystem(EventBus& eventBus)
+    : m_eventBus(eventBus)
 {}
+
+void InputSystem::SetInputMode(InputMode newMode) {
+    m_inputMode = newMode;
+}
 
 void InputSystem::Update() {
     ASCIIgL::InputManager::GetInst().Update();
@@ -42,4 +45,4 @@ float InputSystem::GetMouseSensitivity() const {
     return ASCIIgL::InputManager::GetInst().GetMouseSensitivity();
 }
 
-} // namespace ecs::systems
+} // namespace ASCIICraft::input

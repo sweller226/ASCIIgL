@@ -8,6 +8,7 @@
 #include <FastNoiseLite/FastNoiseLite.h>
 
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIICraft/world/blockplacement/BlockPlacement.hpp>
 
 TerrainGenerator::TerrainGenerator(entt::registry &registry)
     : noiseInitialized(false)
@@ -199,7 +200,11 @@ uint32_t TerrainGenerator::DetermineBlockState(int worldX, int worldY, int world
 
     if (depthFromSurface == 0) {
         CheckTreePlacement(worldX, worldY, worldZ, params, treePlacementPositions);
-        return grassId;
+
+        // Apply placement-time logic (grass orientation, etc.) with terrain generation context
+        return ASCIICraft::GetFinalizedBlockStateForPlacement(
+            *m_bsr, grassId, worldX, worldY, worldZ, ASCIICraft::PlacementContext::TerrainGeneration
+        );
     } else if (depthFromSurface < params.DIRT_DEPTH) {
         return dirtId;
     } else {
@@ -240,7 +245,7 @@ void TerrainGenerator::CheckTreePlacement(
 }
 
 void TerrainGenerator::GenerateTree(int worldX, int worldY, int worldZ, SetBlockCallback setBlock) {
-    constexpr int TRUNK_HEIGHT = 5;
+    constexpr int TRUNK_HEIGHT = 6;  // Extends up to Y+5 (center of 3x3 layer, almost to top)
     constexpr int LEAF_BASE_OFFSET = 3;
     constexpr int LEAF_RADIUS = 2;
 

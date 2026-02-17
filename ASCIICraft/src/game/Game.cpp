@@ -30,6 +30,7 @@
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/Velocity.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
+#include <ASCIICraft/ecs/components/PlayerController.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
 
 // shaders
@@ -38,11 +39,12 @@
 
 Game::Game()
     : gameState(GameState::Playing)
-    , inputSystem(registry, eventBus)
-    , movementSystem(registry, inputSystem, eventBus)
+    , inputSystem(eventBus)
+    , gameplayInputFilter(inputSystem)
+    , movementSystem(registry, gameplayInputFilter, eventBus)
     , physicsSystem(registry)
     , renderSystem(registry)
-    , cameraSystem(registry, inputSystem)
+    , cameraSystem(registry, gameplayInputFilter)
     , guiManager(registry, eventBus, inputSystem)
     , blockUpdateSystem(registry, eventBus)
     , placingSystem(registry, eventBus)
@@ -207,7 +209,7 @@ void Game::Update() {
     ASCIIgL::Logger::Debug("Game::Update - state = " +
         std::to_string(static_cast<int>(gameState)));
 
-    inputSystem.SetInputMode(guiManager.IsBlockingInput() ? ecs::systems::InputMode::GUI : ecs::systems::InputMode::Gameplay);
+    inputSystem.SetInputMode(guiManager.IsBlockingInput() ? ASCIICraft::input::InputMode::GUI : ASCIICraft::input::InputMode::Gameplay);
     inputSystem.Update();
 
     for ([[maybe_unused]] const auto& e : eventBus.view<events::ToggleInventoryEvent>()) {
@@ -243,12 +245,10 @@ void Game::Update() {
             ASCIIgL::Logger::Debug("Update: Running world update");
             world->Update();
 
-            if (inputSystem.GetInputMode() == ecs::systems::InputMode::Gameplay) {
-                ASCIIgL::Logger::Debug("Update: Running movement system");
-                movementSystem.Update();
-                ASCIIgL::Logger::Debug("Update: Running camera system");
-                cameraSystem.Update();
-            }
+            ASCIIgL::Logger::Debug("Update: Running movement system");
+            movementSystem.Update();
+            ASCIIgL::Logger::Debug("Update: Running camera system");
+            cameraSystem.Update();
 
             ASCIIgL::Logger::Debug("Update: Running physics system");
             physicsSystem.Update();
@@ -568,7 +568,11 @@ void Game::InitializeBlockStates() {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
 
-    bsr.RegisterType("minecraft:grass", {});
+    bsr.RegisterType("minecraft:grass", {
+        // BlockStateRegistry properties are string-based; use BlockFace in code and convert at placement time.
+        blockstate::BlockProperty{ "facing", {"north", "south", "east", "west"}, 0 }
+    });
+    
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:grass"), [&](blockstate::BlockState& s) {
         s.faceTextureLayers[0] = L(0, 0); // Top
         s.faceTextureLayers[1] = L(2, 0); // Bottom (dirt)

@@ -49,6 +49,7 @@ cbuffer ConstantBuffer : register(b0)
     float4 gradientEnd;     // End color of gradient (bright), alpha = unused
     float3 cameraPos;       // Unused in PS but part of CBuffer layout
     float4 fogParams;       // x=start, y=end
+    float3 fogColor;        // Color to fade to at distance (matches background)
 };
 
 struct PS_INPUT
@@ -88,9 +89,9 @@ float4 main(PS_INPUT input) : SV_TARGET
     float3 mappedColor = hue * brightness;
 
     // === Fog Application ===
-    // Simple linear fog: fades to gradientStart (darkest color) at distance
+    // Simple linear fog: fades to fogColor (background color) at distance
     float fogFactor = saturate((input.dist - fogParams.x) / (fogParams.y - fogParams.x));
-    float3 finalColor = lerp(mappedColor, gradientStart.rgb, fogFactor); // Fade to dark/background
+    float3 finalColor = lerp(mappedColor, fogColor, fogFactor); // Fade to background color
     
     // Preserve original alpha
     return float4(finalColor, texColor.a);
@@ -105,6 +106,7 @@ ASCIIgL::UniformBufferLayout GetTerrainPSUniformLayout() {
         .Add("gradientEnd", ASCIIgL::UniformType::Float4)
         .Add("cameraPos", ASCIIgL::UniformType::Float3)
         .Add("fogParams", ASCIIgL::UniformType::Float4)
+        .Add("fogColor", ASCIIgL::UniformType::Float3)
         .Build();
 }
 

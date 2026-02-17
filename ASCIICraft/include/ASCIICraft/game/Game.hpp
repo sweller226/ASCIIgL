@@ -19,7 +19,8 @@
 // ecs systems
 #include <ASCIICraft/ecs/systems/MovementSystem.hpp>
 #include <ASCIICraft/ecs/systems/CameraSystem.hpp>
-#include <ASCIICraft/ecs/systems/InputSystem.hpp>
+#include <ASCIICraft/input/InputSystem.hpp>
+#include <ASCIICraft/input/GameplayInputFilter.hpp>
 #include <ASCIICraft/ecs/systems/RenderSystem.hpp>
 #include <ASCIICraft/ecs/systems/PhysicsSystem.hpp>
 #include <ASCIICraft/gui/GuiManager.hpp>
@@ -65,8 +66,9 @@ private:
     entt::registry registry;
     EventBus eventBus;
     
-    // ecs systems (inputSystem first so others can take a reference)
-    ecs::systems::InputSystem inputSystem;
+    // ecs systems (inputSystem first; gameplayInputFilter wraps it for movement/camera so GUI blocks input there)
+    ASCIICraft::input::InputSystem inputSystem;
+    ASCIICraft::GameplayInputFilter gameplayInputFilter;
     ecs::systems::MovementSystem movementSystem;
     ecs::systems::CameraSystem cameraSystem;
     ecs::systems::PhysicsSystem physicsSystem;

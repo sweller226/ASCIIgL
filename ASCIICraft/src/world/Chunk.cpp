@@ -10,6 +10,8 @@
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/TextureLibrary.hpp>
 
+#include <ASCIICraft/world/blockstate/BlockFace.hpp>
+
 
 
 // Chunk constructor
@@ -73,6 +75,7 @@ void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
         int x, y, z;
         int faceIndex;    // 0..5
         int textureLayer; // atlas layer for this face
+        uint8_t blockFacing; // BlockFace for top/bottom UV rotation (default North)
     };
     std::vector<TransparentFace> transparentFaces;
 
@@ -134,6 +137,9 @@ void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
 
                 const auto renderMode = state.renderMode;
                 const bool blockIsTranslucent = (renderMode == blockstate::RenderMode::Translucent);
+
+                // Facing for top/bottom UV rotation (blocks with "facing" property)
+                BlockFace blockFacing = StringToBlockFace(bsr.GetPropertyValue(stateId, "facing"));
                 
                 // Check each face of the block
                 for (int face = 0; face < 6; face++) {
@@ -222,6 +228,7 @@ void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
                         tf.z = z;
                         tf.faceIndex = face;
                         tf.textureLayer = textureLayer;
+                        tf.blockFacing = static_cast<uint8_t>(blockFacing);
                         transparentFaces.push_back(tf);
                     } else {
                         // Opaque and cutout faces are emitted directly into the opaque mesh.
@@ -238,6 +245,10 @@ void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
                             ) + faceVerticesIndexed[face][vertIdx];
 
                             glm::vec2 faceUV = faceUVsIndexed[vertIdx];
+                            // Rotate top/bottom UV for blocks with facing (e.g. grass)
+                            if (face == 0 || face == 1) {
+                                faceUV = RotateTopBottomUV(faceUV, blockFacing);
+                            }
                             float u = faceUV.x;
                             float v = 1.0f - faceUV.y;
 
@@ -344,6 +355,7 @@ void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
 
                 int face = tf.faceIndex;
                 int textureLayer = tf.textureLayer;
+                BlockFace blockFacing = static_cast<BlockFace>(tf.blockFacing);
 
                 int baseVertexIndex = static_cast<int>(verticesVariant.size()) / ASCIIgL::VertFormats::PosUVLayer().GetStride();
 
@@ -355,6 +367,9 @@ void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
                     ) + faceVerticesIndexed[face][vertIdx];
 
                     glm::vec2 faceUV = faceUVsIndexed[vertIdx];
+                    if (face == 0 || face == 1) {
+                        faceUV = RotateTopBottomUV(faceUV, blockFacing);
+                    }
                     float u = faceUV.x;
                     float v = 1.0f - faceUV.y;
 

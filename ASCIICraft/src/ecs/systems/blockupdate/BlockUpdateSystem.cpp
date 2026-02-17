@@ -34,9 +34,13 @@ namespace ecs::systems {
         auto& events = eventBus.view<PlaceBlockEvent>();
         World* world = GetWorldPtr(m_registry);
 
+        auto* bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
+        if (!world || !bsr) return;
+
         for (auto& e : events) {
             if (e.stateId == blockstate::BlockStateRegistry::AIR_STATE_ID) { continue; }
 
+            // Event already contains finalized state (orientation applied in PlacingSystem)
             world->GetChunkManager()->SetBlockState(e.position, e.stateId);
         }
     }

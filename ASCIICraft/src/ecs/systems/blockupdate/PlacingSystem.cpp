@@ -8,6 +8,7 @@
 #include <ASCIICraft/events/PlaceBlockEvent.hpp>
 #include <ASCIICraft/world/World.hpp>
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/blockplacement/BlockPlacement.hpp>
 
 namespace ecs::systems {
 
@@ -39,8 +40,16 @@ void PlacingSystem::PlayerPlace() {
             auto* bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
             if (!bsr) break;
 
+            // Get the base state (e.g. default grass block)
+            uint32_t baseStateId = bsr->GetDefaultState(bsr->GetTypeId("minecraft:bedrock"));
+            
+            // Apply placement-time logic (grass orientation, etc.) with player placement context
+            uint32_t finalizedStateId = ASCIICraft::GetFinalizedBlockStateForPlacement(
+                *bsr, baseStateId, rayCast.second, ASCIICraft::PlacementContext::PlayerPlacement
+            );
+
             PlaceBlockEvent placeEvent;
-            placeEvent.stateId = bsr->GetDefaultState(bsr->GetTypeId("minecraft:bedrock"));
+            placeEvent.stateId = finalizedStateId;
             placeEvent.position = rayCast.second;
             m_eventBus.emit(placeEvent);
         }
