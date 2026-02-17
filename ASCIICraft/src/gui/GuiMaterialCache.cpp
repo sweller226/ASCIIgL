@@ -1,6 +1,6 @@
 #include <ASCIICraft/gui/GuiMaterialCache.hpp>
-#include <ASCIIgL/renderer/gpu/Material.hpp>
-#include <ASCIIgL/renderer/gpu/Shader.hpp>
+#include <ASCIIgL/renderer/Material.hpp>
+#include <ASCIIgL/renderer/Shader.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 #include <ASCIICraft/rendering/GUIShaders.hpp>
 #include <ASCIIgL/util/Logger.hpp>

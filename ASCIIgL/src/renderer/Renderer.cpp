@@ -6,6 +6,8 @@
 #include <sstream>
 #include <mutex>
 #include <thread>
+#include <iostream>
+#include <Windows.h>
 
 #include <tbb/parallel_for_each.h>
 
@@ -16,8 +18,8 @@
 #include <ASCIIgL/util/Profiler.hpp>
 
 #include <ASCIIgL/renderer/screen/Screen.hpp>
-#include <ASCIIgL/renderer/cpu/RendererCPU.hpp>
-#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
+#include <ASCIIgL/renderer/Shader.hpp>
+#include <ASCIIgL/renderer/Material.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 
 namespace ASCIIgL {
@@ -27,13 +29,13 @@ namespace ASCIIgL {
 // =============================================================================
 
 Renderer::~Renderer() {
+    Shutdown();
     _color_buffer.clear();
 }
 
-void Renderer::Initialize(bool antialiasing, int antialiasing_samples, bool cpu_only) {
+void Renderer::Initialize(bool antialiasing, int antialiasing_samples) {
     _antialiasing = antialiasing;
     _antialiasing_samples = antialiasing_samples;
-    _cpu_only = cpu_only;
     
     if (!_initialized) {
         Logger::Info("Initializing Renderer...");
@@ -49,20 +51,54 @@ void Renderer::Initialize(bool antialiasing, int antialiasing_samples, bool cpu_
     auto& screen = Screen::GetInst();
     _color_buffer.resize(screen.GetWidth() * screen.GetHeight());
 
-    if (_cpu_only) {
-        if (!_rendererCPU) {
-            _rendererCPU = &RendererCPU::GetInst();
-            _rendererCPU->Initialize();
-        }
-    }
-    else {
-        if (!_rendererGPU) {
-            _rendererGPU = &RendererGPU::GetInst();
-            _rendererGPU->Initialize();
-        }
+    Logger::Info("[Renderer] Initializing DirectX 11...");
+
+    if (!InitializeDevice()) {
+        Logger::Error("[Renderer] Failed to initialize device");
+        return;
     }
 
+    if (!InitializeRenderTarget()) {
+        Logger::Error("[Renderer] Failed to initialize render target");
+        return;
+    }
+
+    Logger::Info("[Renderer] Initializing depth stencil...");
+    if (!InitializeDepthStencil()) {
+        Logger::Error("[Renderer] Failed to initialize depth stencil");
+        return;
+    }
+
+    if (!InitializeSamplers()) {
+        Logger::Error("[Renderer] Failed to initialize samplers");
+        return;
+    }
+
+    if (!InitializeRasterizerStates()) {
+        Logger::Error("[Renderer] Failed to initialize rasterizer states");
+        return;
+    }
+
+    Logger::Info("[Renderer] Initializing blend states...");
+    if (!InitializeBlendStates()) {
+        Logger::Error("[Renderer] Failed to initialize blend states");
+        return;
+    }
+
+    if (!InitializeStagingTexture()) {
+        Logger::Error("[Renderer] Failed to initialize staging texture");
+        return;
+    }
+
+    if (!InitializeDebugSwapChain()) {
+        Logger::Error("[Renderer] Failed to initialize debug swap chain (non-fatal)");
+        // Non-fatal - continue without swap chain
+    }
+
+    // Pipeline state (depth + blend) is set in BeginColBuffFrame when RTV is bound.
+
     _initialized = true;
+    Logger::Debug("Renderer initialization complete - Device, Shaders, Buffers ready");
 }
 
 bool Renderer::IsInitialized() const {
@@ -70,36 +106,38 @@ bool Renderer::IsInitialized() const {
 }
 
 // =============================================================================
-// RENDERING MODE CONFIGURATION
-// =============================================================================
-
-bool Renderer::GetCpuOnly() const {
-    return _cpu_only;
-}
-
-// =============================================================================
 // HIGH-LEVEL DRAWING API - MESHES AND MODELS
 // =============================================================================
 
 void Renderer::DrawMesh(const Mesh* mesh) {
-    if (!mesh) {
-        Logger::Error("DrawMesh: mesh is nullptr!");
+    if (!_initialized || !mesh) {
+        if (!mesh) {
+            Logger::Error("DrawMesh: mesh is nullptr!");
+        }
         return;
     }
     
-    if (_cpu_only) {
-        _rendererCPU->DrawMesh(mesh);
+    // Get or create GPU buffer cache for this mesh
+    GPUMeshCache* cache = GetOrCreateMeshCache(mesh);
+    if (!cache || !cache->vertexBuffer) return;
+    
+    // Bind cached vertex buffer with mesh's format stride
+    UINT stride = mesh->GetVertFormat().GetStride();
+    UINT offset = 0;
+    _context->IASetVertexBuffers(0, 1, cache->vertexBuffer.GetAddressOf(), &stride, &offset);
+    
+    // Draw with or without indices
+    if (cache->indexBuffer && cache->indexCount > 0) {
+        _context->IASetIndexBuffer(cache->indexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
+        _context->DrawIndexed(static_cast<UINT>(cache->indexCount), 0, 0);
     } else {
-        _rendererGPU->DrawMesh(mesh);
+        _context->Draw(static_cast<UINT>(cache->vertexCount), 0);
     }
 }
 
-
 void Renderer::DrawModel(const Model& ModelObj) {
-    if (_cpu_only) {
-        _rendererCPU->DrawModel(ModelObj);
-    } else {
-        _rendererGPU->DrawModel(ModelObj);
+    for (size_t i = 0; i < ModelObj.meshes.size(); i++) {
+        DrawMesh(ModelObj.meshes[i]);
     }
 }
 
@@ -363,12 +401,56 @@ void Renderer::PlotColorBlend(int x, int y, const glm::ivec4& color) {
 // =============================================================================
 
 void Renderer::BeginColBuffFrame() {
-    if (_cpu_only) {
-        _rendererCPU->BeginColBuffFrame();
+    if (!_initialized) {
+        Logger::Error("[Renderer] BeginFrame called before initialization!");
+        return;
     }
-    else {
-        _rendererGPU->BeginColBuffFrame();
-    }
+
+    Logger::Debug("BeginFrame: Clearing render target and setting up pipeline");
+
+    // Clear render target (convert 0-255 integer color to 0-1 float)
+    glm::ivec3 bgCol = GetBackgroundCol();
+    float clear_color[4] = { 
+        static_cast<float>(bgCol.x) / 255.0f, 
+        static_cast<float>(bgCol.y) / 255.0f, 
+        static_cast<float>(bgCol.z) / 255.0f, 
+        1.0f 
+    };
+    _context->ClearRenderTargetView(_renderTargetView.Get(), clear_color);
+
+    // Clear depth stencil
+    _context->ClearDepthStencilView(_depthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);  // Clear to 1.0 (far plane)
+
+    // Bind render targets
+    _context->OMSetRenderTargets(1, _renderTargetView.GetAddressOf(), _depthStencilView.Get());
+
+    // Set viewport
+    D3D11_VIEWPORT viewport = {};
+    viewport.Width = static_cast<float>(Screen::GetInst().GetWidth());
+    viewport.Height = static_cast<float>(Screen::GetInst().GetHeight());
+    viewport.MinDepth = 0.0f;
+    viewport.MaxDepth = 1.0f;
+    _context->RSSetViewports(1, &viewport);
+
+    // Set depth stencil and blend state (on for both 3D and 2D)
+    _context->OMSetDepthStencilState(_depthStencilState.Get(), 0);
+    const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    _context->OMSetBlendState(_blendStateAlpha.Get(), blendFactor, 0xFFFFFFFF);
+
+    // Set rasterizer state based on wireframe, backface culling, and CCW modes
+    bool wireframe = GetWireframe();
+    bool backfaceCulling = GetBackfaceCulling();
+    bool ccw = GetCCW();
+    
+    // Calculate index: wireframe(0/1) + cull(0/2) + ccw(0/4)
+    int stateIndex = (wireframe ? 1 : 0) + (backfaceCulling ? 2 : 0) + (ccw ? 4 : 0);
+    _context->RSSetState(_rasterizerStates[stateIndex].Get());
+
+    // Bind sampler
+    _context->PSSetSamplers(0, 1, _samplerLinear.GetAddressOf());
+
+    // Set primitive topology
+    _context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     
     std::fill(_color_buffer.begin(), _color_buffer.end(), glm::ivec4(_background_col, 1));
 }
@@ -748,12 +830,30 @@ void Renderer::TestRenderColorContinuous() {
 }
 
 void Renderer::EndColBuffFrame() {
-    if (_cpu_only) {
-        // no action needed for CPU renderer
+    // Resolve MSAA render target to non-MSAA texture for CPU download
+    D3D11_TEXTURE2D_DESC rtDesc;
+    _renderTarget->GetDesc(&rtDesc);
+    
+    if (rtDesc.SampleDesc.Count > 1) {
+        // MSAA is enabled - resolve to non-MSAA texture
+        _context->ResolveSubresource(
+            _resolvedTexture.Get(),     // Destination (non-MSAA)
+            0,                           // Dest subresource
+            _renderTarget.Get(),         // Source (MSAA)
+            0,                           // Source subresource
+            DXGI_FORMAT_R8G8B8A8_UNORM  // Format
+        );
+    } else {
+        // No MSAA - just copy render target to resolved texture
+        _context->CopyResource(_resolvedTexture.Get(), _renderTarget.Get());
     }
-    else {
-        _rendererGPU->EndColBuffFrame();
+    
+    // Present for RenderDoc (does nothing if no swap chain)
+    if (_debugSwapChain) {
+        _debugSwapChain->Present(0, 0);
     }
+
+    DownloadFramebuffer();
 
     OverwritePxBuffWithColBuff();
 }
@@ -767,6 +867,966 @@ void Renderer::SetPaletteMode(PaletteMode mode) {
 
 PaletteMode Renderer::GetPaletteMode() const {
     return _paletteMode;
+}
+
+// =========================================================================
+// GPU Initialization Methods
+// =========================================================================
+
+bool Renderer::InitializeDevice() {
+    UINT createDeviceFlags = 0;
+#ifdef _DEBUG
+    createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+
+    D3D_FEATURE_LEVEL featureLevels[] = {
+        D3D_FEATURE_LEVEL_11_1,
+        D3D_FEATURE_LEVEL_11_0,
+    };
+
+    D3D_FEATURE_LEVEL featureLevel;
+    HRESULT hr = D3D11CreateDevice(
+        nullptr,                    // Default adapter
+        D3D_DRIVER_TYPE_HARDWARE,   // Use hardware acceleration
+        nullptr,                    // No software module
+        createDeviceFlags,          // Device flags
+        featureLevels,              // Feature levels to try
+        ARRAYSIZE(featureLevels),   // Number of feature levels
+        D3D11_SDK_VERSION,          // SDK version
+        &_device,                   // Output device
+        &featureLevel,              // Chosen feature level
+        &_context                   // Output context
+    );
+
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] D3D11CreateDevice failed: 0x" + ss.str());
+        return false;
+    }
+
+    std::string featureLevelStr = (featureLevel == D3D_FEATURE_LEVEL_11_1) ? "11.1" : "11.0";
+    Logger::Info("[Renderer] Device created with feature level: " + featureLevelStr);
+
+    return true;
+}
+
+bool Renderer::InitializeRenderTarget() {
+    // Get MSAA settings
+    bool useMSAA = GetAntialiasing();
+    int msaaSamples = GetAntialiasingsamples();
+    
+    UINT sampleCount = 1;
+    UINT qualityLevel = 0;
+    
+    if (useMSAA) {
+        sampleCount = std::clamp(msaaSamples, 1, 8);  // Clamp to 1-8 samples
+        
+        // Check MSAA quality support
+        UINT numQualityLevels = 0;
+        _device->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, sampleCount, &numQualityLevels);
+        if (numQualityLevels > 0) {
+            qualityLevel = 0; 
+        } else {
+            Logger::Warning("[Renderer] " + std::to_string(sampleCount) + " x MSAA not supported, falling back to 1x");
+            sampleCount = 1;
+        }
+    }
+    
+    Logger::Debug("[Renderer] Creating render target with " + std::to_string(sampleCount) + "x MSAA");
+    
+    // Create MSAA render target texture
+    D3D11_TEXTURE2D_DESC texDesc = {};
+    texDesc.Width = Screen::GetInst().GetWidth();
+    texDesc.Height = Screen::GetInst().GetHeight();
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = 1;
+    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texDesc.SampleDesc.Count = sampleCount;
+    texDesc.SampleDesc.Quality = qualityLevel;
+    texDesc.Usage = D3D11_USAGE_DEFAULT;
+    texDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+    texDesc.CPUAccessFlags = 0;
+
+    HRESULT hr = _device->CreateTexture2D(&texDesc, nullptr, &_renderTarget);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create render target texture: 0x" + ss.str());
+        return false;
+    }
+
+    // Create render target view
+    hr = _device->CreateRenderTargetView(_renderTarget.Get(), nullptr, &_renderTargetView);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create render target view: 0x" + ss.str());
+        return false;
+    }
+    
+    // Create resolved (non-MSAA) texture for CPU download
+    texDesc.SampleDesc.Count = 1;
+    texDesc.SampleDesc.Quality = 0;
+    texDesc.BindFlags = 0;  // No binding needed, just for copying
+    
+    hr = _device->CreateTexture2D(&texDesc, nullptr, &_resolvedTexture);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create resolved texture: 0x" + ss.str());
+        return false;
+    }
+
+    std::string msg = "[Renderer] Render target initialized: " + 
+        std::to_string(Screen::GetInst().GetWidth()) + "x" + 
+        std::to_string(Screen::GetInst().GetHeight()) + 
+        (useMSAA ? (" with " + std::to_string(sampleCount) + "x MSAA") : " without MSAA");
+    Logger::Info(msg);
+
+    return true;
+}
+
+bool Renderer::InitializeDepthStencil() {
+    // Get MSAA settings (must match render target)
+    bool useMSAA = GetAntialiasing();
+    int msaaSamples = GetAntialiasingsamples();
+    
+    UINT sampleCount = 1;
+    if (useMSAA) {
+        sampleCount = std::clamp(msaaSamples, 1, 8);
+    }
+    
+    // Create depth stencil texture (must match render target MSAA settings)
+    D3D11_TEXTURE2D_DESC depthDesc = {};
+    depthDesc.Width = Screen::GetInst().GetWidth();
+    depthDesc.Height = Screen::GetInst().GetHeight();
+    depthDesc.MipLevels = 1;
+    depthDesc.ArraySize = 1;
+    depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    depthDesc.SampleDesc.Count = sampleCount;
+    depthDesc.SampleDesc.Quality = 0;
+    depthDesc.Usage = D3D11_USAGE_DEFAULT;
+    depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+
+    HRESULT hr = _device->CreateTexture2D(&depthDesc, nullptr, &_depthStencilBuffer);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create depth stencil buffer: 0x" + ss.str());
+        return false;
+    }
+
+    // Create depth stencil view
+    hr = _device->CreateDepthStencilView(_depthStencilBuffer.Get(), nullptr, &_depthStencilView);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create depth stencil view: 0x" + ss.str());
+        return false;
+    }
+
+    // Create depth stencil state
+    D3D11_DEPTH_STENCIL_DESC dsDesc = {};
+    dsDesc.DepthEnable = TRUE;
+    dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+    dsDesc.DepthFunc = D3D11_COMPARISON_LESS;  // Standard depth test: closer objects win
+    dsDesc.StencilEnable = FALSE;
+
+    hr = _device->CreateDepthStencilState(&dsDesc, &_depthStencilState);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create depth stencil state: 0x" + ss.str());
+        return false;
+    }
+
+    // No-depth state (depth test disabled)
+    dsDesc.DepthEnable = FALSE;
+    dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+    hr = _device->CreateDepthStencilState(&dsDesc, &_depthStencilStateNoTest);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create no-depth stencil state: 0x" + ss.str());
+        return false;
+    }
+
+    // Depth test on, depth write off — for transparent/2D so they don't occlude geometry behind
+    dsDesc.DepthEnable = TRUE;
+    dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+    dsDesc.DepthFunc = D3D11_COMPARISON_LESS;
+    hr = _device->CreateDepthStencilState(&dsDesc, &_depthStencilStateNoWrite);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create no-write depth stencil state: 0x" + ss.str());
+        return false;
+    }
+
+    return true;
+}
+
+bool Renderer::InitializeSamplers() {
+    // Create point sampler with linear mipmap blending for pixel art
+    // Point filtering keeps pixels sharp, linear mip blending reduces shimmering at distance
+    D3D11_SAMPLER_DESC samplerDesc = {};
+    samplerDesc.Filter = D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;  // Point filtering with smooth mipmap transitions
+    samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;  // Clamp to prevent bleeding at edges
+    samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    samplerDesc.MipLODBias = -0.5f;  // Use slightly sharper mipmaps to reduce atlas bleeding
+    samplerDesc.MaxAnisotropy = 1;
+    samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    samplerDesc.MinLOD = 0;
+    samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+    HRESULT hr = _device->CreateSamplerState(&samplerDesc, &_samplerLinear);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create sampler state: 0x" + ss.str());
+        return false;
+    }
+
+    Logger::Debug("[Renderer] Created point sampler with linear mipmap blending for pixel art");
+    return true;
+}
+
+bool Renderer::InitializeRasterizerStates() {
+    D3D11_RASTERIZER_DESC desc = {};
+    desc.DepthClipEnable = TRUE;  // Enable depth clipping
+
+    // Create all 8 combinations: wireframe(0/1) + cull(0/2) + ccw(0/4)
+    for (int i = 0; i < 8; ++i) {
+        bool wireframe = (i & 1) != 0;      // Bit 0: wireframe
+        bool cull = (i & 2) != 0;           // Bit 1: backface culling
+        bool ccw = (i & 4) != 0;            // Bit 2: counter-clockwise winding
+
+        desc.FillMode = wireframe ? D3D11_FILL_WIREFRAME : D3D11_FILL_SOLID;
+        desc.CullMode = cull ? D3D11_CULL_BACK : D3D11_CULL_NONE;
+        desc.FrontCounterClockwise = ccw ? TRUE : FALSE;
+
+        HRESULT hr = _device->CreateRasterizerState(&desc, &_rasterizerStates[i]);
+        if (FAILED(hr)) {
+            std::ostringstream ss;
+            ss << std::hex << hr;
+            Logger::Error("[Renderer] Failed to create rasterizer state " + std::to_string(i) + ": 0x" + ss.str());
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool Renderer::InitializeBlendStates() {
+    // Opaque: no blending (default for 3D)
+    D3D11_BLEND_DESC opaqueDesc = {};
+    opaqueDesc.AlphaToCoverageEnable = FALSE;
+    opaqueDesc.IndependentBlendEnable = FALSE;
+    opaqueDesc.RenderTarget[0].BlendEnable = FALSE;
+    opaqueDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+    HRESULT hr = _device->CreateBlendState(&opaqueDesc, &_blendStateOpaque);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create opaque blend state: 0x" + ss.str());
+        return false;
+    }
+
+    // Alpha: blend for GUI (transparent PNG regions)
+    D3D11_BLEND_DESC alphaDesc = {};
+    alphaDesc.AlphaToCoverageEnable = FALSE;
+    alphaDesc.IndependentBlendEnable = FALSE;
+    alphaDesc.RenderTarget[0].BlendEnable = TRUE;
+    alphaDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+    alphaDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    alphaDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+    alphaDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+    alphaDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+    alphaDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    alphaDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+    hr = _device->CreateBlendState(&alphaDesc, &_blendStateAlpha);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create alpha blend state: 0x" + ss.str());
+        return false;
+    }
+
+    return true;
+}
+
+bool Renderer::InitializeStagingTexture() {
+    // Create staging texture for CPU readback
+    D3D11_TEXTURE2D_DESC stagingDesc = {};
+    stagingDesc.Width = Screen::GetInst().GetWidth();
+    stagingDesc.Height = Screen::GetInst().GetHeight();
+    stagingDesc.MipLevels = 1;
+    stagingDesc.ArraySize = 1;
+    stagingDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    stagingDesc.SampleDesc.Count = 1;
+    stagingDesc.SampleDesc.Quality = 0;
+    stagingDesc.Usage = D3D11_USAGE_STAGING;
+    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+
+    HRESULT hr = _device->CreateTexture2D(&stagingDesc, nullptr, &_stagingTexture);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create staging texture: 0x" + ss.str());
+        return false;
+    }
+
+    return true;
+}
+
+bool Renderer::InitializeDebugSwapChain() {
+    // Get console window handle for minimal swap chain
+    HWND hwnd = GetConsoleWindow();
+    if (!hwnd) {
+        Logger::Error("[Renderer] Failed to get console window handle");
+        return false;
+    }
+
+    // Create a minimal 1x1 swap chain for RenderDoc
+    DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
+    swapChainDesc.BufferCount = 1;
+    swapChainDesc.BufferDesc.Width = 1;
+    swapChainDesc.BufferDesc.Height = 1;
+    swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    swapChainDesc.BufferDesc.RefreshRate.Numerator = 60;
+    swapChainDesc.BufferDesc.RefreshRate.Denominator = 1;
+    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swapChainDesc.OutputWindow = hwnd;
+    swapChainDesc.SampleDesc.Count = 1;
+    swapChainDesc.SampleDesc.Quality = 0;
+    swapChainDesc.Windowed = TRUE;
+    swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+    // Get DXGI factory from device
+    ComPtr<IDXGIDevice> dxgiDevice;
+    if (FAILED(_device.As(&dxgiDevice))) {
+        Logger::Error("[Renderer] Failed to get DXGI device");
+        return false;
+    }
+
+    ComPtr<IDXGIAdapter> dxgiAdapter;
+    if (FAILED(dxgiDevice->GetAdapter(&dxgiAdapter))) {
+        Logger::Error("[Renderer] Failed to get DXGI adapter");
+        return false;
+    }
+
+    ComPtr<IDXGIFactory> dxgiFactory;
+    if (FAILED(dxgiAdapter->GetParent(__uuidof(IDXGIFactory), &dxgiFactory))) {
+        Logger::Error("[Renderer] Failed to get DXGI factory");
+        return false;
+    }
+
+    if (FAILED(dxgiFactory->CreateSwapChain(_device.Get(), &swapChainDesc, &_debugSwapChain))) {
+        Logger::Error("[Renderer] Failed to create debug swap chain");
+        return false;
+    }
+
+    Logger::Debug("[Renderer] Debug swap chain created successfully");
+    return true;
+}
+
+// =========================================================================
+// Framebuffer Download (GPU -> CPU)
+// =========================================================================
+
+void Renderer::DownloadFramebuffer()
+{
+    Logger::Debug("[Renderer] Downloading framebuffer from GPU to CPU...");
+
+    if (!_initialized) {
+        Logger::Warning("[Renderer] DownloadFramebuffer called before initialization!");
+        return;
+    };
+
+    Logger::Debug("DownloadFramebuffer: Copying GPU framebuffer to CPU");
+
+    const int width = Screen::GetInst().GetWidth();
+    const int height = Screen::GetInst().GetHeight();
+
+    // Ensure color buffer is correct size
+    if (_color_buffer.size() != width * height) {
+        _color_buffer.resize(width * height);
+    }
+
+    // Copy resolved texture to staging texture (resolved texture is always non-MSAA)
+    _context->CopyResource(_stagingTexture.Get(), _resolvedTexture.Get());
+
+    // Map staging texture
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    HRESULT hr = _context->Map(_stagingTexture.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+    if (FAILED(hr)) {
+        Logger::Warning("Failed to map staging texture: 0x" + std::to_string(hr));
+        return;
+    }
+
+    // Copy pixels to color buffer (keep 0-255, convert to 0-15 at LUT lookup)
+    uint8_t* src = static_cast<uint8_t*>(mapped.pData);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            uint8_t* pixel = src + y * mapped.RowPitch + x * 4; // RGBA
+            int index = y * width + x;
+            
+            // Keep 0-255 precision in color buffer
+            _color_buffer[index] = glm::ivec4(
+                pixel[0],  // R (0-255)
+                pixel[1],  // G (0-255)
+                pixel[2],  // B (0-255)
+                pixel[3]   // A (0-255)
+            );
+        }
+    }
+
+    _context->Unmap(_stagingTexture.Get(), 0);
+    
+    // Sample some pixels to verify we have actual data
+    int nonBlackPixels = 0;
+    for (int i = 0; i < width * height; i++) {
+        auto& pixel = _color_buffer[i];
+        if (pixel.r != 0 || pixel.g != 0 || pixel.b != 0) {
+            nonBlackPixels++;
+        }
+    }
+    Logger::Debug("DownloadFramebuffer: Successfully downloaded " + std::to_string(width * height) + " pixels, " + std::to_string(nonBlackPixels) + " non-black");
+    
+    // Sample center pixel
+    int centerIdx = (height / 2) * width + (width / 2);
+    auto& centerPixel = _color_buffer[centerIdx];
+    Logger::Debug("Center pixel color: R=" + std::to_string(centerPixel.r) + " G=" + std::to_string(centerPixel.g) + " B=" + std::to_string(centerPixel.b));
+}
+
+// =========================================================================
+// Depth and Blend State Management
+// =========================================================================
+
+void Renderer::SetDepthTestEnabled(bool enabled) {
+    if (!_initialized) return;
+    ID3D11DepthStencilState* state = enabled ? _depthStencilState.Get() : _depthStencilStateNoTest.Get();
+    _context->OMSetDepthStencilState(state, 0);
+}
+
+void Renderer::SetDepthWriteEnabled(bool enabled) {
+    if (!_initialized) return;
+    ID3D11DepthStencilState* state = enabled ? _depthStencilState.Get() : _depthStencilStateNoWrite.Get();
+    _context->OMSetDepthStencilState(state, 0);
+}
+
+void Renderer::SetBlendEnabled(bool enabled) {
+    if (!_initialized) return;
+    ID3D11BlendState* state = enabled ? _blendStateAlpha.Get() : _blendStateOpaque.Get();
+    const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    _context->OMSetBlendState(state, blendFactor, 0xFFFFFFFF);
+}
+
+// =========================================================================
+// Cleanup
+// =========================================================================
+
+void Renderer::Shutdown()
+{
+    if (!_initialized) return;
+
+    // Release all COM objects (ComPtr handles this automatically)
+    _textureCache.clear();  // Clear texture cache
+    _currentTextureSRV.Reset();
+    _stagingTexture.Reset();
+    
+    // Release sampler
+    _samplerLinear.Reset();
+    
+    // Release all rasterizer states
+    for (auto& state : _rasterizerStates) {
+        state.Reset();
+    }
+
+    _blendStateAlpha.Reset();
+    _blendStateOpaque.Reset();
+    _depthStencilStateNoWrite.Reset();
+    _depthStencilStateNoTest.Reset();
+    _depthStencilState.Reset();
+    _depthStencilView.Reset();
+    _depthStencilBuffer.Reset();
+    _renderTargetView.Reset();
+    _resolvedTexture.Reset();
+    _renderTarget.Reset();
+    _context.Reset();
+    _device.Reset();
+
+    _initialized = false;
+    Logger::Debug("[Renderer] Shutdown complete");
+}
+
+// =========================================================================
+// Per-Mesh GPU Buffer Cache Management
+// =========================================================================
+
+Renderer::GPUMeshCache* Renderer::GetOrCreateMeshCache(const Mesh* mesh) {
+    if (!mesh) return nullptr;
+    
+    // Check if cache already exists
+    if (mesh->gpuBufferCache) {
+        return static_cast<GPUMeshCache*>(mesh->gpuBufferCache);
+    }
+    
+    // Create new cache
+    GPUMeshCache* cache = new GPUMeshCache();
+    
+    // Create vertex buffer (immutable for static meshes)
+    if (mesh->GetVertexDataSize() > 0) {
+        D3D11_BUFFER_DESC vbDesc = {};
+        vbDesc.ByteWidth = static_cast<UINT>(mesh->GetVertexDataSize());  // Size in bytes
+        vbDesc.Usage = D3D11_USAGE_IMMUTABLE;  // Static - won't change
+        vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        
+        D3D11_SUBRESOURCE_DATA vbData = {};
+        vbData.pSysMem = mesh->GetVertices().data();
+        
+        HRESULT hr = _device->CreateBuffer(&vbDesc, &vbData, &cache->vertexBuffer);
+        if (FAILED(hr)) {
+            std::ostringstream ss;
+            ss << std::hex << hr;
+            Logger::Error("[Renderer] Failed to create mesh vertex buffer: 0x" + ss.str());
+            delete cache;
+            return nullptr;
+        }
+        cache->vertexCount = mesh->GetVertexCount();
+    }
+    
+    // Create index buffer if mesh is indexed
+    if (!mesh->GetIndices().empty()) {
+        D3D11_BUFFER_DESC ibDesc = {};
+        ibDesc.ByteWidth = sizeof(int) * mesh->GetIndices().size();
+        ibDesc.Usage = D3D11_USAGE_IMMUTABLE;
+        ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+        
+        D3D11_SUBRESOURCE_DATA ibData = {};
+        ibData.pSysMem = mesh->GetIndices().data();
+        
+        HRESULT hr = _device->CreateBuffer(&ibDesc, &ibData, &cache->indexBuffer);
+        if (FAILED(hr)) {
+            std::ostringstream ss;
+            ss << std::hex << hr;
+            Logger::Error("[Renderer] Failed to create mesh index buffer: 0x" + ss.str());
+            delete cache;
+            return nullptr;
+        }
+        cache->indexCount = mesh->GetIndices().size();
+    }
+    
+    // Store cache in mesh
+    mesh->gpuBufferCache = cache;
+    
+    Logger::Debug("[Renderer] Created GPU buffer cache for mesh: " + 
+                  std::to_string(cache->vertexCount) + " vertices, " + 
+                  std::to_string(cache->indexCount) + " indices");
+    
+    return cache;
+}
+
+void Renderer::ReleaseMeshCache(void* cachePtr) {
+    if (!cachePtr) return;
+    
+    GPUMeshCache* cache = static_cast<GPUMeshCache*>(cachePtr);
+    delete cache;  // ComPtr automatically releases buffers
+}
+
+void Renderer::InvalidateCachedTexture(const Texture* tex) {
+    if (!tex) return;
+    
+    auto it = _textureCache.find(tex);
+    if (it != _textureCache.end()) {
+        _textureCache.erase(it);
+        Logger::Debug("[Renderer] Texture cache invalidated for texture");
+    }
+}
+
+// =========================================================================
+// Texture Management
+// =========================================================================
+
+bool Renderer::CreateTextureFromASCIIgLTexture(const Texture* tex, ID3D11ShaderResourceView** srv)
+{
+    if (!tex) return false;
+
+    const int baseW = tex->GetWidth();
+    const int baseH = tex->GetHeight();
+    const uint8_t* baseData = tex->GetDataPtr();
+
+    if (!baseData) return false;
+
+    const bool hasCustom = tex->HasCustomMipmaps();
+    const int mipCount = tex->GetMipCount();
+
+    // -----------------------------
+    // Texture data is already 0–255
+    // -----------------------------
+    auto GetTextureData = [&](const uint8_t* src, int w, int h) {
+        size_t count = w * h * 4;
+        std::vector<uint8_t> out(count);
+        std::memcpy(out.data(), src, count);  // Data is already 0–255
+        return out;
+    };
+
+    // -----------------------------
+    // Create texture description
+    // -----------------------------
+    D3D11_TEXTURE2D_DESC desc = {};
+    desc.Width = baseW;
+    desc.Height = baseH;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    if (hasCustom) {
+        desc.MipLevels = mipCount;
+        desc.MiscFlags = 0; // no auto-mips
+    } else {
+        desc.MipLevels = 0; // auto-generate
+        desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
+        desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+    }
+
+    ComPtr<ID3D11Texture2D> texture;
+    HRESULT hr = _device->CreateTexture2D(&desc, nullptr, &texture);
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] Failed to create texture");
+        return false;
+    }
+
+    // -----------------------------
+    // Upload mip 0
+    // -----------------------------
+    {
+        auto gpuData = GetTextureData(baseData, baseW, baseH);
+        _context->UpdateSubresource(texture.Get(), 0, nullptr, gpuData.data(), baseW * 4, 0);
+    }
+
+    // -----------------------------
+    // Upload custom mipmaps
+    // -----------------------------
+    if (hasCustom) {
+        for (int level = 1; level < mipCount; ++level) {
+            int w = tex->GetMipWidth(level);
+            int h = tex->GetMipHeight(level);
+            const uint8_t* mipData = tex->GetMipDataPtr(level);
+
+            auto gpuData = GetTextureData(mipData, w, h);
+
+            _context->UpdateSubresource(
+                texture.Get(),
+                level,
+                nullptr,
+                gpuData.data(),
+                w * 4,
+                0
+            );
+        }
+    }
+
+    // -----------------------------
+    // Create SRV
+    // -----------------------------
+    hr = _device->CreateShaderResourceView(texture.Get(), nullptr, srv);
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] Failed to create SRV");
+        return false;
+    }
+
+    // -----------------------------
+    // Auto-generate GPU mipmaps if needed
+    // -----------------------------
+    if (!hasCustom) {
+        _context->GenerateMips(*srv);
+    }
+
+    return true;
+}
+
+void Renderer::BindTexture(const Texture* tex, int slot) {
+    if (!_initialized) {
+        UnbindTexture(slot);
+        return;
+    }
+
+    if (!tex) {
+        UnbindTexture(slot);
+        return;
+    }
+
+    // Check cache first
+    auto it = _textureCache.find(tex);
+    if (it != _textureCache.end()) {
+        // Texture already uploaded - just bind it
+        _currentTextureSRV = it->second;
+        // Bind to specific slot
+        ID3D11ShaderResourceView* srvs[] = { it->second.Get() };
+        _context->PSSetShaderResources(slot, 1, srvs);
+        
+        ID3D11SamplerState* samplers[] = { _samplerLinear.Get() };
+        _context->PSSetSamplers(slot, 1, samplers);
+        return;
+    }
+
+    // First time seeing this texture - create and cache it
+    ID3D11ShaderResourceView* srv = nullptr;
+    if (CreateTextureFromASCIIgLTexture(tex, &srv)) {
+        _currentTextureSRV.Attach(srv);
+        _textureCache[tex] = _currentTextureSRV;  // Cache for future use
+        
+        // Bind to specific slot
+        ID3D11ShaderResourceView* srvs[] = { srv };
+        _context->PSSetShaderResources(slot, 1, srvs);
+        
+        ID3D11SamplerState* samplers[] = { _samplerLinear.Get() };
+        _context->PSSetSamplers(slot, 1, samplers);
+    }
+}
+
+bool Renderer::CreateTextureArraySRV(const TextureArray* texArray, ID3D11ShaderResourceView** srv) {
+    if (!texArray || !texArray->IsValid()) return false;
+
+    const int layerCount = texArray->GetLayerCount();
+    const int tileSize = texArray->GetTileSize();
+    const bool hasCustom = texArray->HasCustomMipmaps();
+    const int mipCount = texArray->GetMipCount();
+
+    Logger::Debug("[Renderer] Creating Texture2DArray: " + std::to_string(layerCount) + " layers, " +
+                  std::to_string(tileSize) + "x" + std::to_string(tileSize) + ", " +
+                  std::to_string(mipCount) + " mip levels");
+
+    // Create texture description for Texture2DArray
+    D3D11_TEXTURE2D_DESC desc = {};
+    desc.Width = tileSize;
+    desc.Height = tileSize;
+    desc.ArraySize = layerCount;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    if (hasCustom) {
+        desc.MipLevels = mipCount;
+        desc.MiscFlags = 0;
+    } else {
+        desc.MipLevels = 0;
+        desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
+        desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+    }
+
+    ComPtr<ID3D11Texture2D> texture;
+    HRESULT hr = _device->CreateTexture2D(&desc, nullptr, &texture);
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] Failed to create Texture2DArray");
+        return false;
+    }
+
+    // Calculate actual mip levels for GPU texture
+    int actualMipLevels = mipCount;
+    if (!hasCustom) {
+        // When GPU auto-generates mipmaps, calculate the actual mip count
+        // MipLevels = floor(log2(max(width, height))) + 1
+        int size = tileSize;
+        actualMipLevels = 1;
+        while (size > 1) {
+            size /= 2;
+            actualMipLevels++;
+        }
+    }
+
+    Logger::Debug("[Renderer] Actual GPU mip levels: " + std::to_string(actualMipLevels));
+
+    // Upload layers
+    for (int layer = 0; layer < layerCount; ++layer) {
+        if (hasCustom) {
+            // Upload all custom mip levels
+            for (int mip = 0; mip < mipCount; ++mip) {
+                const uint8_t* data = texArray->GetLayerData(layer, mip);
+                if (!data) continue;
+
+                int mipW = texArray->GetMipWidth(mip);
+                int mipH = texArray->GetMipHeight(mip);
+
+                UINT subresource = D3D11CalcSubresource(mip, layer, actualMipLevels);
+                _context->UpdateSubresource(texture.Get(), subresource, nullptr, data, mipW * 4, 0);
+            }
+        } else {
+            // Only upload base mip level (mip 0) - GPU will generate the rest
+            const uint8_t* data = texArray->GetLayerData(layer, 0);
+            if (!data) continue;
+
+            UINT subresource = D3D11CalcSubresource(0, layer, actualMipLevels);
+            _context->UpdateSubresource(texture.Get(), subresource, nullptr, data, tileSize * 4, 0);
+        }
+    }
+
+    // Create SRV for Texture2DArray
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+    srvDesc.Texture2DArray.MostDetailedMip = 0;
+    srvDesc.Texture2DArray.MipLevels = hasCustom ? mipCount : -1;
+    srvDesc.Texture2DArray.FirstArraySlice = 0;
+    srvDesc.Texture2DArray.ArraySize = layerCount;
+
+    hr = _device->CreateShaderResourceView(texture.Get(), &srvDesc, srv);
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] Failed to create Texture2DArray SRV");
+        return false;
+    }
+
+    // Auto-generate GPU mipmaps if needed
+    if (!hasCustom) {
+        _context->GenerateMips(*srv);
+    }
+
+    Logger::Info("[Renderer] Successfully created Texture2DArray");
+    return true;
+}
+
+void Renderer::BindTextureArray(const TextureArray* texArray, int slot) {
+    if (!_initialized || !texArray || !texArray->IsValid()) {
+        UnbindTextureArray(slot);
+        return;
+    }
+
+    ComPtr<ID3D11ShaderResourceView> srv;
+    
+    auto it = _textureArrayCache.find(texArray);
+    if (it != _textureArrayCache.end()) {
+        srv = it->second;
+    } else {
+        ID3D11ShaderResourceView* rawSRV = nullptr;
+        if (CreateTextureArraySRV(texArray, &rawSRV)) {
+            srv.Attach(rawSRV);
+            _textureArrayCache[texArray] = srv;
+        }
+    }
+
+    if (srv) {
+        _currentTextureSRV = srv; // Note: tracking current only works well for singe slot, might need array if tracking per slot
+        
+        // Bind texture and sampler to pixel shader
+        ID3D11ShaderResourceView* srvs[] = { srv.Get() };
+        _context->PSSetShaderResources(slot, 1, srvs);
+        
+        ID3D11SamplerState* samplers[] = { _samplerLinear.Get() };
+        _context->PSSetSamplers(slot, 1, samplers);
+    }
+}
+
+void Renderer::UnbindTexture(int slot) {
+    if (!_initialized) return;
+    ID3D11ShaderResourceView* nullSRVs[] = { nullptr };
+    _context->PSSetShaderResources(slot, 1, nullSRVs);
+    if (slot == 0) _currentTextureSRV = nullptr;
+}
+
+void Renderer::UnbindTextureArray(int slot) {
+    if (!_initialized) return;
+    ID3D11ShaderResourceView* nullSRVs[] = { nullptr };
+    _context->PSSetShaderResources(slot, 1, nullSRVs);
+}
+
+// =========================================================================
+// Custom Shader/Material System Implementation
+// =========================================================================
+
+void Renderer::BindShaderProgram(ShaderProgram* program) {
+    if (!_initialized) return;
+    
+    _boundShaderProgram = program;
+    
+    if (program && program->IsValid()) {
+        // Bind custom shaders and input layout
+        _context->VSSetShader(program->_vertexShader->_vertexShader.Get(), nullptr, 0);
+        _context->PSSetShader(program->_pixelShader->_pixelShader.Get(), nullptr, 0);
+        _context->IASetInputLayout(program->_inputLayout.Get());
+    } else {
+        // Revert to default shaders
+        UnbindShaderProgram();
+    }
+}
+
+void Renderer::UnbindShaderProgram() {
+    if (!_initialized) return;
+    
+    _boundShaderProgram = nullptr;
+    _boundMaterial = nullptr;
+}
+
+void Renderer::BindMaterial(Material* material) {
+    if (!_initialized || !material) return;
+    
+    _boundMaterial = material;
+    
+    // Bind shader program
+    auto program = material->GetShaderProgram();
+    if (program) {
+        BindShaderProgram(program.get());
+    }
+    
+    // Bind textures
+    for (const auto& slot : material->_textureSlots) {
+        if (slot.texture) {
+            BindTexture(slot.texture, slot.slot);
+        } else if (slot.textureArray) {
+            BindTextureArray(slot.textureArray, slot.slot);
+        }
+    }
+    
+    // Upload constant buffer if dirty
+    UploadMaterialConstants(material);
+}
+
+void Renderer::UploadMaterialConstants(Material* material) {
+    if (!material || !_initialized) return;
+    
+    // Update material's packed constant buffer data
+    material->UpdateConstantBufferData();
+    
+    auto program = material->GetShaderProgram();
+    if (!program) return;
+    
+    const auto& layout = program->GetUniformLayout();
+    if (layout.GetSize() == 0) return;
+    
+    // Create or update material's GPU constant buffer
+    if (!material->_constantBufferInitialized) {
+        D3D11_BUFFER_DESC cbDesc = {};
+        cbDesc.ByteWidth = layout.GetSize();
+        cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+        cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        
+        HRESULT hr = _device->CreateBuffer(&cbDesc, nullptr, &material->_constantBuffer);
+        if (FAILED(hr)) {
+            Logger::Error("Failed to create material constant buffer");
+            return;
+        }
+        material->_constantBufferInitialized = true;
+    }
+    
+    // Map and upload data
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    HRESULT hr = _context->Map(material->_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    if (SUCCEEDED(hr)) {
+        memcpy(mapped.pData, material->_constantBufferData.data(), layout.GetSize());
+        _context->Unmap(material->_constantBuffer.Get(), 0);
+    }
+    
+    // Bind to both vertex and pixel shader stages
+    _context->VSSetConstantBuffers(0, 1, material->_constantBuffer.GetAddressOf());
+    _context->PSSetConstantBuffers(0, 1, material->_constantBuffer.GetAddressOf());
 }
 
 } // namespace ASCIIgL

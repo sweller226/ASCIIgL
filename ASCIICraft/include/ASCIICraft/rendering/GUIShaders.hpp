@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ASCIIgL/renderer/gpu/Shader.hpp>
+#include <ASCIIgL/renderer/Shader.hpp>
 
 namespace GUIShaders {
 

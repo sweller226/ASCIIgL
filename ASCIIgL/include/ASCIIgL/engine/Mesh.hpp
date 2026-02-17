@@ -10,12 +10,11 @@
 namespace ASCIIgL {
 
 // Forward declaration
-class RendererGPU;
+class Renderer;
 
 class Mesh // this class represents a mesh with generic vertex data and a vertex format descriptor
 {
-	friend class RendererGPU;
-	friend class RendererCPU;
+	friend class Renderer;
 private:
 	std::vector<std::byte> vertexData;  // Raw vertex data as bytes
 	std::vector<int> indices;
@@ -23,8 +22,8 @@ private:
 	Texture* texture; // single texture pointer (not owned by Mesh)
 	TextureArray* textureArray = nullptr; // TextureArray pointer (not owned by Mesh)
 
-	// GPU buffer cache (opaque pointer - managed by RendererGPU)
-	// This allows RendererGPU to cache buffers without Mesh knowing about DirectX
+	// GPU buffer cache (opaque pointer - managed by Renderer)
+	// This allows Renderer to cache buffers without Mesh knowing about DirectX
 	mutable void* gpuBufferCache = nullptr;
 
 public:

@@ -1,8 +1,8 @@
 #include <ASCIICraft/world/ChunkManager.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
-#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
-#include <ASCIIgL/renderer/gpu/Material.hpp>
+#include <ASCIIgL/renderer/Renderer.hpp>
+#include <ASCIIgL/renderer/Material.hpp>
 
 #ifdef max
 #  undef max
@@ -627,7 +627,7 @@ void ChunkManager::RenderChunks() {
     mat->SetFloat4("fogParams", glm::vec4(fogStart, fogEnd, 0.0f, 0.0f));
 
     // Bind material (shader + constants + textures)
-    ASCIIgL::RendererGPU::GetInst().BindMaterial(mat.get());
+    ASCIIgL::Renderer::GetInst().BindMaterial(mat.get());
 
     // --- Render chunks ---
     int renderedCount = 0;
@@ -647,7 +647,7 @@ void ChunkManager::RenderChunks() {
         renderedCount++;
     }
 
-    ASCIIgL::RendererGPU::GetInst().UnbindTextureArray();
+    ASCIIgL::Renderer::GetInst().UnbindTextureArray();
 
     ASCIIgL::Logger::Debug("RenderChunks: Rendered " + std::to_string(renderedCount) + " chunks.");
 }

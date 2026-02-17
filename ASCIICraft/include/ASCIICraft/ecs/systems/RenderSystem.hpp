@@ -15,7 +15,7 @@
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 #include <glm/vec2.hpp>
 #include <ASCIIgL/engine/Mesh.hpp>
-#include <ASCIIgL/renderer/gpu/Material.hpp>
+#include <ASCIIgL/renderer/Material.hpp>
 
 namespace ecs::systems {
 

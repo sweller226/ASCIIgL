@@ -21,7 +21,7 @@ namespace ASCIIgL {
 
 // Forward declarations
 class Texture;
-class RendererGPU;
+class Renderer;
 
 // =========================================================================
 // Shader Type Enum
@@ -113,7 +113,7 @@ private:
 
 class Shader {
     friend class ShaderProgram;
-    friend class RendererGPU;
+    friend class Renderer;
 
 public:
     // Create from HLSL source code
@@ -158,7 +158,7 @@ private:
 
 class ShaderProgram {
     friend class Material;
-    friend class RendererGPU;
+    friend class Renderer;
 
 public:
     // Create a shader program from vertex and pixel shaders

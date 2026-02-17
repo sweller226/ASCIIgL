@@ -1,8 +1,8 @@
-#include <ASCIIgL/renderer/gpu/Shader.hpp>
+#include <ASCIIgL/renderer/Shader.hpp>
 
 #include <iostream>
 
-#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
+#include <ASCIIgL/renderer/Renderer.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
 
@@ -185,22 +185,22 @@ bool Shader::CompileFromSource(const std::string& source, const std::string& ent
 
     _bytecode.Attach(shaderBlob);
     
-    // Get the D3D device from RendererGPU
-    auto& gpu = RendererGPU::GetInst();
-    if (!gpu._device) {
-        _compileError = "RendererGPU device not initialized";
+    // Get the D3D device from Renderer
+    auto& renderer = Renderer::GetInst();
+    if (!renderer._device) {
+        _compileError = "Renderer device not initialized";
         return false;
     }
 
     if (_type == ShaderType::Vertex) {
-        hr = gpu._device->CreateVertexShader(
+        hr = renderer._device->CreateVertexShader(
             _bytecode->GetBufferPointer(),
             _bytecode->GetBufferSize(),
             nullptr,
             &_vertexShader
         );
     } else {
-        hr = gpu._device->CreatePixelShader(
+        hr = renderer._device->CreatePixelShader(
             _bytecode->GetBufferPointer(),
             _bytecode->GetBufferSize(),
             nullptr,
@@ -227,22 +227,22 @@ bool Shader::LoadFromBytecode(const std::vector<uint8_t>& bytecode) {
     
     memcpy(_bytecode->GetBufferPointer(), bytecode.data(), bytecode.size());
     
-    // Get the D3D device from RendererGPU
-    auto& gpu = RendererGPU::GetInst();
-    if (!gpu._device) {
-        _compileError = "RendererGPU device not initialized";
+    // Get the D3D device from Renderer
+    auto& renderer = Renderer::GetInst();
+    if (!renderer._device) {
+        _compileError = "Renderer device not initialized";
         return false;
     }
 
     if (_type == ShaderType::Vertex) {
-        hr = gpu._device->CreateVertexShader(
+        hr = renderer._device->CreateVertexShader(
             _bytecode->GetBufferPointer(),
             _bytecode->GetBufferSize(),
             nullptr,
             &_vertexShader
         );
     } else {
-        hr = gpu._device->CreatePixelShader(
+        hr = renderer._device->CreatePixelShader(
             _bytecode->GetBufferPointer(),
             _bytecode->GetBufferSize(),
             nullptr,
@@ -343,9 +343,9 @@ bool ShaderProgram::Initialize(
 #ifdef _WIN32
 
 bool ShaderProgram::CreateInputLayout(const VertFormat& format) {
-    auto& gpu = RendererGPU::GetInst();
-    if (!gpu._device) {
-        _error = "RendererGPU device not initialized";
+    auto& renderer = Renderer::GetInst();
+    if (!renderer._device) {
+        _error = "Renderer device not initialized";
         return false;
     }
 
@@ -366,7 +366,7 @@ bool ShaderProgram::CreateInputLayout(const VertFormat& format) {
         inputDesc.push_back(desc);
     }
 
-    HRESULT hr = gpu._device->CreateInputLayout(
+    HRESULT hr = renderer._device->CreateInputLayout(
         inputDesc.data(),
         static_cast<UINT>(inputDesc.size()),
         _vertexShader->_bytecode->GetBufferPointer(),

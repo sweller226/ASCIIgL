@@ -1,7 +1,7 @@
 #include <ASCIICraft/ecs/systems/RenderSystem.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <ASCIIgL/renderer/gpu/Material.hpp>
-#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
+#include <ASCIIgL/renderer/Material.hpp>
+#include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 
@@ -122,11 +122,11 @@ namespace ecs::systems {
             // BindMaterial uploads constants, so only call UploadMaterialConstants if material didn't change
             // (MVP changes every item, so we always need to upload after setting it)
             if (materialChanged) {
-                ASCIIgL::RendererGPU::GetInst().BindMaterial(mat.get());
+                ASCIIgL::Renderer::GetInst().BindMaterial(mat.get());
                 lastMesh = meshPtr;
             } else {
                 // Material already bound, just upload updated constants (MVP)
-                ASCIIgL::RendererGPU::GetInst().UploadMaterialConstants(mat.get());
+                ASCIIgL::Renderer::GetInst().UploadMaterialConstants(mat.get());
             }
 
             ASCIIgL::Renderer::GetInst().DrawMesh(meshPtr);
@@ -166,11 +166,11 @@ namespace ecs::systems {
             // BindMaterial uploads constants, so only call UploadMaterialConstants if material didn't change
             // (MVP changes every item, so we always need to upload after setting it)
             if (materialChanged) {
-                ASCIIgL::RendererGPU::GetInst().BindMaterial(mat.get());
+                ASCIIgL::Renderer::GetInst().BindMaterial(mat.get());
                 lastMesh = meshPtr;
             } else {
                 // Material already bound, just upload updated constants (MVP)
-                ASCIIgL::RendererGPU::GetInst().UploadMaterialConstants(mat.get());
+                ASCIIgL::Renderer::GetInst().UploadMaterialConstants(mat.get());
             }
 
             ASCIIgL::Renderer::GetInst().DrawMesh(meshPtr);

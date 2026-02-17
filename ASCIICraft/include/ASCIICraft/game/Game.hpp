@@ -9,7 +9,7 @@
 #include <ASCIIgL/engine/TextureArray.hpp>
 #include <ASCIIgL/engine/InputManager.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
-#include <ASCIIgL/renderer/gpu/Shader.hpp>
+#include <ASCIIgL/renderer/Shader.hpp>
 
 #include <ASCIICraft/world/World.hpp>
 

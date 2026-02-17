@@ -4,8 +4,8 @@
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
-#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
-#include <ASCIIgL/renderer/gpu/Material.hpp>
+#include <ASCIIgL/renderer/Renderer.hpp>
+#include <ASCIIgL/renderer/Material.hpp>
 
 #include <ASCIIgL/engine/TextureLibrary.hpp>
 #include <ASCIIgL/engine/MipFilters.hpp>
@@ -128,9 +128,9 @@ bool Game::Initialize() {
     ASCIIgL::Renderer::GetInst().SetDiagnosticsEnabled(true);
 
     ASCIIgL::Logger::Debug("Initializing renderer...");
-    ASCIIgL::Renderer::GetInst().Initialize(true, 4, false);
+    ASCIIgL::Renderer::GetInst().Initialize(true, 4);
 
-    ASCIIgL::RendererGPU::GetInst().SetBlendEnabled(true);
+    ASCIIgL::Renderer::GetInst().SetBlendEnabled(true);
 
     ASCIIgL::Logger::Debug("Initializing block states...");
     InitializeBlockStates();

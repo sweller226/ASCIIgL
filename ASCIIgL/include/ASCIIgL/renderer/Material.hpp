@@ -8,7 +8,7 @@
 
 #include <glm/glm.hpp>
 
-#include <ASCIIgL/renderer/gpu/Shader.hpp>
+#include <ASCIIgL/renderer/Shader.hpp>
 #include <ASCIIgL/engine/TextureArray.hpp>
 
 #ifdef _WIN32
@@ -20,7 +20,7 @@ namespace ASCIIgL {
 
 // Forward declarations
 class Texture;
-class RendererGPU;
+class Renderer;
 class ShaderProgram;
 
 // =========================================================================
@@ -42,7 +42,7 @@ struct TextureSlot {
 // =========================================================================
 
 class Material {
-    friend class RendererGPU;
+    friend class Renderer;
 
 public:
     // Create a material from a shader program

@@ -8,8 +8,8 @@
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/util/Profiler.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
-#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
-#include <ASCIIgL/renderer/gpu/Material.hpp>
+#include <ASCIIgL/renderer/Renderer.hpp>
+#include <ASCIIgL/renderer/Material.hpp>
 
 #include <ASCIICraft/world/ChunkRegion.hpp>
 #include <ASCIICraft/util/Util.hpp>
