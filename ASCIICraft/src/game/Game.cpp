@@ -501,7 +501,7 @@ void Game::RenderPlaying() {
 }
 
 void Game::InitializeWorld() {
-    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, WorldCoord(0, 90, 0), 4));
+    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, WorldCoord(0, 90, 0), 10));
     ASCIIgL::Logger::Debug("World created and stored in registry context.");
 }
 
@@ -572,7 +572,7 @@ void Game::InitializeBlockStates() {
         // BlockStateRegistry properties are string-based; use BlockFace in code and convert at placement time.
         blockstate::BlockProperty{ "facing", {"north", "south", "east", "west"}, 0 }
     });
-    
+
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:grass"), [&](blockstate::BlockState& s) {
         s.faceTextureLayers[0] = L(0, 0); // Top
         s.faceTextureLayers[1] = L(2, 0); // Bottom (dirt)

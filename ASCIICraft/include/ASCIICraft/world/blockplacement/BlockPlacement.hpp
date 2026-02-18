@@ -36,13 +36,13 @@ inline uint32_t GetFinalizedBlockStateForPlacement(
         switch (context) {
             case PlacementContext::TerrainGeneration:
                 // Deterministic random orientation based on world position
-                facing = GetGrassFacingForPosition(position);
+                facing = GetGrassFacingForPosition(position, 100);
                 break;
                 
             case PlacementContext::PlayerPlacement:
                 // For now, same as terrain (position-based)
                 // Future: could use player look direction
-                facing = GetGrassFacingForPosition(position);
+                facing = GetGrassFacingForPosition(position, 100);
                 break;
                 
             case PlacementContext::StructureGeneration:

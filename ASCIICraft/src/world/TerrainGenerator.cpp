@@ -266,6 +266,7 @@ void TerrainGenerator::GenerateTree(int worldX, int worldY, int worldZ, SetBlock
         for (int dx = -LEAF_RADIUS; dx <= LEAF_RADIUS; ++dx) {
             for (int dz = -LEAF_RADIUS; dz <= LEAF_RADIUS; ++dz) {
                 if (std::abs(dx) == LEAF_RADIUS && std::abs(dz) == LEAF_RADIUS) continue;
+                if (std::abs(dx == 0) && std::abs(dz == 0)) continue;
                 setBlock(worldX + dx, leafBaseY + dy, worldZ + dz, oakLeavesId);
             }
         }
@@ -274,6 +275,7 @@ void TerrainGenerator::GenerateTree(int worldX, int worldY, int worldZ, SetBlock
     // Third layer (Y+5): 3x3
     for (int dx = -1; dx <= 1; ++dx) {
         for (int dz = -1; dz <= 1; ++dz) {
+            if (std::abs(dx == 0) && std::abs(dz == 0)) continue;
             setBlock(worldX + dx, leafBaseY + 2, worldZ + dz, oakLeavesId);
         }
     }
