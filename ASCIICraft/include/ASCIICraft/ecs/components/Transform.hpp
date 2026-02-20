@@ -1,11 +1,14 @@
 // Transform.hpp
 #pragma once
 
+#include <ASCIIgL/util/Logger.hpp>
+
 #include <glm/vec3.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <entt/entt.hpp>
 
 namespace ecs::components {
 
@@ -41,5 +44,28 @@ struct Transform {
     void rotate(const glm::quat& delta) { rotation = delta * rotation; dirty = true; }
     void rescale(const glm::vec3& factor) { scale *= factor; dirty = true; }
 };
+
+inline std::pair<glm::vec3, bool> GetPos(entt::entity ent, entt::registry& registry) {
+    // Validate entity
+    if (ent == entt::null || !registry.valid(ent)) {
+        ASCIIgL::Logger::Error("PlayerFactory::GetPosition: Player entity is invalid or null.");
+        return {glm::vec3(0.0f), false};
+    }
+
+    // Check component existence
+    if (!registry.all_of<components::Transform>(ent)) {
+        ASCIIgL::Logger::Error("PlayerFactory::GetPosition: Transform component missing on player entity.");
+        return {glm::vec3(0.0f), false};
+    }
+
+    // Safe retrieval
+    auto* t = registry.try_get<components::Transform>(ent);
+    if (!t) {
+        ASCIIgL::Logger::Error("PlayerFactory::GetPosition: try_get returned NULL for Transform.");
+        return {glm::vec3(0.0f), false};
+    }
+
+    return {t->position, true};
+}
 
 }

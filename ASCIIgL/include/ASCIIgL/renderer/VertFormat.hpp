@@ -156,6 +156,9 @@ namespace VertFormats {
     
     // Position (XYZ) + Color (RGBA normalized) - Colored vertices
     const VertFormat& PosColor();
+    
+    // Position (XYZ) + TexCoord (UV) + Layer Index - For Texture2DArray rendering
+    const VertFormat& PosUVLayer();
 }
 
 // =========================================================================
@@ -211,6 +214,31 @@ struct PosUV {
     void SetXY(const glm::vec2 v) { data[0] = v.x; data[1] = v.y; }
     void SetXYZ(const glm::vec3 v) { data[0] = v.x; data[1] = v.y; data[2] = v.z; }
     void SetUV(const glm::vec2 v) { data[3] = v.x; data[4] = v.y; }
+};
+
+// PosUVLayer vertex: XYZ + UV + Layer (6 floats = 24 bytes) - For Texture2DArray
+struct PosUVLayer {
+    float data[6];
+
+    // Accessors
+    float X() const { return data[0]; }
+    float Y() const { return data[1]; }
+    float Z() const { return data[2]; }
+    float U() const { return data[3]; }
+    float V() const { return data[4]; }
+    float Layer() const { return data[5]; }
+
+    glm::vec2 GetXY() const { return glm::vec2(data[0], data[1]); }
+    glm::vec3 GetXYZ() const { return glm::vec3(data[0], data[1], data[2]); }
+    glm::vec2 GetUV() const { return glm::vec2(data[3], data[4]); }
+    glm::vec3 GetUVLayer() const { return glm::vec3(data[3], data[4], data[5]); }
+
+    // Mutators
+    void SetXY(const glm::vec2 v) { data[0] = v.x; data[1] = v.y; }
+    void SetXYZ(const glm::vec3 v) { data[0] = v.x; data[1] = v.y; data[2] = v.z; }
+    void SetUV(const glm::vec2 v) { data[3] = v.x; data[4] = v.y; }
+    void SetUVLayer(const glm::vec3 v) { data[3] = v.x; data[4] = v.y; data[5] = v.z; }
+    void SetLayer(float layer) { data[5] = layer; }
 };
 
 } // namespace VertStructs

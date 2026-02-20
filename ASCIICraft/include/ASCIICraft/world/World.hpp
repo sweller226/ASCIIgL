@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ASCIICraft/world/Block.hpp>
 #include <ASCIICraft/world/Chunk.hpp>
 #include <ASCIICraft/world/TerrainGenerator.hpp>
 #include <ASCIICraft/world/Coords.hpp>

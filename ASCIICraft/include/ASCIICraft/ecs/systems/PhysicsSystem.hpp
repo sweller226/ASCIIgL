@@ -9,22 +9,16 @@
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/Velocity.hpp>
 #include <ASCIICraft/ecs/components/PlayerMode.hpp>
+#include <ASCIICraft/ecs/systems/ISystem.hpp>
 
 namespace ecs::systems {
 
-class PhysicsSystem {
+class PhysicsSystem : public ISystem {
 public:
-    explicit PhysicsSystem(entt::registry &registry) noexcept;
-    
-    PhysicsSystem(const PhysicsSystem&) = delete;
-    PhysicsSystem& operator=(const PhysicsSystem&) = delete;
-    PhysicsSystem(PhysicsSystem&&) = delete;
-    PhysicsSystem& operator=(PhysicsSystem&&) = delete;
-
-    ~PhysicsSystem() = default;
+    explicit PhysicsSystem(entt::registry &registry);
 
     /// Call every frame with frame dt; system accumulates and steps at fixed tick
-    void Update();
+    void Update() override;
 
 private:
     /// Run a single fixed physics step
@@ -66,7 +60,7 @@ private:
     
     /// Binary search to find maximum safe movement distance before collision
     /// @return Maximum safe distance in range [0, maxDistance]
-    [[nodiscard]] float BinarySearchCollision(
+    float BinarySearchCollision(
         const glm::vec3 &startPos, 
         const glm::vec3 &direction,
         float maxDistance,

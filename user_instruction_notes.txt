@@ -1,0 +1,9 @@
+1. Download font manually from ASCIIgL res folder for now
+
+2. Set font in console manually to Square Modern if not working automatically
+
+3. Set Terminal color palette to the one set by program if not working automatically
+
+4. Set line height to 1.0 if not working automatically (fix this)
+
+5. Set antialiasing in Windows Terminal to "cleartype" if not working automatically, or "aliased" if you want the true ascii art look.

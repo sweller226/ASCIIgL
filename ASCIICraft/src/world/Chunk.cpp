@@ -2,22 +2,33 @@
 
 #include <algorithm>
 #include <cassert>
+#include <numeric>  // std::iota
 
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/engine/TextureLibrary.hpp>
+
+#include <ASCIICraft/world/blockstate/BlockFace.hpp>
+
+
 
 // Chunk constructor
 Chunk::Chunk(const ChunkCoord& coord) 
     : coord(coord)
     , generated(false)
     , dirty(true)
-    , hasMesh(false) {
+    , hasOpaqueMesh(false) {
     
-    // Initialize all blocks to air
-    std::fill(blocks, blocks + VOLUME, Block(BlockType::Air));
+    // Initialize all blocks to air (stateId 0)
+    std::fill(blocks, blocks + VOLUME, blockstate::BlockStateRegistry::AIR_STATE_ID);
     
+    // Initialize transparent mesh flags
+    for (int i = 0; i < TRANSPARENT_VARIANT_COUNT; ++i) {
+        hasTransparentMesh[i] = false;
+    }
+
     // Initialize neighbor pointers to nullptr
     for (int i = 0; i < 6; ++i) {
         neighbors[i] = nullptr;
@@ -25,44 +36,59 @@ Chunk::Chunk(const ChunkCoord& coord)
 }
 
 // Block access methods
-Block& Chunk::GetBlock(int x, int y, int z) {
+uint32_t Chunk::GetBlockState(int x, int y, int z) const {
     assert(IsValidBlockCoord(x, y, z) && "Block coordinates out of range");
     return blocks[GetBlockIndex(x, y, z)];
 }
 
-const Block& Chunk::GetBlock(int x, int y, int z) const {
-    assert(IsValidBlockCoord(x, y, z) && "Block coordinates out of range");
-    return blocks[GetBlockIndex(x, y, z)];
-}
-
-void Chunk::SetBlock(int x, int y, int z, const Block& block) {
+void Chunk::SetBlockState(int x, int y, int z, uint32_t stateId) {
     assert(IsValidBlockCoord(x, y, z) && "Block coordinates out of range");
     
     int index = GetBlockIndex(x, y, z);
-    if (blocks[index].type != block.type || blocks[index].metadata != block.metadata) {
-        blocks[index] = block;
+    if (blocks[index] != stateId) {
+        blocks[index] = stateId;
         InvalidateMesh();
     }
 }
 
-// Mesh generation
-void Chunk::GenerateMesh() {
+uint32_t Chunk::GetBlockStateByIndex(int i) const {
+    if (0 <= i && i < VOLUME) { return blocks[i]; }
+    ASCIIgL::Logger::Warning("GetBlockStateByIndex: index out of bounds");
+    return blockstate::BlockStateRegistry::AIR_STATE_ID;
+}
+
+void Chunk::SetBlockStateByIndex(int i, uint32_t stateId) {
+    if (0 <= i && i < VOLUME) { blocks[i] = stateId; }
+}
+
+    // Mesh generation
+void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
     if (!generated) {
         return; // Can't generate mesh for ungenerated chunk
     }
 
-    std::vector<std::byte> vertices;
-    std::vector<int> indices;
+    // Separate geometry buffers for opaque faces and collect transparent faces for multi-view variants
+    std::vector<std::byte> verticesOpaque;
+    std::vector<int> indicesOpaque;
 
-    // Get the block texture atlas
-    if (!Block::HasTextureAtlas()) {
-        ASCIIgL::Logger::Warning("No texture atlas available for chunk mesh generation");
+    struct TransparentFace {
+        int x, y, z;
+        int faceIndex;    // 0..5
+        int textureLayer; // atlas layer for this face
+        uint8_t blockFacing; // BlockFace for top/bottom UV rotation (default North)
+    };
+    std::vector<TransparentFace> transparentFaces;
+
+    // Get the block texture array
+    auto blockTexturesPtr = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
+    if (!blockTexturesPtr) {
+        ASCIIgL::Logger::Warning("No texture array available for chunk mesh generation");
         return;
     }
 
     ASCIIgL::Logger::Debug("Generating mesh for chunk at (" + std::to_string(coord.x) + ", " + std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
     
-    ASCIIgL::Texture* blockAtlas = Block::GetTextureAtlas();
+    ASCIIgL::TextureArray* blockTextures = blockTexturesPtr.get();
 
     // Face normal vectors for cube faces
     const glm::vec3 faceNormals[6] = {
@@ -72,42 +98,6 @@ void Chunk::GenerateMesh() {
         glm::vec3(0, 0, -1),  // South (Back)
         glm::vec3(1, 0, 0),   // East (Right)
         glm::vec3(-1, 0, 0)   // West (Left)
-    };
-    
-    // Face vertex offsets for cube
-    // Non-indexed: each face is 2 triangles = 6 vertices
-    // Indexed: each face is 4 unique vertices
-    const glm::vec3 faceVertices[6][6] = {
-        // Top face (Y+)
-        {
-            glm::vec3(0, 1, 0), glm::vec3(0, 1, 1), glm::vec3(1, 1, 1),
-            glm::vec3(0, 1, 0), glm::vec3(1, 1, 1), glm::vec3(1, 1, 0)
-        },
-        // Bottom face (Y-)
-        {
-            glm::vec3(0, 0, 1), glm::vec3(0, 0, 0), glm::vec3(1, 0, 0),
-            glm::vec3(0, 0, 1), glm::vec3(1, 0, 0), glm::vec3(1, 0, 1)
-        },
-        // North face (Z+)
-        {
-            glm::vec3(0, 0, 1), glm::vec3(1, 0, 1), glm::vec3(1, 1, 1),
-            glm::vec3(0, 0, 1), glm::vec3(1, 1, 1), glm::vec3(0, 1, 1)
-        },
-        // South face (Z-)
-        {
-            glm::vec3(1, 0, 0), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0),
-            glm::vec3(1, 0, 0), glm::vec3(0, 1, 0), glm::vec3(1, 1, 0)
-        },
-        // East face (X+)
-        {
-            glm::vec3(1, 0, 1), glm::vec3(1, 0, 0), glm::vec3(1, 1, 0),
-            glm::vec3(1, 0, 1), glm::vec3(1, 1, 0), glm::vec3(1, 1, 1)
-        },
-        // West face (X-)
-        {
-            glm::vec3(0, 0, 0), glm::vec3(0, 0, 1), glm::vec3(0, 1, 1),
-            glm::vec3(0, 0, 0), glm::vec3(0, 1, 1), glm::vec3(0, 1, 0)
-        }
     };
     
     // For indexed rendering, we need 4 unique vertices per face
@@ -126,12 +116,6 @@ void Chunk::GenerateMesh() {
         { glm::vec3(0, 0, 0), glm::vec3(0, 0, 1), glm::vec3(0, 1, 1), glm::vec3(0, 1, 0) }
     };
     
-    // UV coordinates for face (2 triangles = 6 vertices)
-    const glm::vec2 faceUVs[6] = {
-        glm::vec2(0, 0), glm::vec2(1, 0), glm::vec2(1, 1),
-        glm::vec2(0, 0), glm::vec2(1, 1), glm::vec2(0, 1)
-    };
-    
     // UV coordinates for indexed rendering (4 corners)
     const glm::vec2 faceUVsIndexed[4] = {
         glm::vec2(0, 0), glm::vec2(1, 0), glm::vec2(1, 1), glm::vec2(0, 1)
@@ -144,11 +128,18 @@ void Chunk::GenerateMesh() {
     for (int x = 0; x < SIZE; x++) {
         for (int y = 0; y < SIZE; y++) {
             for (int z = 0; z < SIZE; z++) {
-                const Block& block = GetBlock(x, y, z);
+                uint32_t stateId = GetBlockState(x, y, z);
+                const auto& state = bsr.GetState(stateId);
                 
-                if (!block.IsSolid()) {
-                    continue; // Skip air blocks
+                if (!state.isSolid) {
+                    continue; // Skip air / non-solid blocks
                 }
+
+                const auto renderMode = state.renderMode;
+                const bool blockIsTranslucent = (renderMode == blockstate::RenderMode::Translucent);
+
+                // Facing for top/bottom UV rotation (blocks with "facing" property)
+                BlockFace blockFacing = StringToBlockFace(bsr.GetPropertyValue(stateId, "facing"));
                 
                 // Check each face of the block
                 for (int face = 0; face < 6; face++) {
@@ -166,10 +157,16 @@ void Chunk::GenerateMesh() {
                         case 5: neighborX--; break; // West
                     }
                     
-                    // Check if neighbor is air (either in this chunk or neighboring chunk)
+                    // Check if neighbor is air / non-occluding (either in this chunk or neighboring chunk)
                     if (IsValidBlockCoord(neighborX, neighborY, neighborZ)) {
                         // Neighbor is within this chunk
-                        shouldRenderFace = !GetBlock(neighborX, neighborY, neighborZ).IsSolid();
+                        uint32_t neighborStateId = GetBlockState(neighborX, neighborY, neighborZ);
+                        const auto& neighborState = bsr.GetState(neighborStateId);
+                        // Only fully opaque neighbors occlude; cutout and translucent do NOT cull this face.
+                        bool neighborOccludes =
+                            neighborState.isSolid &&
+                            neighborState.renderMode == blockstate::RenderMode::Opaque;
+                        shouldRenderFace = !neighborOccludes;
                     } else {
                         // Neighbor is in adjacent chunk - check neighboring chunk for face culling
                         shouldRenderFace = true; // Default to render if we can't determine neighbor state
@@ -203,9 +200,14 @@ void Chunk::GenerateMesh() {
                             Chunk* neighborChunk = GetNeighbor(neighborChunkDir);
                             // CRITICAL: Check for null pointer before accessing neighbor
                             if (neighborChunk != nullptr && neighborChunk->IsGenerated()) {
-                                // Check if the neighbor block in adjacent chunk is solid
-                                const Block& neighborBlock = neighborChunk->GetBlock(localX, localY, localZ);
-                                shouldRenderFace = !neighborBlock.IsSolid();
+                                // Check if the neighbor block in adjacent chunk is solid/occluding
+                                uint32_t neighborStateId = neighborChunk->GetBlockState(localX, localY, localZ);
+                                const auto& neighborState = bsr.GetState(neighborStateId);
+                                // Only fully opaque neighbors occlude; cutout and translucent do NOT cull this face.
+                                bool neighborOccludes =
+                                    neighborState.isSolid &&
+                                    neighborState.renderMode == blockstate::RenderMode::Opaque;
+                                shouldRenderFace = !neighborOccludes;
                             }
                             // If neighbor is null or not generated, render the face (conservative approach)
                         }
@@ -215,101 +217,188 @@ void Chunk::GenerateMesh() {
                         continue;
                     }
                     
-                    // Get texture coordinates for this block face
-                    glm::vec4 blockTextureUV = block.GetTextureUV(face);
-                    
-                    // Indexed rendering: generate 4 unique vertices
-                    int baseVertexIndex = vertices.size() / ASCIIgL::VertFormats::PosUV().GetStride();
-                    
-                    for (int vertIdx = 0; vertIdx < 4; vertIdx++) {
-                        // World position (chunk-relative + block position)
-                        glm::vec3 WorldCoord = glm::vec3(
-                            coord.x * SIZE + x,
-                            coord.y * SIZE + y, 
-                            coord.z * SIZE + z
-                        ) + faceVerticesIndexed[face][vertIdx];
-                        
-                        // UV coordinates (map face UV to block's texture UV)
-                        glm::vec2 faceUV = faceUVsIndexed[vertIdx];
-                        glm::vec2 textureUV = glm::vec2(
-                            blockTextureUV.x + faceUV.x * (blockTextureUV.z - blockTextureUV.x),
-                            blockTextureUV.w - faceUV.y * (blockTextureUV.w - blockTextureUV.y)
-                        );
-                        
-                        ASCIIgL::VertStructs::PosUV vertex = {
-                            WorldCoord.x, WorldCoord.y, WorldCoord.z,  // XYZ
-                            textureUV.x, textureUV.y             // UV
-                        };
-                        
-                        // Append bytes to vertices vector
-                        const auto* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
-                        vertices.insert(vertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUV));
-                    }
-                    
-                    // Add indices for this face (2 triangles)
-                    for (int i = 0; i < 6; i++) {
-                        indices.push_back(baseVertexIndex + faceIndices[i]);
+                    // Get texture layer index for this block face from blockstate
+                    int textureLayer = state.faceTextureLayers[face];
+
+                    if (blockIsTranslucent) {
+                        // Collect translucent faces; we'll build direction-specific meshes later.
+                        TransparentFace tf;
+                        tf.x = x;
+                        tf.y = y;
+                        tf.z = z;
+                        tf.faceIndex = face;
+                        tf.textureLayer = textureLayer;
+                        tf.blockFacing = static_cast<uint8_t>(blockFacing);
+                        transparentFaces.push_back(tf);
+                    } else {
+                        // Opaque and cutout faces are emitted directly into the opaque mesh.
+                        std::vector<std::byte>& vertices = verticesOpaque;
+                        std::vector<int>& indices = indicesOpaque;
+
+                        int baseVertexIndex = static_cast<int>(vertices.size()) / ASCIIgL::VertFormats::PosUVLayer().GetStride();
+
+                        for (int vertIdx = 0; vertIdx < 4; vertIdx++) {
+                            glm::vec3 WorldCoord = glm::vec3(
+                                coord.x * SIZE + x,
+                                coord.y * SIZE + y, 
+                                coord.z * SIZE + z
+                            ) + faceVerticesIndexed[face][vertIdx];
+
+                            glm::vec2 faceUV = faceUVsIndexed[vertIdx];
+                            // Rotate top/bottom UV for blocks with facing (e.g. grass)
+                            if (face == 0 || face == 1) {
+                                faceUV = RotateTopBottomUV(faceUV, blockFacing);
+                            }
+                            float u = faceUV.x;
+                            float v = 1.0f - faceUV.y;
+
+                            ASCIIgL::VertStructs::PosUVLayer vertex = {
+                                WorldCoord.x, WorldCoord.y, WorldCoord.z,
+                                u, v, static_cast<float>(textureLayer)
+                            };
+
+                            const auto* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
+                            vertices.insert(vertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUVLayer));
+                        }
+
+                        for (int i = 0; i < 6; i++) {
+                            indices.push_back(baseVertexIndex + faceIndices[i]);
+                        }
                     }
                 }
             }
         }
     }
     
-    // Create the mesh
-    if (!vertices.empty()) {
-        if (blockAtlas) {
-            int width = 0;
-            try {
-                width = blockAtlas->GetWidth();
-            } catch (const std::exception& e) {
-                ASCIIgL::Logger::Error("  Exception in GetWidth(): " + std::string(e.what()));
-                mesh.reset();
-                hasMesh = false;
-                SetDirty(false);
-                return;
-            } catch (...) {
-                ASCIIgL::Logger::Error("  Unknown exception in GetWidth()!");
-                mesh.reset();
-                hasMesh = false;
-                SetDirty(false);
-                return;
-            }
-            
-            int height = 0;
-            try {
-                height = blockAtlas->GetHeight();
-            } catch (const std::exception& e) {
-                ASCIIgL::Logger::Error("  Exception in GetHeight(): " + std::string(e.what()));
-                mesh.reset();
-                hasMesh = false;
-                SetDirty(false);
-                return;
-            } catch (...) {
-                ASCIIgL::Logger::Error("  Unknown exception in GetHeight()!");
-                mesh.reset();
-                hasMesh = false;
-                SetDirty(false);
-                return;
-            }
-        } else {
-            ASCIIgL::Logger::Error("  Block atlas is nullptr!");
-            mesh.reset();
-            hasMesh = false;
+    // Create meshes
+    opaqueMesh.reset();
+    for (int i = 0; i < TRANSPARENT_VARIANT_COUNT; ++i) {
+        transparentMeshes[i].reset();
+        hasTransparentMesh[i] = false;
+    }
+    hasOpaqueMesh = false;
+
+    if (!verticesOpaque.empty()) {
+        // Validate texture array
+        if (!blockTextures || !blockTextures->IsValid()) {
+            ASCIIgL::Logger::Error("  Block texture array is invalid!");
             SetDirty(false);
             return;
         }
         
-        if (!indices.empty()) {
-            mesh = std::make_unique<ASCIIgL::Mesh>(std::move(vertices), ASCIIgL::VertFormats::PosUV(), std::move(indices), blockAtlas);
-            ASCIIgL::Logger::Debug("Indexed mesh created successfully with " + std::to_string(vertices.size()) + " bytes and " + std::to_string(indices.size()) + " indices");
+        if (!indicesOpaque.empty()) {
+            opaqueMesh = std::make_unique<ASCIIgL::Mesh>(
+                std::move(verticesOpaque),
+                ASCIIgL::VertFormats::PosUVLayer(),
+                std::move(indicesOpaque),
+                blockTextures
+            );
+            ASCIIgL::Logger::Debug("Opaque chunk mesh created with " +
+                std::to_string(opaqueMesh ? opaqueMesh->GetVertexCount() : 0) + " vertices");
+            hasOpaqueMesh = (opaqueMesh != nullptr);
+        }
+    }
+
+    // Build transparent meshes for multiple canonical view directions if we have faces
+    if (!transparentFaces.empty()) {
+        if (!blockTextures || !blockTextures->IsValid()) {
+            ASCIIgL::Logger::Error("  Block texture array is invalid for transparent mesh!");
+            SetDirty(false);
+            return;
         }
 
-        hasMesh = true;
-    } else {
-        mesh.reset();
-        hasMesh = false;
+        // Canonical view directions: +X, -X, +Y, -Y, +Z, -Z
+        const glm::vec3 viewDirs[TRANSPARENT_VARIANT_COUNT] = {
+            glm::vec3( 1,  0,  0),
+            glm::vec3(-1,  0,  0),
+            glm::vec3( 0,  1,  0),
+            glm::vec3( 0, -1,  0),
+            glm::vec3( 0,  0,  1),
+            glm::vec3( 0,  0, -1)
+        };
+
+        for (int v = 0; v < TRANSPARENT_VARIANT_COUNT; ++v) {
+            std::vector<std::byte> verticesVariant;
+            std::vector<int> indicesVariant;
+
+            // Order faces back-to-front along this canonical view direction
+            std::vector<size_t> order(transparentFaces.size());
+            std::iota(order.begin(), order.end(), 0);
+
+            const glm::vec3 D = glm::normalize(viewDirs[v]);
+
+            std::sort(order.begin(), order.end(),
+                [&](size_t a, size_t b) {
+                    const auto& fa = transparentFaces[a];
+                    const auto& fb = transparentFaces[b];
+
+                    glm::vec3 centerA(
+                        coord.x * SIZE + fa.x + 0.5f,
+                        coord.y * SIZE + fa.y + 0.5f,
+                        coord.z * SIZE + fa.z + 0.5f
+                    );
+
+                    glm::vec3 centerB(
+                        coord.x * SIZE + fb.x + 0.5f,
+                        coord.y * SIZE + fb.y + 0.5f,
+                        coord.z * SIZE + fb.z + 0.5f
+                    );
+
+                    float da = glm::dot(centerA, D);
+                    float db = glm::dot(centerB, D);
+                    // Farther along D drawn first -> sort descending
+                    return da > db;
+                });
+
+            for (size_t idx : order) {
+                const auto& tf = transparentFaces[idx];
+
+                int face = tf.faceIndex;
+                int textureLayer = tf.textureLayer;
+                BlockFace blockFacing = static_cast<BlockFace>(tf.blockFacing);
+
+                int baseVertexIndex = static_cast<int>(verticesVariant.size()) / ASCIIgL::VertFormats::PosUVLayer().GetStride();
+
+                for (int vertIdx = 0; vertIdx < 4; ++vertIdx) {
+                    glm::vec3 WorldCoord = glm::vec3(
+                        coord.x * SIZE + tf.x,
+                        coord.y * SIZE + tf.y,
+                        coord.z * SIZE + tf.z
+                    ) + faceVerticesIndexed[face][vertIdx];
+
+                    glm::vec2 faceUV = faceUVsIndexed[vertIdx];
+                    if (face == 0 || face == 1) {
+                        faceUV = RotateTopBottomUV(faceUV, blockFacing);
+                    }
+                    float u = faceUV.x;
+                    float v = 1.0f - faceUV.y;
+
+                    ASCIIgL::VertStructs::PosUVLayer vertex = {
+                        WorldCoord.x, WorldCoord.y, WorldCoord.z,
+                        u, v, static_cast<float>(textureLayer)
+                    };
+
+                    const auto* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
+                    verticesVariant.insert(verticesVariant.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUVLayer));
+                }
+
+                for (int i = 0; i < 6; ++i) {
+                    indicesVariant.push_back(baseVertexIndex + faceIndices[i]);
+                }
+            }
+
+            if (!verticesVariant.empty() && !indicesVariant.empty()) {
+                transparentMeshes[v] = std::make_unique<ASCIIgL::Mesh>(
+                    std::move(verticesVariant),
+                    ASCIIgL::VertFormats::PosUVLayer(),
+                    std::move(indicesVariant),
+                    blockTextures
+                );
+                hasTransparentMesh[v] = (transparentMeshes[v] != nullptr);
+            }
+        }
     }
-    
+
     SetDirty(false);
 }
 
@@ -357,29 +446,4 @@ void Chunk::LogNeighbors() const {
     }
 }
 
-void Chunk::Render() const {
-    if (!hasMesh || !mesh || !mesh->GetTexture()) {
-        return;
-    }
-    
-    // Use DrawMesh instead of batching - leverages GPU mesh caching
-    ASCIIgL::Renderer::GetInst().DrawMesh(mesh.get());
-}
-
-Block& Chunk::GetBlockByIndex(int i) {
-    static Block s_airBlock(BlockType::Air);  // Static fallback for out-of-bounds
-    if (0 <= i && i < VOLUME) { return blocks[i]; }
-    ASCIIgL::Logger::Warning("GetBlockByIndex: index out of bounds");
-    return s_airBlock;
-}
-
-const Block& Chunk::GetBlockByIndex(int i) const {
-    static const Block s_airBlock(BlockType::Air);  // Static fallback for out-of-bounds
-    if (0 <= i && i < VOLUME) { return blocks[i]; }
-    ASCIIgL::Logger::Warning("GetBlockByIndex: index out of bounds");
-    return s_airBlock;
-}
-
-void Chunk::SetBlockByIndex(int i, const Block& block) {
-    if (0 <= i && i < VOLUME) { blocks[i] = block; }
-}
+// Rendering is now handled by ChunkManager via Renderer draw-call queue.

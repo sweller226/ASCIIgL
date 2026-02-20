@@ -35,7 +35,7 @@ public:
     ScreenWinImpl(Screen& screenRef);
     ~ScreenWinImpl();
 
-    int Initialize(unsigned int width, unsigned int height, unsigned int fontSize, const Palette& palette);
+    int Initialize(unsigned int width, unsigned int height, float fontSize, const Palette& palette);
     void ClearPixelBuffer();
     void OutputBuffer();
     void RenderTabTitle();
@@ -47,10 +47,9 @@ public:
     std::vector<CHAR_INFO>& GetPixelBuffer();
 
     // Windows Terminal methods
-    void SetFontTerminal(HANDLE currentHandle, unsigned int fontSize);
+    void SetFontTerminal(HANDLE currentHandle, float fontSize);
     std::wstring GetTerminalSettingsPath();
     bool ModifyTerminalFont(const std::wstring& settingsPath, float fontSize);
-    float ConvertPixelSizeToTerminalPoints(unsigned int pixelSize);
     void EnableVTMode();
     bool IsFontInstalled(const std::wstring& fontName);
     bool InstallFontFromFile(const std::wstring& fontFilePath);

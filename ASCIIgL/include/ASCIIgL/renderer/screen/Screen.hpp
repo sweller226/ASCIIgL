@@ -36,7 +36,7 @@ private:
     unsigned int _screen_width = 0;
     unsigned int _screen_height = 0;
     std::wstring _title;
-    unsigned int _fontSize = 0;
+    float _fontSize = 0.0f;
     Palette _palette;
 
     Screen();
@@ -49,7 +49,7 @@ public:
         static Screen instance;
         return instance;
     }
-    int Initialize(unsigned int width, unsigned int height, const std::wstring title, unsigned int fontSize, const Palette palette = Palette());
+    int Initialize(unsigned int width, unsigned int height, const std::wstring title, float fontSize, const Palette palette = Palette());
     bool IsInitialized() const;
 
     void RenderTabTitle();
@@ -63,7 +63,7 @@ public:
 
     const std::wstring& GetTitle() const;
     void SetTitle(const std::wstring& title);
-    unsigned int GetFontSize() const;
+    float GetFontSize() const;
     unsigned int GetHeight() const;
     unsigned int GetWidth() const;
     Palette& GetPalette();

@@ -1,13 +1,13 @@
 #include <ASCIIgL/engine/Mesh.hpp>
-#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
+#include <ASCIIgL/renderer/Renderer.hpp>
 
 namespace ASCIIgL {
 
 Mesh::~Mesh()
 {
     // Cleanup GPU buffer cache if it exists
-    if (gpuBufferCache && RendererGPU::GetInst().IsInitialized()) {
-        RendererGPU::GetInst().ReleaseMeshCache(gpuBufferCache);
+    if (gpuBufferCache && Renderer::GetInst().IsInitialized()) {
+        Renderer::GetInst().ReleaseMeshCache(gpuBufferCache);
         gpuBufferCache = nullptr;
     }
     
@@ -16,8 +16,8 @@ Mesh::~Mesh()
 }
 
 void Mesh::ReleaseGpuCache() {
-    if (gpuBufferCache && RendererGPU::GetInst().IsInitialized()) {
-        RendererGPU::GetInst().ReleaseMeshCache(gpuBufferCache);
+    if (gpuBufferCache && Renderer::GetInst().IsInitialized()) {
+        Renderer::GetInst().ReleaseMeshCache(gpuBufferCache);
         gpuBufferCache = nullptr;
     }
 }

@@ -47,16 +47,14 @@ struct ChunkHeader {
 
 // One unique block entry in the palette
 struct SerializedBlock {
-    uint8_t type;
-    uint8_t  metadata;
+    uint32_t stateId;
     bool operator==(const SerializedBlock& other) const {
-        return type == other.type && metadata == other.metadata;
+        return stateId == other.stateId;
     }
 };
 
 struct SerializedEdit {
-    uint8_t type;
-    uint8_t  metadata;
+    uint32_t stateId;
     uint16_t pos;
 };
 
@@ -71,7 +69,7 @@ namespace std {
     template<>
     struct hash<SerializedBlock> {
         size_t operator()(const SerializedBlock& b) const {
-            return (static_cast<size_t>(b.type) << 8) ^ b.metadata;
+            return std::hash<uint32_t>{}(b.stateId);
         }
     };
 }

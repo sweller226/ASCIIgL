@@ -35,7 +35,7 @@ int Screen::Initialize(
     unsigned int width, 
     unsigned int height, 
     const std::wstring title, 
-    unsigned int fontSize, 
+    float fontSize, 
     const Palette palette
 ) {
     if (!_initialized) {
@@ -54,14 +54,8 @@ int Screen::Initialize(
     _title = title;
 
     // Enforce minimum font size
-    const unsigned int MIN_FONT_SIZE = 2;
-    unsigned int adjustedFontSize = fontSize;
-    
-    if (fontSize < MIN_FONT_SIZE) {
-        adjustedFontSize = MIN_FONT_SIZE;
-        Logger::Warning(L"Font size " + std::to_wstring(fontSize) + L" is below minimum of " + 
-                       std::to_wstring(MIN_FONT_SIZE) + L". Adjusting to minimum.");
-    }
+    const float MIN_FONT_SIZE = 2.0f;
+    float adjustedFontSize = std::max(MIN_FONT_SIZE, fontSize);
     
     Logger::Debug(L"Setting font size to " + std::to_wstring(adjustedFontSize));
     _fontSize = adjustedFontSize;
@@ -144,7 +138,7 @@ void Screen::SetTitle(const std::wstring& title) {
     _title = title;
 }
 
-unsigned int Screen::GetFontSize() const {
+float Screen::GetFontSize() const {
     return _fontSize;
 }
 

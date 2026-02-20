@@ -1,16 +1,15 @@
 #include <ASCIICraft/events/EventBus.hpp>
+#include <ASCIICraft/ecs/systems/ISystem.hpp>
 
 #include <entt/entt.hpp>
 
 namespace ecs::systems {
 
-class BlockUpdateSystem {
+class BlockUpdateSystem : public ISystem {
 public:
-    explicit BlockUpdateSystem(entt::registry &registry, EventBus& eventBus) noexcept;
-    BlockUpdateSystem(const BlockUpdateSystem&) = delete;
-    BlockUpdateSystem& operator=(const BlockUpdateSystem&) = delete;
-
-    void Update();
+    explicit BlockUpdateSystem(entt::registry &registry, EventBus& eventBus);
+    
+    void Update() override;
 
 private:
     entt::registry &m_registry;

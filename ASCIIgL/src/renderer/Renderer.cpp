@@ -6,6 +6,8 @@
 #include <sstream>
 #include <mutex>
 #include <thread>
+#include <iostream>
+#include <Windows.h>
 
 #include <tbb/parallel_for_each.h>
 
@@ -16,104 +18,14 @@
 #include <ASCIIgL/util/Profiler.hpp>
 
 #include <ASCIIgL/renderer/screen/Screen.hpp>
-#include <ASCIIgL/renderer/cpu/RendererCPU.hpp>
-#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
+#include <ASCIIgL/renderer/Shader.hpp>
+#include <ASCIIgL/renderer/Material.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 
 namespace ASCIIgL {
 
-// =============================================================================
-// LIFECYCLE MANAGEMENT
-// =============================================================================
-
-Renderer::~Renderer() {
-    _color_buffer.clear();
-}
-
-void Renderer::Initialize(bool antialiasing, int antialiasing_samples, bool cpu_only) {
-    _antialiasing = antialiasing;
-    _antialiasing_samples = antialiasing_samples;
-    _cpu_only = cpu_only;
-    
-    if (!_initialized) {
-        Logger::Info("Initializing Renderer...");
-    } else {
-        Logger::Warning("Renderer is already initialized!");
-        return;
-    }
-
-    if (!Screen::GetInst().IsInitialized()) {
-        Logger::Error("Renderer: Screen must be initialized before creating Renderer.");
-        throw std::runtime_error("Renderer: Screen must be initialized before creating Renderer.");
-    }
-    auto& screen = Screen::GetInst();
-    _color_buffer.resize(screen.GetWidth() * screen.GetHeight());
-
-    if (_cpu_only) {
-        if (!_rendererCPU) {
-            _rendererCPU = &RendererCPU::GetInst();
-            _rendererCPU->Initialize();
-        }
-    }
-    else {
-        if (!_rendererGPU) {
-            _rendererGPU = &RendererGPU::GetInst();
-            _rendererGPU->Initialize();
-        }
-    }
-
-    _initialized = true;
-}
-
-bool Renderer::IsInitialized() const {
-    return _initialized;
-}
-
-// =============================================================================
-// RENDERING MODE CONFIGURATION
-// =============================================================================
-
-bool Renderer::GetCpuOnly() const {
-    return _cpu_only;
-}
-
-// =============================================================================
-// HIGH-LEVEL DRAWING API - MESHES AND MODELS
-// =============================================================================
-
-void Renderer::DrawMesh(const Mesh* mesh) {
-    if (!mesh) {
-        Logger::Error("DrawMesh: mesh is nullptr!");
-        return;
-    }
-    
-    if (mesh->GetTexture()) {
-        if (_cpu_only) {
-            _rendererCPU->DrawMesh(mesh);
-        } else {
-            _rendererGPU->DrawMesh(mesh);
-        }
-    } else {
-        Logger::Warning("DrawMesh: mesh texture is null");
-    }
-}
-
-
-void Renderer::DrawModel(const Model& ModelObj) {
-    if (_cpu_only) {
-        _rendererCPU->DrawModel(ModelObj);
-    } else {
-        _rendererGPU->DrawModel(ModelObj);
-    }
-}
-
-void Renderer::Draw2DQuad(const Texture& tex) {
-    if (_cpu_only) {
-        _rendererCPU->Draw2DQuad(tex);
-    } else {
-        _rendererGPU->Draw2DQuad(tex);
-    }
-}
+// Core lifecycle and non-draw functionality for Renderer lives here.
+// Draw-call related methods have been moved to Renderer_Draw.cpp.
 
 // =============================================================================
 // TRIANGLE RASTERIZATION - WIREFRAME (PIXEL BUFFER)
@@ -229,10 +141,10 @@ void Renderer::DrawClippedLinePxBuff(int x0, int y0, int x1, int y1, int minX, i
 
 void Renderer::DrawScreenBorderPxBuff(const unsigned short col) {
     // DRAWING BORDERS
-    DrawLinePxBuff(0, 0, Screen::GetInst().GetWidth() - 1, 0, _charRamp[8], col);
-    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, 0, Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, _charRamp[8], col);
-    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, _charRamp[8], col);
-    DrawLinePxBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, _charRamp[8], col);
+    DrawLinePxBuff(0, 0, Screen::GetInst().GetWidth() - 1, 0, _charRamp.back(), col);
+    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, 0, Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, _charRamp.back(), col);
+    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, _charRamp.back(), col);
+    DrawLinePxBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, _charRamp.back(), col);
 }
 
 // =============================================================================
@@ -375,12 +287,56 @@ void Renderer::PlotColorBlend(int x, int y, const glm::ivec4& color) {
 // =============================================================================
 
 void Renderer::BeginColBuffFrame() {
-    if (_cpu_only) {
-        _rendererCPU->BeginColBuffFrame();
+    if (!_initialized) {
+        Logger::Error("[Renderer] BeginFrame called before initialization!");
+        return;
     }
-    else {
-        _rendererGPU->BeginColBuffFrame();
-    }
+
+    Logger::Debug("BeginFrame: Clearing render target and setting up pipeline");
+
+    // Clear render target (convert 0-255 integer color to 0-1 float)
+    glm::ivec3 bgCol = GetBackgroundCol();
+    float clear_color[4] = { 
+        static_cast<float>(bgCol.x) / 255.0f, 
+        static_cast<float>(bgCol.y) / 255.0f, 
+        static_cast<float>(bgCol.z) / 255.0f, 
+        1.0f 
+    };
+    _context->ClearRenderTargetView(_renderTargetView.Get(), clear_color);
+
+    // Clear depth stencil
+    _context->ClearDepthStencilView(_depthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);  // Clear to 1.0 (far plane)
+
+    // Bind render targets
+    _context->OMSetRenderTargets(1, _renderTargetView.GetAddressOf(), _depthStencilView.Get());
+
+    // Set viewport
+    D3D11_VIEWPORT viewport = {};
+    viewport.Width = static_cast<float>(Screen::GetInst().GetWidth());
+    viewport.Height = static_cast<float>(Screen::GetInst().GetHeight());
+    viewport.MinDepth = 0.0f;
+    viewport.MaxDepth = 1.0f;
+    _context->RSSetViewports(1, &viewport);
+
+    // Set depth stencil and blend state (on for both 3D and 2D)
+    _context->OMSetDepthStencilState(_depthStencilState.Get(), 0);
+    const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    _context->OMSetBlendState(_blendStateAlpha.Get(), blendFactor, 0xFFFFFFFF);
+
+    // Set rasterizer state based on wireframe, backface culling, and CCW modes
+    bool wireframe = GetWireframe();
+    bool backfaceCulling = GetBackfaceCulling();
+    bool ccw = GetCCW();
+    
+    // Calculate index: wireframe(0/1) + cull(0/2) + ccw(0/4)
+    int stateIndex = (wireframe ? 1 : 0) + (backfaceCulling ? 2 : 0) + (ccw ? 4 : 0);
+    _context->RSSetState(_rasterizerStates[stateIndex].Get());
+
+    // Bind sampler
+    _context->PSSetSamplers(0, 1, _samplerLinear.GetAddressOf());
+
+    // Set primitive topology
+    _context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     
     std::fill(_color_buffer.begin(), _color_buffer.end(), glm::ivec4(_background_col, 1));
 }
@@ -406,6 +362,9 @@ void Renderer::OverwritePxBuffWithColBuff() {
     const size_t unrollFactor = 4;
     const size_t unrolledEnd = (bufferSize / unrollFactor) * unrollFactor;
     
+    // Lambda to convert 0-255 to 0-15 for LUT indexing
+    auto to16 = [](int v) { return (v * 15 + 127) / 255; };
+    
     size_t i = 0;
     for (; i < unrolledEnd; i += unrollFactor) {
         const auto& color0 = _color_buffer[i];
@@ -413,11 +372,16 @@ void Renderer::OverwritePxBuffWithColBuff() {
         const auto& color2 = _color_buffer[i + 2];
         const auto& color3 = _color_buffer[i + 3];
         
+        // Convert 0-255 to 0-15 for LUT indexing
+        const int r0 = to16(color0.r), g0 = to16(color0.g), b0 = to16(color0.b);
+        const int r1 = to16(color1.r), g1 = to16(color1.g), b1 = to16(color1.b);
+        const int r2 = to16(color2.r), g2 = to16(color2.g), b2 = to16(color2.b);
+        const int r3 = to16(color3.r), g3 = to16(color3.g), b3 = to16(color3.b);
 
-        const int index0 = (color0.r * _rgbLUTDepth * _rgbLUTDepth) + (color0.g * _rgbLUTDepth) + color0.b;
-        const int index1 = (color1.r * _rgbLUTDepth * _rgbLUTDepth) + (color1.g * _rgbLUTDepth) + color1.b;
-        const int index2 = (color2.r * _rgbLUTDepth * _rgbLUTDepth) + (color2.g * _rgbLUTDepth) + color2.b;
-        const int index3 = (color3.r * _rgbLUTDepth * _rgbLUTDepth) + (color3.g * _rgbLUTDepth) + color3.b;
+        const int index0 = (r0 * _rgbLUTDepth * _rgbLUTDepth) + (g0 * _rgbLUTDepth) + b0;
+        const int index1 = (r1 * _rgbLUTDepth * _rgbLUTDepth) + (g1 * _rgbLUTDepth) + b1;
+        const int index2 = (r2 * _rgbLUTDepth * _rgbLUTDepth) + (g2 * _rgbLUTDepth) + b2;
+        const int index3 = (r3 * _rgbLUTDepth * _rgbLUTDepth) + (g3 * _rgbLUTDepth) + b3;
         
         pixelBuffer[i] = _colorLUT[index0];
         pixelBuffer[i + 1] = _colorLUT[index1];
@@ -427,7 +391,8 @@ void Renderer::OverwritePxBuffWithColBuff() {
     
     for (; i < bufferSize; ++i) {
         const auto& color = _color_buffer[i];
-        const int index = (color.r * _rgbLUTDepth * _rgbLUTDepth) + (color.g * _rgbLUTDepth) + color.b;
+        const int r = to16(color.r), g = to16(color.g), b = to16(color.b);
+        const int index = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
         pixelBuffer[i] = _colorLUT[index];
     }
 }
@@ -440,42 +405,95 @@ void Renderer::PrecomputeColorLUT() {
     Palette& palette = Screen::GetInst().GetPalette();
     if (_colorLUTComputed) return;
     
+    // Use the configured palette mode
+    PaletteMode mode = _paletteMode;
+    
     const float invPaletteDepth = 1.0f / 15.0f;
+    
+    // sRGB to linear conversion (IEC 61966-2-1)
+    auto srgbToLinear = [](float s) {
+        return s <= 0.04045f ? s / 12.92f : std::pow((s + 0.055f) / 1.055f, 2.4f);
+    };
+    
+    auto srgbToLinearVec = [&srgbToLinear](const glm::vec3& c) {
+        return glm::vec3(srgbToLinear(c.r), srgbToLinear(c.g), srgbToLinear(c.b));
+    };
     
     // Precompute all possible RGB combinations
     for (int r = 0; r < static_cast<int>(_rgbLUTDepth); ++r) {
         for (int g = 0; g < static_cast<int>(_rgbLUTDepth); ++g) {
             for (int b = 0; b < static_cast<int>(_rgbLUTDepth); ++b) {
-                // Convert discrete RGB to normalized [0,1] range
-                glm::vec3 rgb(
-                    r*invPaletteDepth,
-                    g*invPaletteDepth,
-                    b*invPaletteDepth
+                // Convert discrete RGB to normalized [0,1] sRGB range
+                glm::vec3 targetSRGB(
+                    r * invPaletteDepth,
+                    g * invPaletteDepth,
+                    b * invPaletteDepth
                 );
 
-                // Find best match using original algorithm
                 float minError = FLT_MAX;
                 int bestFgIndex = 0, bestBgIndex = 0, bestCharIndex = 0;
 
-                // 16-color palette: all indices 0-15 can be used for both fg and bg
-                for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
-                    for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
-                        for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
-                            float coverage = _charCoverage[charIdx];
+                if (mode == PaletteMode::Monochrome) {
+                    // ===== MONOCHROME PATH: Compare by luminance only =====
+                    // For monochrome palettes (grayscale, amber, sepia), all colors
+                    // lie on the same hue line. Comparing by luminance is faster
+                    // and more accurate than RGB distance.
+                    
+                    float targetLuminance = PaletteUtil::sRGB1_Luminance(targetSRGB);
+                    
+                    for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
+                        float fgLuminance = palette.GetLuminance(fgIdx);
+                        
+                        for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
+                            float bgLuminance = palette.GetLuminance(bgIdx);
                             
-                            // Convert palette colors from 0-15 to 0.0-1.0 for comparison
-                            glm::vec3 fgColor = glm::vec3(palette.GetRGB(fgIdx)) * invPaletteDepth;
-                            glm::vec3 bgColor = glm::vec3(palette.GetRGB(bgIdx)) * invPaletteDepth;
-                            
-                            glm::vec3 simulatedColor = coverage * fgColor + (1.0f - coverage) * bgColor;
-                            glm::vec3 diff = rgb - simulatedColor;
-                            float error = glm::dot(diff, diff);
+                            for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
+                                float coverage = _charCoverage[charIdx];
+                                
+                                // Simulate luminance as weighted blend
+                                float simLuminance = coverage * fgLuminance + (1.0f - coverage) * bgLuminance;
+                                float error = std::abs(targetLuminance - simLuminance);
 
-                            if (error < minError) {
-                                minError = error;
-                                bestFgIndex = fgIdx;
-                                bestBgIndex = bgIdx;
-                                bestCharIndex = charIdx;
+                                if (error < minError) {
+                                    minError = error;
+                                    bestFgIndex = fgIdx;
+                                    bestBgIndex = bgIdx;
+                                    bestCharIndex = charIdx;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // ===== MULTICOLOR PATH: Linearized sRGB with weighted distance =====
+                    // For full-color palettes, linearize sRGB before comparison and use
+                    // perceptually weighted Euclidean distance (green-sensitive).
+                    
+                    glm::vec3 targetLinear = srgbToLinearVec(targetSRGB);
+                    
+                    for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
+                        glm::vec3 fgLinear = srgbToLinearVec(palette.GetRGBNormalized(fgIdx));
+                        
+                        for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
+                            glm::vec3 bgLinear = srgbToLinearVec(palette.GetRGBNormalized(bgIdx));
+                            
+                            for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
+                                float coverage = _charCoverage[charIdx];
+                                
+                                // Simulate color in linear space
+                                glm::vec3 simLinear = coverage * fgLinear + (1.0f - coverage) * bgLinear;
+                                glm::vec3 diff = targetLinear - simLinear;
+                                
+                                // Weighted Euclidean distance (Rec. 709 luminance weights)
+                                float error = 0.2126f * diff.r * diff.r 
+                                            + 0.7152f * diff.g * diff.g 
+                                            + 0.0722f * diff.b * diff.b;
+
+                                if (error < minError) {
+                                    minError = error;
+                                    bestFgIndex = fgIdx;
+                                    bestBgIndex = bgIdx;
+                                    bestCharIndex = charIdx;
+                                }
                             }
                         }
                     }
@@ -488,17 +506,7 @@ void Renderer::PrecomputeColorLUT() {
                 unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
                 unsigned short combinedColor = fgColor | bgColor;
 
-
                 if (fgColor > 0xF || bgColor > 0xF0) {
-                    std::wstringstream ss;
-                    ss << L"PrecomputeColorLUT: Invalid color at index " << index 
-                       << L" RGB(" << r << L"," << g << L"," << b << L")"
-                       << L" FG:0x" << std::hex << fgColor 
-                       << L" BG:0x" << bgColor
-                       << L" fgIdx:" << std::dec << bestFgIndex 
-                       << L" bgIdx:" << bestBgIndex;
-                    Logger::Error(ss.str());
-                    
                     // Clamp to valid range
                     fgColor = fgColor & 0xF;
                     bgColor = bgColor & 0xF0;
@@ -518,8 +526,10 @@ CHAR_INFO Renderer::GetCharInfo(const glm::ivec3& rgb) {
         PrecomputeColorLUT();
     }
 
-    // Pre-computed _rgbLUTDepth squared for faster indexing
-    const int index = (rgb.r * _rgbLUTDepth * _rgbLUTDepth) + (rgb.g * _rgbLUTDepth) + rgb.b;
+    // Convert 0-255 to 0-15 for LUT indexing
+    auto to16 = [](int v) { return (v * 15 + 127) / 255; };
+    const int r = to16(rgb.r), g = to16(rgb.g), b = to16(rgb.b);
+    const int index = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
 
     return _colorLUT[index];
 }
@@ -553,7 +563,7 @@ bool Renderer::GetCCW() const {
 }
 
 void Renderer::SetBackgroundCol(const glm::ivec3& col) {
-    _background_col = glm::clamp(col, glm::ivec3(0), glm::ivec3(15));
+    _background_col = glm::clamp(col, glm::ivec3(0), glm::ivec3(255));
 }
 
 glm::ivec3 Renderer::GetBackgroundCol() const {
@@ -592,135 +602,136 @@ void Renderer::LogDiagnostics() const {
     if (!_diagnostics_enabled) return;
 }
 
-// =============================================================================
-// TEST/DEBUG RENDERING FUNCTIONS
-// =============================================================================
-
-void Renderer::TestRenderFont() {
-    Screen& screen = Screen::GetInst();
-    int screenWidth = screen.GetWidth();
-    int screenHeight = screen.GetHeight();
-    
-    // Get the number of characters in the ramp
-    const int numChars = static_cast<int>(_charRamp.size());
-    
-    // Calculate grid dimensions (square-ish grid)
-    int gridCols = static_cast<int>(std::ceil(std::sqrt(numChars)));
-    int gridRows = static_cast<int>(std::ceil(static_cast<float>(numChars) / gridCols));
-    
-    // Calculate patch size for each character
-    int patchWidth = screenWidth / gridCols;
-    int patchHeight = screenHeight / gridRows;
-    
-    // Combined foreground and background color
-    Palette& palette = screen.GetPalette();
-    unsigned short combinedColor = palette.GetFgColor(6) | palette.GetBgColor(11);
-    
-    // Fill screen with character patches
-    for (int charIdx = 0; charIdx < numChars; ++charIdx) {
-        // Calculate which patch this character belongs to
-        int patchX = charIdx % gridCols;
-        int patchY = charIdx / gridCols;
-        
-        // Calculate the bounds of this patch
-        int startX = patchX * patchWidth;
-        int startY = patchY * patchHeight;
-        int endX = (patchX == gridCols - 1) ? screenWidth : startX + patchWidth;  // Handle remainder
-        int endY = (patchY == gridRows - 1) ? screenHeight : startY + patchHeight; // Handle remainder
-        
-        // Fill the entire patch with this character
-        wchar_t currentChar = _charRamp[charIdx];
-        CHAR_INFO charInfo;
-
-        charInfo.Char.UnicodeChar = currentChar;
-        charInfo.Attributes = combinedColor;
-        
-        for (int y = startY; y < endY; ++y) {
-            for (int x = startX; x < endX; ++x) {
-                screen.PlotPixel(glm::vec2(x, y), charInfo);
-            }
-        }
-    }
-}
-
-void Renderer::TestRenderColorDiscrete() {
-    Screen& screen = Screen::GetInst();
-    int screenWidth = screen.GetWidth();
-    int screenHeight = screen.GetHeight();
-
-    // 16 colors, arrange in a 4x4 grid
-    const int numColors = Palette::COLOR_COUNT;
-    const int gridCols = 4;
-    const int gridRows = 4;
-
-    int patchWidth = screenWidth / gridCols;
-    int patchHeight = screenHeight / gridRows;
-
-    Palette& palette = screen.GetPalette();
-
-    for (int colorIdx = 0; colorIdx < numColors; ++colorIdx) {
-        int patchX = colorIdx % gridCols;
-        int patchY = colorIdx / gridCols;
-
-        int startX = patchX * patchWidth;
-        int startY = patchY * patchHeight;
-        int endX = (patchX == gridCols - 1) ? screenWidth : startX + patchWidth;
-        int endY = (patchY == gridRows - 1) ? screenHeight : startY + patchHeight;
-
-        // Use a solid block character for visibility
-        CHAR_INFO charInfo;
-        charInfo.Char.UnicodeChar = 'B';
-        charInfo.Attributes = palette.GetFgColor(colorIdx) | palette.GetBgColor(colorIdx);
-        std::wstringstream ss;
-        ss << L"Color " << colorIdx << L" RGB: ("
-           << palette.GetRGB(colorIdx).r << L", "
-           << palette.GetRGB(colorIdx).g << L", "
-           << palette.GetRGB(colorIdx).b << L") "
-           << "FG: " << palette.GetFgColor(colorIdx) << L" | BG: " << palette.GetBgColor(colorIdx);
-        Logger::Debug(ss.str());
-
-        for (int y = startY; y < endY; ++y) {
-            for (int x = startX; x < endX; ++x) {
-                screen.PlotPixel(glm::vec2(x, y), charInfo);
-            }
-        }
-    }
-}
-
-void Renderer::TestRenderColorContinuous() {
-    Screen& screen = Screen::GetInst();
-    
-    // Display all 4096 colors in a 64x64 grid
-    // Each position (x,y) maps directly to a unique RGB combination
-    for (int y = 0; y < 64; y++) {
-        for (int x = 0; x < 64; x++) {
-            // Linear index from 0 to 4095
-            int linearIndex = y * 64 + x;
-            
-            // Reverse the 3D indexing to get RGB values
-            // index = (r * 16 * 16) + (g * 16) + b
-            int r = linearIndex / (_rgbLUTDepth * _rgbLUTDepth);  // High order
-            int g = (linearIndex / _rgbLUTDepth) % _rgbLUTDepth;  // Middle order
-            int b = linearIndex % _rgbLUTDepth;                    // Low order
-            
-            // Reconstruct the LUT index
-            int lutIndex = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
-            CHAR_INFO charInfo = _colorLUT[lutIndex];
-
-            screen.PlotPixel(glm::vec2(x + 10 + int(x/16), y + 10 + int(y/16)), charInfo);
-        }
-    }
-}
-
 void Renderer::EndColBuffFrame() {
-    if (_cpu_only) {
-        // no action needed for CPU renderer
+    // Resolve MSAA render target to non-MSAA texture for CPU download
+    D3D11_TEXTURE2D_DESC rtDesc;
+    _renderTarget->GetDesc(&rtDesc);
+    
+    if (rtDesc.SampleDesc.Count > 1) {
+        // MSAA is enabled - resolve to non-MSAA texture
+        _context->ResolveSubresource(
+            _resolvedTexture.Get(),     // Destination (non-MSAA)
+            0,                           // Dest subresource
+            _renderTarget.Get(),         // Source (MSAA)
+            0,                           // Source subresource
+            DXGI_FORMAT_R8G8B8A8_UNORM  // Format
+        );
+    } else {
+        // No MSAA - just copy render target to resolved texture
+        _context->CopyResource(_resolvedTexture.Get(), _renderTarget.Get());
     }
-    else {
-        _rendererGPU->EndColBuffFrame();
+    
+    // Present for RenderDoc (does nothing if no swap chain)
+    if (_debugSwapChain) {
+        _debugSwapChain->Present(0, 0);
     }
+
+    DownloadFramebuffer();
 
     OverwritePxBuffWithColBuff();
+}
+
+void Renderer::SetPaletteMode(PaletteMode mode) {
+    if (_paletteMode != mode) {
+        _paletteMode = mode;
+        _colorLUTComputed = false; // Invalidate LUT to force recomputation
+    }
+}
+
+PaletteMode Renderer::GetPaletteMode() const {
+    return _paletteMode;
+}
+
+// =========================================================================
+// Custom Shader/Material System Implementation
+// =========================================================================
+
+void Renderer::BindShaderProgram(ShaderProgram* program) {
+    if (!_initialized) return;
+    
+    _boundShaderProgram = program;
+    
+    if (program && program->IsValid()) {
+        // Bind custom shaders and input layout
+        _context->VSSetShader(program->_vertexShader->_vertexShader.Get(), nullptr, 0);
+        _context->PSSetShader(program->_pixelShader->_pixelShader.Get(), nullptr, 0);
+        _context->IASetInputLayout(program->_inputLayout.Get());
+    } else {
+        // Revert to default shaders
+        UnbindShaderProgram();
+    }
+}
+
+void Renderer::UnbindShaderProgram() {
+    if (!_initialized) return;
+    
+    _boundShaderProgram = nullptr;
+    _boundMaterial = nullptr;
+}
+
+void Renderer::BindMaterial(Material* material) {
+    if (!_initialized || !material) return;
+    
+    _boundMaterial = material;
+    
+    // Bind shader program
+    auto program = material->GetShaderProgram();
+    if (program) {
+        BindShaderProgram(program.get());
+    }
+    
+    // Bind textures
+    for (const auto& slot : material->_textureSlots) {
+        if (slot.texture) {
+            BindTexture(slot.texture, slot.slot);
+        } else if (slot.textureArray) {
+            BindTextureArray(slot.textureArray, slot.slot);
+        }
+    }
+    
+    // Upload constant buffer if dirty
+    UploadMaterialConstants(material);
+}
+
+void Renderer::UploadMaterialConstants(Material* material) {
+    if (!material || !_initialized) return;
+    
+    // Update material's packed constant buffer data
+    material->UpdateConstantBufferData();
+    
+    auto program = material->GetShaderProgram();
+    if (!program) return;
+    
+    const auto& layout = program->GetUniformLayout();
+    if (layout.GetSize() == 0) return;
+    
+    // Create or update material's GPU constant buffer
+    if (!material->_constantBufferInitialized) {
+        D3D11_BUFFER_DESC cbDesc = {};
+        cbDesc.ByteWidth = layout.GetSize();
+        cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+        cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        
+        HRESULT hr = _device->CreateBuffer(&cbDesc, nullptr, &material->_constantBuffer);
+        if (FAILED(hr)) {
+            Logger::Error("Failed to create material constant buffer");
+            return;
+        }
+        material->_constantBufferInitialized = true;
+    }
+    
+    // Map and upload data
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    HRESULT hr = _context->Map(material->_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    if (SUCCEEDED(hr)) {
+        memcpy(mapped.pData, material->_constantBufferData.data(), layout.GetSize());
+        _context->Unmap(material->_constantBuffer.Get(), 0);
+    }
+    
+    // Bind to both vertex and pixel shader stages
+    _context->VSSetConstantBuffers(0, 1, material->_constantBuffer.GetAddressOf());
+    _context->PSSetConstantBuffers(0, 1, material->_constantBuffer.GetAddressOf());
 }
 
 } // namespace ASCIIgL

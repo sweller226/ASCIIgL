@@ -37,7 +37,7 @@ ScreenWinImpl::~ScreenWinImpl() {
 }
 
 // ScreenWinImpl method implementations (Windows Terminal only)
-int ScreenWinImpl::Initialize(const unsigned int width, const unsigned int height, const unsigned int fontSize, const Palette& palette) {
+int ScreenWinImpl::Initialize(const unsigned int width, const unsigned int height, const float fontSize, const Palette& palette) {
     // First, get current console handle to check maximum window size with proper font
     HANDLE currentHandle = GetStdHandle(STD_OUTPUT_HANDLE);
     if (currentHandle == INVALID_HANDLE_VALUE) {
@@ -204,54 +204,13 @@ std::vector<CHAR_INFO>& ScreenWinImpl::GetPixelBuffer() {
     return _pixelBuffer;
 }
 
-void ScreenWinImpl::SetFontTerminal(HANDLE currentHandle, unsigned int fontSize) {
+void ScreenWinImpl::SetFontTerminal(HANDLE currentHandle, float fontSize) {
     Logger::Info(L"Attempting to modify Windows Terminal settings.json file directly.");
     
-    // Convert pixel-based font size to Windows Terminal point size
-    float terminalFontSize = ConvertPixelSizeToTerminalPoints(fontSize);
-    Logger::Debug(L"Converting pixel size " + std::to_wstring(fontSize) + 
-                  L" to terminal point size " + std::to_wstring(terminalFontSize));
-
-    std::wstring settingsPath = GetTerminalSettingsPath();
-    if (!settingsPath.empty() && ModifyTerminalFont(settingsPath, terminalFontSize)) {
+    std::wstring settingsPath =d GetTerminalSettiwwngsPath();
+    if (!settingsPath.empty() && ModifyTerminalFont(settingsPath, fontSize)) {
         Logger::Info(L"Successfully modified Windows Terminal settings.json");
     }
-}
-
-float ScreenWinImpl::ConvertPixelSizeToTerminalPoints(unsigned int pixelSize) {
-    // Precise conversion from pixel-based font size to typographic points
-    // 
-    // Method: Get system DPI and calculate the actual point size that would 
-    // produce the same pixel height at the current DPI setting
-    
-    // Get the DPI of the primary display
-    HDC hdc = GetDC(NULL);
-    if (hdc == NULL) {
-        Logger::Warning(L"Could not get device context for DPI calculation, using default conversion");
-        return static_cast<float>(pixelSize) * 0.75f;  // Fallback to empirical conversion
-    }
-    
-    int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);  // Vertical DPI (typically 96 or 120)
-    ReleaseDC(NULL, hdc);
-    
-    // Typographic conversion: 1 point = 1/72 inch
-    // At 96 DPI: 1 point = 96/72 = 1.333... pixels
-    // At 120 DPI: 1 point = 120/72 = 1.666... pixels
-    // 
-    // To convert pixels to points: points = pixels * 72 / DPI
-    float pointSize = static_cast<float>(pixelSize) * 72.0f / static_cast<float>(dpiY);
-    
-    // Apply a small adjustment factor because Windows Terminal tends to render
-    // fonts slightly differently than the legacy console due to different 
-    // rendering engines (DirectWrite vs GDI)
-    const float renderingAdjustment = 0.9f;  // Fine-tune based on visual testing
-    pointSize *= renderingAdjustment;
-    
-    Logger::Debug(L"DPI: " + std::to_wstring(dpiY) + 
-                  L", Pixel size: " + std::to_wstring(pixelSize) + 
-                  L", Calculated point size: " + std::to_wstring(pointSize));
-
-    return std::max(1.0f, pointSize);
 }
 
 std::wstring ScreenWinImpl::GetTerminalSettingsPath() {
@@ -470,14 +429,11 @@ void ScreenWinImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOutput) 
         // - Foreground/background overrides are set to match index 0
         //   so that attribute 0x0 displays correctly
         
-        // Helper lambda to convert palette RGB (0-15) to hex color string
+        // Helper lambda to convert palette RGB (0-255) to hex color string
         auto toHex = [&palette](int paletteIdx) -> std::string {
             glm::ivec3 rgb = palette.GetRGB(paletteIdx);
-            int r = (rgb.r * 255) / 15;
-            int g = (rgb.g * 255) / 15;
-            int b = (rgb.b * 255) / 15;
             char hexColor[8];
-            snprintf(hexColor, sizeof(hexColor), "#%02X%02X%02X", r, g, b);
+            snprintf(hexColor, sizeof(hexColor), "#%02X%02X%02X", rgb.r, rgb.g, rgb.b);
             return std::string(hexColor);
         };
         

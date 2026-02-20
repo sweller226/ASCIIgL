@@ -301,10 +301,7 @@ void RegionFile::parseChunkBlob(const std::vector<uint8_t>& blob, Chunk* out) {
         uint16_t idx = indices[i];
         if (idx >= palette.size()) throw std::runtime_error("palette index out of range");
         const SerializedBlock& sb = palette[idx];
-        Block b;
-        b.type = static_cast<BlockType>(sb.type);
-        b.metadata = sb.metadata;
-        out->SetBlockByIndex(static_cast<int>(i), b);
+        out->SetBlockStateByIndex(static_cast<int>(i), sb.stateId);
     }
 }
 
@@ -315,8 +312,8 @@ std::vector<uint8_t> RegionFile::buildChunkBlob(const Chunk* data) {
     std::vector<uint16_t> indices(Chunk::VOLUME);
 
     for (int i = 0; i < static_cast<int>(Chunk::VOLUME); ++i) {
-        Block b = data->GetBlockByIndex(i);
-        SerializedBlock key{ static_cast<uint8_t>(b.type), b.metadata };
+        uint32_t stateId = data->GetBlockStateByIndex(i);
+        SerializedBlock key{ stateId };
         auto it = paletteMap.find(key);
         if (it == paletteMap.end()) {
             uint16_t id = static_cast<uint16_t>(palette.size());
@@ -365,8 +362,6 @@ bool RegionFile::LoadChunk(Chunk* out) {
     RegionCoord rp = out->GetCoord().ToRegionCoord();
     glm::ivec3 lp = out->GetCoord().ToLocalRegion(rp);
 
-    ASCIIgL::Logger::Debugf("LoadChunk: rp=(%d,%d,%d), lp=(%d,%d,%d)", rp.x, rp.y, rp.z, lp.x, lp.y, lp.z);
-
     // Validate local coords
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
         lp.x >= REGION_SIZE || lp.y >= REGION_SIZE || lp.z >= REGION_SIZE) {
@@ -375,7 +370,6 @@ bool RegionFile::LoadChunk(Chunk* out) {
     }
 
     uint32_t off = indexOffset(lp);
-    ASCIIgL::Logger::Debugf("LoadChunk: indexOffset = %u", off);
 
     if (off >= chunkIndexes.size()) {
         ASCIIgL::Logger::Warning("LoadChunk: indexOffset out of chunkIndexes range");
@@ -383,18 +377,11 @@ bool RegionFile::LoadChunk(Chunk* out) {
     }
 
     auto& entry = chunkIndexes[off];
-    ASCIIgL::Logger::Debugf("LoadChunk: entry.flags=%u, entry.offset=%llu, entry.length=%u",
-                            static_cast<unsigned int>(entry.flags),
-                            static_cast<unsigned long long>(entry.offset),
-                            entry.length);
-
     if (!(entry.flags & 0x1)) {
-        ASCIIgL::Logger::Debug("LoadChunk: chunk not present (flags)");
         return false;
     }
 
     if (entry.length == 0) {
-        ASCIIgL::Logger::Debug("LoadChunk: chunk length is zero");
         return false;
     }
 
@@ -452,12 +439,9 @@ bool RegionFile::LoadChunk(Chunk* out) {
 
     safeRead(_file, reinterpret_cast<char*>(blob.data()), static_cast<std::streamsize>(blob.size()), fsize, entry.offset);
 
-    ASCIIgL::Logger::Debugf("LoadChunk: read %zu bytes OK", blob.size());
-
     parseChunkBlob(blob, out);
 
     _file.close();
-    ASCIIgL::Logger::Debug("LoadChunk: success");
     return true;
 }
 
@@ -465,8 +449,6 @@ bool RegionFile::LoadChunk(Chunk* out) {
 bool RegionFile::SaveChunk(const Chunk* data) {
     RegionCoord rp = data->GetCoord().ToRegionCoord();
     glm::ivec3 lp = data->GetCoord().ToLocalRegion(rp);
-
-    ASCIIgL::Logger::Debugf("SaveChunk: rp=(%d,%d,%d), lp=(%d,%d,%d)", rp.x, rp.y, rp.z, lp.x, lp.y, lp.z);
 
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
         lp.x >= REGION_SIZE || lp.y >= REGION_SIZE || lp.z >= REGION_SIZE) {
@@ -485,7 +467,6 @@ bool RegionFile::SaveChunk(const Chunk* data) {
     auto& entry = chunkIndexes[off];
 
     std::vector<uint8_t> raw = buildChunkBlob(data);
-    ASCIIgL::Logger::Debugf("SaveChunk: built blob of %zu bytes", raw.size());
 
     if (raw.empty()) {
         ASCIIgL::Logger::Warning("SaveChunk: blob size is zero, nothing to write");
@@ -517,27 +498,21 @@ bool RegionFile::SaveChunk(const Chunk* data) {
     }
 
     uint32_t offset = static_cast<uint32_t>(p);
-    ASCIIgL::Logger::Debugf("SaveChunk: writing at offset %u", offset);
 
     safeWrite(_file, reinterpret_cast<const char*>(raw.data()), static_cast<std::streamsize>(raw.size()));
 
     if (!(entry.flags & 0x1)) {
         header.chunkCount++;
-        ASCIIgL::Logger::Debugf("SaveChunk: incremented chunkCount to %u", header.chunkCount);
     }
 
     entry.offset = offset;
     entry.length = static_cast<uint32_t>(raw.size());
     entry.flags = static_cast<uint8_t>(entry.flags | 0x1);
 
-    ASCIIgL::Logger::Debugf("SaveChunk: updated index entry (offset=%u, length=%u, flags=%u)",
-                            entry.offset, entry.length, static_cast<unsigned int>(entry.flags));
-
     // Persist header and index tables (must be robust/atomic in writeHeaderAndIndex)
     writeHeaderAndIndex();
 
     _file.close();
-    ASCIIgL::Logger::Debug("SaveChunk: success");
     return true;
 }
 
@@ -545,9 +520,6 @@ bool RegionFile::SaveChunk(const Chunk* data) {
 bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out) {
     RegionCoord rp = pos.ToRegionCoord();
     glm::ivec3 lp = pos.ToLocalRegion(rp);
-
-    ASCIIgL::Logger::Debugf("LoadMetaData: rp=(%d,%d,%d), lp=(%d,%d,%d)",
-                             rp.x, rp.y, rp.z, lp.x, lp.y, lp.z);
 
     // Validate local coords
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
@@ -557,7 +529,6 @@ bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out) {
     }
 
     uint32_t off = indexOffset(lp);
-    ASCIIgL::Logger::Debugf("LoadMetaData: indexOffset = %u", off);
 
     if (off >= metaIndexes.size()) {
         ASCIIgL::Logger::Warning("LoadMetaData: indexOffset out of metaIndexes range");
@@ -565,18 +536,12 @@ bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out) {
     }
 
     auto& entry = metaIndexes[off];
-    ASCIIgL::Logger::Debugf("LoadMetaData: entry.flags=%u, entry.offset=%llu, entry.length=%u",
-                            static_cast<unsigned int>(entry.flags),
-                            static_cast<unsigned long long>(entry.offset),
-                            entry.length);
 
     if (!(entry.flags & 0x1)) {
-        ASCIIgL::Logger::Debug("LoadMetaData: metadata not present");
         return false;
     }
 
     if (entry.length == 0) {
-        ASCIIgL::Logger::Debug("LoadMetaData: metadata length is zero");
         return false;
     }
 
@@ -588,7 +553,6 @@ bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out) {
 
     // If header.metaStart is zero, log fallback but we still treat entry.offset as absolute.
     if (header.metaStart == 0) {
-        ASCIIgL::Logger::Debug("LoadMetaData: metaStart missing, computing fallback (using absolute offsets)");
     }
 
     uint64_t fsize = fileSizeOnDisk(_path);
@@ -641,21 +605,16 @@ bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out) {
 
     safeRead(_file, reinterpret_cast<char*>(blob.data()), static_cast<std::streamsize>(blob.size()), fsize, entry.offset);
 
-    ASCIIgL::Logger::Debugf("LoadMetaData: read %zu bytes OK", blob.size());
 
     parseMetaBlob(blob, out);
 
     _file.close();
-    ASCIIgL::Logger::Debug("LoadMetaData: success");
     return true;
 }
 
 bool RegionFile::SaveMetaData(const ChunkCoord& pos, const MetaBucket* data) {
     RegionCoord rp = pos.ToRegionCoord();
     glm::ivec3 lp = pos.ToLocalRegion(rp);
-
-    ASCIIgL::Logger::Debugf("SaveMetaData: rp=(%d,%d,%d), lp=(%d,%d,%d)",
-                             rp.x, rp.y, rp.z, lp.x, lp.y, lp.z);
 
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
         lp.x >= REGION_SIZE || lp.y >= REGION_SIZE || lp.z >= REGION_SIZE) {
@@ -664,7 +623,6 @@ bool RegionFile::SaveMetaData(const ChunkCoord& pos, const MetaBucket* data) {
     }
 
     uint32_t off = indexOffset(lp);
-    ASCIIgL::Logger::Debugf("SaveMetaData: indexOffset = %u", off);
 
     if (off >= metaIndexes.size()) {
         ASCIIgL::Logger::Error("SaveMetaData: indexOffset out of metaIndexes range");
@@ -674,7 +632,6 @@ bool RegionFile::SaveMetaData(const ChunkCoord& pos, const MetaBucket* data) {
     auto& entry = metaIndexes[off];
 
     std::vector<uint8_t> raw = buildMetaBlob(data);
-    ASCIIgL::Logger::Debugf("SaveMetaData: built blob of %zu bytes", raw.size());
 
     if (raw.empty()) {
         ASCIIgL::Logger::Warning("SaveMetaData: blob size is zero, nothing to write");
@@ -693,7 +650,6 @@ bool RegionFile::SaveMetaData(const ChunkCoord& pos, const MetaBucket* data) {
         const uint32_t metaIndexTableSize  = static_cast<uint32_t>(entryCount * sizeof(MetaBucketIndexEntry));
         header.chunkStart = header.chunkStart ? header.chunkStart : (headerSize + chunkIndexTableSize + metaIndexTableSize);
         header.metaStart = header.chunkStart;
-        ASCIIgL::Logger::Debugf("SaveMetaData: initialized header.metaStart=%u", header.metaStart);
     }
 
     if (!openForReadWrite()) {
@@ -725,7 +681,6 @@ bool RegionFile::SaveMetaData(const ChunkCoord& pos, const MetaBucket* data) {
     }
     
     uint32_t offset = static_cast<uint32_t>(offset64);
-    ASCIIgL::Logger::Debugf("SaveMetaData: writing at offset %u", offset);
 
     safeWrite(_file, reinterpret_cast<const char*>(raw.data()), static_cast<std::streamsize>(raw.size()));
 
@@ -735,16 +690,10 @@ bool RegionFile::SaveMetaData(const ChunkCoord& pos, const MetaBucket* data) {
     entry.length = static_cast<uint32_t>(raw.size());
     entry.flags = static_cast<uint8_t>(entry.flags | 0x1);
 
-    ASCIIgL::Logger::Debugf("SaveMetaData: updated index entry (offset=%llu, length=%u, flags=%u)",
-                            static_cast<unsigned long long>(entry.offset),
-                            entry.length,
-                            static_cast<unsigned int>(entry.flags));
-
     // Persist header + both index tables
     writeHeaderAndIndex();
 
     _file.close();
-    ASCIIgL::Logger::Debug("SaveMetaData: success");
     return true;
 }
 
@@ -803,9 +752,8 @@ void RegionFile::parseMetaBlob(const std::vector<uint8_t>& blob, MetaBucket* out
         pos += perEntry;
 
         CrossChunkEdit e;
-        e.packedPos = se.pos;                 // native endianness
-        e.block.type = static_cast<BlockType>(se.type);
-        e.block.metadata = se.metadata;
+        e.packedPos = se.pos;
+        e.stateId = se.stateId;
 
         out->edits.push_back(e);
     }
@@ -834,9 +782,8 @@ std::vector<uint8_t> RegionFile::buildMetaBlob(const MetaBucket* data) {
         arr.reserve(count);
         for (const CrossChunkEdit& e : data->edits) {
             SerializedEdit se;
-            se.type = static_cast<uint8_t>(e.block.type);
-            se.metadata = e.block.metadata;
-            se.pos = e.packedPos; // native endianness
+            se.stateId = e.stateId;
+            se.pos = e.packedPos;
             arr.push_back(se);
         }
         append_raw(arr.data(), arr.size() * sizeof(SerializedEdit));

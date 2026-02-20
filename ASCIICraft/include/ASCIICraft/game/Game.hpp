@@ -1,24 +1,29 @@
 #pragma once
 
 #include <memory>
+#include <functional>
 
 #include <entt/entt.hpp>
 
 #include <ASCIIgL/renderer/screen/Screen.hpp>
-#include <ASCIIgL/engine/Texture.hpp>
+#include <ASCIIgL/engine/TextureArray.hpp>
 #include <ASCIIgL/engine/InputManager.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
+#include <ASCIIgL/renderer/Shader.hpp>
 
 #include <ASCIICraft/world/World.hpp>
 
-// ecs managers
-#include <ASCIICraft/ecs/managers/PlayerManager.hpp>
+// ecs factories
+#include <ASCIICraft/ecs/factories/PlayerFactory.hpp>
 
 // ecs systems
-#include <ASCIICraft/ecs/systems/MovementSystem.hpp> 
+#include <ASCIICraft/ecs/systems/MovementSystem.hpp>
 #include <ASCIICraft/ecs/systems/CameraSystem.hpp>
-#include <ASCIICraft/ecs/systems/RenderSystem.hpp> 
-#include <ASCIICraft/ecs/systems/PhysicsSystem.hpp> 
+#include <ASCIICraft/input/InputSystem.hpp>
+#include <ASCIICraft/input/GameplayInputFilter.hpp>
+#include <ASCIICraft/ecs/systems/RenderSystem.hpp>
+#include <ASCIICraft/ecs/systems/PhysicsSystem.hpp>
+#include <ASCIICraft/gui/GuiManager.hpp>
 
 // block update systems
 #include <ASCIICraft/ecs/systems/blockupdate/BlockUpdateSystem.hpp>
@@ -31,6 +36,7 @@
 // events
 #include <ASCIICraft/events/BreakBlockEvent.hpp>
 #include <ASCIICraft/events/PlaceBlockEvent.hpp>
+#include <ASCIICraft/events/InputEvents.hpp>
 
 enum class GameState {
     Playing,
@@ -44,7 +50,7 @@ public:
     
     // Core game functions
     bool Initialize();
-    void Run();
+    void Run(std::function<bool()> shouldExternalExit);
     void Shutdown();
     
     // Game state management
@@ -59,32 +65,42 @@ private:
     // Resources
     entt::registry registry;
     EventBus eventBus;
-    std::unique_ptr<ASCIIgL::Texture> blockAtlas;  // Block texture atlas - must persist during game lifetime
-
-    // ecs systems
+    
+    // ecs systems (inputSystem first; gameplayInputFilter wraps it for movement/camera so GUI blocks input there)
+    ASCIICraft::input::InputSystem inputSystem;
+    ASCIICraft::GameplayInputFilter gameplayInputFilter;
     ecs::systems::MovementSystem movementSystem;
     ecs::systems::CameraSystem cameraSystem;
     ecs::systems::PhysicsSystem physicsSystem;
     ecs::systems::RenderSystem renderSystem;
+
+    ASCIICraft::gui::GuiManager guiManager;
 
     // block updates
     ecs::systems::BlockUpdateSystem blockUpdateSystem;
     ecs::systems::MiningSystem miningSystem;
     ecs::systems::PlacingSystem placingSystem;
 
+    // ecs factories
+    ecs::factories::PlayerFactory playerFactory;
+
     // Game state
     GameState gameState;
-    bool isRunning;
+    std::function<bool()> shouldExternalExit;
+    bool shouldInternalExit;
     
     // Private methods
     bool LoadResources();
-    void InitializeContext();
+    void InitializeWorld();
+    void InitializePlayer();
     void InitializeSystems();
     void RenderPlaying();
+    void InitializeItemDefinitions();
+    void InitializeBlockStates();
     
     // Constants
     static inline int SCREEN_WIDTH = 550;
     static inline int SCREEN_HEIGHT = 350;
-    static constexpr int FONT_SIZE = 4;
+    static constexpr float FONT_SIZE = 2.5f;
     static constexpr float TARGET_FPS = 60.0f;
 };

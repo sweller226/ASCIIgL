@@ -9,12 +9,13 @@
 #include <ASCIIgL/util/Logger.hpp>
 
 #include <ASCIICraft/world/World.hpp>
+#include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
-#include <ASCIICraft/ecs/managers/PlayerManager.hpp>
+#include <ASCIICraft/ecs/factories/PlayerFactory.hpp>
 
 namespace ecs::systems {
 
-PhysicsSystem::PhysicsSystem(entt::registry &registry) noexcept
+PhysicsSystem::PhysicsSystem(entt::registry &registry)
   : m_registry(registry)
   , m_accumulator(0.0f)
 {}
@@ -129,7 +130,7 @@ void PhysicsSystem::ResolveAABBAgainstWorld(
         for (int x = imin.x; x <= imax.x; ++x)
             for (int y = imin.y; y <= imax.y; ++y)
                 for (int z = imin.z; z <= imax.z; ++z)
-                    if (world->GetChunkManager()->GetBlock({x, y, z}).type != BlockType::Air)
+                    if (world->GetChunkManager()->GetBlockState({x, y, z}) != blockstate::BlockStateRegistry::AIR_STATE_ID)
                         return true;
 
         return false;
@@ -244,7 +245,7 @@ bool PhysicsSystem::TryStepUp(
         for (int x = imin.x; x <= imax.x; ++x) {
             for (int y = imin.y; y <= imax.y; ++y) {
                 for (int z = imin.z; z <= imax.z; ++z) {
-                    if (world->GetChunkManager()->GetBlock({x, y, z}).type != BlockType::Air) {
+                    if (world->GetChunkManager()->GetBlockState({x, y, z}) != blockstate::BlockStateRegistry::AIR_STATE_ID) {
                         return true;
                     }
                 }

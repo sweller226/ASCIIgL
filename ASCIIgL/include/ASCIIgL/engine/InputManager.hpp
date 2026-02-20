@@ -192,7 +192,7 @@ private:
     std::unordered_map<std::string, bool> toggleStates;  // For toggle actions
     
     // Settings
-    float mouseSensitivity = 80.0f;  // Default sensitivity
+    float mouseSensitivity = 100.0f;  // Default sensitivity
     
     // Helper functions
     InputState CalculateKeyState(Key key) const;

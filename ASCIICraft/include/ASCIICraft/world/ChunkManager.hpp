@@ -7,6 +7,7 @@
 #include <ASCIICraft/world/ChunkRegion.hpp>
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/TerrainGenerator.hpp>
+#include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
 
 #include <entt/entt.hpp>
 
@@ -17,11 +18,14 @@ public:
 
     void Update();
 
-    // Block operations
-    Block& GetBlock(const WorldCoord& pos);
-    Block& GetBlock(int x, int y, int z);
-    void SetBlock(const WorldCoord& pos, const Block& block);
-    void SetBlock(int x, int y, int z, const Block& block);
+    // Block operations (blockstate IDs)
+    uint32_t GetBlockState(const WorldCoord& pos) const;
+    uint32_t GetBlockState(int x, int y, int z) const;
+    void SetBlockState(const WorldCoord& pos, uint32_t stateId);
+    void SetBlockState(int x, int y, int z, uint32_t stateId);
+
+    // Save handling
+    void SaveAll();
 
     // World limits
     unsigned int GetMaxWorldChunkRadius() const { return maxWorldChunkRadius; }
@@ -35,7 +39,8 @@ public:
     void SetRenderDistance(unsigned int distance) { renderDistance = distance; }
     unsigned int GetRenderDistance() const { return renderDistance; }
 
-    std::pair<Block*, WorldCoord> BlockIntersectsView(glm::vec3& lookDir, glm::vec3& headPos, float reach);
+    // Raycasting (returns stateId and position)
+    std::pair<uint32_t, WorldCoord> BlockIntersectsView(glm::vec3& lookDir, glm::vec3& headPos, float reach);
     std::pair<bool, WorldCoord> BlockIntersectsViewForPlacement(glm::vec3& lookDir, glm::vec3& headPos, float reach);
     
     void BlockUpdateNeighboursDirty(const ChunkCoord& chunkCoord, const glm::ivec3& localPos);

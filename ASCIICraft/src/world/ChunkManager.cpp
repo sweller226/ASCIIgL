@@ -1,8 +1,8 @@
 #include <ASCIICraft/world/ChunkManager.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
-#include <ASCIIgL/renderer/gpu/RendererGPU.hpp>
-#include <ASCIIgL/renderer/gpu/Material.hpp>
+#include <ASCIIgL/renderer/Renderer.hpp>
+#include <ASCIIgL/renderer/Material.hpp>
 
 #ifdef max
 #  undef max
@@ -11,7 +11,9 @@
 #include <algorithm>
 #include <cmath>
 
-#include <ASCIICraft/ecs/managers/PlayerManager.hpp>
+#include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/ecs/components/Transform.hpp>
+#include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 
 // Static member definition - ordered to match face indices in Chunk::GenerateMesh()
 const ChunkCoord ChunkManager::FACE_NEIGHBOR_OFFSETS[6] = {
@@ -27,7 +29,7 @@ ChunkManager::ChunkManager(entt::registry& registry, const unsigned int chunkWor
     : maxWorldChunkRadius(chunkWorldLimit)
     , renderDistance(renderDistance)
     , registry(registry) 
-    , terrainGenerator() {
+    , terrainGenerator(registry) {
         ASCIIgL::Logger::Debug("Chunk manager initialized");
         regionManager = std::make_unique<RegionManager>();
 }
@@ -93,8 +95,8 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
         chunkPtr->SetGenerated(true);
     } else {
 
-        auto setBlock = [this](int x, int y, int z, const Block& block) {
-            this->SetBlock(x, y, z, block);
+        auto setBlock = [this](int x, int y, int z, uint32_t stateId) {
+            this->SetBlockState(x, y, z, stateId);
         };
 
         terrainGenerator.GenerateChunk(chunkPtr, setBlock);
@@ -108,7 +110,7 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
     for (const auto& edit : cachedMetaBucket->edits) {
         int x = 0, y = 0, z = 0;
         edit.UnpackPos(x, y, z);
-        chunkPtr->SetBlock(x, y, z, edit.block);
+        chunkPtr->SetBlockState(x, y, z, edit.stateId);
     }
     cachedMetaBucket->edits.clear();
 
@@ -120,22 +122,54 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
         for (const auto& edit : bucket.edits) {
             int x = 0, y = 0, z = 0;
             edit.UnpackPos(x, y, z);
-            chunkPtr->SetBlock(x, y, z, edit.block);
+            chunkPtr->SetBlockState(x, y, z, edit.stateId);
         }
 
         crossChunkEdits.erase(it);
     } else {}
 }
 
+void ChunkManager::SaveAll() {
+    ASCIIgL::Logger::Info("Saving all chunks (" + std::to_string(loadedChunks.size()) + ") and metadata...");
+
+    // 1. Save all loaded chunks
+    for (auto& [coord, chunkPtr] : loadedChunks) {
+        if (!chunkPtr) continue;
+        
+        RegionCoord rp = coord.ToRegionCoord();
+        if (!regionManager->FilePresent(rp)) {
+            regionManager->AddRegion(RegionFile(rp));
+        }
+        regionManager->AccessRegion(rp).SaveChunk(chunkPtr.get());
+    }
+    loadedChunks.clear();
+
+    // 2. Save all pending metadata (cross-chunk edits)
+    int metaCount = 0;
+    for (auto& [coord, metaBucket] : crossChunkEdits) {
+        if (metaBucket.edits.empty()) continue;
+
+        RegionCoord rp = coord.ToRegionCoord();
+        if (!regionManager->FilePresent(rp)) {
+            regionManager->AddRegion(RegionFile(rp));
+        }
+        regionManager->AccessRegion(rp).SaveMetaData(coord, &metaBucket);
+        metaCount++;
+    }
+    crossChunkEdits.clear();
+
+    ASCIIgL::Logger::Info("SaveAll complete. Saved " + std::to_string(metaCount) + " meta buckets.");
+}
+
 void ChunkManager::UnloadChunk(const ChunkCoord& coord) {
-    auto it = loadedChunks.find(coord);
-    if (it == loadedChunks.end()) {
+    auto itChunk = loadedChunks.find(coord);
+    if (itChunk == loadedChunks.end()) {
         return; // Already unloaded
     }
     
-    Chunk* chunkToUnload = it->second.get();
+    Chunk* chunkToUnload = itChunk->second.get();
     if (!chunkToUnload) {
-        loadedChunks.erase(it);
+        loadedChunks.erase(itChunk);
         return;
     }
     
@@ -156,16 +190,19 @@ void ChunkManager::UnloadChunk(const ChunkCoord& coord) {
         }
     }
     
-    // Now safe to unload the 
+    // Now safe to unload
     RegionCoord rp = coord.ToRegionCoord();
     if (!regionManager->FilePresent(rp)) {
         regionManager->AddRegion(RegionFile(rp));
     }
-    regionManager->AccessRegion(rp).SaveChunk(it->second.get());
+    regionManager->AccessRegion(rp).SaveChunk(itChunk->second.get());
+    loadedChunks.erase(itChunk);
 
-    loadedChunks.erase(it);
-    ASCIIgL::Logger::Debug("Unloaded chunk at (" + std::to_string(coord.x) + ", " + 
-                  std::to_string(coord.y) + ", " + std::to_string(coord.z) + ")");
+    auto itMeta = crossChunkEdits.find(coord);
+    if (itMeta != crossChunkEdits.end()) {
+        regionManager->AccessRegion(rp).SaveMetaData(coord, &itMeta->second);
+        crossChunkEdits.erase(itMeta);
+    }
 }
 
 bool ChunkManager::IsChunkLoaded(const ChunkCoord& coord) const {
@@ -173,11 +210,13 @@ bool ChunkManager::IsChunkLoaded(const ChunkCoord& coord) const {
 }
 
 void ChunkManager::UpdateChunkLoading() {
-    if (!ecs::managers::GetPlayerPtr(registry)) {
+    entt::entity player = ecs::components::GetPlayerEntity(registry);
+    if (player == entt::null) {
         return;
     }
     
-    glm::vec3 playerPos = ecs::managers::GetPlayerPtr(registry)->GetPosition();
+    auto [playerPos, success] = ecs::components::GetPos(player, registry);
+    if (!success) return;
     ChunkCoord playerChunk = WorldCoord(playerPos).ToChunkCoord();
     
     const unsigned int loadRadius = renderDistance;
@@ -278,7 +317,11 @@ std::vector<Chunk*> ChunkManager::GetVisibleChunks(const glm::vec3& playerPos, c
     glm::vec3 forward = glm::normalize(viewDir);
     
     // FOV-based frustum culling with safety margin
-    const ASCIIgL::Camera3D* camera = ecs::managers::GetPlayerPtr(registry)->GetCamera();
+    entt::entity player = ecs::components::GetPlayerEntity(registry);
+    if (player == entt::null) return visibleChunks;
+    
+    const ASCIIgL::Camera3D* camera = ecs::components::GetPlayerCamera(player, registry);
+    if (!camera) return visibleChunks;
     float fov = camera->GetFov();
     float extendedFov = fov * 1.6f; // 30° margin for safety
     const float fovHalfAngle = glm::radians(extendedFov * 0.5f);
@@ -385,6 +428,13 @@ void ChunkManager::BatchInvalidateChunkFaceNeighborMeshes(const ChunkCoord& coor
 void ChunkManager::RegenerateDirtyChunks() {
     int regeneratedCount = 0;
     
+    // Get BlockStateRegistry from ECS context
+    auto* bsr = registry.ctx().find<blockstate::BlockStateRegistry>();
+    if (!bsr) {
+        ASCIIgL::Logger::Error("RegenerateDirtyChunks: BlockStateRegistry not found!");
+        return;
+    }
+    
     // Simple: regenerate all dirty chunks that are loaded
     for (const auto& pair : loadedChunks) {
         if (regeneratedCount >= MAX_REGENERATIONS_PER_FRAME) {
@@ -395,7 +445,7 @@ void ChunkManager::RegenerateDirtyChunks() {
         Chunk* chunk = pair.second.get();
         
         if (chunk && chunk->IsDirty() && chunk->IsGenerated()) {
-            chunk->GenerateMesh();
+            chunk->GenerateMesh(*bsr);
             regeneratedCount++;
         }
     }
@@ -469,34 +519,34 @@ bool ChunkManager::IsChunkOutsideWorld(const ChunkCoord& coord) const {
     return distanceFromOrigin > maxWorldChunkRadius;
 }
 
-Block& ChunkManager::GetBlock(const WorldCoord& pos) {
-    return GetBlock(pos.x, pos.y, pos.z);
+uint32_t ChunkManager::GetBlockState(const WorldCoord& pos) const {
+    return GetBlockState(pos.x, pos.y, pos.z);
 }
 
-Block& ChunkManager::GetBlock(int x, int y, int z) {
+uint32_t ChunkManager::GetBlockState(int x, int y, int z) const {
     ChunkCoord chunkCoord = WorldCoord(x, y, z).ToChunkCoord();
     
-    Chunk* chunk = GetChunk(chunkCoord);
-    if (!chunk) {
-        return Block(); // Return air block if chunk not loaded
+    auto it = loadedChunks.find(chunkCoord);
+    if (it == loadedChunks.end() || !it->second) {
+        return blockstate::BlockStateRegistry::AIR_STATE_ID;
     }
     
     glm::ivec3 localPos = WorldCoord(x, y, z).ToLocalChunkPos();
-    return chunk->GetBlock(localPos.x, localPos.y, localPos.z);
+    return it->second->GetBlockState(localPos.x, localPos.y, localPos.z);
 }
 
-void ChunkManager::SetBlock(const WorldCoord& pos, const Block& block) {
-    SetBlock(pos.x, pos.y, pos.z, block);
+void ChunkManager::SetBlockState(const WorldCoord& pos, uint32_t stateId) {
+    SetBlockState(pos.x, pos.y, pos.z, stateId);
 }
 
-void ChunkManager::SetBlock(int x, int y, int z, const Block& block) {
+void ChunkManager::SetBlockState(int x, int y, int z, uint32_t stateId) {
     ChunkCoord chunkCoord = WorldCoord(x, y, z).ToChunkCoord();
     
     Chunk* chunk = GetChunk(chunkCoord);
     if (!chunk) {
         CrossChunkEdit crossChunkEdit;
         crossChunkEdit.PackPos(x, y, z);
-        crossChunkEdit.block = block;
+        crossChunkEdit.stateId = stateId;
 
         auto it = crossChunkEdits.find(chunkCoord);
         if (it == crossChunkEdits.end()) {
@@ -506,11 +556,11 @@ void ChunkManager::SetBlock(int x, int y, int z, const Block& block) {
             metaTimeTracker.push(chunkCoord);
         } else {
             it->second.edits.push_back(crossChunkEdit);
-            it->second.lastTouched = NowSeconds(); // getting curr time in seconds
+            it->second.lastTouched = NowSeconds();
         }
     } else {
         glm::ivec3 localPos = WorldCoord(x, y, z).ToLocalChunkPos();
-        chunk->SetBlock(localPos.x, localPos.y, localPos.z, block);
+        chunk->SetBlockState(localPos.x, localPos.y, localPos.z, stateId);
         chunk->SetDirty(true);
 
         BlockUpdateNeighboursDirty(chunkCoord, localPos);
@@ -526,20 +576,21 @@ void ChunkManager::RenderChunks() {
     ASCIIgL::Logger::Debug("ChunkManager::RenderChunks called.");
 
     // --- Player retrieval ---
-    const auto player = ecs::managers::GetPlayerPtr(registry);
-    if (!player) {
-        ASCIIgL::Logger::Error("RenderChunks: PlayerManager returned NULL player!");
+    entt::entity player = ecs::components::GetPlayerEntity(registry);
+    if (player == entt::null) {
+        ASCIIgL::Logger::Error("RenderChunks: Player entity not found!");
         return;
     }
 
-    glm::vec3 pos = player->GetPosition();
+    auto [pos, success] = ecs::components::GetPos(player, registry);
+    if (!success) return;
     ASCIIgL::Logger::Debug("RenderChunks: Player position = (" +
         std::to_string(pos.x) + ", " +
         std::to_string(pos.y) + ", " +
         std::to_string(pos.z) + ")");
 
     // --- Camera retrieval ---
-    auto* cam = player->GetCamera();
+    auto* cam = ecs::components::GetPlayerCamera(player, registry);
     if (!cam) {
         ASCIIgL::Logger::Error("RenderChunks: PlayerCamera is NULL!");
         return;
@@ -557,22 +608,36 @@ void ChunkManager::RenderChunks() {
         std::to_string(visibleChunks.size()));
 
     // --- Material retrieval ---
-    auto mat = ASCIIgL::MaterialLibrary::GetInst().GetDefault();
+    auto mat = ASCIIgL::MaterialLibrary::GetInst().Get("blockMaterial");
     if (!mat) {
-        ASCIIgL::Logger::Error("RenderChunks: Default material is NULL!");
+        ASCIIgL::Logger::Error("RenderChunks: blockMaterial not found!");
         return;
     }
 
     // --- MVP setup ---
     glm::mat4 mvp = cam->proj * cam->view * glm::mat4(1.0f);
-    ASCIIgL::Logger::Debug("RenderChunks: MVP matrix computed.");
-
-    ASCIIgL::RendererGPU::GetInst().BindMaterial(mat.get());
     mat->SetMatrix4("mvp", mvp);
-    ASCIIgL::RendererGPU::GetInst().UploadMaterialConstants(mat.get());
 
-    // --- Render chunks ---
+    // --- Fog Parameters ---
+    float chunkRenderDist = static_cast<float>(renderDistance * Chunk::SIZE);
+    float fogEnd = chunkRenderDist - (Chunk::SIZE * 0.5f); // Fade out fully before strict cutoff
+    float fogStart = fogEnd - (Chunk::SIZE * 1.0f);        // Start fading 3 chunks earlier
+    
+    // Get background color and normalize to 0-1 range for shader
+    glm::ivec3 bgCol = ASCIIgL::Renderer::GetInst().GetBackgroundCol();
+    glm::vec3 fogColor = glm::vec3(bgCol) / 255.0f;
+    
+    mat->SetFloat3("cameraPos", pos);
+    mat->SetFloat4("fogParams", glm::vec4(fogStart, fogEnd, 0.0f, 0.0f));
+    mat->SetFloat3("fogColor", fogColor);
+
+    // --- Prepare renderer draw-calls ---
+    ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
+
     int renderedCount = 0;
+
+    // Precompute normalized camera forward for transparent depth sorting
+    glm::vec3 camDir = glm::normalize(camFront);
 
     for (Chunk* chunk : visibleChunks) {
         if (!chunk) {
@@ -585,14 +650,69 @@ void ChunkManager::RenderChunks() {
             continue;
         }
 
-        chunk->Render();
-        renderedCount++;
+        // Opaque part
+        if (chunk->HasOpaqueMesh() && chunk->GetOpaqueMesh()) {
+            ASCIIgL::Renderer::DrawCall dc;
+            dc.mesh        = chunk->GetOpaqueMesh();
+            dc.material    = mat.get();
+            dc.layer       = 0;           // world geometry layer
+            dc.transparent = false;       // opaque pass
+            dc.sortKey     = 0.0f;        // not used for opaque
+
+            renderer.SubmitDraw(dc);
+            renderedCount++;
+        }
+
+        // Transparent part: choose the variant whose canonical direction best matches the camera view
+        if (chunk->HasTransparentMesh()) {
+            // Canonical directions for transparent variants (must match Chunk::TRANSPARENT_VARIANT_COUNT order)
+            const glm::vec3 viewDirs[Chunk::TRANSPARENT_VARIANT_COUNT] = {
+                glm::vec3( 1,  0,  0),
+                glm::vec3(-1,  0,  0),
+                glm::vec3( 0,  1,  0),
+                glm::vec3( 0, -1,  0),
+                glm::vec3( 0,  0,  1),
+                glm::vec3( 0,  0, -1)
+            };
+
+            int bestIdx = 0;
+            float bestDot = -1.0f;
+            for (int i = 0; i < Chunk::TRANSPARENT_VARIANT_COUNT; ++i) {
+                if (!chunk->HasTransparentMeshVariant(i)) continue;
+                float d = glm::dot(camDir, glm::normalize(viewDirs[i]));
+                if (d > bestDot) {
+                    bestDot = d;
+                    bestIdx = i;
+                }
+            }
+
+            if (chunk->HasTransparentMeshVariant(bestIdx)) {
+                // Use view-space depth along camera forward as coarse sort key between chunks
+                glm::vec3 chunkCenter(
+                    chunk->GetCoord().x * Chunk::SIZE + Chunk::SIZE * 0.5f,
+                    chunk->GetCoord().y * Chunk::SIZE + Chunk::SIZE * 0.5f,
+                    chunk->GetCoord().z * Chunk::SIZE + Chunk::SIZE * 0.5f
+                );
+                glm::vec3 toChunk = chunkCenter - pos;
+                float depth = glm::dot(toChunk, camDir); // positive = in front of camera
+
+                ASCIIgL::Renderer::DrawCall dc;
+                dc.mesh        = chunk->GetTransparentMeshVariant(bestIdx);
+                dc.material    = mat.get();
+                dc.layer       = 0;           // world geometry layer
+                dc.transparent = true;        // transparent pass
+                dc.sortKey     = depth;       // back-to-front sorting using view depth
+
+                renderer.SubmitDraw(dc);
+                renderedCount++;
+            }
+        }
     }
 
-    ASCIIgL::Logger::Debug("RenderChunks: Rendered " + std::to_string(renderedCount) + " chunks.");
+    ASCIIgL::Logger::Debug("RenderChunks: Enqueued " + std::to_string(renderedCount) + " chunk draw calls.");
 }
 
-std::pair<Block*, WorldCoord>  ChunkManager::BlockIntersectsView(glm::vec3& lookDir, glm::vec3& headPos, float reach) {
+std::pair<uint32_t, WorldCoord> ChunkManager::BlockIntersectsView(glm::vec3& lookDir, glm::vec3& headPos, float reach) {
     glm::vec3 dir = glm::normalize(lookDir);
     const float step = 0.1f;
 
@@ -604,17 +724,16 @@ std::pair<Block*, WorldCoord>  ChunkManager::BlockIntersectsView(glm::vec3& look
         int by = static_cast<int>(floor(pos.y));
         int bz = static_cast<int>(floor(pos.z));
 
-        Block& block = GetBlock(bx, by, bz);
+        uint32_t stateId = GetBlockState(bx, by, bz);
 
-        if (block.type != BlockType::Air) {
-            // Return pointer + world coordinate of the hit block
-            return { &block, WorldCoord(bx, by, bz) };
+        if (stateId != blockstate::BlockStateRegistry::AIR_STATE_ID) {
+            return { stateId, WorldCoord(bx, by, bz) };
         }
 
         dist += step;
     }
 
-    return { nullptr, WorldCoord() };
+    return { blockstate::BlockStateRegistry::AIR_STATE_ID, WorldCoord() };
 }
 
 std::pair<bool, WorldCoord> ChunkManager::BlockIntersectsViewForPlacement(glm::vec3& lookDir, glm::vec3& headPos, float reach) {
@@ -633,15 +752,12 @@ std::pair<bool, WorldCoord> ChunkManager::BlockIntersectsViewForPlacement(glm::v
         int by = static_cast<int>(floor(pos.y));
         int bz = static_cast<int>(floor(pos.z));
 
-        Block& block = GetBlock(bx, by, bz);
+        uint32_t stateId = GetBlockState(bx, by, bz);
 
-        if (block.type == BlockType::Air) {
-            // Update last empty block
+        if (stateId == blockstate::BlockStateRegistry::AIR_STATE_ID) {
             lastEmpty = WorldCoord(bx, by, bz);
         }
         else {
-            // Hit a solid block — return the *previous* empty block
-            Block& emptyBlock = GetBlock(lastEmpty.x, lastEmpty.y, lastEmpty.z);
             return { true, lastEmpty };
         }
 
