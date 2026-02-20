@@ -82,29 +82,8 @@ bool Game::Initialize() {
         glm::ivec3(190, 205, 230)
     );
 
-    // frost cyan
-    ASCIIgL::Palette frostCyanPalette(
-        lowLight,
-        highLight,
-        glm::ivec3(200, 230, 245)
-    );
-
-    // warm beige
-    ASCIIgL::Palette warmBeigePalette(
-        lowLight,
-        highLight,
-        glm::ivec3(220, 205, 180)
-    );
-
-    // slate
-    ASCIIgL::Palette slatePalette(
-        lowLight,
-        highLight,
-        glm::ivec3(180, 200, 230)
-    );
-
     // choose your active palette
-    ASCIIgL::Palette gamePalette = silverBluePalette;
+    ASCIIgL::Palette gamePalette = grayPalette;
 
     ASCIIgL::Logger::Debug("Initializing screen...");
     if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
