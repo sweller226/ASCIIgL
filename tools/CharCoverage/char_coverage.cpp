@@ -250,8 +250,9 @@ int main(int argc, char** argv) {
 
     FILE* out = stdout;
     if (outputPath) {
+        (void)remove(outputPath);  // Replace any existing file
         if (fopen_s(&out, outputPath, "w") != 0 || !out) {
-            fprintf(stderr, "Failed to open %s for writing\n", outputPath);
+            fprintf(stderr, "Failed to open %s for writing (file may be in use)\n", outputPath);
             return 1;
         }
     }
@@ -393,7 +394,7 @@ int main(int argc, char** argv) {
                 if (*p == '\\' || *p == '"') fputc('\\', out);
                 fputc(*p, out);
             }
-            fprintf(out, "\",\n  \"coverageVersion\": 2,\n  \"sizeMin\": %.2f,\n  \"sizeMax\": %.2f,\n  \"step\": %.2f,\n  \"cleartype\": %s,\n  \"chars\": [",
+            fprintf(out, "\",\n  \"sizeMin\": %.2f,\n  \"sizeMax\": %.2f,\n  \"step\": %.2f,\n  \"cleartype\": %s,\n  \"chars\": [",
                     SCAN_SIZE_MIN, SCAN_SIZE_MAX, SCAN_STEP, useClearType ? "true" : "false");
             for (size_t k = 0; k < chars.size(); ++k) {
                 if (k) fprintf(out, ", ");

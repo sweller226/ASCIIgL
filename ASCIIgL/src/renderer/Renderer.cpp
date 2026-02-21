@@ -505,6 +505,19 @@ void Renderer::LoadCharCoverageFromJson() {
             _charRamp.push_back(L' ');
     }
 
+    // Sort ramp by coverage ascending (low-coverage chars first, high last)
+    std::vector<size_t> order(n);
+    std::iota(order.begin(), order.end(), size_t(0));
+    std::sort(order.begin(), order.end(), [this](size_t a, size_t b) { return _charCoverage[a] < _charCoverage[b]; });
+    std::vector<wchar_t> sortedRamp(n);
+    std::vector<float> sortedCoverage(n);
+    for (size_t i = 0; i < n; ++i) {
+        sortedRamp[i] = _charRamp[order[i]];
+        sortedCoverage[i] = _charCoverage[order[i]];
+    }
+    _charRamp = std::move(sortedRamp);
+    _charCoverage = std::move(sortedCoverage);
+
     Logger::Info("[Renderer] Loaded char coverage for font size " + std::to_string(fontSize) + " (" + std::to_string(_charRamp.size()) + " glyphs)");
     for (size_t i = 0; i < _charRamp.size() && i < _charCoverage.size(); ++i) {
         wchar_t ch = _charRamp[i];
