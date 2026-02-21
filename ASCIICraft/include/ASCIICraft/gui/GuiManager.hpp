@@ -9,7 +9,7 @@
 #include <entt/entt.hpp>
 
 #include <ASCIICraft/gui/Screen.hpp>
-#include <ASCIICraft/input/IGameInputSource.hpp>
+#include <ASCIICraft/input/IInputSource.hpp>
 
 class EventBus;
 
@@ -21,7 +21,7 @@ namespace ASCIICraft::gui {
 /// Game calls Update(), then Draw(renderSystem) to add GUI items directly to RenderSystem.
 class GuiManager {
 public:
-    GuiManager(entt::registry& registry, EventBus& eventBus, ASCIICraft::IGameInputSource& input);
+    GuiManager(entt::registry& registry, EventBus& eventBus, ASCIICraft::IInputSource& input);
 
     void SetScreenSize(glm::vec2 size);
     glm::vec2 GetScreenSize() const { return m_screenSize; }
@@ -49,7 +49,7 @@ private:
 
     entt::registry& m_registry;
     EventBus& m_eventBus;
-    ASCIICraft::IGameInputSource& m_input;
+    ASCIICraft::IInputSource& m_input;
 
     glm::vec2 m_screenSize{550.0f, 350.0f};
     glm::vec2 m_cursorPosition{0.0f, 0.0f};

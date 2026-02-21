@@ -34,6 +34,8 @@ void Renderer::Initialize(bool antialiasing, int antialiasing_samples) {
     auto& screen = Screen::GetInst();
     _color_buffer.resize(screen.GetWidth() * screen.GetHeight());
 
+    LoadCharCoverageFromJson();
+
     Logger::Info("[Renderer] Initializing DirectX 11...");
 
     if (!InitializeDevice()) {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ASCIICraft/input/IGameInputSource.hpp>
+#include <ASCIICraft/input/IInputSource.hpp>
 
 class EventBus;
 
@@ -16,7 +16,7 @@ enum class InputMode {
 /// and exposes action state (pass-through from engine).
 ///
 /// When mode is GUI, Update() does not emit gameplay events. Other input (e.g. inventory toggle) is unaffected.
-class InputSystem : public IGameInputSource {
+class InputSystem : public IInputSource {
 public:
     explicit InputSystem(EventBus& eventBus);
 
@@ -25,7 +25,7 @@ public:
     void SetInputMode(InputMode mode);
     InputMode GetInputMode() const { return m_inputMode; }
 
-    // IGameInputSource — pass-through from engine
+    // IInputSource — pass-through from engine
     bool IsActionHeld(const std::string& action) const override;
     bool IsActionPressed(const std::string& action) const override;
     float GetMouseSensitivity() const override;

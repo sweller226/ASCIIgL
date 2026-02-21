@@ -171,6 +171,12 @@ public:
     
     // Get a registered material (returns nullptr if not found)
     std::shared_ptr<Material> Get(const std::string& name) const;
+
+    /// Get or create a material by cloning a registered template and binding a texture.
+    /// Cached by (templateName, texture pointer); same texture returns same material.
+    /// Returns nullptr if the template is not registered.
+    std::shared_ptr<Material> GetOrCreateFromTemplate(const std::string& templateName,
+        const Texture* texture, uint32_t textureSlot = 0);
     
     // Check if material exists
     bool Has(const std::string& name) const;
@@ -190,8 +196,10 @@ private:
     MaterialLibrary(const MaterialLibrary&) = delete;
     MaterialLibrary& operator=(const MaterialLibrary&) = delete;
 
+    static constexpr const char* _defaultMaterialName = "default";
+
     std::unordered_map<std::string, std::shared_ptr<Material>> _materials;
-    std::shared_ptr<Material> _defaultMaterial;
+    std::unordered_map<std::string, std::weak_ptr<Material>> _templateTextureCache;
 };
 
 } // namespace ASCIIgL

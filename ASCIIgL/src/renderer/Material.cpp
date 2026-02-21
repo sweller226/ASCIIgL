@@ -312,6 +312,27 @@ std::shared_ptr<Material> MaterialLibrary::Get(const std::string& name) const {
     return nullptr;
 }
 
+std::shared_ptr<Material> MaterialLibrary::GetOrCreateFromTemplate(const std::string& templateName,
+    const Texture* texture, uint32_t textureSlot) {
+    if (!texture) return nullptr;
+
+    const std::string key = templateName + "@" + std::to_string(reinterpret_cast<uintptr_t>(texture));
+    auto it = _templateTextureCache.find(key);
+    if (it != _templateTextureCache.end()) {
+        if (auto cached = it->second.lock())
+            return cached;
+        _templateTextureCache.erase(it);
+    }
+
+    auto base = Get(templateName);
+    if (!base) return nullptr;
+
+    std::shared_ptr<Material> material(base->Clone().release());
+    material->SetTexture(textureSlot, texture);
+    _templateTextureCache[key] = material;
+    return material;
+}
+
 bool MaterialLibrary::Has(const std::string& name) const {
     return _materials.find(name) != _materials.end();
 }
@@ -322,17 +343,18 @@ void MaterialLibrary::Remove(const std::string& name) {
 
 void MaterialLibrary::Clear() {
     _materials.clear();
-    _defaultMaterial.reset();
+    _templateTextureCache.clear();
 }
 
 std::shared_ptr<Material> MaterialLibrary::GetDefault() {
-    if (!_defaultMaterial) {
-        auto mat = Material::CreateDefault();
-        if (mat) {
-            _defaultMaterial = std::shared_ptr<Material>(mat.release());
-        }
-    }
-    return _defaultMaterial;
+    auto it = _materials.find(_defaultMaterialName);
+    if (it != _materials.end() && it->second)
+        return it->second;
+    auto mat = Material::CreateDefault();
+    if (!mat) return nullptr;
+    std::shared_ptr<Material> stored(mat.release());
+    _materials[_defaultMaterialName] = stored;
+    return stored;
 }
 
 } // namespace ASCIIgL

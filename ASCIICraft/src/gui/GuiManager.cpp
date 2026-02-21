@@ -5,7 +5,7 @@
 
 namespace ASCIICraft::gui {
 
-GuiManager::GuiManager(entt::registry& registry, EventBus& eventBus, ASCIICraft::IGameInputSource& input)
+GuiManager::GuiManager(entt::registry& registry, EventBus& eventBus, ASCIICraft::IInputSource& input)
     : m_registry(registry)
     , m_eventBus(eventBus)
     , m_input(input)

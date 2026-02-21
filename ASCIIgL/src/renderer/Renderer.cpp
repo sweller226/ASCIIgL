@@ -7,7 +7,10 @@
 #include <mutex>
 #include <thread>
 #include <iostream>
+#include <fstream>
 #include <Windows.h>
+
+#include <nlohmann/json.hpp>
 
 #include <tbb/parallel_for_each.h>
 
@@ -140,11 +143,11 @@ void Renderer::DrawClippedLinePxBuff(int x0, int y0, int x1, int y1, int minX, i
 }
 
 void Renderer::DrawScreenBorderPxBuff(const unsigned short col) {
-    // DRAWING BORDERS
-    DrawLinePxBuff(0, 0, Screen::GetInst().GetWidth() - 1, 0, _charRamp.back(), col);
-    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, 0, Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, _charRamp.back(), col);
-    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, _charRamp.back(), col);
-    DrawLinePxBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, _charRamp.back(), col);
+    wchar_t borderChar = _charRamp.empty() ? L'#' : _charRamp.back();
+    DrawLinePxBuff(0, 0, Screen::GetInst().GetWidth() - 1, 0, borderChar, col);
+    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, 0, Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, borderChar, col);
+    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, borderChar, col);
+    DrawLinePxBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, borderChar, col);
 }
 
 // =============================================================================
@@ -398,12 +401,137 @@ void Renderer::OverwritePxBuffWithColBuff() {
 }
 
 // =============================================================================
+// CHAR COVERAGE (loaded from JSON to match char_coverage tool)
+// =============================================================================
+
+// Character ramp order must match tools/CharCoverage DEFAULT_CHARS (coverages array index = ramp index).
+static const wchar_t CHAR_RAMP_DEFAULT[] =
+    L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890.:,;'\"(!?)+-*/=\"";
+
+void Renderer::LoadCharCoverageFromJson() {
+    _charRamp.clear();
+    _charCoverage.clear();
+    _colorLUTComputed = false;
+
+    float fontSize = Screen::GetInst().GetFontSize();
+
+    // Try exe-relative (ASCIICraft copy) then project-root-relative (run from ASCIICraft root)
+    const char* paths[] = {
+        "res/ASCIIgL/coverage_cleartype.json",
+    };
+    std::ifstream file;
+    for (const char* path : paths) {
+        file.open(path);
+        if (file.good()) break;
+        file.close();
+    }
+    if (!file.good()) {
+        Logger::Warning("[Renderer] coverage_cleartype.json not found; using fallback char ramp.");
+        for (const wchar_t* p = CHAR_RAMP_DEFAULT; *p; ++p) {
+            _charRamp.push_back(*p);
+            _charCoverage.push_back(0.5f);
+        }
+        return;
+    }
+
+    nlohmann::json j;
+    try {
+        j = nlohmann::json::parse(file);
+    } catch (const std::exception& e) {
+        Logger::Warning(std::string("[Renderer] Failed to parse coverage_cleartype.json: ") + e.what());
+        for (const wchar_t* p = CHAR_RAMP_DEFAULT; *p; ++p) {
+            _charRamp.push_back(*p);
+            _charCoverage.push_back(0.5f);
+        }
+        return;
+    }
+    file.close();
+
+    if (!j.contains("intervals") || !j["intervals"].is_array() || j["intervals"].empty()) {
+        Logger::Warning("[Renderer] coverage_cleartype.json has no intervals.");
+        for (const wchar_t* p = CHAR_RAMP_DEFAULT; *p; ++p) {
+            _charRamp.push_back(*p);
+            _charCoverage.push_back(0.5f);
+        }
+        return;
+    }
+
+    const auto& intervals = j["intervals"];
+    size_t bestIdx = 0;
+    bool found = false;
+    for (size_t i = 0; i < intervals.size(); ++i) {
+        const auto& iv = intervals[i];
+        if (!iv.contains("sizeMin") || !iv.contains("sizeMax") || !iv.contains("coverages")) continue;
+        float smin = iv["sizeMin"].get<float>();
+        float smax = iv["sizeMax"].get<float>();
+        if (fontSize >= smin && fontSize <= smax) {
+            bestIdx = i;
+            found = true;
+            break;
+        }
+    }
+    if (!found && !intervals.empty()) {
+        if (fontSize <= intervals[0]["sizeMin"].get<float>())
+            bestIdx = 0;
+        else
+            bestIdx = intervals.size() - 1;
+    }
+
+    const auto& iv = intervals[bestIdx];
+    const auto& coverages = iv["coverages"];
+    if (!coverages.is_array()) {
+        Logger::Warning("[Renderer] Selected interval has no coverages array.");
+        for (const wchar_t* p = CHAR_RAMP_DEFAULT; *p; ++p) {
+            _charRamp.push_back(*p);
+            _charCoverage.push_back(0.5f);
+        }
+        return;
+    }
+
+    size_t n = coverages.size();
+    _charCoverage.reserve(n);
+    for (size_t i = 0; i < n; ++i)
+        _charCoverage.push_back(coverages[i].get<float>());
+
+    _charRamp.clear();
+    _charRamp.reserve(n);
+    if (j.contains("chars") && j["chars"].is_array() && j["chars"].size() >= n) {
+        for (size_t i = 0; i < n; ++i)
+            _charRamp.push_back(static_cast<wchar_t>(j["chars"][i].get<unsigned>()));
+    } else {
+        for (const wchar_t* p = CHAR_RAMP_DEFAULT; *p && _charRamp.size() < n; ++p)
+            _charRamp.push_back(*p);
+        while (_charRamp.size() < n)
+            _charRamp.push_back(L' ');
+    }
+
+    Logger::Info("[Renderer] Loaded char coverage for font size " + std::to_string(fontSize) + " (" + std::to_string(_charRamp.size()) + " glyphs)");
+    for (size_t i = 0; i < _charRamp.size() && i < _charCoverage.size(); ++i) {
+        wchar_t ch = _charRamp[i];
+        float cov = _charCoverage[i];
+        std::wstring charDesc;
+        if (ch == L' ') charDesc = L"' '";
+        else if (ch == L'"') charDesc = L"'\"'";
+        else if (ch == L'\\') charDesc = L"'\\\\'";
+        else if (ch >= 32 && ch < 127) charDesc = std::wstring(L"'") + ch + L"'";
+        else {
+            charDesc = L"U+";
+            wchar_t hex[8];
+            swprintf_s(hex, L"%04X", (unsigned)(unsigned short)ch);
+            charDesc += hex;
+        }
+        Logger::Debug(L"[Renderer] char coverage " + charDesc + L" => " + std::to_wstring(cov));
+    }
+}
+
+// =============================================================================
 // COLOR LOOKUP TABLE (LUT)
 // =============================================================================
 
 void Renderer::PrecomputeColorLUT() {
     Palette& palette = Screen::GetInst().GetPalette();
     if (_colorLUTComputed) return;
+    if (_charRamp.empty() || _charRamp.size() != _charCoverage.size()) return;
     
     // Use the configured palette mode
     PaletteMode mode = _paletteMode;

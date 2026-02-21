@@ -176,30 +176,10 @@ private:
     // =========================================================================
     // Glyphs and Color LUT
     // =========================================================================
-    static constexpr std::array<wchar_t, 12> _charRamp = {
-        L' ', L'.', L'-', L':',
-        L'o', L'+', L'O', L'A',
-        L'E', L'0', L'B', L'@'
-    };
-    
-    static constexpr std::array<float, 12> _charCoverage = {
-        0.00f,   // ' '
-        0.056f,  // '.'
-        0.084f,  // '-'
-        0.140f,  // ':'
-        0.224f,  // 'o'
-        0.294f,  // 'E'
-        0.294f,  // '+'
-        0.350f,  // 'O'
-        0.434f,  // 'A'
-        0.574f,  // '0'
-        0.630f,  // 'B'
-        0.672f   // '@'
-    };
+    std::vector<wchar_t> _charRamp;
+    std::vector<float> _charCoverage;
 
-    // TODO, go throuh each character and eyeball it better than just getting chat to guess
-    // or make a program that simulates the font and windows antialiasing to get the values
-
+    void LoadCharCoverageFromJson();
     void PrecomputeColorLUT();
     PaletteMode _paletteMode = PaletteMode::MultiColor;
     bool _colorLUTComputed = false;

@@ -55,10 +55,10 @@ int Screen::Initialize(
 
     // Enforce minimum font size
     const float MIN_FONT_SIZE = 2.0f;
-    float adjustedFontSize = std::max(MIN_FONT_SIZE, fontSize);
+    const float MAX_FONT_SIZE = 11.0f;
+    _fontSize = std::clamp(fontSize, MIN_FONT_SIZE, MAX_FONT_SIZE);
     
-    Logger::Debug(L"Setting font size to " + std::to_wstring(adjustedFontSize));
-    _fontSize = adjustedFontSize;
+    Logger::Debug(L"Setting font size to " + std::to_wstring(_fontSize));
 
     // setting palette reference
     if (palette.entries.size() != Palette::COLOR_COUNT) {
@@ -73,7 +73,7 @@ int Screen::Initialize(
     _impl = std::make_unique<ScreenWinImpl>(*this);
     
     // Windows-specific initialization through delegation
-    int initResult = _impl->Initialize(width, height, adjustedFontSize, palette);
+    int initResult = _impl->Initialize(width, height, _fontSize, palette);
     if (initResult) { return initResult; }
 
 #else
