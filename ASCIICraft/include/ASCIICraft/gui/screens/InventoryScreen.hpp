@@ -8,7 +8,7 @@ namespace ASCIIgL { class Texture; class Mesh; }
 namespace ecs::systems { class RenderSystem; }
 class EventBus;
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 /// Blocking inventory screen: 9×4 slot grid. E to toggle (handled by GuiManager).
 class InventoryScreen : public Screen {
@@ -27,4 +27,4 @@ private:
     std::shared_ptr<ASCIIgL::Texture> m_inventoryTexture;
 };
 
-} // namespace ASCIICraft::gui
+} // namespace gui

@@ -13,13 +13,13 @@ namespace ecs::systems {
 
 class MovementSystem : public ISystem {
 public:
-    MovementSystem(entt::registry& registry, ASCIICraft::IInputSource& input, EventBus& eventBus);
+    MovementSystem(entt::registry& registry, IInputSource& input, EventBus& eventBus);
 
     void Update() override;
 
 private:
     entt::registry& m_registry;
-    ASCIICraft::IInputSource& m_input;
+    IInputSource& m_input;
     EventBus& m_eventBus;
 
     void ProcessMovementInput();

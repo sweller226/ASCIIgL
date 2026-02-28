@@ -18,15 +18,22 @@ endif()
 add_subdirectory(vendor)
 
 # ---------------------------------------------------------------------------
+# oneTBB (job queue for chunk generation / meshing)
+# ---------------------------------------------------------------------------
+set(TBB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/lib/oneTBB/oneapi-tbb-2022.3.0-win/oneapi-tbb-2022.3.0")
+list(APPEND CMAKE_PREFIX_PATH "${TBB_ROOT}")
+find_package(TBB CONFIG REQUIRED COMPONENTS tbb)
+
+# ---------------------------------------------------------------------------
 # ASCIIgL Engine paths (using distributed library)
 # ---------------------------------------------------------------------------
-set(ASCIIgL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/libs/ASCIIgL-v1.0.0")
+set(ASCIIgL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/lib/ASCIIgL-v1.0.0")
 set(ASCIIgL_LIB_DIR "${ASCIIgL_ROOT}/lib")
 set(ASCIIgL_INCLUDE_DIR "${ASCIIgL_ROOT}/include")
 set(ASCIIgL_VENDOR_DIR "${ASCIIgL_ROOT}/vendor")
 
 # Make ASCIIgL's shipped vendor targets available (should only expose glm::glm)
-# Ensure libs/ASCIIgL-v1.0.0/vendor/CMakeLists.txt creates only glm::glm (or prefers system glm)
+# Ensure lib/ASCIIgL-v1.0.0/vendor/CMakeLists.txt creates only glm::glm (or prefers system glm)
 add_subdirectory("${ASCIIgL_VENDOR_DIR}" EXCLUDE_FROM_ALL)
 
 # ---------------------------------------------------------------------------
@@ -58,7 +65,7 @@ set_target_properties(ASCIIgL PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${ASCIIgL_INCLUDE_DIR}"
     INTERFACE_LINK_DIRECTORIES "${ASCIIgL_LIB_DIR}"
     # Reference the namespaced glm target provided by ASCIIgL's vendor CMake
-    INTERFACE_LINK_LIBRARIES "glm::glm;$<$<CONFIG:Debug>:tbb12_debug>;$<$<NOT:$<CONFIG:Debug>>:tbb12>"
+    INTERFACE_LINK_LIBRARIES "glm::glm"
     IMPORTED_LOCATION_MINSIZEREL     "${ASCIIgL_LIBRARY_RELEASE}"
     IMPORTED_LOCATION_RELWITHDEBINFO "${ASCIIgL_LIBRARY_RELEASE}"
 )
@@ -95,8 +102,11 @@ target_include_directories(ASCIICraft PRIVATE
 # ---------------------------------------------------------------------------
 # Linking
 # ---------------------------------------------------------------------------
-# Link ASCIIgL (which transitively provides glm::glm and TBB)
+# Link ASCIIgL (which transitively provides glm::glm)
 target_link_libraries(ASCIICraft PRIVATE ASCIIgL::ASCIIgL)
+
+# Link oneTBB (job queue)
+target_link_libraries(ASCIICraft PRIVATE TBB::tbb)
 
 # Link vendor header-only targets from top-level vendor/ if present
 if(TARGET entt)
@@ -107,8 +117,9 @@ if(TARGET FastNoiseLite)
     target_link_libraries(ASCIICraft PRIVATE FastNoiseLite)
 endif()
 
-# Platform-specific libraries (required by ASCIIgL)
+# Platform-specific: prevent Windows min/max macros from breaking std::min/std::max
 if(WIN32)
+    target_compile_definitions(ASCIICraft PRIVATE NOMINMAX)
     target_link_libraries(ASCIICraft PRIVATE winmm)
 endif()
 
@@ -132,12 +143,19 @@ add_custom_command(TARGET ASCIICraft POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${ASCIIgL_ROOT}/res"
         "$<TARGET_FILE_DIR:ASCIICraft>/res/ASCIIgL"
-    COMMAND ${CMAKE_COMMAND} -E echo "Copying oneTBB DLLs"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${ASCIIgL_ROOT}/bin/tbb12.dll"
-        "$<TARGET_FILE_DIR:ASCIICraft>/tbb12.dll"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${ASCIIgL_ROOT}/bin/tbb12_debug.dll"
-        "$<TARGET_FILE_DIR:ASCIICraft>/tbb12_debug.dll"
     COMMENT "Copying game and library resources"
 )
+
+# Copy oneTBB DLLs to exe dir on Windows (required at runtime)
+if(WIN32)
+    add_custom_command(TARGET ASCIICraft POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Copying oneTBB DLLs"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${TBB_ROOT}/redist/intel64/vc14/tbb12.dll"
+            "$<TARGET_FILE_DIR:ASCIICraft>/tbb12.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${TBB_ROOT}/redist/intel64/vc14/tbb12_debug.dll"
+            "$<TARGET_FILE_DIR:ASCIICraft>/tbb12_debug.dll"
+        COMMENT "Copying oneTBB runtime DLLs"
+    )
+endif()

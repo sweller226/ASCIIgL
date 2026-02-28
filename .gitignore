@@ -7,7 +7,7 @@
 .vscode/
 
 # Distribution in different projects
-**/libs/ASCIIgL-*
+**/lib/ASCIIgL-*
 
-#libs
-ASCIIgL/lib/oneTBB/
+# Libs (vendor / oneTBB - do not commit)
+**/lib/oneTBB/

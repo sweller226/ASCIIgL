@@ -12,8 +12,6 @@
 
 #include <nlohmann/json.hpp>
 
-#include <tbb/parallel_for_each.h>
-
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/Collision.hpp>
 

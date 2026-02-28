@@ -67,14 +67,14 @@ private:
     EventBus eventBus;
     
     // ecs systems (inputSystem first; gameplayInputFilter wraps it for movement/camera so GUI blocks input there)
-    ASCIICraft::input::InputSystem inputSystem;
-    ASCIICraft::GameplayInputFilter gameplayInputFilter;
+    input::InputSystem inputSystem;
+    GameplayInputFilter gameplayInputFilter;
     ecs::systems::MovementSystem movementSystem;
     ecs::systems::CameraSystem cameraSystem;
     ecs::systems::PhysicsSystem physicsSystem;
     ecs::systems::RenderSystem renderSystem;
 
-    ASCIICraft::gui::GuiManager guiManager;
+    gui::GuiManager guiManager;
 
     // block updates
     ecs::systems::BlockUpdateSystem blockUpdateSystem;

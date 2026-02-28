@@ -82,6 +82,55 @@ bool Game::Initialize() {
         glm::ivec3(190, 205, 230)
     );
 
+    // amber / sepia (warm terminal)
+    ASCIIgL::Palette amberPalette(
+        lowLight,
+        highLight,
+        glm::ivec3(212, 175, 120)
+    );
+
+    // matrix / phosphor green
+    ASCIIgL::Palette matrixGreenPalette(
+        lowLight,
+        highLight,
+        glm::ivec3(160, 220, 160)
+    );
+
+    // violet / purple
+    ASCIIgL::Palette violetPalette(
+        lowLight,
+        highLight,
+        glm::ivec3(200, 180, 220)
+    );
+
+    // warm paper / cream
+    ASCIIgL::Palette creamPalette(
+        lowLight,
+        highLight,
+        glm::ivec3(245, 235, 210)
+    );
+
+    // cool mint
+    ASCIIgL::Palette mintPalette(
+        lowLight,
+        highLight,
+        glm::ivec3(180, 230, 220)
+    );
+
+    // sunset / warm pink
+    ASCIIgL::Palette sunsetPalette(
+        lowLight,
+        highLight,
+        glm::ivec3(230, 195, 185)
+    );
+
+    // classic green (old CRT)
+    ASCIIgL::Palette classicGreenPalette(
+        lowLight,
+        highLight,
+        glm::ivec3(130, 200, 130)
+    );
+
     // choose your active palette
     ASCIIgL::Palette gamePalette = grayPalette;
 
@@ -97,7 +146,6 @@ bool Game::Initialize() {
 
     ASCIIgL::FPSClock::GetInst().Initialize(static_cast<unsigned int>(TARGET_FPS), 1.0f);
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
-
 
     // Using a monochromatic gradient palette, so use Monochrome optimization
     ASCIIgL::Renderer::GetInst().SetPaletteMode(ASCIIgL::PaletteMode::Monochrome);
@@ -188,7 +236,7 @@ void Game::Update() {
     ASCIIgL::Logger::Debug("Game::Update - state = " +
         std::to_string(static_cast<int>(gameState)));
 
-    inputSystem.SetInputMode(guiManager.IsBlockingInput() ? ASCIICraft::input::InputMode::GUI : ASCIICraft::input::InputMode::Gameplay);
+    inputSystem.SetInputMode(guiManager.IsBlockingInput() ? input::InputMode::GUI : input::InputMode::Gameplay);
     inputSystem.Update();
 
     for ([[maybe_unused]] const auto& e : eventBus.view<events::ToggleInventoryEvent>()) {
@@ -449,13 +497,13 @@ bool Game::LoadResources() {
     // OOP GUI: create play + inventory screens after textures/materials exist (CreateQuadMesh needs terrainTextureArray)
     entt::entity player = ecs::components::GetPlayerEntity(registry);
     if (player != entt::null) {
-        auto guiQuad = ASCIICraft::gui::CreateQuadMesh();
-        guiManager.SetPlayScreen(std::make_unique<ASCIICraft::gui::PlayHUDScreen>(
+        auto guiQuad = gui::CreateQuadMesh();
+        guiManager.SetPlayScreen(std::make_unique<gui::PlayHUDScreen>(
             registry, eventBus, player));
         auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().GetTexture("inventoryTexture");
         if (!inventoryTexture)
             ASCIIgL::Logger::Warning("LoadResources: inventoryTexture is null; inventory GUI will have no texture");
-        guiManager.SetInventoryScreen(std::make_unique<ASCIICraft::gui::InventoryScreen>(
+        guiManager.SetInventoryScreen(std::make_unique<gui::InventoryScreen>(
             registry, eventBus, player, guiQuad, inventoryTexture));
     }
 
@@ -480,12 +528,12 @@ void Game::RenderPlaying() {
 }
 
 void Game::InitializeWorld() {
-    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, WorldCoord(0, 90, 0), 10));
+    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, WorldCoord(0, 120, 0), 10));
     ASCIIgL::Logger::Debug("World created and stored in registry context.");
 }
 
 void Game::InitializePlayer() {
-    playerFactory.createPlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Survival);
+    playerFactory.createPlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Spectator);
     ASCIIgL::Logger::Debug("Player entity created");
 }
 

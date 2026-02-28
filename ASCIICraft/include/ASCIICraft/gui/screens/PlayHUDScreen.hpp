@@ -6,7 +6,7 @@
 
 class EventBus;
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 /// Non-blocking play HUD: hotbar (9 slots) at bottom center.
 class PlayHUDScreen : public Screen {
@@ -20,4 +20,4 @@ private:
     EventBus* m_eventBus = nullptr;
 };
 
-} // namespace ASCIICraft::gui
+} // namespace gui

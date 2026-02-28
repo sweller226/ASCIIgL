@@ -12,13 +12,13 @@ namespace ecs::systems {
 
 class CameraSystem : public ISystem {
 public:
-    CameraSystem(entt::registry& registry, ASCIICraft::IInputSource& input);
+    CameraSystem(entt::registry& registry, IInputSource& input);
 
     void Update() override;
 
 private:
     entt::registry& m_registry;
-    ASCIICraft::IInputSource& m_input;
+    IInputSource& m_input;
 
     void ProcessCameraInput(components::PlayerCamera& cam, float dt);
     void LerpFOV(components::PlayerCamera& cam, components::PlayerController& ctrl, float dt);

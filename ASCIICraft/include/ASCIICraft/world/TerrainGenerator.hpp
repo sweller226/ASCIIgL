@@ -5,25 +5,26 @@
 #include <functional>
 #include <unordered_set>
 #include <cstdint>
+#include <mutex>
 
 #include <glm/glm.hpp>
 
 #include <entt/entt.hpp>
 
 #include <ASCIICraft/world/Chunk.hpp>
+#include <ASCIICraft/world/Coords.hpp>
+#include <ASCIICraft/world/TerrainResult.hpp>
 
 class FastNoiseLite;
 
 class TerrainGenerator {
 public:
-    // Callback types for World operations (uses blockstate IDs)
-    using SetBlockCallback = std::function<void(int, int, int, uint32_t)>;
-    
     TerrainGenerator(entt::registry &registry);
     ~TerrainGenerator();
     
-    void GenerateChunk(Chunk* chunk, 
-                      SetBlockCallback setBlockQuiet = nullptr);
+    /// Thread-safe: generate terrain for one chunk into \p result (blocks + crossChunkBlocks for trees).
+    /// Uses read-only bsr. Tree blocks are appended to result.crossChunkBlocks for main-thread application.
+    void GenerateChunkInto(ChunkCoord coord, TerrainResult& result, const blockstate::BlockStateRegistry* bsr);
 
 private:
     entt::registry &m_registry;
@@ -45,28 +46,26 @@ private:
     std::unique_ptr<FastNoiseLite> treeNoise;
     std::unique_ptr<FastNoiseLite> forestDensityNoise;
 
-    bool noiseInitialized;
+    std::once_flag noiseInitFlag;
 
     void InitializeNoiseGenerators();
     TerrainParams GetTerrainParams() const;
     
-    // Core generation pipeline
-    void GenerateTerrainColumns(Chunk* chunk, const ChunkCoord& coord, const TerrainParams& params,
-                              std::vector<glm::ivec3>& treePlacementPositions);
-    void GenerateTrees(Chunk* chunk, const std::vector<glm::ivec3>& treePlacementPositions,
-                      SetBlockCallback setBlockQuiet);
-    
     // Helper functions
     glm::ivec3 LocalToWorldCoord(const ChunkCoord& coord, int localX, int localZ) const;
     uint32_t GetBlockStateAt(int worldX, int worldY, int worldZ, int terrainHeight,
-                            const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions);
+                            const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions,
+                            const blockstate::BlockStateRegistry* bsrOverride = nullptr);
     
     // Terrain calculation
     int CalculateTerrainHeight(int worldX, int worldZ, const TerrainParams& params) const;
     
     bool ShouldCarveCave(int worldX, int worldY, int worldZ, int depthFromSurface, const TerrainParams& params) const;
-    uint32_t DetermineBlockState(int worldX, int worldY, int worldZ, int depthFromSurface, const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions);
+    uint32_t DetermineBlockState(int worldX, int worldY, int worldZ, int depthFromSurface, const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions,
+                                 const blockstate::BlockStateRegistry* bsrOverride = nullptr);
     void CheckTreePlacement(int worldX, int worldY, int worldZ, const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions) const;
 
-    void GenerateTree(int worldX, int worldY, int worldZ, SetBlockCallback setBlockQuiet);
+    /// Same as GenerateTree but appends (worldPos, stateId) to \p out for async application on the main thread.
+    void GenerateTreeInto(int worldX, int worldY, int worldZ, const blockstate::BlockStateRegistry* bsr,
+                         std::vector<WorldBlockPlacement>& out);
 };

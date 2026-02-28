@@ -3,8 +3,6 @@
 #include <ASCIICraft/input/IInputSource.hpp>
 #include <ASCIICraft/input/InputSystem.hpp>
 
-namespace ASCIICraft {
-
 /// Wraps the real input source and blocks all gameplay input when GUI is active.
 /// Pass this to MovementSystem and CameraSystem so they see "no input" when the GUI is open,
 /// while GuiManager continues to use the real InputSystem for cursor and clicks.
@@ -32,5 +30,3 @@ public:
 private:
     input::InputSystem& m_inputSystem;
 };
-
-} // namespace ASCIICraft

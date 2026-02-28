@@ -44,8 +44,8 @@ void PlacingSystem::PlayerPlace() {
             uint32_t baseStateId = bsr->GetDefaultState(bsr->GetTypeId("minecraft:bedrock"));
             
             // Apply placement-time logic (grass orientation, etc.) with player placement context
-            uint32_t finalizedStateId = ASCIICraft::GetFinalizedBlockStateForPlacement(
-                *bsr, baseStateId, rayCast.second, ASCIICraft::PlacementContext::PlayerPlacement
+            uint32_t finalizedStateId = GetFinalizedBlockStateForPlacement(
+                *bsr, baseStateId, rayCast.second, PlacementContext::PlayerPlacement
             );
 
             PlaceBlockEvent placeEvent;

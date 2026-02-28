@@ -15,13 +15,13 @@ class EventBus;
 
 namespace ecs::systems { class RenderSystem; }
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 /// Central OOP GUI: screen stack, cursor, and 2D camera.
 /// Game calls Update(), then Draw(renderSystem) to add GUI items directly to RenderSystem.
 class GuiManager {
 public:
-    GuiManager(entt::registry& registry, EventBus& eventBus, ASCIICraft::IInputSource& input);
+    GuiManager(entt::registry& registry, EventBus& eventBus, IInputSource& input);
 
     void SetScreenSize(glm::vec2 size);
     glm::vec2 GetScreenSize() const { return m_screenSize; }
@@ -49,7 +49,7 @@ private:
 
     entt::registry& m_registry;
     EventBus& m_eventBus;
-    ASCIICraft::IInputSource& m_input;
+    IInputSource& m_input;
 
     glm::vec2 m_screenSize{550.0f, 350.0f};
     glm::vec2 m_cursorPosition{0.0f, 0.0f};
@@ -63,4 +63,4 @@ private:
     std::unique_ptr<ASCIIgL::Camera2D> m_guiCamera;
 };
 
-} // namespace ASCIICraft::gui
+} // namespace gui

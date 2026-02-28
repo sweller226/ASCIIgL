@@ -11,6 +11,9 @@
 
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
 #include <ASCIICraft/world/Coords.hpp>
+#include <ASCIICraft/world/ChunkMeshGen.hpp>
+
+namespace ASCIIgL { class TextureArray; }
 
 // Chunk class - contains 16x16x16 blocks stored as blockstate IDs
 class Chunk {
@@ -27,7 +30,9 @@ public:
     
     uint32_t GetBlockStateByIndex(int i) const;
     void SetBlockStateByIndex(int i, uint32_t stateId);
-    
+    /// Contiguous block data for bulk copy (e.g. mesh/terrain jobs). Size Chunk::VOLUME.
+    const uint32_t* GetBlockData() const { return blocks; }
+
     // Chunk properties
     const ChunkCoord& GetCoord() const { return coord; }
     bool IsGenerated() const { return generated; }
@@ -38,36 +43,26 @@ public:
     // Mesh generation for rendering (needs registry for texture/solidity lookups)
     void GenerateMesh(const blockstate::BlockStateRegistry& bsr);
 
+    /// Apply mesh data from job queue (creates Mesh objects and assigns). Call on main thread only.
+    void ApplyMeshData(ChunkMeshData&& data, ASCIIgL::TextureArray* blockTextures);
+
+    /// Apply terrain result from job queue (block data). Call on main thread only. Sets generated when count == VOLUME.
+    void ApplyBlockData(const uint32_t* blocks, size_t count);
+
     // Mesh access
     bool HasOpaqueMesh() const { return hasOpaqueMesh; }
-    bool HasTransparentMesh() const {
-        for (bool h : hasTransparentMesh) {
-            if (h) return true;
-        }
-        return false;
-    }
+    bool HasTransparentMesh() const { return hasTransparentMesh; }
     bool HasMesh() const { return HasOpaqueMesh() || HasTransparentMesh(); }
 
     ASCIIgL::Mesh* GetOpaqueMesh() const { return opaqueMesh.get(); }
 
-    // Transparent meshes are pre-baked for multiple view directions (variants).
-    static constexpr int TRANSPARENT_VARIANT_COUNT = 6; // +X, -X, +Y, -Y, +Z, -Z
-
-    bool HasTransparentMeshVariant(int idx) const {
-        return (idx >= 0 && idx < TRANSPARENT_VARIANT_COUNT) ? hasTransparentMesh[idx] : false;
-    }
-
-    ASCIIgL::Mesh* GetTransparentMeshVariant(int idx) const {
-        return (idx >= 0 && idx < TRANSPARENT_VARIANT_COUNT) ? transparentMeshes[idx].get() : nullptr;
-    }
+    ASCIIgL::Mesh* GetTransparentMesh() const { return transparentMesh.get(); }
 
     void InvalidateMesh() {
         hasOpaqueMesh = false;
         opaqueMesh.reset();
-        for (int i = 0; i < TRANSPARENT_VARIANT_COUNT; ++i) {
-            hasTransparentMesh[i] = false;
-            transparentMeshes[i].reset();
-        }
+        hasTransparentMesh = false;
+        transparentMesh.reset();
         dirty = true;
     }
     
@@ -78,9 +73,6 @@ public:
     // Utility
     bool IsValidBlockCoord(int x, int y, int z) const;
     WorldCoord ChunkToWorldCoord(int x, int y, int z) const;
-
-    // Logging
-    void LogNeighbors() const;
     
 private:
     ChunkCoord coord;
@@ -89,12 +81,12 @@ private:
     bool generated;
     bool dirty;
 
-    // Mesh data for rendering (split into opaque and multiple transparent variants)
+    // Mesh data for rendering (split into opaque and transparent)
     bool hasOpaqueMesh;
-    bool hasTransparentMesh[TRANSPARENT_VARIANT_COUNT];
+    bool hasTransparentMesh;
 
     std::unique_ptr<ASCIIgL::Mesh> opaqueMesh;
-    std::unique_ptr<ASCIIgL::Mesh> transparentMeshes[TRANSPARENT_VARIANT_COUNT];
+    std::unique_ptr<ASCIIgL::Mesh> transparentMesh;
     
     // Neighbor chunks (6 directions: +X, -X, +Y, -Y, +Z, -Z)
     Chunk* neighbors[6];

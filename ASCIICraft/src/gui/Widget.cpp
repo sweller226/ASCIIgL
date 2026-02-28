@@ -1,7 +1,7 @@
 #include <ASCIICraft/gui/Widget.hpp>
 #include <ASCIICraft/ecs/systems/RenderSystem.hpp>
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 void Widget::Layout(glm::vec2 screenSize, const glm::vec2* parentTopLeft) {
     if (parentTopLeft) {
@@ -32,4 +32,4 @@ const Widget* Widget::HitTest(glm::vec2 point) const {
     return ContainsPoint(point) ? this : nullptr;
 }
 
-} // namespace ASCIICraft::gui
+} // namespace gui

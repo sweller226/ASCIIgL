@@ -5,6 +5,7 @@
 #include <memory>
 
 #include <ASCIICraft/world/ChunkRegion.hpp>
+#include <ASCIICraft/world/ChunkJobQueue.hpp>
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/TerrainGenerator.hpp>
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
@@ -32,7 +33,6 @@ public:
     void SetMaxWorldChunkRadius(unsigned int radius) { maxWorldChunkRadius = radius; }
     
     // Rendering support
-    void RegenerateDirtyChunks();  // Batch regenerate all dirty chunks
     void RenderChunks();
     
     // World streaming (based on player position)
@@ -60,8 +60,17 @@ private:
     // Terrain generation
     TerrainGenerator terrainGenerator;
 
+    // Chunk job queue (terrain + mesh on worker threads)
+    std::unique_ptr<ChunkJobQueue> chunkJobQueue;
+    // Reused each frame to avoid allocs when draining job results
+    std::vector<CompletedTerrainResult> drainTerrainBuffer_;
+    std::vector<CompletedMeshResult> drainMeshBuffer_;
+
     // Internal methods
-    void UpdateChunkNeighbors(const ChunkCoord& coord, bool markNeighborsDirty = true);
+    /// Wire neighbor pointers for chunk at coord; mark each neighbor dirty when both have terrain (so edge chunks re-mesh).
+    void UpdateChunkNeighbors(const ChunkCoord& coord);
+    /// True iff every in-world neighbor is loaded and has terrain (IsGenerated). Edge chunks do not mesh until neighbors past them are loaded.
+    bool AllNeighborsGenerated(const ChunkCoord& coord) const;
     std::vector<ChunkCoord> GetChunksInRadius(const ChunkCoord& center, unsigned int radius) const;
     bool IsChunkOutsideWorld(const ChunkCoord& coord) const;
 
@@ -76,9 +85,17 @@ private:
     void UnloadChunk(const ChunkCoord& coord);
     bool IsChunkLoaded(const ChunkCoord& coord) const;
     void UpdateChunkLoading();
+    void DrainAndApplyJobResults();
+    void EnqueueMeshForDirtyChunks();
+    /// Rebuild mesh on main thread and apply immediately (for same-frame block-edit feedback).
+    void RebuildChunkMeshImmediate(Chunk* c);
 
     static const ChunkCoord FACE_NEIGHBOR_OFFSETS[6];
-    static constexpr int MAX_REGENERATIONS_PER_FRAME = 200;
+    /// Tuned for 16x16x16 chunks (more chunks per volume than tall column chunks).
+    static constexpr int MAX_QUEUES_PER_FRAME = 256;
+    static constexpr int MAX_CHUNK_LOADS_PER_FRAME = 64;   // spread disk I/O; higher ok for small chunks
+    static constexpr int MAX_MESH_APPLIES_PER_FRAME = 64;  // GPU uploads per frame; small meshes = cheaper
+    static constexpr int MAX_SYNC_MESH_REBUILDS_PER_FRAME = 32;  // main-thread mesh build (small chunk = fast)
 
     // World settings
     unsigned int maxWorldChunkRadius;

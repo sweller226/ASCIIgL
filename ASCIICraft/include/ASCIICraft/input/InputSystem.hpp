@@ -4,7 +4,7 @@
 
 class EventBus;
 
-namespace ASCIICraft::input {
+namespace input {
 
 /// Who is consuming input this frame: gameplay (movement, look, jump, etc.) or GUI.
 enum class InputMode {
@@ -35,4 +35,4 @@ private:
     InputMode m_inputMode = InputMode::Gameplay;
 };
 
-} // namespace ASCIICraft::input
+} // namespace input

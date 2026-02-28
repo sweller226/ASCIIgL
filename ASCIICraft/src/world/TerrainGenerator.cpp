@@ -11,8 +11,7 @@
 #include <ASCIICraft/world/blockplacement/BlockPlacement.hpp>
 
 TerrainGenerator::TerrainGenerator(entt::registry &registry)
-    : noiseInitialized(false)
-    , m_registry(registry) {
+    : m_registry(registry) {
     terrainNoise = std::make_unique<FastNoiseLite>();
     caveNoise1 = std::make_unique<FastNoiseLite>();
     caveNoise2 = std::make_unique<FastNoiseLite>();
@@ -29,50 +28,84 @@ TerrainGenerator::TerrainGenerator(entt::registry &registry)
 
 TerrainGenerator::~TerrainGenerator() = default;
 
-void TerrainGenerator::GenerateChunk(Chunk* chunk, SetBlockCallback setBlock) {
-    if (!chunk) return;
+void TerrainGenerator::GenerateChunkInto(ChunkCoord coord, TerrainResult& result,
+                                        const blockstate::BlockStateRegistry* bsr) {
+    if (!bsr) return;
+    
+    result.blocks.resize(Chunk::VOLUME);
+    uint32_t airId = bsr->GetDefaultState("minecraft:air");
+    std::fill(result.blocks.begin(), result.blocks.end(), airId);
     
     InitializeNoiseGenerators();
     const TerrainParams params = GetTerrainParams();
-    const ChunkCoord coord = chunk->GetCoord();
+    const int chunkBaseY = coord.y * Chunk::SIZE;
     
     std::vector<glm::ivec3> treePlacementPositions;
-    GenerateTerrainColumns(chunk, coord, params, treePlacementPositions);
-    GenerateTrees(chunk, treePlacementPositions, setBlock);
-    
-    chunk->SetGenerated(true);
-}
-
-void TerrainGenerator::GenerateTerrainColumns(Chunk* chunk, const ChunkCoord& coord, const TerrainParams& params,
-                                            std::vector<glm::ivec3>& treePlacementPositions) {
-    const int chunkBaseY = coord.y * Chunk::SIZE;
-
-    
-    uint32_t airId = m_bsr->GetDefaultState("minecraft:air");
-    
     for (int x = 0; x < Chunk::SIZE; ++x) {
         for (int z = 0; z < Chunk::SIZE; ++z) {
-            const glm::ivec3 WorldCoord = LocalToWorldCoord(coord, x, z);
-            const int terrainHeight = CalculateTerrainHeight(WorldCoord.x, WorldCoord.z, params);
+            const glm::ivec3 worldCoord = LocalToWorldCoord(coord, x, z);
+            const int terrainHeight = CalculateTerrainHeight(worldCoord.x, worldCoord.z, params);
             
             for (int y = 0; y < Chunk::SIZE; ++y) {
                 const int worldY = chunkBaseY + y;
-                const uint32_t stateId = GetBlockStateAt(WorldCoord.x, worldY, WorldCoord.z, terrainHeight, params, treePlacementPositions);
+                const uint32_t stateId = GetBlockStateAt(worldCoord.x, worldY, worldCoord.z, terrainHeight, params, treePlacementPositions, bsr);
                 
                 if (stateId != airId) {
-                    chunk->SetBlockState(x, y, z, stateId);
+                    const int index = x + y * Chunk::SIZE + z * Chunk::SIZE * Chunk::SIZE;
+                    result.blocks[index] = stateId;
                 }
             }
         }
     }
+
+    // Trees: append to result.crossChunkBlocks for main-thread application (SetBlockState)
+    for (const auto& pos : treePlacementPositions) {
+        GenerateTreeInto(pos.x, pos.y, pos.z, bsr, result.crossChunkBlocks);
+    }
 }
 
-void TerrainGenerator::GenerateTrees(Chunk* chunk, const std::vector<glm::ivec3>& treePlacementPositions, SetBlockCallback setBlock) {
-    if (!setBlock || treePlacementPositions.empty()) return;
-    
-    for (const auto& pos : treePlacementPositions) {
-        GenerateTree(pos.x, pos.y, pos.z, setBlock);
+void TerrainGenerator::GenerateTreeInto(int worldX, int worldY, int worldZ,
+                                        const blockstate::BlockStateRegistry* bsr,
+                                        std::vector<WorldBlockPlacement>& out) {
+    if (!bsr) return;
+    constexpr int TRUNK_HEIGHT = 6;
+    constexpr int LEAF_BASE_OFFSET = 3;
+    constexpr int LEAF_RADIUS = 2;
+
+    uint32_t dirtId = bsr->GetDefaultState("minecraft:dirt");
+    uint32_t oakLogId = bsr->GetDefaultState("minecraft:oak_log");
+    uint32_t oakLeavesId = bsr->GetDefaultState("minecraft:oak_leaves");
+
+    auto push = [&out](int x, int y, int z, uint32_t stateId) {
+        out.push_back(WorldBlockPlacement{ WorldCoord(x, y, z), stateId });
+    };
+
+    push(worldX, worldY - 1, worldZ, dirtId);
+    for (int i = 0; i < TRUNK_HEIGHT; ++i)
+        push(worldX, worldY + i, worldZ, oakLogId);
+
+    const int leafBaseY = worldY + LEAF_BASE_OFFSET;
+    for (int dy = 0; dy < 2; ++dy) {
+        for (int dx = -LEAF_RADIUS; dx <= LEAF_RADIUS; ++dx) {
+            for (int dz = -LEAF_RADIUS; dz <= LEAF_RADIUS; ++dz) {
+                if (std::abs(dx) == LEAF_RADIUS && std::abs(dz) == LEAF_RADIUS) continue;
+                if (dx == 0 && dz == 0) continue;
+                push(worldX + dx, leafBaseY + dy, worldZ + dz, oakLeavesId);
+            }
+        }
     }
+    for (int dx = -1; dx <= 1; ++dx) {
+        for (int dz = -1; dz <= 1; ++dz) {
+            if (dx == 0 && dz == 0) continue;
+            push(worldX + dx, leafBaseY + 2, worldZ + dz, oakLeavesId);
+        }
+    }
+    const int crownY = leafBaseY + 3;
+    push(worldX, crownY, worldZ, oakLeavesId);
+    push(worldX, crownY, worldZ + 1, oakLeavesId);
+    push(worldX, crownY, worldZ - 1, oakLeavesId);
+    push(worldX + 1, crownY, worldZ, oakLeavesId);
+    push(worldX - 1, crownY, worldZ, oakLeavesId);
 }
 
 glm::ivec3 TerrainGenerator::LocalToWorldCoord(const ChunkCoord& coord, int localX, int localZ) const {
@@ -84,10 +117,12 @@ glm::ivec3 TerrainGenerator::LocalToWorldCoord(const ChunkCoord& coord, int loca
 }
 
 uint32_t TerrainGenerator::GetBlockStateAt(int worldX, int worldY, int worldZ, int terrainHeight,
-                                          const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions) {
-
-    uint32_t bedrockId = m_bsr->GetDefaultState("minecraft:bedrock");
-    uint32_t airId = m_bsr->GetDefaultState("minecraft:air");
+                                          const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions,
+                                          const blockstate::BlockStateRegistry* bsrOverride) {
+    const blockstate::BlockStateRegistry* bsr = bsrOverride ? bsrOverride : m_bsr;
+    if (!bsr) return 0u;
+    uint32_t bedrockId = bsr->GetDefaultState("minecraft:bedrock");
+    uint32_t airId = bsr->GetDefaultState("minecraft:air");
 
     // Bedrock layer at world bottom
     if (worldY == 0) {
@@ -106,12 +141,11 @@ uint32_t TerrainGenerator::GetBlockStateAt(int worldX, int worldY, int worldZ, i
     }
     
     // Determine solid block type
-    return DetermineBlockState(worldX, worldY, worldZ, depthFromSurface, params, treePlacementPositions);
+    return DetermineBlockState(worldX, worldY, worldZ, depthFromSurface, params, treePlacementPositions, bsrOverride);
 }
 
 void TerrainGenerator::InitializeNoiseGenerators() {
-    if (noiseInitialized) return;
-    
+    std::call_once(noiseInitFlag, [this]() {
     // Terrain noise - for surface height
     terrainNoise->SetNoiseType(FastNoiseLite::NoiseType_Perlin);
     terrainNoise->SetFrequency(0.02f);
@@ -151,8 +185,7 @@ void TerrainGenerator::InitializeNoiseGenerators() {
     treeNoise->SetFrequency(0.25f);
     treeNoise->SetFractalType(FastNoiseLite::FractalType_None);
     treeNoise->SetSeed(99999);
-    
-    noiseInitialized = true;
+    });
 }
 
 TerrainGenerator::TerrainParams TerrainGenerator::GetTerrainParams() const {
@@ -192,18 +225,20 @@ bool TerrainGenerator::ShouldCarveCave(int worldX, int worldY, int worldZ, int d
 
 uint32_t TerrainGenerator::DetermineBlockState(int worldX, int worldY, int worldZ, int depthFromSurface, 
                                               const TerrainParams& params,
-                                              std::vector<glm::ivec3>& treePlacementPositions) {
-
-    uint32_t grassId = m_bsr->GetDefaultState("minecraft:grass");
-    uint32_t dirtId = m_bsr->GetDefaultState("minecraft:dirt");
-    uint32_t stoneId = m_bsr->GetDefaultState("minecraft:stone");
+                                              std::vector<glm::ivec3>& treePlacementPositions,
+                                              const blockstate::BlockStateRegistry* bsrOverride) {
+    const blockstate::BlockStateRegistry* bsr = bsrOverride ? bsrOverride : m_bsr;
+    if (!bsr) return 0u;
+    uint32_t grassId = bsr->GetDefaultState("minecraft:grass");
+    uint32_t dirtId = bsr->GetDefaultState("minecraft:dirt");
+    uint32_t stoneId = bsr->GetDefaultState("minecraft:stone");
 
     if (depthFromSurface == 0) {
         CheckTreePlacement(worldX, worldY, worldZ, params, treePlacementPositions);
 
         // Apply placement-time logic (grass orientation, etc.) with terrain generation context
-        return ASCIICraft::GetFinalizedBlockStateForPlacement(
-            *m_bsr, grassId, worldX, worldY, worldZ, ASCIICraft::PlacementContext::TerrainGeneration
+        return GetFinalizedBlockStateForPlacement(
+            *bsr, grassId, worldX, worldY, worldZ, PlacementContext::TerrainGeneration
         );
     } else if (depthFromSurface < params.DIRT_DEPTH) {
         return dirtId;
@@ -242,49 +277,4 @@ void TerrainGenerator::CheckTreePlacement(
             treePlacementPositions.push_back(glm::ivec3(worldX, worldY + 1, worldZ));
         }
     }
-}
-
-void TerrainGenerator::GenerateTree(int worldX, int worldY, int worldZ, SetBlockCallback setBlock) {
-    constexpr int TRUNK_HEIGHT = 6;  // Extends up to Y+5 (center of 3x3 layer, almost to top)
-    constexpr int LEAF_BASE_OFFSET = 3;
-    constexpr int LEAF_RADIUS = 2;
-
-    uint32_t dirtId = m_bsr->GetDefaultState("minecraft:dirt");
-    uint32_t oakLogId = m_bsr->GetDefaultState("minecraft:oak_log");
-    uint32_t oakLeavesId = m_bsr->GetDefaultState("minecraft:oak_leaves");
-    
-    // Generate trunk
-    setBlock(worldX, worldY - 1, worldZ, dirtId);
-    for (int i = 0; i < TRUNK_HEIGHT; ++i) {
-        setBlock(worldX, worldY + i, worldZ, oakLogId);
-    }
-    
-    const int leafBaseY = worldY + LEAF_BASE_OFFSET;
-    
-    // Bottom two layers (Y+3, Y+4): 5x5 without corners
-    for (int dy = 0; dy < 2; ++dy) {
-        for (int dx = -LEAF_RADIUS; dx <= LEAF_RADIUS; ++dx) {
-            for (int dz = -LEAF_RADIUS; dz <= LEAF_RADIUS; ++dz) {
-                if (std::abs(dx) == LEAF_RADIUS && std::abs(dz) == LEAF_RADIUS) continue;
-                if (std::abs(dx == 0) && std::abs(dz == 0)) continue;
-                setBlock(worldX + dx, leafBaseY + dy, worldZ + dz, oakLeavesId);
-            }
-        }
-    }
-    
-    // Third layer (Y+5): 3x3
-    for (int dx = -1; dx <= 1; ++dx) {
-        for (int dz = -1; dz <= 1; ++dz) {
-            if (std::abs(dx == 0) && std::abs(dz == 0)) continue;
-            setBlock(worldX + dx, leafBaseY + 2, worldZ + dz, oakLeavesId);
-        }
-    }
-    
-    // Top layer (Y+6): Crown
-    const int crownY = leafBaseY + 3;
-    setBlock(worldX, crownY, worldZ, oakLeavesId);
-    setBlock(worldX, crownY, worldZ + 1, oakLeavesId);
-    setBlock(worldX, crownY, worldZ - 1, oakLeavesId);
-    setBlock(worldX + 1, crownY, worldZ, oakLeavesId);
-    setBlock(worldX - 1, crownY, worldZ, oakLeavesId);
 }

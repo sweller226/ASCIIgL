@@ -6,8 +6,6 @@
 #include <ASCIICraft/world/blockstate/BlockFace.hpp>
 #include <ASCIICraft/world/blockplacement/GrassOrientation.hpp>
 
-namespace ASCIICraft {
-
 /// Context in which a block is being placed, determines placement behavior.
 enum class PlacementContext {
     TerrainGeneration,    // World generation (deterministic, position-based)
@@ -20,7 +18,7 @@ enum class PlacementContext {
 /// Call this before placing a block in the world, whether from terrain generation or player placement.
 /// Returns the finalized stateId ready to be placed.
 inline uint32_t GetFinalizedBlockStateForPlacement(
-    blockstate::BlockStateRegistry& bsr,
+    const blockstate::BlockStateRegistry& bsr,
     uint32_t stateId,
     const WorldCoord& position,
     PlacementContext context = PlacementContext::TerrainGeneration
@@ -66,12 +64,10 @@ inline uint32_t GetFinalizedBlockStateForPlacement(
 
 /// Overload for individual coordinates
 inline uint32_t GetFinalizedBlockStateForPlacement(
-    blockstate::BlockStateRegistry& bsr,
+    const blockstate::BlockStateRegistry& bsr,
     uint32_t stateId,
     int x, int y, int z,
     PlacementContext context = PlacementContext::TerrainGeneration
 ) {
     return GetFinalizedBlockStateForPlacement(bsr, stateId, WorldCoord(x, y, z), context);
 }
-
-} // namespace ASCIICraft

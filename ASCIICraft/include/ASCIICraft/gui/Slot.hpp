@@ -8,7 +8,7 @@ namespace ASCIIgL { class Mesh; class Texture; }
 namespace ecs::systems { class RenderSystem; }
 class EventBus;
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 /// ECS-bound slot: reads Inventory + ItemIndex for draw; emits SlotClickedEvent on click.
 class Slot : public Widget {
@@ -33,4 +33,4 @@ private:
     std::shared_ptr<ASCIIgL::Mesh> m_slotBackgroundMesh;
 };
 
-} // namespace ASCIICraft::gui
+} // namespace gui

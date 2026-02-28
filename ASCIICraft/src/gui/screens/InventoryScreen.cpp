@@ -4,7 +4,7 @@
 #include <ASCIIgL/renderer/Material.hpp>
 #include <ASCIICraft/ecs/systems/RenderSystem.hpp>
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 InventoryScreen::InventoryScreen(entt::registry& registry, EventBus& eventBus, entt::entity playerEntity,
                                   std::shared_ptr<ASCIIgL::Mesh> panelQuad,
@@ -68,4 +68,4 @@ bool InventoryScreen::OnClick(glm::vec2 position, int button) {
     return false;
 }
 
-} // namespace ASCIICraft::gui
+} // namespace gui

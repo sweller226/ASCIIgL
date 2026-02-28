@@ -5,7 +5,7 @@
 #include <memory>
 #include <string>
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 namespace ecs::systems { class RenderSystem; }
 
@@ -28,4 +28,4 @@ public:
     virtual bool OnClick(glm::vec2 position, int button) { (void)position; (void)button; return false; }
 };
 
-} // namespace ASCIICraft::gui
+} // namespace gui
