@@ -12,6 +12,15 @@
 
 #include <entt/entt.hpp>
 
+#include <glm/glm.hpp>
+
+/// Fog parameters used when rendering chunks. fogStart/fogEnd are derived from render distance.
+struct ChunkManagerFogParams {
+    float fogStart = 0.f;
+    float fogEnd = 0.f;
+    glm::vec3 fogColor = glm::vec3(0.f);
+};
+
 class ChunkManager {
 public:
     ChunkManager(entt::registry& registry, const unsigned int chunkWorldLimit, const unsigned int renderDistance);
@@ -36,8 +45,14 @@ public:
     void RenderChunks();
     
     // World streaming (based on player position)
-    void SetRenderDistance(unsigned int distance) { renderDistance = distance; }
+    void SetRenderDistance(unsigned int distance);
     unsigned int GetRenderDistance() const { return renderDistance; }
+
+    // Fog (used in RenderChunks; start/end are tied to render distance)
+    ChunkManagerFogParams& GetFogParams() { return fogParams_; }
+    const ChunkManagerFogParams& GetFogParams() const { return fogParams_; }
+    void SetFogParams(const ChunkManagerFogParams& p) { fogParams_ = p; }
+    void SetFogColor(const glm::vec3& color) { fogParams_.fogColor = color; }
 
     // Raycasting (returns stateId and position)
     std::pair<uint32_t, WorldCoord> BlockIntersectsView(glm::vec3& lookDir, glm::vec3& headPos, float reach);
@@ -77,6 +92,7 @@ private:
     // chunk rendering support
     std::vector<Chunk*> GetVisibleChunks(const glm::vec3& playerPos, const glm::vec3& viewDir) const;
     void BatchInvalidateChunkFaceNeighborMeshes(const ChunkCoord& coord);  // Prevents chain reactions
+    void UpdateFogFromRenderDistance();  // sets fogParams_.fogStart, fogParams_.fogEnd from renderDistance
 
     // Chunk management
     Chunk* GetChunk(const ChunkCoord& coord);
@@ -100,4 +116,6 @@ private:
     // World settings
     unsigned int maxWorldChunkRadius;
     unsigned int renderDistance;
+
+    ChunkManagerFogParams fogParams_;
 };

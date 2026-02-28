@@ -153,12 +153,10 @@ const char* GetSemanticName(VertexElementSemantic semantic) {
         case VertexElementSemantic::Tangent:     return "TANGENT";
         case VertexElementSemantic::Bitangent:   return "BITANGENT";
         case VertexElementSemantic::Color:       return "COLOR";
-        case VertexElementSemantic::TexCoord0:   return "TEXCOORD";
-        case VertexElementSemantic::TexCoord1:   return "TEXCOORD";
-        case VertexElementSemantic::TexCoord2:   return "TEXCOORD";
-        case VertexElementSemantic::TexCoord3:   return "TEXCOORD";
+        case VertexElementSemantic::TexCoord:    return "TEXCOORD";
         case VertexElementSemantic::BoneIndices: return "BLENDINDICES";
         case VertexElementSemantic::BoneWeights: return "BLENDWEIGHT";
+        case VertexElementSemantic::Light:       return "LIGHT";
         case VertexElementSemantic::Custom0:     return "CUSTOM";
         case VertexElementSemantic::Custom1:     return "CUSTOM";
         case VertexElementSemantic::Custom2:     return "CUSTOM";
@@ -201,7 +199,7 @@ namespace VertFormats {
 const VertFormat& PosWUVInvW() {
     static VertFormat format = VertFormat::Builder()
         .AddFloat4(VertexElementSemantic::Position)    // XYZW (16 bytes)
-        .AddFloat3(VertexElementSemantic::TexCoord0)   // UVW (12 bytes)
+        .AddFloat3(VertexElementSemantic::TexCoord, 0)   // UVW -> TEXCOORD0 (12 bytes)
         .Build();
     return format;
 }
@@ -209,7 +207,7 @@ const VertFormat& PosWUVInvW() {
 const VertFormat& PosUV() {
     static VertFormat format = VertFormat::Builder()
         .AddFloat3(VertexElementSemantic::Position)    // XYZ (12 bytes)
-        .AddFloat2(VertexElementSemantic::TexCoord0)   // UV (8 bytes)
+        .AddFloat2(VertexElementSemantic::TexCoord, 0)   // UV -> TEXCOORD0 (8 bytes)
         .Build();
     return format;
 }
@@ -218,7 +216,7 @@ const VertFormat& PosNormUV() {
     static VertFormat format = VertFormat::Builder()
         .AddFloat3(VertexElementSemantic::Position)    // XYZ (12 bytes)
         .AddFloat3(VertexElementSemantic::Normal)      // XYZ (12 bytes)
-        .AddFloat2(VertexElementSemantic::TexCoord0)   // UV (8 bytes)
+        .AddFloat2(VertexElementSemantic::TexCoord, 0)   // UV -> TEXCOORD0 (8 bytes)
         .Build();
     return format;
 }
@@ -234,7 +232,16 @@ const VertFormat& PosColor() {
 const VertFormat& PosUVLayer() {
     static VertFormat format = VertFormat::Builder()
         .AddFloat3(VertexElementSemantic::Position)    // XYZ (12 bytes)
-        .AddFloat3(VertexElementSemantic::TexCoord0)   // UV + Layer (12 bytes)
+        .AddFloat3(VertexElementSemantic::TexCoord, 0)   // UV + Layer -> TEXCOORD0 (12 bytes)
+        .Build();
+    return format;
+}
+
+const VertFormat& PosUVLayerLight() {
+    static VertFormat format = VertFormat::Builder()
+        .AddFloat3(VertexElementSemantic::Position)   // XYZ (12 bytes)
+        .AddFloat3(VertexElementSemantic::TexCoord, 0)   // UV + Layer -> TEXCOORD0 (12 bytes)
+        .AddFloat(VertexElementSemantic::Light)       // Per-vertex light multiplier (4 bytes)
         .Build();
     return format;
 }

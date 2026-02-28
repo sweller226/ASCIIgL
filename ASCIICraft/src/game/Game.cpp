@@ -375,11 +375,11 @@ bool Game::LoadResources() {
         return false;
     }
     
-    // Create shader program with gradient map uniform layout
+    // Create shader program with gradient map uniform layout (PosUVLayerLight = terrain + per-vertex light)
     auto blockShaderProgram = ASCIIgL::ShaderProgram::Create(
         std::move(terrainVS),
         std::move(terrainPS),
-        ASCIIgL::VertFormats::PosUVLayer(),
+        ASCIIgL::VertFormats::PosUVLayerLight(),
         TerrainShaders::GetTerrainPSUniformLayout()
     );
     
@@ -456,7 +456,7 @@ bool Game::LoadResources() {
     // Register material (textures are set per-item via AddGuiItem texture parameter)
     ASCIIgL::MaterialLibrary::GetInst().Register("guiMaterial", std::move(guiMaterial));
 
-    // GUI item material: PosUVLayer + texture array for item icons in slots
+    // GUI item material: PosUVLayerLight + texture array for item icons in slots
     auto itemVS = ASCIIgL::Shader::CreateFromSource(
         GUIShaders::GetItemVSSource(),
         ASCIIgL::ShaderType::Vertex
@@ -475,7 +475,7 @@ bool Game::LoadResources() {
     auto guiItemShaderProgram = ASCIIgL::ShaderProgram::Create(
         std::move(itemVS),
         std::move(itemPS),
-        ASCIIgL::VertFormats::PosUVLayer(),
+        ASCIIgL::VertFormats::PosUVLayerLight(),
         GUIShaders::GetItemPSUniformLayout()
     );
 

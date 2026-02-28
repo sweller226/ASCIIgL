@@ -92,7 +92,7 @@ Mesh* Model::Impl::processMesh(const tinyobj::attrib_t& attrib, const tinyobj::s
     VertFormat::Builder vFormatBuilder;
     vFormatBuilder.AddFloat4(VertexElementSemantic::Position);
     if (hasTexCoords) {
-        vFormatBuilder.AddFloat2(VertexElementSemantic::TexCoord0);
+        vFormatBuilder.AddFloat2(VertexElementSemantic::TexCoord, 0);
     }
     if (hasNormals) {
         vFormatBuilder.AddFloat3(VertexElementSemantic::Normal);

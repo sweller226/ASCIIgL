@@ -98,7 +98,10 @@ ChunkMeshData BuildChunkMeshData(
     };
     const int faceIndices[6] = { 0, 1, 2, 0, 2, 3 };
 
-    const unsigned int stride = static_cast<unsigned int>(ASCIIgL::VertFormats::PosUVLayer().GetStride());
+    // Directional light multipliers: top bright8st, bottom darkest, sides in between
+    const float faceLight[6] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f }; // +Y, -Y, +Z, -Z, +X, -X
+
+    const unsigned int stride = static_cast<unsigned int>(ASCIIgL::VertFormats::PosUVLayerLight().GetStride());
 
     for (int x = 0; x < SIZE; ++x) {
         for (int y = 0; y < SIZE; ++y) {
@@ -146,6 +149,7 @@ ChunkMeshData BuildChunkMeshData(
                         });
                     } else {
                         int baseVertexIndex = static_cast<int>(verticesOpaque.size()) / static_cast<int>(stride);
+                        float light = faceLight[face];
                         for (int vertIdx = 0; vertIdx < 4; ++vertIdx) {
                             glm::vec3 worldCoord = glm::vec3(
                                 coord.x * SIZE + x,
@@ -157,12 +161,13 @@ ChunkMeshData BuildChunkMeshData(
                                 faceUV = RotateTopBottomUV(faceUV, blockFacing);
                             float u = faceUV.x;
                             float v = 1.0f - faceUV.y;
-                            ASCIIgL::VertStructs::PosUVLayer vertex = {
-                                worldCoord.x, worldCoord.y, worldCoord.z,
-                                u, v, static_cast<float>(textureLayer)
-                            };
+                            ASCIIgL::VertStructs::PosUVLayerLight vertex = {};
+                            vertex.SetXYZ(worldCoord);
+                            vertex.SetUV(glm::vec2(u, v));
+                            vertex.SetLayer(static_cast<float>(textureLayer));
+                            vertex.SetLight(light);
                             const std::byte* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
-                            verticesOpaque.insert(verticesOpaque.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUVLayer));
+                            verticesOpaque.insert(verticesOpaque.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUVLayerLight));
                         }
                         for (int i = 0; i < 6; ++i)
                             indicesOpaque.push_back(baseVertexIndex + faceIndices[i]);
@@ -190,6 +195,7 @@ ChunkMeshData BuildChunkMeshData(
             int textureLayer = tf.textureLayer;
             BlockFace bf = static_cast<BlockFace>(tf.blockFacing);
             int baseVertexIndex = static_cast<int>(out.transparentVertices.size()) / static_cast<int>(stride);
+            float light = faceLight[face];
 
             for (int vertIdx = 0; vertIdx < 4; ++vertIdx) {
                 glm::vec3 worldCoord = glm::vec3(
@@ -202,12 +208,13 @@ ChunkMeshData BuildChunkMeshData(
                     faceUV = RotateTopBottomUV(faceUV, bf);
                 float u = faceUV.x;
                 float v = 1.0f - faceUV.y;
-                ASCIIgL::VertStructs::PosUVLayer vertex = {
-                    worldCoord.x, worldCoord.y, worldCoord.z,
-                    u, v, static_cast<float>(textureLayer)
-                };
+                ASCIIgL::VertStructs::PosUVLayerLight vertex = {};
+                vertex.SetXYZ(worldCoord);
+                vertex.SetUV(glm::vec2(u, v));
+                vertex.SetLayer(static_cast<float>(textureLayer));
+                vertex.SetLight(light);
                 const std::byte* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
-                out.transparentVertices.insert(out.transparentVertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUVLayer));
+                out.transparentVertices.insert(out.transparentVertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUVLayerLight));
             }
             for (int i = 0; i < 6; ++i)
                 out.transparentIndices.push_back(baseVertexIndex + faceIndices[i]);

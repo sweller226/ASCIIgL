@@ -71,12 +71,14 @@ struct VS_INPUT
 {
     float3 position : POSITION;
     float3 texcoord : TEXCOORD0; // UV + Layer index
+    float light : LIGHT;          // Per-vertex light (1.0 = full bright for GUI)
 };
 
 struct PS_INPUT
 {
     float4 position : SV_POSITION;
-    float3 texcoord : TEXCOORD0; // UV + Layer passed to pixel shader
+    float3 texcoord : TEXCOORD0;
+    float light : TEXCOORD1;
 };
 
 PS_INPUT main(VS_INPUT input)
@@ -84,6 +86,7 @@ PS_INPUT main(VS_INPUT input)
     PS_INPUT output;
     output.position = mul(mvp, float4(input.position, 1.0));
     output.texcoord = input.texcoord;
+    output.light = input.light;
     return output;
 }
 )";
@@ -102,13 +105,15 @@ cbuffer ConstantBuffer : register(b0)
 struct PS_INPUT
 {
     float4 position : SV_POSITION;
-    float3 texcoord : TEXCOORD0; // UV.xy + Layer.z
+    float3 texcoord : TEXCOORD0;
+    float light : TEXCOORD1;
 };
 
 float4 main(PS_INPUT input) : SV_TARGET
 {
     float4 texColor = itemTextures.Sample(samplerState, input.texcoord);
-    if (texColor.a < 0.1) discard; // Simple alpha test
+    if (texColor.a < 0.1) discard;
+    texColor.rgb *= input.light; // Support per-vertex light (1.0 for GUI items)
     return texColor;
 }
 )";

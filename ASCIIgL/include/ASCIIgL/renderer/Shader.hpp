@@ -108,6 +108,13 @@ private:
 };
 
 // =========================================================================
+// Shader include map - For sharing HLSL utility code via #include
+// =========================================================================
+// Map: include name (as used in #include "Name.hlsl") -> full HLSL source.
+// Pass to CreateFromSource when building shaders that use #include.
+using ShaderIncludeMap = std::unordered_map<std::string, std::string>;
+
+// =========================================================================
 // Shader - Represents a single compiled shader (vertex or pixel)
 // =========================================================================
 
@@ -116,11 +123,19 @@ class Shader {
     friend class Renderer;
 
 public:
-    // Create from HLSL source code
+    // Create from HLSL source code (no includes)
     static std::unique_ptr<Shader> CreateFromSource(
         const std::string& source,
         ShaderType type,
         const std::string& entryPoint = "main"
+    );
+
+    // Create from HLSL source with shared includes (for #include "Util.hlsl" etc.)
+    static std::unique_ptr<Shader> CreateFromSource(
+        const std::string& source,
+        ShaderType type,
+        const std::string& entryPoint,
+        const ShaderIncludeMap* pIncludes
     );
 
     // Create from precompiled bytecode (for faster loading)
@@ -138,7 +153,8 @@ public:
 private:
     Shader(ShaderType type);
 
-    bool CompileFromSource(const std::string& source, const std::string& entryPoint);
+    bool CompileFromSource(const std::string& source, const std::string& entryPoint,
+                          const ShaderIncludeMap* pIncludes = nullptr);
     bool LoadFromBytecode(const std::vector<uint8_t>& bytecode);
 
     ShaderType _type;

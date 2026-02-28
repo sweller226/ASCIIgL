@@ -36,6 +36,20 @@ ChunkManager::ChunkManager(entt::registry& registry, const unsigned int chunkWor
     chunkJobQueue->SetTerrainGenerator(&terrainGenerator);
     chunkJobQueue->SetMaxDrainPerFrame(static_cast<size_t>(MAX_QUEUES_PER_FRAME));
     chunkJobQueue->SetMaxDrainMeshPerFrame(static_cast<size_t>(MAX_MESH_APPLIES_PER_FRAME));
+    UpdateFogFromRenderDistance();
+    glm::ivec3 bgCol = ASCIIgL::Renderer::GetInst().GetBackgroundCol();
+    fogParams_.fogColor = glm::vec3(bgCol) / 255.0f;
+}
+
+void ChunkManager::SetRenderDistance(unsigned int distance) {
+    renderDistance = distance;
+    UpdateFogFromRenderDistance();
+}
+
+void ChunkManager::UpdateFogFromRenderDistance() {
+    float chunkRenderDist = static_cast<float>(renderDistance * Chunk::SIZE);
+    fogParams_.fogEnd = chunkRenderDist - (Chunk::SIZE * 1.5f);
+    fogParams_.fogStart = fogParams_.fogEnd - (Chunk::SIZE * 1.0f);
 }
 
 Chunk* ChunkManager::GetChunk(const ChunkCoord& coord) {
@@ -698,18 +712,10 @@ void ChunkManager::RenderChunks() {
     glm::mat4 mvp = cam->proj * cam->view * glm::mat4(1.0f);
     mat->SetMatrix4("mvp", mvp);
 
-    // --- Fog Parameters ---
-    float chunkRenderDist = static_cast<float>(renderDistance * Chunk::SIZE);
-    float fogEnd = chunkRenderDist - (Chunk::SIZE * 1.5f); // Fade out fully before strict cutoff
-    float fogStart = fogEnd - (Chunk::SIZE * 1.0f);        // Start fading 3 chunks earlier
-    
-    // Get background color and normalize to 0-1 range for shader
-    glm::ivec3 bgCol = ASCIIgL::Renderer::GetInst().GetBackgroundCol();
-    glm::vec3 fogColor = glm::vec3(bgCol) / 255.0f;
-    
+    // --- Fog (from ChunkManagerFogParams; start/end tied to render distance) ---
     mat->SetFloat3("cameraPos", pos);
-    mat->SetFloat4("fogParams", glm::vec4(fogStart, fogEnd, 0.0f, 0.0f));
-    mat->SetFloat3("fogColor", fogColor);
+    mat->SetFloat4("fogParams", glm::vec4(fogParams_.fogStart, fogParams_.fogEnd, 0.0f, 0.0f));
+    mat->SetFloat3("fogColor", fogParams_.fogColor);
 
     // --- Prepare renderer draw-calls ---
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();

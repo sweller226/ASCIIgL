@@ -61,8 +61,8 @@ try {
     Write-Host "`n=== Step 4: Updating ASCIICraft Libraries ===" -ForegroundColor Magenta
     
     $SourceDistribution = Join-Path $ASCIIgLDir "dist\ASCIIgL-v$Version"
-    $ASCIICraftLibsDir = Join-Path $ASCIICraftDir "libs"
-    $TargetLibrary = Join-Path $ASCIICraftLibsDir "ASCIIgL-v$Version"
+    $ASCIICraftLibDir = Join-Path $ASCIICraftDir "lib"
+    $TargetLibrary = Join-Path $ASCIICraftLibDir "ASCIIgL-v$Version"
     
     Write-Host "Source Distribution: $SourceDistribution" -ForegroundColor Yellow
     Write-Host "Target Library: $TargetLibrary" -ForegroundColor Yellow
@@ -72,10 +72,10 @@ try {
         throw "Source distribution not found: $SourceDistribution"
     }
     
-    # Create libs directory if it doesn't exist
-    if (-not (Test-Path $ASCIICraftLibsDir)) {
-        New-Item -ItemType Directory -Path $ASCIICraftLibsDir -Force | Out-Null
-        Write-Host "Created libs directory: $ASCIICraftLibsDir" -ForegroundColor Green
+    # Create lib directory if it doesn't exist
+    if (-not (Test-Path $ASCIICraftLibDir)) {
+        New-Item -ItemType Directory -Path $ASCIICraftLibDir -Force | Out-Null
+        Write-Host "Created lib directory: $ASCIICraftLibDir" -ForegroundColor Green
     }
     
     # Remove existing library if it exists
