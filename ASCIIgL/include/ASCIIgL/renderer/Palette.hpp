@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <glm/glm.hpp>
 
 namespace ASCIIgL {
@@ -65,10 +66,11 @@ public:
 
     Palette();
     Palette(std::array<PaletteEntry, 16> customEntries);
-    
-    // Create a gradient palette from dark to light luminance with hue direction (colors in 0-255 range)
-    // Colors are interpolated with gamma correction across 16 entries
-    Palette(float darkL, float lightL, const glm::ivec3& hueDir);
+
+    virtual ~Palette() = default;
+
+    /// Deep copy; returns MonochromePalette when called on MonochromePalette.
+    virtual std::unique_ptr<Palette> clone() const;
 
     // Get color in 0-255 range (for rendering, shaders, etc.)
     glm::ivec3 GetRGB(unsigned int idx) const;
@@ -81,11 +83,36 @@ public:
     
     // Get luminance (perceptual brightness, Rec. 709)
     float GetLuminance(unsigned int idx) const;
+
+    /// Index of the palette entry with smallest luminance (darkest).
+    unsigned int GetMinLumIdx() const;
+    /// Index of the palette entry with largest luminance (brightest).
+    unsigned int GetMaxLumIdx() const;
     
     // Terminal attribute methods (use hex value for console)
     unsigned short GetHex(unsigned int idx) const;
     unsigned short GetFgColor(unsigned int idx) const;
     unsigned short GetBgColor(unsigned int idx) const;
+};
+
+// Gradient palette (dark to light) along a hue direction; inherits from Palette.
+// Stores darkL, lightL, and hueDir for inspection or regeneration.
+class MonochromePalette : public Palette {
+public:
+    // Create a gradient palette from dark to light luminance with hue direction (hueDir in 0-255).
+    // Colors are interpolated with gamma correction across 16 entries.
+    MonochromePalette(float darkL, float lightL, const glm::ivec3& hueDir);
+
+    float GetDarkL() const { return _darkL; }
+    float GetLightL() const { return _lightL; }
+    const glm::ivec3& GetHueDir() const { return _hueDir; }
+
+    std::unique_ptr<Palette> clone() const override;
+
+private:
+    float _darkL = 0.0f;
+    float _lightL = 0.0f;
+    glm::ivec3 _hueDir = glm::ivec3(0);
 };
 
 } // namespace ASCIIgL

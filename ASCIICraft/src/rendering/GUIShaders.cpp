@@ -7,6 +7,8 @@ const char* GetGUIVSSource() {
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
+    float4 gradientStart;
+    float4 gradientEnd;
 };
 
 struct VS_INPUT
@@ -33,12 +35,16 @@ PS_INPUT main(VS_INPUT input)
 
 const char* GetGUIPSSource() {
     return R"(
+#include "ColorMonochrome.hlsl"
+
 Texture2D guiTexture : register(t0);
 SamplerState samplerState : register(s0);
 
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
+    float4 gradientStart;
+    float4 gradientEnd;
 };
 
 struct PS_INPUT
@@ -49,7 +55,12 @@ struct PS_INPUT
 
 float4 main(PS_INPUT input) : SV_TARGET
 {
-    return guiTexture.Sample(samplerState, input.texcoord);
+    float4 texColor = guiTexture.Sample(samplerState, input.texcoord);
+    float luminance = dot(texColor.rgb, REC709);
+    float3 linearStart = sRGBToLinear(gradientStart.rgb);
+    float3 linearEnd = sRGBToLinear(gradientEnd.rgb);
+    float3 mappedColor = LinearLuminanceToGradientRGB(luminance, linearStart, linearEnd);
+    return float4(mappedColor, texColor.a);
 }
 )";
 }
@@ -57,6 +68,8 @@ float4 main(PS_INPUT input) : SV_TARGET
 ASCIIgL::UniformBufferLayout GetGUIPSUniformLayout() {
     return ASCIIgL::UniformBufferLayout::Builder()
         .Add("mvp", ASCIIgL::UniformType::Mat4)
+        .Add("gradientStart", ASCIIgL::UniformType::Float4)
+        .Add("gradientEnd", ASCIIgL::UniformType::Float4)
         .Build();
 }
 
@@ -65,6 +78,8 @@ const char* GetItemVSSource() {
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
+    float4 gradientStart;
+    float4 gradientEnd;
 };
 
 struct VS_INPUT
@@ -94,12 +109,16 @@ PS_INPUT main(VS_INPUT input)
 
 const char* GetItemPSSource() {
     return R"(
+#include "ColorMonochrome.hlsl"
+
 Texture2DArray itemTextures : register(t0);
 SamplerState samplerState : register(s0);
 
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
+    float4 gradientStart;
+    float4 gradientEnd;
 };
 
 struct PS_INPUT
@@ -113,8 +132,12 @@ float4 main(PS_INPUT input) : SV_TARGET
 {
     float4 texColor = itemTextures.Sample(samplerState, input.texcoord);
     if (texColor.a < 0.1) discard;
-    texColor.rgb *= input.light; // Support per-vertex light (1.0 for GUI items)
-    return texColor;
+    float luminance = dot(texColor.rgb, REC709);
+    float3 linearStart = sRGBToLinear(gradientStart.rgb);
+    float3 linearEnd = sRGBToLinear(gradientEnd.rgb);
+    float3 mappedColor = LinearLuminanceToGradientRGB(luminance, linearStart, linearEnd);
+    mappedColor *= input.light;
+    return float4(mappedColor, texColor.a);
 }
 )";
 }
@@ -122,6 +145,8 @@ float4 main(PS_INPUT input) : SV_TARGET
 ASCIIgL::UniformBufferLayout GetItemPSUniformLayout() {
     return ASCIIgL::UniformBufferLayout::Builder()
         .Add("mvp", ASCIIgL::UniformType::Mat4)
+        .Add("gradientStart", ASCIIgL::UniformType::Float4)
+        .Add("gradientEnd", ASCIIgL::UniformType::Float4)
         .Build();
 }
 

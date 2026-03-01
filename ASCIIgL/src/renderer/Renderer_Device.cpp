@@ -145,7 +145,7 @@ bool Renderer::InitializeRenderTarget() {
         
         // Check MSAA quality support
         UINT numQualityLevels = 0;
-        _device->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, sampleCount, &numQualityLevels);
+        _device->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, sampleCount, &numQualityLevels);
         if (numQualityLevels > 0) {
             qualityLevel = 0; 
         } else {
@@ -162,7 +162,7 @@ bool Renderer::InitializeRenderTarget() {
     texDesc.Height = Screen::GetInst().GetHeight();
     texDesc.MipLevels = 1;
     texDesc.ArraySize = 1;
-    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     texDesc.SampleDesc.Count = sampleCount;
     texDesc.SampleDesc.Quality = qualityLevel;
     texDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -387,7 +387,7 @@ bool Renderer::InitializeStagingTexture() {
     stagingDesc.Height = Screen::GetInst().GetHeight();
     stagingDesc.MipLevels = 1;
     stagingDesc.ArraySize = 1;
-    stagingDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    stagingDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     stagingDesc.SampleDesc.Count = 1;
     stagingDesc.SampleDesc.Quality = 0;
     stagingDesc.Usage = D3D11_USAGE_STAGING;

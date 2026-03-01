@@ -42,6 +42,8 @@ PS_INPUT main(VS_INPUT input)
 
 const char* GetTerrainPSSource() {
     return R"(
+#include "ColorMonochrome.hlsl"
+
 Texture2DArray blockTextures : register(t0);
 SamplerState samplerState : register(s0);
 
@@ -65,31 +67,31 @@ struct PS_INPUT
 
 float4 main(PS_INPUT input) : SV_TARGET
 {
-    // Sample the texture array
+    // Sample the texture array (already linear RGB from sRGB texture format)
     float4 texColor = blockTextures.Sample(samplerState, input.texcoord);
     
     // Binary alpha test (cutout): discard pixels below threshold (e.g. leaves, grass)
     static const float ALPHA_CUTOFF = 0.5;
     clip(texColor.a - ALPHA_CUTOFF);
     
-    // Compute luminance using standard coefficients (Rec. 709)
-    float luminance = dot(texColor.rgb, float3(0.2126, 0.7152, 0.0722));
+    // Linear luminance (Rec. 709) - texColor is linear
+    float luminance = dot(texColor.rgb, REC709);
     
-    // === Monochromatic gradient mapping (no hue drift) ===
-    float3 hue = normalize(gradientEnd.rgb + 0.0001);
-    float minBrightness = length(gradientStart.rgb);
-    float maxBrightness = length(gradientEnd.rgb);
-    float brightness = lerp(minBrightness, maxBrightness, luminance);
-    float3 mappedColor = hue * brightness;
+    // Luminance-based gradient along segment (linearStart -> linearEnd); direction matches monochrome LUT
+    float3 linearStart = sRGBToLinear(gradientStart.rgb);
+    float3 linearEnd = sRGBToLinear(gradientEnd.rgb);
+    float3 mappedColor = LinearLuminanceToGradientRGB(luminance, linearStart, linearEnd);
 
-    // === Per-vertex directional lighting ===
+    // Per-vertex directional lighting
     mappedColor *= input.light;
 
-    // === Fog Application ===
+    // Fog (fogColor assumed sRGB; linearize for correct blend in linear space)
     float fogFactor = saturate((input.dist - fogParams.x) / (fogParams.y - fogParams.x));
-    float3 finalColor = lerp(mappedColor, fogColor, fogFactor);
+    float3 fogLinear = sRGBToLinear(fogColor);
+    float3 finalColorLinear = lerp(mappedColor, fogLinear, fogFactor);
     
-    return float4(finalColor, texColor.a);
+    // Output linear; render target is sRGB so GPU converts on write for readback / LUT
+    return float4(finalColorLinear, texColor.a);
 }
 )";
 }

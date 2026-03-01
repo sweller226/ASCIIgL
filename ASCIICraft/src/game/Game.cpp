@@ -6,6 +6,7 @@
 #include <ASCIIgL/renderer/Palette.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
+#include <ASCIIgL/renderer/HLSLIncludes.hpp>
 
 #include <ASCIIgL/engine/TextureLibrary.hpp>
 #include <ASCIIgL/engine/MipFilters.hpp>
@@ -65,73 +66,16 @@ bool Game::Initialize() {
 
     ASCIIgL::Logger::Debug("Setting up palette and screen...");
 
-    float lowLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(18, 18, 18));
-    float highLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(210, 210, 210));
+    float lowLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(20, 20, 20));
+    float highLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(222, 222, 222));
 
-    // gray
-    ASCIIgL::Palette grayPalette(
-        lowLight,
-        highLight,
-        glm::ivec3(205, 205, 205)
-    );
+    // Monochrome palettes (dark→light along hue direction). Swap which one is used to change the look.
+    ASCIIgL::MonochromePalette grayPalette(lowLight, highLight, glm::ivec3(205, 205, 205));
+    ASCIIgL::MonochromePalette sepiaPalette(lowLight, highLight, glm::ivec3(200, 170, 130));
+    ASCIIgL::MonochromePalette greenPalette(lowLight, highLight, glm::ivec3(80, 200, 100));
+    ASCIIgL::MonochromePalette bluePalette(lowLight, highLight, glm::ivec3(120, 160, 220));
+    ASCIIgL::MonochromePalette amberPalette(lowLight, highLight, glm::ivec3(220, 180, 100));
 
-    // silver blue
-    ASCIIgL::Palette silverBluePalette(
-        lowLight,
-        highLight,
-        glm::ivec3(190, 205, 230)
-    );
-
-    // amber / sepia (warm terminal)
-    ASCIIgL::Palette amberPalette(
-        lowLight,
-        highLight,
-        glm::ivec3(212, 175, 120)
-    );
-
-    // matrix / phosphor green
-    ASCIIgL::Palette matrixGreenPalette(
-        lowLight,
-        highLight,
-        glm::ivec3(160, 220, 160)
-    );
-
-    // violet / purple
-    ASCIIgL::Palette violetPalette(
-        lowLight,
-        highLight,
-        glm::ivec3(200, 180, 220)
-    );
-
-    // warm paper / cream
-    ASCIIgL::Palette creamPalette(
-        lowLight,
-        highLight,
-        glm::ivec3(245, 235, 210)
-    );
-
-    // cool mint
-    ASCIIgL::Palette mintPalette(
-        lowLight,
-        highLight,
-        glm::ivec3(180, 230, 220)
-    );
-
-    // sunset / warm pink
-    ASCIIgL::Palette sunsetPalette(
-        lowLight,
-        highLight,
-        glm::ivec3(230, 195, 185)
-    );
-
-    // classic green (old CRT)
-    ASCIIgL::Palette classicGreenPalette(
-        lowLight,
-        highLight,
-        glm::ivec3(130, 200, 130)
-    );
-
-    // choose your active palette
     ASCIIgL::Palette gamePalette = grayPalette;
 
     ASCIIgL::Logger::Debug("Initializing screen...");
@@ -146,9 +90,6 @@ bool Game::Initialize() {
 
     ASCIIgL::FPSClock::GetInst().Initialize(static_cast<unsigned int>(TARGET_FPS), 1.0f);
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
-
-    // Using a monochromatic gradient palette, so use Monochrome optimization
-    ASCIIgL::Renderer::GetInst().SetPaletteMode(ASCIIgL::PaletteMode::Monochrome);
 
     ASCIIgL::Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(8));
     ASCIIgL::Renderer::GetInst().SetWireframe(false);
@@ -360,9 +301,13 @@ bool Game::LoadResources() {
         ASCIIgL::ShaderType::Vertex
     );
     
+    ASCIIgL::ShaderIncludeMap terrainIncludes;
+    ASCIIgL::HLSLIncludes::AddToMap(terrainIncludes);
     auto terrainPS = ASCIIgL::Shader::CreateFromSource(
         TerrainShaders::GetTerrainPSSource(),
-        ASCIIgL::ShaderType::Pixel
+        ASCIIgL::ShaderType::Pixel,
+        "main",
+        &terrainIncludes
     );
     
     if (!terrainVS || !terrainVS->IsValid()) {
@@ -399,11 +344,10 @@ bool Game::LoadResources() {
     // Set texture array (weak reference inside Material, owned by TextureLibrary)
     blockMaterial->SetTextureArray(0, blockTextureArray.get());
     
-    // Set gradient colors (dark to bright, normalized 0-1 range)
-    // These correspond to palette colors: dark end = black, bright end = white
+    // Set gradient colors from palette entries with smallest and largest luminance (matches monochrome LUT)
     auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
-    blockMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(0), 1.0f));  // Black
-    blockMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(15), 1.0f));  // Bright (matches palette)
+    blockMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
+    blockMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
 
     // Register material
     ASCIIgL::MaterialLibrary::GetInst().Register("blockMaterial", std::move(blockMaterial));
@@ -419,9 +363,13 @@ bool Game::LoadResources() {
         ASCIIgL::ShaderType::Vertex
     );
 
+    ASCIIgL::ShaderIncludeMap guiIncludes;
+    ASCIIgL::HLSLIncludes::AddToMap(guiIncludes);
     auto guiPS = ASCIIgL::Shader::CreateFromSource(
         GUIShaders::GetGUIPSSource(),
-        ASCIIgL::ShaderType::Pixel
+        ASCIIgL::ShaderType::Pixel,
+        "main",
+        &guiIncludes
     );
 
     if (!guiVS || !guiVS->IsValid()) {
@@ -453,6 +401,11 @@ bool Game::LoadResources() {
         return false;
     }
 
+    {
+        auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
+        guiMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
+        guiMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
+    }
     // Register material (textures are set per-item via AddGuiItem texture parameter)
     ASCIIgL::MaterialLibrary::GetInst().Register("guiMaterial", std::move(guiMaterial));
 
@@ -462,9 +415,13 @@ bool Game::LoadResources() {
         ASCIIgL::ShaderType::Vertex
     );
 
+    ASCIIgL::ShaderIncludeMap itemIncludes;
+    ASCIIgL::HLSLIncludes::AddToMap(itemIncludes);
     auto itemPS = ASCIIgL::Shader::CreateFromSource(
         GUIShaders::GetItemPSSource(),
-        ASCIIgL::ShaderType::Pixel
+        ASCIIgL::ShaderType::Pixel,
+        "main",
+        &itemIncludes
     );
 
     if (!itemVS || !itemVS->IsValid() || !itemPS || !itemPS->IsValid()) {
@@ -490,6 +447,11 @@ bool Game::LoadResources() {
         return false;
     }
 
+    {
+        auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
+        guiItemMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
+        guiItemMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
+    }
     auto* terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get();
     guiItemMaterial->SetTextureArray(0, terrainTextureArray);
     ASCIIgL::MaterialLibrary::GetInst().Register("guiItemMaterial", std::move(guiItemMaterial));

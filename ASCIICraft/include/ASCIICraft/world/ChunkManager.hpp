@@ -15,10 +15,11 @@
 #include <glm/glm.hpp>
 
 /// Fog parameters used when rendering chunks. fogStart/fogEnd are derived from render distance.
+/// fogColor is sRGB in [0,1]; the terrain shader linearizes it before blending in linear space.
 struct ChunkManagerFogParams {
     float fogStart = 0.f;
     float fogEnd = 0.f;
-    glm::vec3 fogColor = glm::vec3(0.f);
+    glm::vec3 fogColor = glm::vec3(0.f);  // sRGB 0-1, matches palette/gradient convention
 };
 
 class ChunkManager {
@@ -52,6 +53,7 @@ public:
     ChunkManagerFogParams& GetFogParams() { return fogParams_; }
     const ChunkManagerFogParams& GetFogParams() const { return fogParams_; }
     void SetFogParams(const ChunkManagerFogParams& p) { fogParams_ = p; }
+    /// color: sRGB in [0,1] (shader linearizes before blending)
     void SetFogColor(const glm::vec3& color) { fogParams_.fogColor = color; }
 
     // Raycasting (returns stateId and position)
@@ -109,8 +111,8 @@ private:
     static const ChunkCoord FACE_NEIGHBOR_OFFSETS[6];
     /// Tuned for 16x16x16 chunks (more chunks per volume than tall column chunks).
     static constexpr int MAX_QUEUES_PER_FRAME = 256;
-    static constexpr int MAX_CHUNK_LOADS_PER_FRAME = 64;   // spread disk I/O; higher ok for small chunks
-    static constexpr int MAX_MESH_APPLIES_PER_FRAME = 64;  // GPU uploads per frame; small meshes = cheaper
+    static constexpr int MAX_CHUNK_LOADS_PER_FRAME = 128;   // spread disk I/O; higher ok for small chunks
+    static constexpr int MAX_MESH_APPLIES_PER_FRAME = 128;  // GPU uploads per frame; small meshes = cheaper
     static constexpr int MAX_SYNC_MESH_REBUILDS_PER_FRAME = 32;  // main-thread mesh build (small chunk = fast)
 
     // World settings

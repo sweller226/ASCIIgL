@@ -250,7 +250,7 @@ bool Renderer::CreateTextureArraySRV(const TextureArray* texArray, ID3D11ShaderR
     desc.Width = tileSize;
     desc.Height = tileSize;
     desc.ArraySize = layerCount;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
@@ -306,9 +306,9 @@ bool Renderer::CreateTextureArraySRV(const TextureArray* texArray, ID3D11ShaderR
         }
     }
 
-    // Create SRV for Texture2DArray
+    // Create SRV for Texture2DArray (sRGB format so sampling returns linear RGB)
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
     srvDesc.Texture2DArray.MostDetailedMip = 0;
     srvDesc.Texture2DArray.MipLevels = hasCustom ? mipCount : -1;

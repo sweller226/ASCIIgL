@@ -22,7 +22,8 @@
 // Must match Windows Terminal font face (ScreenWinImpl: "Square Modern"), square cell, lineHeight 1
 static const wchar_t* DEFAULT_FONT = L"Square Modern";
 static const float DEFAULT_SIZE = 3.0f;
-static const wchar_t DEFAULT_CHARS[] = L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890.:,;'\"(!?)+-*/=\"";
+// Space first with hardcoded coverage 0; must match Renderer char ramp
+static const wchar_t DEFAULT_CHARS[] = L" ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890.:,;'\"(!?)+-*/=\"";
 
 // Scan mode: sizes 2 to 12, step 0.01
 static const float SCAN_SIZE_MIN = 2.0f;
@@ -63,6 +64,9 @@ static float computeCoverage(
     bool useClearType,
     HRESULT* outHr
 ) {
+    // Space: hardcoded coverage 0 (no glyph fill)
+    if (ch == L' ') return 0.0f;
+
     UINT32 codePoint = (UINT32)(unsigned short)ch;
     UINT16 glyphIndex = 0;
     HRESULT hr = fontFace->GetGlyphIndices(&codePoint, 1, &glyphIndex);
@@ -330,6 +334,14 @@ int main(int argc, char** argv) {
     const float pixelsPerDip = 1.0f;
 
     if (scanMode) {
+        // Ensure space (U+0020) is first in chars so output JSON always has 32 with coverage 0
+        if (chars.empty() || chars[0] != L' ') {
+            for (size_t j = 0; j < chars.size(); ++j) {
+                if (chars[j] == L' ') { chars.erase(chars.begin() + (ptrdiff_t)j); break; }
+            }
+            chars.insert(0, 1, L' ');
+        }
+
         // Scan sizes 2.0 to 11.0 step 0.01, merge consecutive identical coverages into intervals
         int numSteps = (int)((SCAN_SIZE_MAX - SCAN_SIZE_MIN) / SCAN_STEP + 0.5f) + 1;
         std::vector<Interval> intervals;
@@ -417,6 +429,14 @@ int main(int argc, char** argv) {
     }
 
     // Single-size path (same point-to-DIP as computeCoveragesForSize)
+    // Ensure space (U+0020) is first so JSON output always has 32 with coverage 0
+    if (chars.empty() || chars[0] != L' ') {
+        for (size_t j = 0; j < chars.size(); ++j) {
+            if (chars[j] == L' ') { chars.erase(chars.begin() + (ptrdiff_t)j); break; }
+        }
+        chars.insert(0, 1, L' ');
+    }
+
     float fontEmSizeDIP = pointSize * 96.0f / 72.0f;
     std::vector<float> coverages;
     coverages.reserve(chars.size());

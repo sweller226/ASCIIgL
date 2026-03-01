@@ -1,6 +1,8 @@
 #include <ASCIIgL/renderer/Palette.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 
 #include <cmath>
+#include <string>
 
 namespace ASCIIgL {
 
@@ -111,7 +113,14 @@ Palette::Palette(std::array<PaletteEntry, 16> customEntries) {
     }
 }
 
-Palette::Palette(float darkL, float lightL, const glm::ivec3& hueDir)
+std::unique_ptr<Palette> Palette::clone() const {
+    return std::make_unique<Palette>(entries);
+}
+
+MonochromePalette::MonochromePalette(float darkL, float lightL, const glm::ivec3& hueDir)
+    : _darkL(darkL)
+    , _lightL(lightL)
+    , _hueDir(hueDir)
 {
     glm::vec3 hueDirLinear = PaletteUtil::sRGB255ToLinear1(hueDir);
 
@@ -132,6 +141,19 @@ Palette::Palette(float darkL, float lightL, const glm::ivec3& hueDir)
 
         entries[i] = PaletteEntry(color, static_cast<unsigned short>(i));
     }
+
+    Logger::Debug("[MonochromePalette] Gradient palette (darkL=" + std::to_string(_darkL) + " lightL=" + std::to_string(_lightL) + " hueDir=(" +
+        std::to_string(_hueDir.r) + "," + std::to_string(_hueDir.g) + "," + std::to_string(_hueDir.b) + ")");
+    for (int i = 0; i < 16; ++i) {
+        const glm::ivec3& rgb = entries[i].rgb;
+        float lum = entries[i].luminance;
+        Logger::Debug("[MonochromePalette]   index " + std::to_string(i) + " => RGB(" +
+            std::to_string(rgb.r) + ", " + std::to_string(rgb.g) + ", " + std::to_string(rgb.b) + ") luminance " + std::to_string(lum));
+    }
+}
+
+std::unique_ptr<Palette> MonochromePalette::clone() const {
+    return std::make_unique<MonochromePalette>(_darkL, _lightL, _hueDir);
 }
 
 glm::ivec3 Palette::GetRGB(unsigned int idx) const {
@@ -152,6 +174,30 @@ glm::vec3 Palette::GetRGBNormalized(unsigned int idx) const {
 float Palette::GetLuminance(unsigned int idx) const {
     if (idx >= COLOR_COUNT) return 0.0f;
     return entries[idx].luminance;  // Cached luminance (Rec. 709)
+}
+
+unsigned int Palette::GetMinLumIdx() const {
+    unsigned int best = 0;
+    float minLum = entries[0].luminance;
+    for (unsigned int k = 1; k < COLOR_COUNT; ++k) {
+        if (entries[k].luminance < minLum) {
+            minLum = entries[k].luminance;
+            best = k;
+        }
+    }
+    return best;
+}
+
+unsigned int Palette::GetMaxLumIdx() const {
+    unsigned int best = 0;
+    float maxLum = entries[0].luminance;
+    for (unsigned int k = 1; k < COLOR_COUNT; ++k) {
+        if (entries[k].luminance > maxLum) {
+            maxLum = entries[k].luminance;
+            best = k;
+        }
+    }
+    return best;
 }
 
 unsigned short Palette::GetHex(unsigned int idx) const {

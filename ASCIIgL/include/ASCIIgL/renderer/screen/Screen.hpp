@@ -37,7 +37,7 @@ private:
     unsigned int _screen_height = 0;
     std::wstring _title;
     float _fontSize = 0.0f;
-    Palette _palette;
+    std::unique_ptr<Palette> _palette;
 
     Screen();
     ~Screen();

@@ -3,7 +3,8 @@
 # Optionally runs the char_coverage tool first to regenerate the file.
 
 param(
-    [switch]$Regenerate  # If set, run char_coverage --scan --cleartype before copying
+    [switch]$Regenerate,  # If set, run char_coverage --scan --cleartype before copying
+    [switch]$Rebuild      # If set, run tools/CharCoverage/build.ps1 first (if present)
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +14,24 @@ $SourcePath = Join-Path $BaseDir "tools\CharCoverage\build\Release\coverage_clea
 $DestDir = Join-Path $BaseDir "ASCIIgL\res"
 $DestPath = Join-Path $DestDir "coverage_cleartype.json"
 $CharCoverageExe = Join-Path $BaseDir "tools\CharCoverage\build\Release\char_coverage.exe"
+$CharCoverageBuildScript = Join-Path $BaseDir "tools\CharCoverage\build.ps1"
+
+if ($Rebuild) {
+    if (Test-Path $CharCoverageBuildScript) {
+        Write-Host "Building CharCoverage..." -ForegroundColor Cyan
+        Push-Location (Split-Path -Parent $CharCoverageBuildScript)
+        try {
+            & $CharCoverageBuildScript
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "CharCoverage build failed with exit code $LASTEXITCODE"
+            }
+        } finally {
+            Pop-Location
+        }
+    } else {
+        Write-Warning "CharCoverage build script not found: $CharCoverageBuildScript"
+    }
+}
 
 if ($Regenerate) {
     if (-not (Test-Path $CharCoverageExe)) {

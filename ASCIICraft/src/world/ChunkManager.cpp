@@ -3,6 +3,7 @@
 #include <ASCIICraft/world/ChunkMeshGen.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
 #include <ASCIIgL/engine/TextureLibrary.hpp>
@@ -37,6 +38,7 @@ ChunkManager::ChunkManager(entt::registry& registry, const unsigned int chunkWor
     chunkJobQueue->SetMaxDrainPerFrame(static_cast<size_t>(MAX_QUEUES_PER_FRAME));
     chunkJobQueue->SetMaxDrainMeshPerFrame(static_cast<size_t>(MAX_MESH_APPLIES_PER_FRAME));
     UpdateFogFromRenderDistance();
+    
     glm::ivec3 bgCol = ASCIIgL::Renderer::GetInst().GetBackgroundCol();
     fogParams_.fogColor = glm::vec3(bgCol) / 255.0f;
 }

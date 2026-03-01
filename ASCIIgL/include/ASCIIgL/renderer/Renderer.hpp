@@ -42,12 +42,6 @@ class Material;
 template<typename T>
 using ComPtr = Microsoft::WRL::ComPtr<T>;
 
-// Palette matching mode for color LUT computation
-enum class PaletteMode {
-    Monochrome,   // Single hue - compare by luminance only (fast)
-    MultiColor    // Full color - linearized sRGB comparison (accurate)
-};
-
 class Renderer
 {
     friend class Shader;
@@ -181,10 +175,17 @@ private:
 
     void LoadCharCoverageFromJson();
     void PrecomputeColorLUT();
-    PaletteMode _paletteMode = PaletteMode::MultiColor;
-    bool _colorLUTComputed = false;
-    static constexpr unsigned int _rgbLUTDepth = 16;
+    /// Map luminance L to index in [0, 1023] for monochrome LUT lookup.
+    size_t MonochromeLuminanceToIndex(float L) const;
+
+    enum class ColorLUTState { NotComputed, Monochrome, MultiColor };
+    ColorLUTState _colorLUTState = ColorLUTState::NotComputed;
+    static constexpr unsigned int _rgbLUTDepth = 16; // DO NOT CHANGE THIS VALUE (WILL BREAK THE LUT)
     std::array<CHAR_INFO, _rgbLUTDepth*_rgbLUTDepth*_rgbLUTDepth> _colorLUT;
+
+    static constexpr size_t _monochromeLUTSize = 1024;
+    std::array<CHAR_INFO, _monochromeLUTSize> _monochromeLUT;
+    std::array<float, _monochromeLUTSize> _monochromeTargetLuminance;
 
     // =========================================================================
     // Diagnostics
@@ -312,10 +313,6 @@ public:
     void SetDiagnosticsEnabled(const bool enabled);
     bool GetDiagnosticsEnabled() const;
 
-    // Palette Mode for Color LUT
-    void SetPaletteMode(PaletteMode mode);
-    PaletteMode GetPaletteMode() const;
-    
     // =========================================================================
     // Buffer and Diagnostics
     // =========================================================================

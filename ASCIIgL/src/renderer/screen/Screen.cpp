@@ -26,7 +26,7 @@
 namespace ASCIIgL {
 
 // Custom constructor and destructor for PIMPL pattern - must be defined where ScreenWinImpl is complete
-Screen::Screen() = default;
+Screen::Screen() : _palette(std::make_unique<Palette>()) {}
 Screen::~Screen() {
     _impl.reset();
 }
@@ -60,20 +60,20 @@ int Screen::Initialize(
     
     Logger::Debug(L"Setting font size to " + std::to_wstring(_fontSize));
 
-    // setting palette reference
+    // Clone palette so we preserve type (Palette vs MonochromePalette)
     if (palette.entries.size() != Palette::COLOR_COUNT) {
         Logger::Warning(L"Palette does not have exactly " + std::to_wstring(Palette::COLOR_COUNT) + L" colors. Using default palette.");
-        _palette = Palette(); // Default palette
+        _palette = std::make_unique<Palette>();
     } else {
-        _palette = palette;
+        _palette = palette.clone();
     }
 
 #ifdef _WIN32
     // Use unified Windows implementation for both CMD and Windows Terminal
     _impl = std::make_unique<ScreenWinImpl>(*this);
     
-    // Windows-specific initialization through delegation
-    int initResult = _impl->Initialize(width, height, _fontSize, palette);
+    // Windows-specific initialization through delegation (use stored clone)
+    int initResult = _impl->Initialize(width, height, _fontSize, *_palette);
     if (initResult) { return initResult; }
 
 #else
@@ -159,7 +159,7 @@ bool Screen::IsInitialized() const {
 }
 
 Palette& Screen::GetPalette() {
-    return _palette;
+    return *_palette;
 }
 
 } // namespace ASCIIgL
