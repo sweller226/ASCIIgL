@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <string>
+#include <utility>
 
 namespace ASCIIgL {
 
@@ -118,10 +119,11 @@ std::unique_ptr<Palette> Palette::clone() const {
 }
 
 MonochromePalette::MonochromePalette(float darkL, float lightL, const glm::ivec3& hueDir)
-    : _darkL(darkL)
-    , _lightL(lightL)
-    , _hueDir(hueDir)
 {
+    if (darkL > lightL) std::swap(darkL, lightL);
+    _darkL = darkL;
+    _lightL = lightL;
+    _hueDir = hueDir;
     glm::vec3 hueDirLinear = PaletteUtil::sRGB255ToLinear1(hueDir);
 
     constexpr float gamma = 2.2f;

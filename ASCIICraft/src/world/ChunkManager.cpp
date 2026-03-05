@@ -3,6 +3,7 @@
 #include <ASCIICraft/world/ChunkMeshGen.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/util/Profiler.hpp>
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
@@ -37,6 +38,13 @@ ChunkManager::ChunkManager(entt::registry& registry, const unsigned int chunkWor
     chunkJobQueue->SetTerrainGenerator(&terrainGenerator);
     chunkJobQueue->SetMaxDrainPerFrame(static_cast<size_t>(MAX_QUEUES_PER_FRAME));
     chunkJobQueue->SetMaxDrainMeshPerFrame(static_cast<size_t>(MAX_MESH_APPLIES_PER_FRAME));
+    chunkJobQueue->SetUnloadSaveCallback([this](Chunk* c, ChunkCoord coord, const MetaBucket* meta) {
+        std::lock_guard<std::mutex> g(unloadMutex_);
+        RegionFile& region = GetOrCreateRegion(coord.ToRegionCoord());
+        region.SaveChunk(c);
+        if (meta && !meta->edits.empty())
+            region.SaveMetaData(coord, meta);
+    });
     UpdateFogFromRenderDistance();
     
     glm::ivec3 bgCol = ASCIIgL::Renderer::GetInst().GetBackgroundCol();
@@ -52,6 +60,12 @@ void ChunkManager::UpdateFogFromRenderDistance() {
     float chunkRenderDist = static_cast<float>(renderDistance * Chunk::SIZE);
     fogParams_.fogEnd = chunkRenderDist - (Chunk::SIZE * 1.5f);
     fogParams_.fogStart = fogParams_.fogEnd - (Chunk::SIZE * 1.0f);
+}
+
+RegionFile& ChunkManager::GetOrCreateRegion(const RegionCoord& rp) {
+    if (!regionManager->FilePresent(rp))
+        regionManager->AddRegion(RegionFile(rp));
+    return regionManager->AccessRegion(rp);
 }
 
 Chunk* ChunkManager::GetChunk(const ChunkCoord& coord) {
@@ -72,7 +86,7 @@ Chunk* ChunkManager::GetOrCreateChunk(const ChunkCoord& coord) {
 }
 
 void ChunkManager::LoadChunk(const ChunkCoord& coord) {
-
+    ASCIIgL::PROFILE_SCOPE("Chunk.LoadChunk");
     if (coord.y < 0) {
         return;
     }
@@ -82,19 +96,11 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
     }
 
     // Create and store new chunk
-    auto chunk = std::make_unique<Chunk>(coord);
+    auto chunk = std::make_shared<Chunk>(coord);
     Chunk* chunkPtr = chunk.get();
-    loadedChunks[coord] = std::move(chunk);
+    loadedChunks[coord] = chunk;
 
-    // Resolve region
-    RegionCoord rp = coord.ToRegionCoord();
-
-    if (!regionManager->FilePresent(rp)) {
-        regionManager->AddRegion(RegionFile(rp));
-    }
-    
-    // Access region once
-    RegionFile& region = regionManager->AccessRegion(rp);
+    RegionFile& region = GetOrCreateRegion(coord.ToRegionCoord());
 
     // Try loading chunk from region file with error handling for corruption
     bool loadedFromFile = false;
@@ -116,32 +122,22 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
 
     if (loadedFromFile) {
         chunkPtr->SetGenerated(true);
-        // Apply cached edits and in-memory edits immediately
-        for (const auto& edit : cachedMetaBucket->edits) {
-            int x = 0, y = 0, z = 0;
-            edit.UnpackPos(x, y, z);
-            chunkPtr->SetBlockState(x, y, z, edit.stateId);
-        }
+        ApplyEditsToChunk(chunkPtr, cachedMetaBucket->edits);
         auto it = crossChunkEdits.find(coord);
         if (it != crossChunkEdits.end()) {
-            for (const auto& edit : it->second.edits) {
-                int x = 0, y = 0, z = 0;
-                edit.UnpackPos(x, y, z);
-                chunkPtr->SetBlockState(x, y, z, edit.stateId);
-            }
+            ApplyEditsToChunk(chunkPtr, it->second.edits);
             crossChunkEdits.erase(it);
         }
     } else {
         // Enqueue terrain gen; keep metadata/edits in crossChunkEdits to apply when terrain result is drained
-        std::vector<CrossChunkEdit> inMemoryEdits;
+        std::vector<CrossChunkEdit> mergedEdits = std::move(cachedMetaBucket->edits);
         auto it = crossChunkEdits.find(coord);
         if (it != crossChunkEdits.end()) {
-            inMemoryEdits = std::move(it->second.edits);
+            for (auto& e : it->second.edits)
+                mergedEdits.push_back(std::move(e));
             crossChunkEdits.erase(it);
         }
-        crossChunkEdits[coord].edits = std::move(cachedMetaBucket->edits);
-        for (auto& edit : inMemoryEdits)
-            crossChunkEdits[coord].edits.push_back(std::move(edit));
+        crossChunkEdits[coord].edits = std::move(mergedEdits);
         chunkJobQueue->EnqueueTerrainGen(chunkPtr);
     }
 }
@@ -157,12 +153,7 @@ void ChunkManager::SaveAll() {
     // 1. Save all loaded chunks
     for (auto& [coord, chunkPtr] : loadedChunks) {
         if (!chunkPtr) continue;
-        
-        RegionCoord rp = coord.ToRegionCoord();
-        if (!regionManager->FilePresent(rp)) {
-            regionManager->AddRegion(RegionFile(rp));
-        }
-        regionManager->AccessRegion(rp).SaveChunk(chunkPtr.get());
+        GetOrCreateRegion(coord.ToRegionCoord()).SaveChunk(chunkPtr.get());
     }
     loadedChunks.clear();
 
@@ -170,12 +161,7 @@ void ChunkManager::SaveAll() {
     int metaCount = 0;
     for (auto& [coord, metaBucket] : crossChunkEdits) {
         if (metaBucket.edits.empty()) continue;
-
-        RegionCoord rp = coord.ToRegionCoord();
-        if (!regionManager->FilePresent(rp)) {
-            regionManager->AddRegion(RegionFile(rp));
-        }
-        regionManager->AccessRegion(rp).SaveMetaData(coord, &metaBucket);
+        GetOrCreateRegion(coord.ToRegionCoord()).SaveMetaData(coord, &metaBucket);
         metaCount++;
     }
     crossChunkEdits.clear();
@@ -189,151 +175,142 @@ void ChunkManager::UnloadChunk(const ChunkCoord& coord) {
         return; // Already unloaded
     }
 
-    Chunk* chunkToUnload = itChunk->second.get();
+    std::shared_ptr<Chunk> chunkToUnload = itChunk->second;
     if (!chunkToUnload) {
         loadedChunks.erase(itChunk);
         return;
     }
-    
+
     for (int i = 0; i < 6; ++i) {
         ChunkCoord neighborCoord = coord + FACE_NEIGHBOR_OFFSETS[i];
-        
-        // Use find() instead of GetChunk() to avoid issues during iteration
         auto neighborIt = loadedChunks.find(neighborCoord);
         if (neighborIt != loadedChunks.end() && neighborIt->second) {
             Chunk* neighborChunk = neighborIt->second.get();
-            
-            // Calculate reverse direction and clear the pointer
             int reverseDir = (i % 2 == 0) ? i + 1 : i - 1;
             neighborChunk->SetNeighbor(reverseDir, nullptr);
-            
-            // Mark neighbor as dirty since it lost a neighbor
             neighborChunk->SetDirty(true);
         }
     }
-    
-    // Now safe to unload
-    RegionCoord rp = coord.ToRegionCoord();
-    if (!regionManager->FilePresent(rp)) {
-        regionManager->AddRegion(RegionFile(rp));
-    }
-    regionManager->AccessRegion(rp).SaveChunk(itChunk->second.get());
-    loadedChunks.erase(itChunk);
 
+    std::optional<MetaBucket> meta;
     auto itMeta = crossChunkEdits.find(coord);
     if (itMeta != crossChunkEdits.end()) {
-        regionManager->AccessRegion(rp).SaveMetaData(coord, &itMeta->second);
+        meta = itMeta->second;
         crossChunkEdits.erase(itMeta);
     }
+
+    loadedChunks.erase(itChunk);
+    chunkJobQueue->EnqueueUnload(coord, std::move(chunkToUnload), std::move(meta));
 }
 
 bool ChunkManager::IsChunkLoaded(const ChunkCoord& coord) const {
     return loadedChunks.find(coord) != loadedChunks.end();
 }
 
-void ChunkManager::UpdateChunkLoading() {
-    entt::entity player = ecs::components::GetPlayerEntity(registry);
-    if (player == entt::null) {
-        return;
+void ChunkManager::ApplyEditsToChunk(Chunk* c, const std::vector<CrossChunkEdit>& edits) {
+    for (const auto& edit : edits) {
+        int x = 0, y = 0, z = 0;
+        edit.UnpackPos(x, y, z);
+        c->SetBlockState(x, y, z, edit.stateId);
     }
-    
-    auto [playerPos, success] = ecs::components::GetPos(player, registry);
-    if (!success) return;
-    ChunkCoord playerChunk = WorldCoord(playerPos).ToChunkCoord();
-    
-    const unsigned int loadRadius = renderDistance;
-    const unsigned int unloadRadius = renderDistance + 2;
+}
 
-    // === STEP 0: CACHE OLD METADATA ===
+void ChunkManager::ProcessMetaBucketExpiry() {
+    ASCIIgL::PROFILE_SCOPE("Chunk.UpdateChunkLoading.MetaBuckets");
     const uint32_t now = NowSeconds();
     constexpr int MAX_META_SAVES_PER_FRAME = 4;
     int metaSaveCount = 0;
 
-    // Process queue entries, but check actual timestamps since queue may not be strictly ordered
     size_t queueSize = metaTimeTracker.size();
     for (size_t i = 0; i < queueSize && metaSaveCount < MAX_META_SAVES_PER_FRAME; ++i) {
         const ChunkCoord key = metaTimeTracker.front();
         metaTimeTracker.pop();
 
         auto it = crossChunkEdits.find(key);
-        if (it == crossChunkEdits.end()) {
-            // Bucket was already removed earlier
+        if (it == crossChunkEdits.end())
             continue;
-        }
 
         MetaBucket& bucket = it->second;
 
-        // Check actual timestamp, not queue order
+        if (Chunk* c = GetChunk(key)) {
+            if (!c->IsGenerated()) {
+                metaTimeTracker.push(key);
+                continue;
+            }
+        }
+
         if (now - bucket.lastTouched < META_BUCKET_TIME_LIMIT) {
-            // Still too new, re-add to back of queue for later processing
             metaTimeTracker.push(key);
             continue;
         }
 
-        // Otherwise, it's expired — cache it in region file
-        RegionCoord rp = key.ToRegionCoord();
-        if (!regionManager->FilePresent(rp)) {
-            regionManager->AddRegion(RegionFile(rp));
-        }
-
-        regionManager->AccessRegion(rp).SaveMetaData(key, &it->second);
+        GetOrCreateRegion(key.ToRegionCoord()).SaveMetaData(key, &it->second);
         crossChunkEdits.erase(it);
         metaSaveCount++;
     }
+}
 
-    // === STEP 1: LOAD NEW CHUNKS ===
-    std::vector<ChunkCoord> chunksToLoad = GetChunksInRadius(playerChunk, loadRadius);
+void ChunkManager::LoadChunksInRadius(const ChunkCoord& playerChunk, unsigned int loadRadius) {
+    std::vector<ChunkCoord> chunksToLoad;
+    {
+        ASCIIgL::PROFILE_SCOPE("Chunk.UpdateChunkLoading.ComputeChunksToLoad");
+        chunksToLoad = GetChunksInRadius(playerChunk, loadRadius);
+        chunksToLoad.erase(std::remove_if(chunksToLoad.begin(), chunksToLoad.end(),
+            [this](const ChunkCoord& coord) {
+                return IsChunkOutsideWorld(coord) || IsChunkLoaded(coord);
+            }), chunksToLoad.end());
 
-    // Filter out chunks outside world limits
-    chunksToLoad.erase(std::remove_if(chunksToLoad.begin(), chunksToLoad.end(),
-        [this](const ChunkCoord& coord) {
-            return IsChunkOutsideWorld(coord) || IsChunkLoaded(coord);
-        }), chunksToLoad.end());
+        std::sort(chunksToLoad.begin(), chunksToLoad.end(), [&playerChunk](const ChunkCoord& a, const ChunkCoord& b) {
+            return ChebyshevDistance(a, playerChunk) < ChebyshevDistance(b, playerChunk);
+        });
+    }
 
-    // Load closer chunks first (Chebyshev distance) so terrain/mesh generate from center outward
-    std::sort(chunksToLoad.begin(), chunksToLoad.end(), [&playerChunk](const ChunkCoord& a, const ChunkCoord& b) {
-        int da = std::max({std::abs(a.x - playerChunk.x), std::abs(a.y - playerChunk.y), std::abs(a.z - playerChunk.z)});
-        int db = std::max({std::abs(b.x - playerChunk.x), std::abs(b.y - playerChunk.y), std::abs(b.z - playerChunk.z)});
-        return da < db;
-    });
-
-    // Load missing chunks (cap per frame to spread disk I/O and avoid spikes)
     std::vector<ChunkCoord> newlyLoadedChunks;
-    newlyLoadedChunks.reserve(std::min(chunksToLoad.size(), static_cast<size_t>(MAX_CHUNK_LOADS_PER_FRAME)));
-    for (size_t i = 0; i < chunksToLoad.size() && i < static_cast<size_t>(MAX_CHUNK_LOADS_PER_FRAME); ++i) {
-        const ChunkCoord& coord = chunksToLoad[i];
-        LoadChunk(coord);
-        newlyLoadedChunks.push_back(coord);
-    }
-    
-    for (const ChunkCoord& coord : newlyLoadedChunks)
-        UpdateChunkNeighbors(coord);
+    {
+        ASCIIgL::PROFILE_SCOPE("Chunk.UpdateChunkLoading.LoadNewChunks");
+        newlyLoadedChunks.reserve(std::min(chunksToLoad.size(), static_cast<size_t>(MAX_CHUNK_LOADS_PER_FRAME)));
+        for (size_t i = 0; i < chunksToLoad.size() && i < static_cast<size_t>(MAX_CHUNK_LOADS_PER_FRAME); ++i) {
+            const ChunkCoord& coord = chunksToLoad[i];
+            LoadChunk(coord);
+            newlyLoadedChunks.push_back(coord);
+        }
 
-    // Enqueue mesh generation for newly loaded chunks only when all neighbors have terrain
-    for (const ChunkCoord& coord : newlyLoadedChunks) {
-        Chunk* c = GetChunk(coord);
-        if (c && c->IsGenerated() && !c->HasMesh() && AllNeighborsGenerated(coord))
-            chunkJobQueue->EnqueueMeshGen(c);
-    }
+        for (const ChunkCoord& coord : newlyLoadedChunks)
+            UpdateChunkNeighbors(coord);
 
-    // === STEP 2: UNLOAD DISTANT CHUNKS ===
-    std::vector<ChunkCoord> chunksToUnload;
-    
-    for (const auto& pair : loadedChunks) {
-        const ChunkCoord& coord = pair.first;
-        int dx = coord.x - playerChunk.x;
-        int dy = coord.y - playerChunk.y;
-        int dz = coord.z - playerChunk.z;
-        int distance = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
-        
-        if (distance > static_cast<int>(unloadRadius) || IsChunkOutsideWorld(coord)) {
-            chunksToUnload.push_back(coord);
+        for (const ChunkCoord& coord : newlyLoadedChunks) {
+            Chunk* c = GetChunk(coord);
+            if (c && c->IsGenerated() && !c->HasMesh() && AllNeighborsGenerated(coord))
+                chunkJobQueue->EnqueueMeshGen(c);
         }
     }
-    
-    // Unload chunks (simple and safe)
-    for (const ChunkCoord& coord : chunksToUnload)
-        UnloadChunk(coord);
+}
+
+void ChunkManager::UnloadDistantChunks(const ChunkCoord& playerChunk, unsigned int unloadRadius) {
+    ASCIIgL::PROFILE_SCOPE("Chunk.UpdateChunkLoading.UnloadChunks");
+    std::vector<ChunkCoord> chunksToUnload;
+    for (const auto& pair : loadedChunks) {
+        const ChunkCoord& coord = pair.first;
+        if (ChebyshevDistance(coord, playerChunk) > static_cast<int>(unloadRadius) || IsChunkOutsideWorld(coord))
+            chunksToUnload.push_back(coord);
+    }
+    const size_t limit = std::min(chunksToUnload.size(), static_cast<size_t>(MAX_CHUNK_UNLOADS_PER_FRAME));
+    for (size_t i = 0; i < limit; ++i)
+        UnloadChunk(chunksToUnload[i]);
+}
+
+void ChunkManager::UpdateChunkLoading() {
+    entt::entity player = ecs::components::GetPlayerEntity(registry);
+    if (player == entt::null) return;
+    auto [playerPos, success] = ecs::components::GetPos(player, registry);
+    if (!success) return;
+    ChunkCoord playerChunk = WorldCoord(playerPos).ToChunkCoord();
+    const unsigned int loadRadius = renderDistance;
+    const unsigned int unloadRadius = renderDistance + 2;
+
+    ProcessMetaBucketExpiry();
+    LoadChunksInRadius(playerChunk, loadRadius);
+    UnloadDistantChunks(playerChunk, unloadRadius);
 }
 
 std::vector<Chunk*> ChunkManager::GetVisibleChunks(const glm::vec3& playerPos, const glm::vec3& viewDir) const {
@@ -364,13 +341,7 @@ std::vector<Chunk*> ChunkManager::GetVisibleChunks(const glm::vec3& playerPos, c
         const ChunkCoord& coord = pair.first;
         Chunk* chunk = pair.second.get();
         
-        // Calculate Chebyshev distance (max of abs differences) for cubic chunks
-        int dx = coord.x - playerChunk.x;
-        int dy = coord.y - playerChunk.y;
-        int dz = coord.z - playerChunk.z;
-        int chunkDistance = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
-        
-        // Early rejection: chunks beyond render distance
+        int chunkDistance = ChebyshevDistance(coord, playerChunk);
         if (chunkDistance > renderDistance) {
             continue;
         }
@@ -455,37 +426,35 @@ void ChunkManager::BatchInvalidateChunkFaceNeighborMeshes(const ChunkCoord& coor
     ASCIIgL::Logger::Debug("Batch invalidated " + std::to_string(chunksToInvalidate.size()) + " chunk meshes");
 }
 
-void ChunkManager::DrainAndApplyJobResults() {
+void ChunkManager::ApplyDrainedTerrainResults() {
     chunkJobQueue->DrainCompletedTerrainResultsInto(drainTerrainBuffer_);
     for (auto& r : drainTerrainBuffer_) {
         Chunk* c = GetChunk(r.coord);
         if (!c) continue;
-        c->ApplyBlockData(r.result.blocks.data(), r.result.blocks.size());
         auto metaIt = crossChunkEdits.find(r.coord);
         if (metaIt != crossChunkEdits.end()) {
-            for (const auto& edit : metaIt->second.edits) {
-                int x = 0, y = 0, z = 0;
-                edit.UnpackPos(x, y, z);
-                c->SetBlockState(x, y, z, edit.stateId);
-            }
+            ApplyEditsToChunk(c, metaIt->second.edits);
             crossChunkEdits.erase(metaIt);
         }
-        for (const auto& placement : r.result.crossChunkBlocks)
-            SetBlockState(placement.pos.x, placement.pos.y, placement.pos.z, placement.stateId);
-        if (c->IsGenerated()) {
-            // Mark neighbors dirty so their meshes are recomputed with up-to-date adjacency,
-            // which fixes cross-chunk border culling when new terrain arrives.
-            UpdateChunkNeighbors(r.coord);
-            if (AllNeighborsGenerated(r.coord))
-                chunkJobQueue->EnqueueMeshGen(c);
+        for (const auto& placement : r.result.crossChunkBlocks) {
+            if (placement.pos.ToChunkCoord() == r.coord) {
+                glm::ivec3 local = placement.pos.ToLocalChunkPos();
+                c->SetBlockState(local.x, local.y, local.z, placement.stateId);
+            } else {
+                SetBlockState(placement.pos.x, placement.pos.y, placement.pos.z, placement.stateId);
+            }
         }
+        c->SetGenerated(true);
+        UpdateChunkNeighbors(r.coord);
+        if (AllNeighborsGenerated(r.coord))
+            chunkJobQueue->EnqueueMeshGen(c);
     }
+}
 
-    // Apply completed mesh results
+void ChunkManager::ApplyDrainedMeshResults() {
     auto blockTextures = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
     if (!blockTextures || !blockTextures->IsValid()) return;
     ASCIIgL::TextureArray* texArray = blockTextures.get();
-
     chunkJobQueue->DrainCompletedMeshResultsInto(drainMeshBuffer_);
     for (auto& r : drainMeshBuffer_) {
         Chunk* c = GetChunk(r.coord);
@@ -494,6 +463,12 @@ void ChunkManager::DrainAndApplyJobResults() {
             c->SetDirty(false);
         }
     }
+}
+
+void ChunkManager::DrainAndApplyJobResults() {
+    ASCIIgL::PROFILE_SCOPE("Chunk.DrainAndApplyJobResults");
+    ApplyDrainedTerrainResults();
+    ApplyDrainedMeshResults();
 }
 
 void ChunkManager::RebuildChunkMeshImmediate(Chunk* c) {
@@ -526,6 +501,7 @@ void ChunkManager::RebuildChunkMeshImmediate(Chunk* c) {
 }
 
 void ChunkManager::EnqueueMeshForDirtyChunks() {
+    ASCIIgL::PROFILE_SCOPE("Chunk.EnqueueMeshForDirtyChunks");
     entt::entity player = ecs::components::GetPlayerEntity(registry);
     if (player == entt::null) return;
     auto [playerPos, success] = ecs::components::GetPos(player, registry);
@@ -542,9 +518,7 @@ void ChunkManager::EnqueueMeshForDirtyChunks() {
     if (eligible.empty()) return;
 
     std::sort(eligible.begin(), eligible.end(), [&playerChunk](const auto& a, const auto& b) {
-        int da = std::max({std::abs(a.first.x - playerChunk.x), std::abs(a.first.y - playerChunk.y), std::abs(a.first.z - playerChunk.z)});
-        int db = std::max({std::abs(b.first.x - playerChunk.x), std::abs(b.first.y - playerChunk.y), std::abs(b.first.z - playerChunk.z)});
-        return da < db;
+        return ChebyshevDistance(a.first, playerChunk) < ChebyshevDistance(b.first, playerChunk);
     });
 
     int syncCount = 0;
@@ -600,17 +574,7 @@ std::vector<ChunkCoord> ChunkManager::GetChunksInRadius(const ChunkCoord& center
     for (int x = center.x - signedRadius; x <= center.x + signedRadius; ++x) {
         for (int y = center.y - signedRadius; y <= center.y + signedRadius; ++y) {
             for (int z = center.z - signedRadius; z <= center.z + signedRadius; ++z) {
-                ChunkCoord coord(x, y, z);
-                
-                // Check if within cubic radius (Chebyshev distance)
-                int dx = std::abs(x - center.x);
-                int dy = std::abs(y - center.y);
-                int dz = std::abs(z - center.z);
-                int distance = std::max({dx, dy, dz});
-                
-                if (distance <= signedRadius) {
-                    chunks.push_back(coord);
-                }
+                chunks.push_back(ChunkCoord(x, y, z));
             }
         }
     }
@@ -679,9 +643,26 @@ void ChunkManager::SetBlockState(int x, int y, int z, uint32_t stateId) {
 }
 
 void ChunkManager::Update() {
-    DrainAndApplyJobResults();
-    UpdateChunkLoading();
-    EnqueueMeshForDirtyChunks();
+    ASCIIgL::PROFILE_SCOPE("Chunk.Update");
+
+    {
+        ASCIIgL::PROFILE_SCOPE("Chunk.Update.DrainAndApplyJobResults");
+        DrainAndApplyJobResults();
+    }
+    {
+        ASCIIgL::PROFILE_SCOPE("Chunk.Update.UpdateChunkLoading");
+        UpdateChunkLoading();
+    }
+    {
+        ASCIIgL::PROFILE_SCOPE("Chunk.Update.EnqueueMeshForDirtyChunks");
+        EnqueueMeshForDirtyChunks();
+    }
+    // Drain again so terrain that completed this frame (e.g. right after LoadChunk) gets
+    // crossChunkEdits applied before next frame; avoids bucket sitting until next Drain.
+    {
+        ASCIIgL::PROFILE_SCOPE("Chunk.Update.DrainAndApplyJobResultsLate");
+        DrainAndApplyJobResults();
+    }
 }
 
 void ChunkManager::RenderChunks() {

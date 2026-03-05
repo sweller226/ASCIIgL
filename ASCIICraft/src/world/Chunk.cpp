@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <cassert>
 #include <array>
-#include <cstring>
 
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
@@ -122,12 +121,6 @@ void Chunk::ApplyMeshData(ChunkMeshData&& data, ASCIIgL::TextureArray* blockText
     }
 
     SetDirty(false);
-}
-
-void Chunk::ApplyBlockData(const uint32_t* blocks, size_t count) {
-    if (!blocks || count != static_cast<size_t>(VOLUME)) return;
-    std::memcpy(this->blocks, blocks, VOLUME * sizeof(uint32_t));
-    SetGenerated(true);
 }
 
 // Neighbor management

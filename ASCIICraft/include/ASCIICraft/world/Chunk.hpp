@@ -32,6 +32,8 @@ public:
     void SetBlockStateByIndex(int i, uint32_t stateId);
     /// Contiguous block data for bulk copy (e.g. mesh/terrain jobs). Size Chunk::VOLUME.
     const uint32_t* GetBlockData() const { return blocks; }
+    /// For terrain job only: writable block buffer. Main thread must not write until chunk is generated.
+    uint32_t* GetBlockDataForWrite() { return blocks; }
 
     // Chunk properties
     const ChunkCoord& GetCoord() const { return coord; }
@@ -45,9 +47,6 @@ public:
 
     /// Apply mesh data from job queue (creates Mesh objects and assigns). Call on main thread only.
     void ApplyMeshData(ChunkMeshData&& data, ASCIIgL::TextureArray* blockTextures);
-
-    /// Apply terrain result from job queue (block data). Call on main thread only. Sets generated when count == VOLUME.
-    void ApplyBlockData(const uint32_t* blocks, size_t count);
 
     // Mesh access
     bool HasOpaqueMesh() const { return hasOpaqueMesh; }

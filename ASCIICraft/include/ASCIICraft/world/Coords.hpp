@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <cstdlib>
 #include <string>
 
 #include <ASCIIgL/util/MathUtil.hpp>
@@ -85,6 +87,11 @@ struct ChunkCoord {
         );
     }
 };
+
+/// Chebyshev distance between two chunk coordinates (max of absolute component differences).
+inline int ChebyshevDistance(const ChunkCoord& a, const ChunkCoord& b) {
+    return std::max({std::abs(a.x - b.x), std::abs(a.y - b.y), std::abs(a.z - b.z)});
+}
 
 // World position (block coordinates)
 struct WorldCoord {

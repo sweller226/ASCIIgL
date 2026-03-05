@@ -495,7 +495,7 @@ void Game::InitializeWorld() {
 }
 
 void Game::InitializePlayer() {
-    playerFactory.createPlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Spectator);
+    playerFactory.createPlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Survival);
     ASCIIgL::Logger::Debug("Player entity created");
 }
 

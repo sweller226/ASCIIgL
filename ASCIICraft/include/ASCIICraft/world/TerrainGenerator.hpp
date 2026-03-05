@@ -22,9 +22,9 @@ public:
     TerrainGenerator(entt::registry &registry);
     ~TerrainGenerator();
     
-    /// Thread-safe: generate terrain for one chunk into \p result (blocks + crossChunkBlocks for trees).
-    /// Uses read-only bsr. Tree blocks are appended to result.crossChunkBlocks for main-thread application.
-    void GenerateChunkInto(ChunkCoord coord, TerrainResult& result, const blockstate::BlockStateRegistry* bsr);
+    /// Thread-safe: generate terrain into \p blocks (chunk's block buffer, size Chunk::VOLUME) and
+    /// append cross-chunk placements (e.g. trees) to \p result.crossChunkBlocks. Call from terrain job only.
+    void GenerateChunkInto(ChunkCoord coord, uint32_t* blocks, TerrainResult& result, const blockstate::BlockStateRegistry* bsr);
 
 private:
     entt::registry &m_registry;

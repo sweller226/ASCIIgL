@@ -355,6 +355,16 @@ std::vector<uint8_t> RegionFile::buildChunkBlob(const Chunk* data) {
     std::vector<uint8_t> packed = packIndices(indices, indexBits);
     if (!packed.empty()) append(packed.data(), packed.size());
 
+    
+    if (buffer.empty()) {
+        ASCIIgL::Logger::Warning("buildChunkBlob: buffer is empty, nothing to write");
+    } 
+    
+    if (buffer.size() > MAX_CHUNK_BLOB_SIZE) {
+        ASCIIgL::Logger::Errorf("buildChunkBlob: buffer size %zu exceeds MAX_CHUNK_BLOB_SIZE %u", buffer.size(), MAX_CHUNK_BLOB_SIZE);
+        throw std::runtime_error("Chunk blob too large");
+    }
+
     return buffer;
 }
 
@@ -467,15 +477,6 @@ bool RegionFile::SaveChunk(const Chunk* data) {
     auto& entry = chunkIndexes[off];
 
     std::vector<uint8_t> raw = buildChunkBlob(data);
-
-    if (raw.empty()) {
-        ASCIIgL::Logger::Warning("SaveChunk: blob size is zero, nothing to write");
-        return false;
-    }
-    if (raw.size() > MAX_CHUNK_BLOB_SIZE) {
-        ASCIIgL::Logger::Errorf("SaveChunk: blob size %zu exceeds MAX_CHUNK_BLOB_SIZE %u", raw.size(), MAX_CHUNK_BLOB_SIZE);
-        throw std::runtime_error("Chunk blob too large");
-    }
 
     if (!openForReadWrite()) {
         ASCIIgL::Logger::Error("SaveChunk: openForReadWrite failed");
@@ -633,15 +634,6 @@ bool RegionFile::SaveMetaData(const ChunkCoord& pos, const MetaBucket* data) {
 
     std::vector<uint8_t> raw = buildMetaBlob(data);
 
-    if (raw.empty()) {
-        ASCIIgL::Logger::Warning("SaveMetaData: blob size is zero, nothing to write");
-        return false;
-    }
-    if (raw.size() > MAX_META_BLOB_SIZE) {
-        ASCIIgL::Logger::Errorf("SaveMetaData: meta blob size %zu exceeds MAX_META_BLOB_SIZE %u", raw.size(), MAX_META_BLOB_SIZE);
-        throw std::runtime_error("Meta blob too large");
-    }
-
     // Ensure header.metaStart is initialized (we keep absolute offsets)
     if (header.metaStart == 0) {
         const size_t entryCount = static_cast<size_t>(REGION_SIZE) * REGION_SIZE * REGION_SIZE;
@@ -787,6 +779,14 @@ std::vector<uint8_t> RegionFile::buildMetaBlob(const MetaBucket* data) {
             arr.push_back(se);
         }
         append_raw(arr.data(), arr.size() * sizeof(SerializedEdit));
+    }
+    
+    if (out.empty()) {
+        ASCIIgL::Logger::Warning("buildMetaBlob: buffer is empty, nothing to write");
+    }
+    if (out.size() > MAX_META_BLOB_SIZE) {
+        ASCIIgL::Logger::Errorf("buildMetaBlob: buffer size %zu exceeds MAX_META_BLOB_SIZE %u", out.size(), MAX_META_BLOB_SIZE);
+        throw std::runtime_error("Meta blob too large");
     }
 
     return out;

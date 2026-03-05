@@ -3,6 +3,7 @@
 #include <ASCIICraft/world/ChunkMeshGen.hpp>
 #include <ASCIICraft/world/TerrainGenerator.hpp>
 
+#include <algorithm>
 #include <array>
 #include <vector>
 #include <cstring>
@@ -16,27 +17,13 @@ void CopyChunkBlocks(const Chunk* chunk, uint32_t* outBlocks) {
     std::memcpy(outBlocks, chunk->GetBlockData(), Chunk::VOLUME * sizeof(uint32_t));
 }
 
-void GenerateTerrainIntoBuffer(
-    ChunkCoord coord,
-    TerrainResult& result,
-    const blockstate::BlockStateRegistry* bsr,
-    TerrainGenerator* terrainGen
-) {
-    if (terrainGen && bsr)
-        terrainGen->GenerateChunkInto(coord, result, bsr);
-    else {
-        result.blocks.resize(Chunk::VOLUME);
-        std::fill(result.blocks.begin(), result.blocks.end(), 0u);
-    }
-}
-
 } // namespace
 
 ChunkJobQueue::ChunkJobQueue(entt::registry& registry)
     : registry_(registry) {}
 
 ChunkJobQueue::~ChunkJobQueue() {
-    WaitForPending();
+    taskGroup_.wait();
 }
 
 void ChunkJobQueue::EnqueueTerrainGen(Chunk* chunk) {
@@ -45,9 +32,14 @@ void ChunkJobQueue::EnqueueTerrainGen(Chunk* chunk) {
     if (!bsr) return;
     TerrainGenerator* gen = terrainGenerator_;
     ChunkCoord coord = chunk->GetCoord();
-    taskGroup_.run([this, coord, bsr, gen]() {
+    taskGroup_.run([this, chunk, coord, bsr, gen]() {
         TerrainResult result;
-        GenerateTerrainIntoBuffer(coord, result, bsr, gen);
+        uint32_t* blocks = chunk->GetBlockDataForWrite();
+        if (gen && bsr) {
+            gen->GenerateChunkInto(coord, blocks, result, bsr);
+        } else {
+            std::fill(blocks, blocks + Chunk::VOLUME, 0u);
+        }
         completedTerrainQueue_.push(CompletedTerrainResult{ coord, std::move(result) });
     });
 }
@@ -96,6 +88,15 @@ void ChunkJobQueue::DrainCompletedMeshResultsInto(std::vector<CompletedMeshResul
         out.push_back(std::move(result));
         if (limit != 0 && out.size() >= limit) break;
     }
+}
+
+void ChunkJobQueue::EnqueueUnload(ChunkCoord coord, std::shared_ptr<Chunk> chunk, std::optional<MetaBucket> meta) {
+    if (!chunk) return;
+    UnloadSaveCallback cb = unloadSaveCallback_;
+    taskGroup_.run([cb, coord, chunk = std::move(chunk), meta = std::move(meta)]() {
+        if (cb && chunk)
+            cb(chunk.get(), coord, meta ? &*meta : nullptr);
+    });
 }
 
 void ChunkJobQueue::WaitForPending() {

@@ -28,31 +28,30 @@ TerrainGenerator::TerrainGenerator(entt::registry &registry)
 
 TerrainGenerator::~TerrainGenerator() = default;
 
-void TerrainGenerator::GenerateChunkInto(ChunkCoord coord, TerrainResult& result,
+void TerrainGenerator::GenerateChunkInto(ChunkCoord coord, uint32_t* blocks, TerrainResult& result,
                                         const blockstate::BlockStateRegistry* bsr) {
-    if (!bsr) return;
-    
-    result.blocks.resize(Chunk::VOLUME);
+    if (!bsr || !blocks) return;
+
     uint32_t airId = bsr->GetDefaultState("minecraft:air");
-    std::fill(result.blocks.begin(), result.blocks.end(), airId);
-    
+    std::fill(blocks, blocks + Chunk::VOLUME, airId);
+
     InitializeNoiseGenerators();
     const TerrainParams params = GetTerrainParams();
     const int chunkBaseY = coord.y * Chunk::SIZE;
-    
+
     std::vector<glm::ivec3> treePlacementPositions;
     for (int x = 0; x < Chunk::SIZE; ++x) {
         for (int z = 0; z < Chunk::SIZE; ++z) {
             const glm::ivec3 worldCoord = LocalToWorldCoord(coord, x, z);
             const int terrainHeight = CalculateTerrainHeight(worldCoord.x, worldCoord.z, params);
-            
+
             for (int y = 0; y < Chunk::SIZE; ++y) {
                 const int worldY = chunkBaseY + y;
                 const uint32_t stateId = GetBlockStateAt(worldCoord.x, worldY, worldCoord.z, terrainHeight, params, treePlacementPositions, bsr);
-                
+
                 if (stateId != airId) {
                     const int index = x + y * Chunk::SIZE + z * Chunk::SIZE * Chunk::SIZE;
-                    result.blocks[index] = stateId;
+                    blocks[index] = stateId;
                 }
             }
         }
