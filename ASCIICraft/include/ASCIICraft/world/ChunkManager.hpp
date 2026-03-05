@@ -49,6 +49,7 @@ public:
     // World streaming (based on player position)
     void SetRenderDistance(unsigned int distance);
     unsigned int GetRenderDistance() const { return renderDistance; }
+    unsigned int GetChunkLoadDistance() const { return loadDistance; }
 
     // Fog (used in RenderChunks; start/end are tied to render distance)
     ChunkManagerFogParams& GetFogParams() { return fogParams_; }
@@ -70,8 +71,9 @@ private:
 
     // make sure to flush edits on world save / shutdown
     std::unordered_map<ChunkCoord, std::shared_ptr<Chunk>> loadedChunks;
-    std::mutex unloadMutex_;  // serializes unload save callback (region I/O)
     std::unordered_map<ChunkCoord, MetaBucket> crossChunkEdits;
+    // Tracks how many chunks from each region are currently loaded (main thread only).
+    std::unordered_map<RegionCoord, int> regionLoadedCounts;
 
     // queue to track metaBucket lifetimes
     std::queue<ChunkCoord> metaTimeTracker;
@@ -99,9 +101,8 @@ private:
     void UpdateFogFromRenderDistance();  // sets fogParams_.fogStart, fogParams_.fogEnd from renderDistance
 
     // Chunk management
-    RegionFile& GetOrCreateRegion(const RegionCoord& rp);
+    std::shared_ptr<RegionFile> GetOrCreateRegion(const RegionCoord& rp);
     Chunk* GetChunk(const ChunkCoord& coord);
-    Chunk* GetOrCreateChunk(const ChunkCoord& coord);
     void LoadChunk(const ChunkCoord& coord);
     void UnloadChunk(const ChunkCoord& coord);
     bool IsChunkLoaded(const ChunkCoord& coord) const;
@@ -120,15 +121,17 @@ private:
 
     static const ChunkCoord FACE_NEIGHBOR_OFFSETS[6];
     /// Tuned for 16x16x16 chunks (more chunks per volume than tall column chunks).
-    static constexpr int MAX_QUEUES_PER_FRAME = 64;
-    static constexpr int MAX_CHUNK_LOADS_PER_FRAME = 32; // spread disk I/O; higher ok for small chunks
-    static constexpr int MAX_CHUNK_UNLOADS_PER_FRAME = 32; // cap unloads per frame; rest drained next frame
-    static constexpr int MAX_MESH_APPLIES_PER_FRAME = 32;  // GPU uploads per frame; small meshes = cheaper
+    static constexpr int MAX_QUEUES_PER_FRAME = 128;
+    static constexpr int MAX_CHUNK_LOADS_PER_FRAME = 128; // spread disk I/O; higher ok for small chunks
+    static constexpr int MAX_CHUNK_UNLOADS_PER_FRAME = 128; // cap unloads per frame; rest drained next frame
+    static constexpr int MAX_MESH_APPLIES_PER_FRAME = 128;  // GPU uploads per frame; small meshes = cheaper
     static constexpr int MAX_SYNC_MESH_REBUILDS_PER_FRAME = 4;  // main-thread mesh build (small chunk = fast)
+    static constexpr unsigned int UNLOAD_RADIUS_PADDING = 0; // extra chunks beyond load radius before unloading
 
     // World settings
     unsigned int maxWorldChunkRadius;
     unsigned int renderDistance;
+    unsigned int loadDistance;
 
     ChunkManagerFogParams fogParams_;
 };

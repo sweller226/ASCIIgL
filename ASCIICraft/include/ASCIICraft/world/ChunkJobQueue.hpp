@@ -3,6 +3,7 @@
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/Chunk.hpp>
 #include <ASCIICraft/world/ChunkMeshGen.hpp>
+#include <ASCIICraft/world/ChunkRegion.hpp>
 #include <ASCIICraft/world/TerrainResult.hpp>
 #include <ASCIICraft/world/CrossChunkEdit.hpp>
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
@@ -33,8 +34,9 @@ struct CompletedTerrainResult {
     TerrainResult result;
 };
 
-/// Callback run on unload task: save chunk and optional metadata. ChunkManager holds unloadMutex_ during save.
-using UnloadSaveCallback = std::function<void(Chunk* chunk, ChunkCoord coord, const MetaBucket* meta)>;
+/// Callback run on unload task: save chunk and optional metadata. region is kept alive for the duration of the task.
+/// closeRegionAfterSave: if true, close region file after save (last chunk in region).
+using UnloadSaveCallback = std::function<void(Chunk* chunk, ChunkCoord coord, const MetaBucket* meta, bool closeRegionAfterSave, std::shared_ptr<RegionFile> region)>;
 
 /// Job queue for chunk terrain generation, mesh generation, and chunk unloading using oneTBB.
 /// - Takes registry to get BlockStateRegistry from context when enqueueing.
@@ -55,7 +57,7 @@ public:
 
     void EnqueueTerrainGen(Chunk* chunk);
     void EnqueueMeshGen(Chunk* chunk);
-    void EnqueueUnload(ChunkCoord coord, std::shared_ptr<Chunk> chunk, std::optional<MetaBucket> meta);
+    void EnqueueUnload(ChunkCoord coord, std::shared_ptr<Chunk> chunk, std::optional<MetaBucket> meta, bool closeRegionAfterSave, std::shared_ptr<RegionFile> region);
 
     /// Set callback invoked on the unload task to perform region SaveChunk/SaveMetaData. Required for EnqueueUnload.
     void SetUnloadSaveCallback(UnloadSaveCallback cb) { unloadSaveCallback_ = std::move(cb); }

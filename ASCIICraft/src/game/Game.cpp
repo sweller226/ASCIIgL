@@ -210,9 +210,6 @@ void Game::Update() {
             ASCIIgL::Logger::Debug("Update: Running block update system");
             blockUpdateSystem.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running world update");
-            world->Update();
-
             ASCIIgL::Logger::Debug("Update: Running movement system");
             movementSystem.Update();
             ASCIIgL::Logger::Debug("Update: Running camera system");
@@ -220,6 +217,9 @@ void Game::Update() {
 
             ASCIIgL::Logger::Debug("Update: Running physics system");
             physicsSystem.Update();
+
+            ASCIIgL::Logger::Debug("Update: Running world update");
+            world->Update();
 
             break;
         }
@@ -490,12 +490,12 @@ void Game::RenderPlaying() {
 }
 
 void Game::InitializeWorld() {
-    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, WorldCoord(0, 120, 0), 10));
+    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, WorldCoord(0, 120, 0), 16));
     ASCIIgL::Logger::Debug("World created and stored in registry context.");
 }
 
 void Game::InitializePlayer() {
-    playerFactory.createPlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Survival);
+    playerFactory.createPlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Spectator);
     ASCIIgL::Logger::Debug("Player entity created");
 }
 

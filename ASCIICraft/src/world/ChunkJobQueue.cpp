@@ -90,12 +90,12 @@ void ChunkJobQueue::DrainCompletedMeshResultsInto(std::vector<CompletedMeshResul
     }
 }
 
-void ChunkJobQueue::EnqueueUnload(ChunkCoord coord, std::shared_ptr<Chunk> chunk, std::optional<MetaBucket> meta) {
-    if (!chunk) return;
+void ChunkJobQueue::EnqueueUnload(ChunkCoord coord, std::shared_ptr<Chunk> chunk, std::optional<MetaBucket> meta, bool closeRegionAfterSave, std::shared_ptr<RegionFile> region) {
+    if (!chunk || !region) return;
     UnloadSaveCallback cb = unloadSaveCallback_;
-    taskGroup_.run([cb, coord, chunk = std::move(chunk), meta = std::move(meta)]() {
-        if (cb && chunk)
-            cb(chunk.get(), coord, meta ? &*meta : nullptr);
+    taskGroup_.run([cb, coord, chunk = std::move(chunk), meta = std::move(meta), closeRegionAfterSave, region = std::move(region)]() {
+        if (cb && chunk && region)
+            cb(chunk.get(), coord, meta ? &*meta : nullptr, closeRegionAfterSave, region);
     });
 }
 

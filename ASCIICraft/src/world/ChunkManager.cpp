@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <unordered_set>
 
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
 #include <ASCIICraft/ecs/components/Transform.hpp>
@@ -30,6 +31,7 @@ const ChunkCoord ChunkManager::FACE_NEIGHBOR_OFFSETS[6] = {
 ChunkManager::ChunkManager(entt::registry& registry, const unsigned int chunkWorldLimit, const unsigned int renderDistance)
     : maxWorldChunkRadius(chunkWorldLimit)
     , renderDistance(renderDistance)
+    , loadDistance(renderDistance + 1)
     , registry(registry)
     , terrainGenerator(registry) {
     ASCIIgL::Logger::Debug("Chunk manager initialized");
@@ -38,12 +40,9 @@ ChunkManager::ChunkManager(entt::registry& registry, const unsigned int chunkWor
     chunkJobQueue->SetTerrainGenerator(&terrainGenerator);
     chunkJobQueue->SetMaxDrainPerFrame(static_cast<size_t>(MAX_QUEUES_PER_FRAME));
     chunkJobQueue->SetMaxDrainMeshPerFrame(static_cast<size_t>(MAX_MESH_APPLIES_PER_FRAME));
-    chunkJobQueue->SetUnloadSaveCallback([this](Chunk* c, ChunkCoord coord, const MetaBucket* meta) {
-        std::lock_guard<std::mutex> g(unloadMutex_);
-        RegionFile& region = GetOrCreateRegion(coord.ToRegionCoord());
-        region.SaveChunk(c);
-        if (meta && !meta->edits.empty())
-            region.SaveMetaData(coord, meta);
+    chunkJobQueue->SetUnloadSaveCallback([this](Chunk* c, ChunkCoord coord, const MetaBucket* meta, bool closeRegionAfterSave, std::shared_ptr<RegionFile> region) {
+        if (region)
+            region->SaveChunkForUnload(c, coord, meta, closeRegionAfterSave);
     });
     UpdateFogFromRenderDistance();
     
@@ -53,19 +52,21 @@ ChunkManager::ChunkManager(entt::registry& registry, const unsigned int chunkWor
 
 void ChunkManager::SetRenderDistance(unsigned int distance) {
     renderDistance = distance;
+    loadDistance = renderDistance + 1;
     UpdateFogFromRenderDistance();
 }
 
 void ChunkManager::UpdateFogFromRenderDistance() {
-    float chunkRenderDist = static_cast<float>(renderDistance * Chunk::SIZE);
-    fogParams_.fogEnd = chunkRenderDist - (Chunk::SIZE * 1.5f);
-    fogParams_.fogStart = fogParams_.fogEnd - (Chunk::SIZE * 1.0f);
+    // Max visible distance: furthest rendered geometry can be ~(renderDistance+1) chunks away.
+    const float maxVisibleDist = static_cast<float>((renderDistance) * Chunk::SIZE);
+    const float startFactor = 0.8f;
+    const float endFactor = 1.0f;
+    fogParams_.fogStart = maxVisibleDist * startFactor;
+    fogParams_.fogEnd = maxVisibleDist * endFactor;
 }
 
-RegionFile& ChunkManager::GetOrCreateRegion(const RegionCoord& rp) {
-    if (!regionManager->FilePresent(rp))
-        regionManager->AddRegion(RegionFile(rp));
-    return regionManager->AccessRegion(rp);
+std::shared_ptr<RegionFile> ChunkManager::GetOrCreateRegion(const RegionCoord& rp) {
+    return regionManager->GetOrCreate(rp);
 }
 
 Chunk* ChunkManager::GetChunk(const ChunkCoord& coord) {
@@ -74,15 +75,6 @@ Chunk* ChunkManager::GetChunk(const ChunkCoord& coord) {
         return it->second.get();
     }
     return nullptr;
-}
-
-Chunk* ChunkManager::GetOrCreateChunk(const ChunkCoord& coord) {
-    Chunk* chunk = GetChunk(coord);
-    if (!chunk) {
-        LoadChunk(coord);
-        chunk = GetChunk(coord);
-    }
-    return chunk;
 }
 
 void ChunkManager::LoadChunk(const ChunkCoord& coord) {
@@ -99,13 +91,16 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
     auto chunk = std::make_shared<Chunk>(coord);
     Chunk* chunkPtr = chunk.get();
     loadedChunks[coord] = chunk;
+    RegionCoord rp = coord.ToRegionCoord();
+    regionLoadedCounts[rp] += 1;
 
-    RegionFile& region = GetOrCreateRegion(coord.ToRegionCoord());
+    std::shared_ptr<RegionFile> region = GetOrCreateRegion(coord.ToRegionCoord());
+    if (!region) return;
 
     // Try loading chunk from region file with error handling for corruption
     bool loadedFromFile = false;
     try {
-        loadedFromFile = region.LoadChunk(chunkPtr);
+        loadedFromFile = region->LoadChunk(chunkPtr);
     } catch (const std::exception& e) {
         ASCIIgL::Logger::Warningf("Failed to load chunk (%d,%d,%d) from region file: %s. Regenerating.",
                                    coord.x, coord.y, coord.z, e.what());
@@ -118,7 +113,7 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
 
     // Load metadata (cross‑chunk edits stored in region file)
     auto cachedMetaBucket = std::make_unique<MetaBucket>();
-    region.LoadMetaData(coord, cachedMetaBucket.get());
+    region->LoadMetaData(coord, cachedMetaBucket.get());
 
     if (loadedFromFile) {
         chunkPtr->SetGenerated(true);
@@ -145,26 +140,47 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
 void ChunkManager::SaveAll() {
     if (chunkJobQueue) {
         chunkJobQueue->WaitForPending();
-        // Apply any completed terrain/mesh results so we save up-to-date chunk data
         DrainAndApplyJobResults();
     }
     ASCIIgL::Logger::Info("Saving all chunks (" + std::to_string(loadedChunks.size()) + ") and metadata...");
 
-    // 1. Save all loaded chunks
+    // Group chunks and metadata by region; one open/flush/close per region (much faster than per-chunk).
+    std::unordered_map<RegionCoord, std::vector<std::pair<ChunkCoord, Chunk*>>> chunksByRegion;
     for (auto& [coord, chunkPtr] : loadedChunks) {
         if (!chunkPtr) continue;
-        GetOrCreateRegion(coord.ToRegionCoord()).SaveChunk(chunkPtr.get());
+        chunksByRegion[coord.ToRegionCoord()].emplace_back(coord, chunkPtr.get());
     }
-    loadedChunks.clear();
-
-    // 2. Save all pending metadata (cross-chunk edits)
-    int metaCount = 0;
+    std::unordered_map<RegionCoord, std::vector<std::pair<ChunkCoord, const MetaBucket*>>> metaByRegion;
     for (auto& [coord, metaBucket] : crossChunkEdits) {
         if (metaBucket.edits.empty()) continue;
-        GetOrCreateRegion(coord.ToRegionCoord()).SaveMetaData(coord, &metaBucket);
-        metaCount++;
+        metaByRegion[coord.ToRegionCoord()].emplace_back(coord, &metaBucket);
     }
+
+    std::unordered_set<RegionCoord> allRegions;
+    for (auto& [rp, _] : chunksByRegion) allRegions.insert(rp);
+    for (auto& [rp, _] : metaByRegion) allRegions.insert(rp);
+
+    int metaCount = 0;
+    for (const RegionCoord& rp : allRegions) {
+        std::shared_ptr<RegionFile> region = GetOrCreateRegion(rp);
+        if (!region || !region->BeginBatchSave()) continue;
+        auto itChunks = chunksByRegion.find(rp);
+        if (itChunks != chunksByRegion.end()) {
+            for (auto& [coord, chunk] : itChunks->second)
+                region->SaveChunkInBatch(chunk);
+        }
+        auto itMeta = metaByRegion.find(rp);
+        if (itMeta != metaByRegion.end()) {
+            for (auto& [coord, meta] : itMeta->second) {
+                region->SaveMetaDataInBatch(coord, meta);
+                metaCount++;
+            }
+        }
+        region->EndBatchSave();
+    }
+    loadedChunks.clear();
     crossChunkEdits.clear();
+    regionLoadedCounts.clear();
 
     ASCIIgL::Logger::Info("SaveAll complete. Saved " + std::to_string(metaCount) + " meta buckets.");
 }
@@ -199,8 +215,20 @@ void ChunkManager::UnloadChunk(const ChunkCoord& coord) {
         crossChunkEdits.erase(itMeta);
     }
 
+    RegionCoord rp = coord.ToRegionCoord();
+    auto itCount = regionLoadedCounts.find(rp);
+    int count = (itCount != regionLoadedCounts.end()) ? itCount->second : 0;
+    bool closeRegionAfterSave = (count == 1);
+    if (itCount != regionLoadedCounts.end()) {
+        itCount->second -= 1;
+        if (itCount->second <= 0) {
+            regionLoadedCounts.erase(itCount);
+        }
+    }
+
+    std::shared_ptr<RegionFile> region = GetOrCreateRegion(rp);
     loadedChunks.erase(itChunk);
-    chunkJobQueue->EnqueueUnload(coord, std::move(chunkToUnload), std::move(meta));
+    chunkJobQueue->EnqueueUnload(coord, std::move(chunkToUnload), std::move(meta), closeRegionAfterSave, std::move(region));
 }
 
 bool ChunkManager::IsChunkLoaded(const ChunkCoord& coord) const {
@@ -244,7 +272,8 @@ void ChunkManager::ProcessMetaBucketExpiry() {
             continue;
         }
 
-        GetOrCreateRegion(key.ToRegionCoord()).SaveMetaData(key, &it->second);
+        if (std::shared_ptr<RegionFile> region = GetOrCreateRegion(key.ToRegionCoord()))
+            region->SaveMetaData(key, &it->second);
         crossChunkEdits.erase(it);
         metaSaveCount++;
     }
@@ -257,7 +286,7 @@ void ChunkManager::LoadChunksInRadius(const ChunkCoord& playerChunk, unsigned in
         chunksToLoad = GetChunksInRadius(playerChunk, loadRadius);
         chunksToLoad.erase(std::remove_if(chunksToLoad.begin(), chunksToLoad.end(),
             [this](const ChunkCoord& coord) {
-                return IsChunkOutsideWorld(coord) || IsChunkLoaded(coord);
+                return coord.y < 0 || IsChunkOutsideWorld(coord) || IsChunkLoaded(coord);
             }), chunksToLoad.end());
 
         std::sort(chunksToLoad.begin(), chunksToLoad.end(), [&playerChunk](const ChunkCoord& a, const ChunkCoord& b) {
@@ -305,8 +334,8 @@ void ChunkManager::UpdateChunkLoading() {
     auto [playerPos, success] = ecs::components::GetPos(player, registry);
     if (!success) return;
     ChunkCoord playerChunk = WorldCoord(playerPos).ToChunkCoord();
-    const unsigned int loadRadius = renderDistance;
-    const unsigned int unloadRadius = renderDistance + 2;
+    const unsigned int loadRadius = loadDistance;
+    const unsigned int unloadRadius = loadDistance + UNLOAD_RADIUS_PADDING;
 
     ProcessMetaBucketExpiry();
     LoadChunksInRadius(playerChunk, loadRadius);
@@ -501,7 +530,6 @@ void ChunkManager::RebuildChunkMeshImmediate(Chunk* c) {
 }
 
 void ChunkManager::EnqueueMeshForDirtyChunks() {
-    ASCIIgL::PROFILE_SCOPE("Chunk.EnqueueMeshForDirtyChunks");
     entt::entity player = ecs::components::GetPlayerEntity(registry);
     if (player == entt::null) return;
     auto [playerPos, success] = ecs::components::GetPos(player, registry);
