@@ -66,8 +66,8 @@ bool Game::Initialize() {
 
     ASCIIgL::Logger::Debug("Setting up palette and screen...");
 
-    float lowLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(20, 20, 20));
-    float highLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(222, 222, 222));
+    float lowLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(22, 22, 22));
+    float highLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(220, 220, 220));
 
     // Monochrome palettes (dark→light along hue direction). Swap which one is used to change the look.
     ASCIIgL::MonochromePalette grayPalette(lowLight, highLight, glm::ivec3(205, 205, 205));

@@ -437,10 +437,12 @@ void ScreenWinImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOutput) 
             return std::string(hexColor);
         };
         
-        // Set foreground and background overrides to palette index 0
-        // This ensures attribute 0x0 displays as palette[0] color in both fg and bg positions
-        customScheme["foreground"] = toHex(0);
-        customScheme["background"] = toHex(0);
+        // Set default foreground/background for the scheme:
+        // - foreground: palette index 15 (brightest entry)
+        // - background: palette index 0  (darkest entry)
+        // Cursor uses palette[0] as before.
+        customScheme["foreground"]  = toHex(15);
+        customScheme["background"]  = toHex(0);
         customScheme["cursorColor"] = toHex(0);
         
         // Windows Terminal color scheme mapping to console attributes:

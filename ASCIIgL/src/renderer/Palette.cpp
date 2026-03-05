@@ -4,6 +4,7 @@
 #include <cmath>
 #include <string>
 #include <utility>
+#include <algorithm>
 
 namespace ASCIIgL {
 
@@ -143,6 +144,12 @@ MonochromePalette::MonochromePalette(float darkL, float lightL, const glm::ivec3
 
         entries[i] = PaletteEntry(color, static_cast<unsigned short>(i));
     }
+
+    // Ensure entries are sorted by luminance (ascending)
+    std::sort(entries.begin(), entries.end(),
+              [](const PaletteEntry& a, const PaletteEntry& b) {
+                  return a.luminance < b.luminance;
+              });
 
     Logger::Debug("[MonochromePalette] Gradient palette (darkL=" + std::to_string(_darkL) + " lightL=" + std::to_string(_lightL) + " hueDir=(" +
         std::to_string(_hueDir.r) + "," + std::to_string(_hueDir.g) + "," + std::to_string(_hueDir.b) + ")");

@@ -619,6 +619,12 @@ void Renderer::PrecomputeMonochromeColorLUT(Palette& palette) {
         _monochromeLUT[i] = std::make_pair(targetLuminance, CHAR_INFO{ glyph, combinedColor });
     }
 
+    // Make sure LUT is sorted by target luminance (ascending)
+    std::sort(_monochromeLUT.begin(), _monochromeLUT.end(),
+              [](const std::pair<float, CHAR_INFO>& a, const std::pair<float, CHAR_INFO>& b) {
+                  return a.first < b.first;
+              });
+
     LogMonochromeLUTStats(palette);
 }
 
