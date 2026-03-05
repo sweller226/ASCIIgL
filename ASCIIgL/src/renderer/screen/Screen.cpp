@@ -36,7 +36,7 @@ int Screen::Initialize(
     unsigned int height, 
     const std::wstring title, 
     float fontSize, 
-    const Palette palette
+    const Palette& palette
 ) {
     if (!_initialized) {
         Logger::Info("Initializing Screen...");
@@ -160,6 +160,11 @@ bool Screen::IsInitialized() const {
 
 Palette& Screen::GetPalette() {
     return *_palette;
+}
+
+bool Screen::IsMonochromePalette() const {
+    // Detect dynamic type of the owned palette
+    return dynamic_cast<MonochromePalette*>(_palette.get()) != nullptr;
 }
 
 } // namespace ASCIIgL

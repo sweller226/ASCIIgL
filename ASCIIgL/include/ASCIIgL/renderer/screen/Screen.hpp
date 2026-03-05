@@ -49,7 +49,7 @@ public:
         static Screen instance;
         return instance;
     }
-    int Initialize(unsigned int width, unsigned int height, const std::wstring title, float fontSize, const Palette palette = Palette());
+    int Initialize(unsigned int width, unsigned int height, const std::wstring title, float fontSize, const Palette& palette);
     bool IsInitialized() const;
 
     void RenderTabTitle();
@@ -67,6 +67,7 @@ public:
     unsigned int GetHeight() const;
     unsigned int GetWidth() const;
     Palette& GetPalette();
+    bool IsMonochromePalette() const;
     std::vector<CHAR_INFO>& GetPixelBuffer();
 };
 

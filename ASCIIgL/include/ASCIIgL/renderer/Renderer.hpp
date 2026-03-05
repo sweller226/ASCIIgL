@@ -175,6 +175,9 @@ private:
 
     void LoadCharCoverageFromJson();
     void PrecomputeColorLUT();
+    void PrecomputeMonochromeColorLUT(Palette& palette);
+    void PrecomputeMultiColorLUT(Palette& palette);
+    void LogMonochromeLUTStats(Palette& palette);
     /// Map luminance L to index in [0, 1023] for monochrome LUT lookup.
     size_t MonochromeLuminanceToIndex(float L) const;
 
@@ -184,8 +187,8 @@ private:
     std::array<CHAR_INFO, _rgbLUTDepth*_rgbLUTDepth*_rgbLUTDepth> _colorLUT;
 
     static constexpr size_t _monochromeLUTSize = 1024;
-    std::array<CHAR_INFO, _monochromeLUTSize> _monochromeLUT;
-    std::array<float, _monochromeLUTSize> _monochromeTargetLuminance;
+    // Each entry stores (target luminance, CHAR_INFO)
+    std::array<std::pair<float, CHAR_INFO>, _monochromeLUTSize> _monochromeLUT;
 
     // =========================================================================
     // Diagnostics

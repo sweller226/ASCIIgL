@@ -75,7 +75,7 @@ PaletteEntry::PaletteEntry(const glm::ivec3& rgbVal, unsigned short hexVal)
     : rgb(rgbVal)
     , rgb16(rgbVal.r / 17, rgbVal.g / 17, rgbVal.b / 17)
     , normalized(glm::vec3(rgbVal) / 255.0f)
-    , luminance(PaletteUtil::sRGB255_Luminance(glm::vec3(rgbVal)))
+    , luminance(PaletteUtil::sRGB255_Luminance(rgbVal))
     , hex(hexVal) {}
 
 PaletteEntry::PaletteEntry() : rgb(0, 0, 0), rgb16(0, 0, 0), normalized(0.0f), luminance(0.0f), hex(0) {}

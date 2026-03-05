@@ -76,7 +76,7 @@ bool Game::Initialize() {
     ASCIIgL::MonochromePalette bluePalette(lowLight, highLight, glm::ivec3(120, 160, 220));
     ASCIIgL::MonochromePalette amberPalette(lowLight, highLight, glm::ivec3(220, 180, 100));
 
-    ASCIIgL::Palette gamePalette = grayPalette;
+    ASCIIgL::MonochromePalette gamePalette = grayPalette;
 
     ASCIIgL::Logger::Debug("Initializing screen...");
     if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
@@ -91,14 +91,15 @@ bool Game::Initialize() {
     ASCIIgL::FPSClock::GetInst().Initialize(static_cast<unsigned int>(TARGET_FPS), 1.0f);
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
 
-    ASCIIgL::Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(8));
-    ASCIIgL::Renderer::GetInst().SetWireframe(false);
-    ASCIIgL::Renderer::GetInst().SetBackfaceCulling(true);
-    ASCIIgL::Renderer::GetInst().SetCCW(true);
-    ASCIIgL::Renderer::GetInst().SetDiagnosticsEnabled(true);
+    ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
+    renderer.SetBackgroundCol(gamePalette.GetRGB(8));
+    renderer.SetWireframe(false);
+    renderer.SetBackfaceCulling(true);
+    renderer.SetCCW(true);
+    renderer.SetDiagnosticsEnabled(true);
 
     ASCIIgL::Logger::Debug("Initializing renderer...");
-    ASCIIgL::Renderer::GetInst().Initialize(true, 4);
+    renderer.Initialize(true, 4);
 
     ASCIIgL::Renderer::GetInst().SetBlendEnabled(true);
 
@@ -490,12 +491,12 @@ void Game::RenderPlaying() {
 }
 
 void Game::InitializeWorld() {
-    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, WorldCoord(0, 120, 0), 16));
+    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, WorldCoord(0, 120, 0), 10));
     ASCIIgL::Logger::Debug("World created and stored in registry context.");
 }
 
 void Game::InitializePlayer() {
-    playerFactory.createPlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Spectator);
+    playerFactory.createPlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Survival);
     ASCIIgL::Logger::Debug("Player entity created");
 }
 

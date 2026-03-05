@@ -8,6 +8,7 @@
 #include <thread>
 #include <iostream>
 #include <fstream>
+#include <unordered_set>
 #include <Windows.h>
 
 #include <nlohmann/json.hpp>
@@ -359,7 +360,7 @@ void Renderer::OverwritePxBuffWithColBuff() {
             const auto& c = _color_buffer[i];
             float L = PaletteUtil::sRGB255_Luminance(glm::ivec3(c.r, c.g, c.b));
             size_t idx = MonochromeLuminanceToIndex(L);
-            pixelBuffer[i] = _monochromeLUT[idx];
+            pixelBuffer[i] = _monochromeLUT[idx].second;
         }
         return;
     }
@@ -536,12 +537,22 @@ void Renderer::LoadCharCoverageFromJson() {
 // =============================================================================
 
 size_t Renderer::MonochromeLuminanceToIndex(float L) const {
-    auto it = std::lower_bound(_monochromeTargetLuminance.begin(),
-                               _monochromeTargetLuminance.end(), L);
-    if (it == _monochromeTargetLuminance.begin()) return 0;
-    if (it == _monochromeTargetLuminance.end()) return _monochromeLUTSize - 1;
-    size_t hi = static_cast<size_t>(it - _monochromeTargetLuminance.begin());
-    return (std::abs(*it - L) < std::abs(_monochromeTargetLuminance[hi - 1] - L)) ? hi : hi - 1;
+    // Monochrome luminance samples were built by linearly interpolating between
+    // lowLinear and highLinear and then taking LinearRGB_Luminance, so the
+    // luminance samples are effectively uniform between [L_min, L_max].
+    // We can therefore invert using a simple affine mapping + round,
+    // clamped to [0, _monochromeLUTSize-1].
+    const float Lmin = _monochromeLUT.front().first;
+    const float Lmax = _monochromeLUT.back().first;
+    if (L <= Lmin) return 0;
+    if (L >= Lmax) return _monochromeLUTSize - 1;
+
+    const float t = (L - Lmin) / (Lmax - Lmin); // in (0,1)
+    float fIdx = t * static_cast<float>(_monochromeLUTSize - 1);
+    // Round to nearest index
+    size_t idx = static_cast<size_t>(std::floor(fIdx + 0.5f));
+    if (idx >= _monochromeLUTSize) idx = _monochromeLUTSize - 1;
+    return idx;
 }
 
 void Renderer::PrecomputeColorLUT() {
@@ -549,59 +560,202 @@ void Renderer::PrecomputeColorLUT() {
     if (_colorLUTState != ColorLUTState::NotComputed) return;
     if (_charRamp.empty() || _charRamp.size() != _charCoverage.size()) return;
 
-    MonochromePalette* monoPalette = dynamic_cast<MonochromePalette*>(&palette);
-    if (monoPalette) {
-        // ===== MONOCHROME: 1-D LUT sweep from lowest to highest palette color (0..1023) =====
-        unsigned int minLumIdx = palette.GetMinLumIdx();
-        unsigned int maxLumIdx = palette.GetMaxLumIdx();
-        glm::vec3 lowRGB = palette.GetRGBNormalized(minLumIdx);
-        glm::vec3 highRGB = palette.GetRGBNormalized(maxLumIdx);
-        glm::vec3 lowLinear = PaletteUtil::sRGB1ToLinear1(lowRGB);
-        glm::vec3 highLinear = PaletteUtil::sRGB1ToLinear1(highRGB);
+    if (Screen::GetInst().IsMonochromePalette()) {
+        PrecomputeMonochromeColorLUT(palette);
+        return;
+    }
 
-        for (int i = 0; i <= 1023; ++i) {
-            float t = static_cast<float>(i) / 1023.0f;
-            glm::vec3 targetLinear = glm::mix(lowLinear, highLinear, t);
-            float targetLuminance = PaletteUtil::LinearRGB_Luminance(targetLinear);
+    PrecomputeMultiColorLUT(palette);
+}
 
-            _monochromeTargetLuminance[i] = targetLuminance;
+void Renderer::PrecomputeMonochromeColorLUT(Palette& palette) {
+    Logger::Info("[Renderer] Precomputing monochrome color LUT...");
 
-            float minError = FLT_MAX;
-            int bestFgIndex = 0, bestBgIndex = 0, bestCharIndex = 0;
+    _colorLUTState = ColorLUTState::Monochrome;
 
-            for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
-                float fgLuminance = palette.GetLuminance(fgIdx);
-                for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
-                    float bgLuminance = palette.GetLuminance(bgIdx);
-                    for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
-                        float coverage = _charCoverage[charIdx];
-                        float simLum = coverage * fgLuminance + (1.0f - coverage) * bgLuminance;
-                        float error = std::abs(targetLuminance - simLum);
-                        if (error < minError) {
-                            minError = error;
-                            bestFgIndex = fgIdx;
-                            bestBgIndex = bgIdx;
-                            bestCharIndex = charIdx;
-                        }
+    // ===== MONOCHROME: 1-D LUT sweep from lowest to highest palette color (0..1023) =====
+    unsigned int minLumIdx = palette.GetMinLumIdx();
+    unsigned int maxLumIdx = palette.GetMaxLumIdx();
+    glm::vec3 lowRGB = palette.GetRGBNormalized(minLumIdx);
+    glm::vec3 highRGB = palette.GetRGBNormalized(maxLumIdx);
+    glm::vec3 lowLinear = PaletteUtil::sRGB1ToLinear1(lowRGB);
+    glm::vec3 highLinear = PaletteUtil::sRGB1ToLinear1(highRGB);
+
+    for (int i = 0; i <= 1023; ++i) {
+        float t = static_cast<float>(i) / 1023.0f;
+        glm::vec3 targetLinear = glm::mix(lowLinear, highLinear, t);
+        float targetLuminance = PaletteUtil::LinearRGB_Luminance(targetLinear);
+
+        float minError = FLT_MAX;
+        int bestFgIndex = 0, bestBgIndex = 0, bestCharIndex = 0;
+
+        for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
+            float fgLuminance = palette.GetLuminance(fgIdx);
+            for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
+                float bgLuminance = palette.GetLuminance(bgIdx);
+                for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
+                    float coverage = _charCoverage[charIdx];
+                    float simLum = coverage * fgLuminance + (1.0f - coverage) * bgLuminance;
+                    float error = std::abs(targetLuminance - simLum);
+                    if (error < minError) {
+                        minError = error;
+                        bestFgIndex = fgIdx;
+                        bestBgIndex = bgIdx;
+                        bestCharIndex = charIdx;
                     }
                 }
             }
-
-            wchar_t glyph = _charRamp[bestCharIndex];
-            unsigned short fgColor = static_cast<unsigned short>(palette.GetFgColor(bestFgIndex));
-            unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
-            unsigned short combinedColor = fgColor | bgColor;
-            if (fgColor > 0xF || bgColor > 0xF0) {
-                fgColor = fgColor & 0xF;
-                bgColor = bgColor & 0xF0;
-                combinedColor = fgColor | bgColor;
-            }
-            _monochromeLUT[i] = {glyph, combinedColor};
         }
 
-        _colorLUTState = ColorLUTState::Monochrome;
-        return;
+        wchar_t glyph = _charRamp[bestCharIndex];
+        unsigned short fgColor = static_cast<unsigned short>(palette.GetFgColor(bestFgIndex));
+        unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
+        unsigned short combinedColor = fgColor | bgColor;
+        if (fgColor > 0xF || bgColor > 0xF0) {
+            fgColor = fgColor & 0xF;
+            bgColor = bgColor & 0xF0;
+            combinedColor = fgColor | bgColor;
+        }
+        _monochromeLUT[i] = std::make_pair(targetLuminance, CHAR_INFO{ glyph, combinedColor });
     }
+
+    LogMonochromeLUTStats(palette);
+}
+
+void Renderer::LogMonochromeLUTStats(Palette& palette) {
+    using ASCIIgL::Logger;
+
+    // 1) Count unique CHAR_INFO entries (glyph + color attributes)
+    std::unordered_set<uint64_t> uniqueEntries;
+    uniqueEntries.reserve(_monochromeLUTSize);
+
+    // 4) Color usage distribution (by palette index)
+    const int colorCount = static_cast<int>(palette.COLOR_COUNT);
+    std::vector<int> fgCounts(colorCount, 0);
+    std::vector<int> bgCounts(colorCount, 0);
+
+    auto attrToFgIndex = [&palette, colorCount](unsigned short fgAttr) -> int {
+        for (int i = 0; i < colorCount; ++i) {
+            if (palette.GetFgColor(i) == fgAttr)
+                return i;
+        }
+        return -1;
+    };
+    auto attrToBgIndex = [&palette, colorCount](unsigned short bgAttr) -> int {
+        for (int i = 0; i < colorCount; ++i) {
+            if (palette.GetBgColor(i) == bgAttr)
+                return i;
+        }
+        return -1;
+    };
+
+    // 5) Distinct (fg, bg) pairs (by palette index)
+    std::unordered_set<uint32_t> pairSet;
+    pairSet.reserve(_monochromeLUTSize);
+
+    int minFgIdx = colorCount, maxFgIdx = -1;
+    int minBgIdx = colorCount, maxBgIdx = -1;
+
+    for (size_t i = 0; i < _monochromeLUTSize; ++i) {
+        const CHAR_INFO& ci = _monochromeLUT[i].second;
+        wchar_t glyph = ci.Char.UnicodeChar;
+        unsigned short attrs = ci.Attributes;
+
+        uint64_t key = (static_cast<uint64_t>(glyph) << 16) | attrs;
+        uniqueEntries.insert(key);
+
+        unsigned short fgAttr = attrs & 0x0F;
+        unsigned short bgAttr = attrs & 0xF0;
+
+        int fgIdx = attrToFgIndex(fgAttr);
+        int bgIdx = attrToBgIndex(bgAttr);
+
+        if (fgIdx >= 0) {
+            fgCounts[fgIdx]++;
+            if (fgIdx < minFgIdx) minFgIdx = fgIdx;
+            if (fgIdx > maxFgIdx) maxFgIdx = fgIdx;
+        }
+        if (bgIdx >= 0) {
+            bgCounts[bgIdx]++;
+            if (bgIdx < minBgIdx) minBgIdx = bgIdx;
+            if (bgIdx > maxBgIdx) maxBgIdx = bgIdx;
+        }
+        if (fgIdx >= 0 && bgIdx >= 0) {
+            uint32_t pairKey = (static_cast<uint32_t>(bgIdx) << 16) | static_cast<uint32_t>(fgIdx & 0xFFFF);
+            pairSet.insert(pairKey);
+        }
+    }
+
+    const size_t totalEntries = _monochromeLUTSize;
+    const size_t uniqueCount = uniqueEntries.size();
+
+    int fgUsed = 0, bgUsed = 0;
+    for (int i = 0; i < colorCount; ++i) {
+        if (fgCounts[i] > 0) fgUsed++;
+        if (bgCounts[i] > 0) bgUsed++;
+    }
+
+    Logger::Info(
+        "[Renderer] Monochrome LUT: " +
+        std::to_string(totalEntries) + " entries, " +
+        std::to_string(uniqueCount) + " unique CHAR_INFO (" +
+        std::to_string((100.0 * uniqueCount) / totalEntries) + "%)"
+    );
+
+    Logger::Info(
+        "[Renderer] Monochrome LUT: FG colors used " +
+        std::to_string(fgUsed) + "/" + std::to_string(colorCount) +
+        ", BG colors used " +
+        std::to_string(bgUsed) + "/" + std::to_string(colorCount)
+    );
+
+    Logger::Info(
+        "[Renderer] Monochrome LUT: distinct (fg,bg) pairs = " +
+        std::to_string(pairSet.size())
+    );
+
+    if (minFgIdx <= maxFgIdx) {
+        Logger::Info(
+            "[Renderer] Monochrome LUT: FG palette index range [" +
+            std::to_string(minFgIdx) + ", " + std::to_string(maxFgIdx) + "]"
+        );
+    }
+    if (minBgIdx <= maxBgIdx) {
+        Logger::Info(
+            "[Renderer] Monochrome LUT: BG palette index range [" +
+            std::to_string(minBgIdx) + ", " + std::to_string(maxBgIdx) + "]"
+        );
+    }
+
+    // Optional: dump full LUT mapping when diagnostics are enabled
+    if (_diagnostics_enabled) {
+        Logger::Debug("[Renderer] Monochrome LUT entries (index, targetL, glyphCode, fgIdx, bgIdx, attrs):");
+        for (size_t i = 0; i < _monochromeLUTSize; ++i) {
+            float targetL = _monochromeLUT[i].first;
+            const CHAR_INFO& ci = _monochromeLUT[i].second;
+            unsigned short attrs = ci.Attributes;
+            unsigned short fgAttr = attrs & 0x0F;
+            unsigned short bgAttr = attrs & 0xF0;
+
+            int fgIdx = attrToFgIndex(fgAttr);
+            int bgIdx = attrToBgIndex(bgAttr);
+
+            unsigned int glyphCode = static_cast<unsigned int>(ci.Char.UnicodeChar);
+
+            Logger::Debug(
+                "[Renderer] MonoLUT[" + std::to_string(i) +
+                "]: L=" + std::to_string(targetL) +
+                " glyph=U+" + std::to_string(glyphCode) +
+                " fgIdx=" + std::to_string(fgIdx) +
+                " bgIdx=" + std::to_string(bgIdx) +
+                " attrs=" + std::to_string(attrs)
+            );
+        }
+    }
+}
+
+void Renderer::PrecomputeMultiColorLUT(Palette& palette) {
+    Logger::Info("[Renderer] Precomputing multi-color color LUT...");
 
     _colorLUTState = ColorLUTState::MultiColor;
     // ===== MULTICOLOR: full 16×16×16 RGB cube =====
@@ -671,7 +825,7 @@ CHAR_INFO Renderer::GetCharInfo(const glm::ivec3& rgb) {
     if (_colorLUTState == ColorLUTState::Monochrome) {
         float L = PaletteUtil::sRGB255_Luminance(rgb);
         size_t idx = MonochromeLuminanceToIndex(L);
-        return _monochromeLUT[idx];
+        return _monochromeLUT[idx].second;
     }
 
     auto to16 = [](int v) { return (v * 15 + 127) / 255; };
