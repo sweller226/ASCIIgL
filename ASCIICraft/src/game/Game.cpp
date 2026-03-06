@@ -10,15 +10,15 @@
 
 #include <ASCIIgL/engine/TextureLibrary.hpp>
 #include <ASCIIgL/engine/MipFilters.hpp>
+#include <ASCIIgL/engine/MonochromeMapping.hpp>
 #include <ASCIIgL/engine/Camera2D.hpp>
+#include <ASCIIgL/engine/FPSClock.hpp>
+
+#include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/util/Profiler.hpp>
 
 #include <glm/vec2.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-
-#include <ASCIIgL/util/Logger.hpp>
-#include <ASCIIgL/engine/FPSClock.hpp>
-
-#include <ASCIIgL/util/Profiler.hpp>
 
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
 #include <ASCIICraft/ecs/data/ItemIndex.hpp>
@@ -64,22 +64,19 @@ Game::~Game() {
 bool Game::Initialize() {
     ASCIIgL::Logger::Info("Initializing ASCIICraft...");
 
-    ASCIIgL::Logger::Debug("Setting up palette and screen...");
+    ASCIIgL::Logger::Debug("Preloading textures for palette generation...");
 
-    // Custom 16-shade grayscale ramp (dark → light).
-    // Even steps in sRGB space keep it simple and predictable.
-    auto Gray = [](int v, unsigned short hex) {
-        return ASCIIgL::PaletteEntry(glm::ivec3(v, v, v), hex);
+    LoadTextures();
+
+    std::vector<std::pair<float, std::shared_ptr<ASCIIgL::Texture>>> textureWeights = {
+        {1.0f, ASCIIgL::TextureLibrary::GetInst().GetTexture("inventoryTexture")}
     };
-    // Clamp range to [22, 222] to avoid extreme black/white.
-    std::array<ASCIIgL::PaletteEntry, 16> customGray = {{
-        Gray(22,  0x0), Gray(35,  0x1), Gray(49,  0x2), Gray(62,  0x3),
-        Gray(75,  0x4), Gray(89,  0x5), Gray(102, 0x6), Gray(115, 0x7),
-        Gray(129, 0x8), Gray(142, 0x9), Gray(155, 0xA), Gray(169, 0xB),
-        Gray(182, 0xC), Gray(195, 0xD), Gray(209, 0xE), Gray(222, 0xF),
-    }};
 
-    ASCIIgL::MonochromePalette gamePalette(customGray);
+    std::vector<std::pair<float, std::shared_ptr<ASCIIgL::TextureArray>>> textureArrayWeights = {
+        {1.0f, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray")}
+    };
+
+    ASCIIgL::Palette gamePalette(textureWeights, textureArrayWeights);
 
     ASCIIgL::Logger::Debug("Initializing screen...");
     if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
@@ -288,21 +285,41 @@ void Game::Shutdown() {
     ASCIIgL::Logger::Info("ASCIICraft shutdown complete");
 }
 
-bool Game::LoadResources() {
-    ASCIIgL::Logger::Info("Loading game resources...");
+bool Game::LoadTextures() {
+    ASCIIgL::Logger::Info("Loading game textures...");
+
+    glm::ivec3 grayHue = glm::ivec3(22, 22, 22);
+    float darkL  = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(22, 22, 22));
+    float lightL = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(219, 219, 219));
+
+    // Build monochrome mapping from the current screen palette if possible.
+    ASCIIgL::MonochromeMapping monoMap;
+    monoMap.enabled = true;
+    monoMap.darkL = darkL;
+    monoMap.lightL = lightL;
+    monoMap.hueDir = grayHue;
 
     // Load block textures via TextureLibrary which takes ownership
-    auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray("res/textures/terrain.png", 16, "terrainTextureArray");
+    auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray("res/textures/terrain2.png", 16, "terrainTextureArray", monoMap);
 
     if (!blockTextureArray || !blockTextureArray->IsValid()) {
         ASCIIgL::Logger::Error("Failed to load block texture array");
         return false;
     }
 
-    // Generate full mip chain (16→8→4→2→1) tuned for pixel art with alpha-test cutouts.
-    // AlphaCutoutAny2x2 prevents leaves from \"averaging away\" and being discarded at distance.
     blockTextureArray->GenerateMipmapsCPU(-1, ASCIIgL::MipFilters::PixelArtAlphaCutoutAny2x2);
 
+    auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture("res/textures/gui/inventory.png", "inventoryTexture", monoMap);
+    if (!inventoryTexture) {
+        ASCIIgL::Logger::Error("Failed to load inventory texture");
+        return false;
+    }
+
+    return true;
+}
+
+bool Game::LoadResources() {
+    ASCIIgL::Logger::Info("Loading game resources...");
     
     // Create gradient mapping shader program
     auto terrainVS = ASCIIgL::Shader::CreateFromSource(
@@ -351,7 +368,7 @@ bool Game::LoadResources() {
     }
     
     // Set texture array (weak reference inside Material, owned by TextureLibrary)
-    blockMaterial->SetTextureArray(0, blockTextureArray.get());
+    blockMaterial->SetTextureArray(0, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get());
     
     // Set gradient colors from palette entries with smallest and largest luminance (matches monochrome LUT)
     auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
@@ -360,12 +377,6 @@ bool Game::LoadResources() {
 
     // Register material
     ASCIIgL::MaterialLibrary::GetInst().Register("blockMaterial", std::move(blockMaterial));
-
-    auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture("res/textures/gui/inventory.png", "inventoryTexture");
-    if (!inventoryTexture) {
-        ASCIIgL::Logger::Error("Failed to load inventory texture");
-        return false;
-    }
 
     auto guiVS = ASCIIgL::Shader::CreateFromSource(
         GUIShaders::GetGUIVSSource(),
@@ -461,6 +472,7 @@ bool Game::LoadResources() {
         guiItemMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
         guiItemMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
     }
+
     auto* terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get();
     guiItemMaterial->SetTextureArray(0, terrainTextureArray);
     ASCIIgL::MaterialLibrary::GetInst().Register("guiItemMaterial", std::move(guiItemMaterial));

@@ -9,6 +9,7 @@
 #include <functional>
 
 #include <ASCIIgL/engine/MipFilters.hpp>
+#include <ASCIIgL/engine/MonochromeMapping.hpp>
 
 namespace ASCIIgL {
 
@@ -17,8 +18,10 @@ class Texture // this class loads a texture from a path and holds its data in a 
 public:
 	std::string texType;
 
-	// type is for model drawing, as they have texture types
-	Texture(const std::string& path, std::string type = "NULL");
+	// type is for model drawing, as they have texture types.
+	// Optional monochrome mapping can bake the texture to a gradient on load.
+	Texture(const std::string& path, std::string type = "NULL",
+	        const MonochromeMapping& mono = MonochromeMapping{});
 	~Texture();
 
 	// Move constructor and assignment for PIMPL

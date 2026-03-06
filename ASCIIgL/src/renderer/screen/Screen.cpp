@@ -162,6 +162,10 @@ Palette& Screen::GetPalette() {
     return *_palette;
 }
 
+MonochromePalette* Screen::GetMonochromePalette() {
+    return dynamic_cast<MonochromePalette*>(_palette.get());
+}
+
 bool Screen::IsMonochromePalette() const {
     // Detect dynamic type of the owned palette
     return dynamic_cast<MonochromePalette*>(_palette.get()) != nullptr;

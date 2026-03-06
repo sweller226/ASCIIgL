@@ -91,6 +91,7 @@ private:
     
     // Private methods
     bool LoadResources();
+    bool LoadTextures();
     void InitializeWorld();
     void InitializePlayer();
     void InitializeSystems();

@@ -2,6 +2,7 @@
 #include <ASCIIgL/engine/Texture.hpp>
 #include <ASCIIgL/engine/MipChain.hpp>
 #include <ASCIIgL/engine/MipFilters.hpp>
+#include <ASCIIgL/engine/MonochromeMapping.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 
 #include <cstring>
@@ -19,6 +20,7 @@ public:
     int layerCount = 0;
     bool valid = false;
     bool hasCustomMipmaps = false;
+    MonochromeMapping monoMapping;
     
     struct Layer {
         struct MipLevel {
@@ -32,16 +34,16 @@ public:
     std::vector<Layer> layers;
     
     // Load from atlas image
-    bool LoadFromAtlas(const std::string& atlasPath, int tileSize);
+    bool LoadFromAtlas(const std::string& atlasPath, int tileSize, const MonochromeMapping& mono);
     
     // Load from individual files
-    bool LoadFromFiles(const std::vector<std::string>& tilePaths);
+    bool LoadFromFiles(const std::vector<std::string>& tilePaths, const MonochromeMapping& mono);
     
     // Generate mipmaps for all layers
     void GenerateMipmapsCPU(int maxLevels, MipFilters::MipFilterFn filter);
 };
 
-bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileSize) {
+bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileSize, const MonochromeMapping& mono) {
     Logger::Info("TEXTURE_ARRAY: Loading from atlas: " + atlasPath);
     
     stbi_set_flip_vertically_on_load(0);
@@ -55,6 +57,7 @@ bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileS
     }
     
     tileSize = inTileSize;
+    monoMapping = mono;
     const int tilesX = atlasW / tileSize;
     const int tilesY = atlasH / tileSize;
     layerCount = tilesX * tilesY;
@@ -85,6 +88,11 @@ bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileS
                 uint8_t* dstRow = mip0.data.data() + y * tileSize * 4;
                 std::memcpy(dstRow, srcRow, tileSize * 4);
             }
+
+            // Optional: bake tile to monochrome gradient on load.
+            if (monoMapping.enabled) {
+                ApplyMonochromeMappingRGBA8(mip0.data.data(), tileSize, tileSize, monoMapping);
+            }
         }
     }
     
@@ -95,7 +103,7 @@ bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileS
     return true;
 }
 
-bool TextureArray::Impl::LoadFromFiles(const std::vector<std::string>& tilePaths) {
+bool TextureArray::Impl::LoadFromFiles(const std::vector<std::string>& tilePaths, const MonochromeMapping& mono) {
     if (tilePaths.empty()) {
         Logger::Error("TEXTURE_ARRAY: No tile paths provided");
         return false;
@@ -106,6 +114,7 @@ bool TextureArray::Impl::LoadFromFiles(const std::vector<std::string>& tilePaths
     stbi_set_flip_vertically_on_load(0);
     
     layerCount = static_cast<int>(tilePaths.size());
+    monoMapping = mono;
     layers.resize(layerCount);
     tileSize = 0;
     
@@ -139,6 +148,10 @@ bool TextureArray::Impl::LoadFromFiles(const std::vector<std::string>& tilePaths
         mip0.height = tileSize;
         mip0.data.resize(tileSize * tileSize * 4);
         std::memcpy(mip0.data.data(), data, tileSize * tileSize * 4);
+
+        if (monoMapping.enabled) {
+            ApplyMonochromeMappingRGBA8(mip0.data.data(), tileSize, tileSize, monoMapping);
+        }
         
         stbi_image_free(data);
     }
@@ -182,16 +195,16 @@ void TextureArray::Impl::GenerateMipmapsCPU(int maxLevels, MipFilters::MipFilter
 
 // TextureArray public interface
 
-TextureArray::TextureArray(const std::string& atlasPath, int tileSize)
+TextureArray::TextureArray(const std::string& atlasPath, int tileSize, const MonochromeMapping& mono)
     : pImpl(std::make_unique<Impl>())
 {
-    pImpl->LoadFromAtlas(atlasPath, tileSize);
+    pImpl->LoadFromAtlas(atlasPath, tileSize, mono);
 }
 
-TextureArray::TextureArray(const std::vector<std::string>& tilePaths)
+TextureArray::TextureArray(const std::vector<std::string>& tilePaths, const MonochromeMapping& mono)
     : pImpl(std::make_unique<Impl>())
 {
-    pImpl->LoadFromFiles(tilePaths);
+    pImpl->LoadFromFiles(tilePaths, mono);
 }
 
 TextureArray::~TextureArray() = default;

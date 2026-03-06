@@ -67,6 +67,9 @@ public:
     unsigned int GetHeight() const;
     unsigned int GetWidth() const;
     Palette& GetPalette();
+    /// Returns a pointer to the palette as a MonochromePalette if and only if
+    /// the current palette is monochrome. Otherwise returns nullptr.
+    MonochromePalette* GetMonochromePalette();
     bool IsMonochromePalette() const;
     std::vector<CHAR_INFO>& GetPixelBuffer();
 };

@@ -4,19 +4,16 @@
 
 namespace ASCIIgL {
 
-std::shared_ptr<TextureArray> TextureLibrary::LoadTextureArray(const std::string& path, int tileSize, const std::string& savedName)
+std::shared_ptr<TextureArray> TextureLibrary::LoadTextureArray(const std::string& path, int tileSize, const std::string& savedName, const MonochromeMapping& mono)
 {
     // Already loaded?
-    std::string nameToSave = savedName;
-    if (nameToSave == "")
-        nameToSave = path;
-    
+    std::string nameToSave = savedName.empty() ? path : savedName;
+
     auto it = _textureArrays.find(nameToSave);
     if (it != _textureArrays.end())
         return it->second;
 
-    // Load new texture array
-    auto texArray = std::make_shared<TextureArray>(path, tileSize);
+    auto texArray = std::make_shared<TextureArray>(path, tileSize, mono);
     if (!texArray || !texArray->IsValid()) {
         Logger::Error("[TextureLibrary] Failed to load TextureArray: " + path);
         return nullptr;
@@ -26,19 +23,17 @@ std::shared_ptr<TextureArray> TextureLibrary::LoadTextureArray(const std::string
     return texArray;
 }
 
-std::shared_ptr<Texture> TextureLibrary::LoadTexture(const std::string& path, const std::string& savedName)
+std::shared_ptr<Texture> TextureLibrary::LoadTexture(const std::string& path, const std::string& savedName, const MonochromeMapping& mono)
 {
-    // Already loaded?
-    std::string nameToSave = savedName;
-    if (nameToSave == "")
-        nameToSave = path;
-    
-    auto it = _textures.find(nameToSave);
-    if (it != _textures.end())
-        return it->second;
+    // If already loaded under this name, drop the old entry so we can reload.
+    std::string nameToSave = savedName.empty() ? path : savedName;
 
-    // Load new texture
-    auto tex = std::make_shared<Texture>(path);
+    auto it = _textures.find(nameToSave);
+    if (it != _textures.end()) {
+        _textures.erase(it);
+    }
+
+    auto tex = std::make_shared<Texture>(path, "NULL", mono);
     if (!tex || tex->GetWidth() == 0 || tex->GetHeight() == 0) {
         Logger::Error("[TextureLibrary] Failed to load Texture: " + path);
         return nullptr;
@@ -68,6 +63,14 @@ bool TextureLibrary::HasTextureArray(const std::string& savedName) const
 bool TextureLibrary::HasTexture(const std::string& savedName) const
 {
     return _textures.find(savedName) != _textures.end();
+}
+
+const std::unordered_map<std::string, std::shared_ptr<TextureArray>>& TextureLibrary::GetTextureArrays() const {
+    return _textureArrays;
+}
+
+const std::unordered_map<std::string, std::shared_ptr<Texture>>& TextureLibrary::GetTextures() const {
+    return _textures;
 }
 
 void TextureLibrary::RemoveTextureArray(const std::string& savedName)

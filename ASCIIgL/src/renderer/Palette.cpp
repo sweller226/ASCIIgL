@@ -1,77 +1,18 @@
 #include <ASCIIgL/renderer/Palette.hpp>
-#include <ASCIIgL/util/Logger.hpp>
 
 #include <cmath>
 #include <string>
 #include <utility>
 #include <algorithm>
 #include <limits>
+#include <vector>
+
+#include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/renderer/PaletteUtil.hpp>
+#include <ASCIIgL/engine/Texture.hpp>
+#include <ASCIIgL/engine/TextureArray.hpp>
 
 namespace ASCIIgL {
-
-namespace PaletteUtil {
-    float sRGB1ToLinear1(float s) {
-        return (s <= 0.04045f)
-            ? (s / 12.92f)
-            : std::pow((s + 0.055f) / 1.055f, 2.4f);
-    }
-
-    glm::vec3 sRGB1ToLinear1(const glm::vec3& c) {
-        return glm::vec3(
-            sRGB1ToLinear1(c.r),
-            sRGB1ToLinear1(c.g),
-            sRGB1ToLinear1(c.b)
-        );
-    }
-
-    // sRGB → Linear (float 0–1)
-    float sRGB255ToLinear1(float s) {
-        s /= 255.0f;
-        return sRGB1ToLinear1(s);
-    }
-
-    // sRGB → Linear (ivec3 0–255)
-    glm::vec3 sRGB255ToLinear1(const glm::ivec3& c) {
-        return glm::vec3(
-            sRGB255ToLinear1(c.r),
-            sRGB255ToLinear1(c.g),
-            sRGB255ToLinear1(c.b)
-        );
-    }
-    
-    // Linear luminance (vec3 only)
-    float LinearRGB_Luminance(const glm::vec3& c) {
-        return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
-    }
-    
-    float sRGB255_Luminance(const glm::ivec3& c) {
-        glm::vec3 lin = sRGB255ToLinear1(c);
-        return LinearRGB_Luminance(lin);
-    }
-
-    float sRGB1_Luminance(const glm::vec3& c) {
-        glm::vec3 lin = sRGB1ToLinear1(c);
-        return LinearRGB_Luminance(lin);
-    }
-
-    // Linear → sRGB (float 0–1 → 0–255)
-    float Linear1ToSrgb255(float c) {
-        float s = (c <= 0.0031308f)
-            ? (12.92f * c)
-            : (1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f);
-
-        return glm::clamp(s * 255.0f, 0.0f, 255.0f);
-    }
-
-    // Linear → sRGB (vec3 0–1 → 0–255)
-    glm::vec3 Linear1ToSrgb255(const glm::vec3& c) {
-        return glm::vec3(
-            Linear1ToSrgb255(c.r),
-            Linear1ToSrgb255(c.g),
-            Linear1ToSrgb255(c.b)
-        );
-    }
-}
 
 PaletteEntry::PaletteEntry(const glm::ivec3& rgbVal, unsigned short hexVal)
     : rgb(rgbVal)
@@ -85,10 +26,9 @@ PaletteEntry::PaletteEntry() : rgb(0, 0, 0), rgb16(0, 0, 0), normalized(0.0f), l
 PaletteEntry::PaletteEntry(int r, int g, int b, unsigned short hexVal)
     : PaletteEntry(glm::ivec3(r, g, b), hexVal) {}
 
-Palette::Palette() {
-    // 16-color palette in 0-255 range:
+void Palette::SetDefaultEntries() {
+    // Default 16-color palette in 0-255 range:
     // - Index 0-15: Standard 16 colors (mapped to attributes 0x0-0xF)
-    
     entries = {{
         //   rgb (0-255)              hex    // Description
         { {0, 0, 0},                0x0 },   // Index 0: black
@@ -108,6 +48,155 @@ Palette::Palette() {
         { {255, 255, 0},            0xE },   // Index 14: brightYellow
         { {255, 255, 255},          0xF }    // Index 15: brightWhite
     }};
+}
+
+Palette::Palette() {
+    SetDefaultEntries();
+}
+
+Palette::Palette(
+    const std::vector<std::pair<float, std::shared_ptr<Texture>>>& textures,
+    const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays)
+{
+    // Collect color samples from given textures/arrays, using the float as a weight.
+    std::vector<glm::vec3> samples;
+    samples.reserve(4096);
+
+    constexpr int BASE_SAMPLES_PER_RESOURCE = 256;
+    constexpr uint8_t ALPHA_THRESHOLD = 16;
+
+    auto sampleTexture = [&](float weight, const std::shared_ptr<Texture>& tex) {
+        if (!tex || weight <= 0.0f) return;
+        int w = tex->GetWidth();
+        int h = tex->GetHeight();
+        if (w <= 0 || h <= 0) return;
+
+        const uint8_t* data = tex->GetDataPtr();
+        if (!data) return;
+
+        const int area = w * h;
+        int targetSamples = std::max(1, static_cast<int>(BASE_SAMPLES_PER_RESOURCE * weight));
+        int stride = 1;
+        if (area > targetSamples) {
+            float s = std::sqrt(static_cast<float>(area) / targetSamples);
+            stride = std::max(1, static_cast<int>(s));
+        }
+
+        for (int y = 0; y < h; y += stride) {
+            for (int x = 0; x < w; x += stride) {
+                const uint8_t* px = data + (static_cast<size_t>(y) * w + x) * 4;
+                uint8_t a = px[3];
+                if (a < ALPHA_THRESHOLD) continue;
+                glm::ivec3 rgb(px[0], px[1], px[2]);
+                samples.push_back(PaletteUtil::sRGB255ToLinear1(rgb));
+            }
+        }
+    };
+
+    auto sampleTextureArray = [&](float weight, const std::shared_ptr<TextureArray>& arr) {
+        if (!arr || weight <= 0.0f || !arr->IsValid()) return;
+        int tileSize = arr->GetTileSize();
+        int layers   = arr->GetLayerCount();
+        if (tileSize <= 0 || layers <= 0) return;
+
+        const int area = tileSize * tileSize;
+        int targetSamples = std::max(1, static_cast<int>(BASE_SAMPLES_PER_RESOURCE * weight));
+        int stride = 1;
+        if (area > targetSamples) {
+            float s = std::sqrt(static_cast<float>(area) / targetSamples);
+            stride = std::max(1, static_cast<int>(s));
+        }
+
+        for (int layer = 0; layer < layers; ++layer) {
+            const uint8_t* data = arr->GetLayerData(layer, 0);
+            if (!data) continue;
+
+            for (int y = 0; y < tileSize; y += stride) {
+                for (int x = 0; x < tileSize; x += stride) {
+                    const uint8_t* px = data + (static_cast<size_t>(y) * tileSize + x) * 4;
+                    uint8_t a = px[3];
+                    if (a < ALPHA_THRESHOLD) continue;
+                    glm::ivec3 rgb(px[0], px[1], px[2]);
+                    samples.push_back(PaletteUtil::sRGB255ToLinear1(rgb));
+                }
+            }
+        }
+    };
+
+    for (auto& entry : textures) {
+        sampleTexture(entry.first, entry.second);
+    }
+    for (auto& entry : textureArrays) {
+        sampleTextureArray(entry.first, entry.second);
+    }
+
+    constexpr int K = 16;
+    if (!samples.empty()) {
+        const int K_eff = std::min<int>(K, static_cast<int>(samples.size()));
+
+        std::array<glm::vec3, K> centers{};
+        for (int k = 0; k < K_eff; ++k) {
+            size_t idx = static_cast<size_t>((static_cast<long long>(k) * samples.size()) / K_eff);
+            if (idx >= samples.size()) idx = samples.size() - 1;
+            centers[k] = samples[idx];
+        }
+        for (int k = K_eff; k < K; ++k) {
+            centers[k] = centers[K_eff - 1];
+        }
+
+        std::vector<int> assignment(samples.size(), 0);
+        const int MAX_ITERS = 10;
+
+        for (int iter = 0; iter < MAX_ITERS; ++iter) {
+            bool changed = false;
+
+            for (size_t i = 0; i < samples.size(); ++i) {
+                float bestDist = std::numeric_limits<float>::max();
+                int bestK = 0;
+                for (int k = 0; k < K; ++k) {
+                    glm::vec3 d = samples[i] - centers[k];
+                    float dist = glm::dot(d, d);
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        bestK = k;
+                    }
+                }
+                if (assignment[i] != bestK) {
+                    assignment[i] = bestK;
+                    changed = true;
+                }
+            }
+
+            std::array<glm::vec3, K> sum{};
+            std::array<int, K> count{};
+            for (int k = 0; k < K; ++k) {
+                sum[k] = glm::vec3(0.0f);
+                count[k] = 0;
+            }
+
+            for (size_t i = 0; i < samples.size(); ++i) {
+                int k = assignment[i];
+                sum[k] += samples[i];
+                ++count[k];
+            }
+
+            for (int k = 0; k < K; ++k) {
+                if (count[k] > 0) {
+                    centers[k] = sum[k] / static_cast<float>(count[k]);
+                }
+            }
+
+            if (!changed) break;
+        }
+
+        for (int k = 0; k < K; ++k) {
+            glm::ivec3 rgb = PaletteUtil::Linear1ToSrgb255(centers[k]);
+            entries[k] = PaletteEntry(rgb, static_cast<unsigned short>(k));
+        }
+    } else {
+        // No samples; fall back to default palette.
+        SetDefaultEntries();
+    }
 }
 
 Palette::Palette(std::array<PaletteEntry, 16> customEntries) {

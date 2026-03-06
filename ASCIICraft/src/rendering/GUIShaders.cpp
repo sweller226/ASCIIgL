@@ -35,16 +35,12 @@ PS_INPUT main(VS_INPUT input)
 
 const char* GetGUIPSSource() {
     return R"(
-#include "ColorMonochrome.hlsl"
-
 Texture2D guiTexture : register(t0);
 SamplerState samplerState : register(s0);
 
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
-    float4 gradientStart;
-    float4 gradientEnd;
 };
 
 struct PS_INPUT
@@ -56,11 +52,7 @@ struct PS_INPUT
 float4 main(PS_INPUT input) : SV_TARGET
 {
     float4 texColor = guiTexture.Sample(samplerState, input.texcoord);
-    float luminance = dot(texColor.rgb, REC709);
-    float3 linearStart = sRGBToLinear(gradientStart.rgb);
-    float3 linearEnd = sRGBToLinear(gradientEnd.rgb);
-    float3 mappedColor = LinearLuminanceToGradientRGB(luminance, linearStart, linearEnd);
-    return float4(mappedColor, texColor.a);
+    return texColor;
 }
 )";
 }
@@ -109,16 +101,12 @@ PS_INPUT main(VS_INPUT input)
 
 const char* GetItemPSSource() {
     return R"(
-#include "ColorMonochrome.hlsl"
-
 Texture2DArray itemTextures : register(t0);
 SamplerState samplerState : register(s0);
 
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
-    float4 gradientStart;
-    float4 gradientEnd;
 };
 
 struct PS_INPUT
@@ -132,11 +120,7 @@ float4 main(PS_INPUT input) : SV_TARGET
 {
     float4 texColor = itemTextures.Sample(samplerState, input.texcoord);
     if (texColor.a < 0.1) discard;
-    float luminance = dot(texColor.rgb, REC709);
-    float3 linearStart = sRGBToLinear(gradientStart.rgb);
-    float3 linearEnd = sRGBToLinear(gradientEnd.rgb);
-    float3 mappedColor = LinearLuminanceToGradientRGB(luminance, linearStart, linearEnd);
-    mappedColor *= input.light;
+    float3 mappedColor = texColor.rgb * input.light;
     return float4(mappedColor, texColor.a);
 }
 )";

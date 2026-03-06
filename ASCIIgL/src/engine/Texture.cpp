@@ -2,6 +2,7 @@
 
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/MipChain.hpp>
+#include <ASCIIgL/engine/MonochromeMapping.hpp>
 #include <stb_image/stb_image.h>
 #include <algorithm>
 
@@ -22,7 +23,7 @@ public:
     std::vector<MipLevel> mipChain; // mipChain[0] = base level
     bool hasCustomMipmaps = false;
 
-    Impl(const std::string& path);
+    Impl(const std::string& path, const MonochromeMapping& mono);
     ~Impl() = default;
 
     glm::vec3 GetPixelRGB(int x, int y) const;
@@ -38,7 +39,7 @@ public:
     void ReplaceBaseLevel(int newWidth, int newHeight, std::vector<uint8_t>&& newData);
 };
 
-Texture::Impl::Impl(const std::string& path)
+Texture::Impl::Impl(const std::string& path, const MonochromeMapping& mono)
     : FilePath(path), _width(0), _height(0), _bpp(0)
 {
     Logger::Info("TEXTURE: Attempting to load texture: " + path);
@@ -67,6 +68,11 @@ Texture::Impl::Impl(const std::string& path)
 
     // Copy raw data - keep full 8-bit precision
     std::memcpy(base.data.data(), tempRGBABuffer, bufferSize);
+
+    // Optional: bake to monochrome gradient on load.
+    if (mono.enabled) {
+        ApplyMonochromeMappingRGBA8(base.data.data(), base.width, base.height, mono);
+    }
 
     mipChain.clear();
     mipChain.push_back(std::move(base));
@@ -143,8 +149,8 @@ void Texture::Impl::GenerateMipmapsCPU(int maxLevels, MipFilters::MipFilterFn fi
 }
 
 // Texture public interface implementation
-Texture::Texture(const std::string& path, const std::string type)
-    : texType(type), pImpl(std::make_unique<Impl>(path)) { }
+Texture::Texture(const std::string& path, const std::string type, const MonochromeMapping& mono)
+    : texType(type), pImpl(std::make_unique<Impl>(path, mono)) { }
 
 Texture::~Texture() = default;
 

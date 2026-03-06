@@ -74,16 +74,8 @@ float4 main(PS_INPUT input) : SV_TARGET
     static const float ALPHA_CUTOFF = 0.5;
     clip(texColor.a - ALPHA_CUTOFF);
     
-    // Linear luminance (Rec. 709) - texColor is linear
-    float luminance = dot(texColor.rgb, REC709);
-    
-    // Luminance-based gradient along segment (linearStart -> linearEnd); direction matches monochrome LUT
-    float3 linearStart = sRGBToLinear(gradientStart.rgb);
-    float3 linearEnd = sRGBToLinear(gradientEnd.rgb);
-    float3 mappedColor = LinearLuminanceToGradientRGB(luminance, linearStart, linearEnd);
-
-    // Per-vertex directional lighting
-    mappedColor *= input.light;
+    // Per-vertex directional lighting on already-baked monochrome texture color
+    float3 mappedColor = texColor.rgb * input.light;
 
     // Fog (fogColor assumed sRGB; linearize for correct blend in linear space)
     float fogFactor = saturate((input.dist - fogParams.x) / (fogParams.y - fogParams.x));
