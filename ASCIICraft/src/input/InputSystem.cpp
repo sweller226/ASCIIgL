@@ -30,6 +30,7 @@ void InputSystem::Update() {
         if (input.IsActionPressed("jump"))    m_eventBus.emit(events::JumpPressedEvent{});
         if (input.IsActionPressed("interact_left"))  m_eventBus.emit(events::PrimaryActionPressedEvent{});
         if (input.IsActionPressed("interact_right")) m_eventBus.emit(events::SecondaryActionPressedEvent{});
+        if (input.IsActionPressed("attack"))          m_eventBus.emit(events::AttackActionPressedEvent{});
     }
 }
 

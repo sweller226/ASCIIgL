@@ -56,10 +56,11 @@ namespace ecs::systems {
             DrawItem item;
             item.entity = ent;
             item.mesh = r.mesh;
-            item.material = nullptr; // ECS entities don't use materials yet
-            item.materialName = "";  // Will use default material
+            item.material = nullptr;
+            item.materialName = r.materialName;  // Use component's material (empty = default)
             item.modelMatrix = t.getModel();
             item.layer = r.layer;
+            item.disableBackfaceCulling = r.disableBackfaceCulling;
 
             if (r.renderType == components::RenderType::ELEM_3D) {
                 m_drawList3D.push_back(std::move(item));
@@ -109,6 +110,7 @@ namespace ecs::systems {
             dc.material    = mat.get();
             dc.layer       = item.layer;
             dc.transparent = false;       // world geometry is opaque by default
+            dc.disableBackfaceCulling = item.disableBackfaceCulling;
             dc.sortKey     = 0.0f;        // not needed for opaque
 
             // Compute MVP for 3D

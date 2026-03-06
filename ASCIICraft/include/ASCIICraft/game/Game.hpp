@@ -15,10 +15,13 @@
 
 // ecs factories
 #include <ASCIICraft/ecs/factories/PlayerFactory.hpp>
+#include <ASCIICraft/ecs/factories/MobFactory.hpp>
 
 // ecs systems
 #include <ASCIICraft/ecs/systems/MovementSystem.hpp>
 #include <ASCIICraft/ecs/systems/CameraSystem.hpp>
+#include <ASCIICraft/ecs/systems/MobAISystem.hpp>
+#include <ASCIICraft/ecs/systems/PlayerCombatSystem.hpp>
 #include <ASCIICraft/input/InputSystem.hpp>
 #include <ASCIICraft/input/GameplayInputFilter.hpp>
 #include <ASCIICraft/ecs/systems/RenderSystem.hpp>
@@ -83,6 +86,13 @@ private:
 
     // ecs factories
     ecs::factories::PlayerFactory playerFactory;
+    ecs::factories::MobFactory mobFactory;
+
+    // mob AI — drives pathfinding, goal scheduling, death/despawn for all mobs
+    ecs::systems::MobAISystem mobAISystem;
+
+    // player combat — melee attack on mobs (F key)
+    ecs::systems::PlayerCombatSystem playerCombatSystem;
 
     // Game state
     GameState gameState;

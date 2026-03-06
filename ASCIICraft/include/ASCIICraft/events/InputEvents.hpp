@@ -22,4 +22,8 @@ struct PrimaryActionPressedEvent {};
 /// Only emitted when not blocking. PlacingSystem consumes for place block.
 struct SecondaryActionPressedEvent {};
 
+/// Emitted when the player presses the key bound to "attack" (e.g. F).
+/// Only emitted when not blocking. PlayerCombatSystem consumes for melee attack on mobs.
+struct AttackActionPressedEvent {};
+
 } // namespace events

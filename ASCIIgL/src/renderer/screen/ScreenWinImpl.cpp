@@ -207,7 +207,7 @@ std::vector<CHAR_INFO>& ScreenWinImpl::GetPixelBuffer() {
 void ScreenWinImpl::SetFontTerminal(HANDLE currentHandle, float fontSize) {
     Logger::Info(L"Attempting to modify Windows Terminal settings.json file directly.");
     
-    std::wstring settingsPath =d GetTerminalSettiwwngsPath();
+    std::wstring settingsPath = GetTerminalSettingsPath();
     if (!settingsPath.empty() && ModifyTerminalFont(settingsPath, fontSize)) {
         Logger::Info(L"Successfully modified Windows Terminal settings.json");
     }

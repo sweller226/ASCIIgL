@@ -46,6 +46,7 @@ private:
         glm::mat4 modelMatrix;
         int32_t layer;
         std::string materialName;  // Fallback: material name if material is null (e.g. "guiItemMaterial")
+        bool disableBackfaceCulling = false;  // copied from Renderable, forwarded to DrawCall
     };
 
     entt::registry& m_registry;

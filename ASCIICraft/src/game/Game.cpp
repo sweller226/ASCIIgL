@@ -36,6 +36,7 @@
 // shaders
 #include <ASCIICraft/rendering/TerrainShaders.hpp>
 #include <ASCIICraft/rendering/GUIShaders.hpp>
+#include <ASCIICraft/rendering/MobShaders.hpp>
 
 Game::Game()
     : gameState(GameState::Playing)
@@ -50,6 +51,9 @@ Game::Game()
     , placingSystem(registry, eventBus)
     , miningSystem(registry, eventBus)
     , playerFactory(registry)
+    , mobFactory(registry)
+    , mobAISystem(registry)
+    , playerCombatSystem(registry, eventBus)
     , shouldInternalExit(false)
 {
     ASCIIgL::Logger::Debug("Game constructor: systems created, registry bound.");
@@ -231,6 +235,13 @@ void Game::Update() {
 
             ASCIIgL::Logger::Debug("Update: Running physics system");
             physicsSystem.Update();
+
+            ASCIIgL::Logger::Debug("Update: Running mob AI");
+            mobFactory.update(ASCIIgL::FPSClock::GetInst().GetDeltaTime());  // prune destroyed entities
+            mobAISystem.update(ASCIIgL::FPSClock::GetInst().GetDeltaTime()); // AI goals, push, death, despawn
+
+            ASCIIgL::Logger::Debug("Update: Running player combat");
+            playerCombatSystem.Update();
 
             break;
         }
@@ -446,6 +457,56 @@ bool Game::LoadResources() {
     guiItemMaterial->SetTextureArray(0, terrainTextureArray);
     ASCIIgL::MaterialLibrary::GetInst().Register("guiItemMaterial", std::move(guiItemMaterial));
 
+    // --- Mob material (PosUV + Texture2D, gradient-mapped like terrain) ---
+    auto mobVS = ASCIIgL::Shader::CreateFromSource(
+        MobShaders::GetMobVSSource(),
+        ASCIIgL::ShaderType::Vertex
+    );
+    auto mobPS = ASCIIgL::Shader::CreateFromSource(
+        MobShaders::GetMobPSSource(),
+        ASCIIgL::ShaderType::Pixel
+    );
+
+    if (!mobVS || !mobVS->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile mob vertex shader: " + mobVS->GetCompileError());
+        return false;
+    }
+    if (!mobPS || !mobPS->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile mob pixel shader: " + mobPS->GetCompileError());
+        return false;
+    }
+
+    auto mobShaderProgram = ASCIIgL::ShaderProgram::Create(
+        std::move(mobVS),
+        std::move(mobPS),
+        ASCIIgL::VertFormats::PosUV(),
+        MobShaders::GetMobPSUniformLayout()
+    );
+
+    if (!mobShaderProgram || !mobShaderProgram->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to create mob shader program");
+        return false;
+    }
+
+    auto mobMaterial = ASCIIgL::Material::Create(std::move(mobShaderProgram));
+    if (!mobMaterial) {
+        ASCIIgL::Logger::Error("Failed to create mob material");
+        return false;
+    }
+
+    // Set gradient colors (same as terrain)
+    mobMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(0), 1.0f));
+    mobMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(15), 1.0f));
+
+    // Clone per-mob-type materials with individual textures bound
+    for (const auto& [typeId, tex] : mobFactory.getTextures()) {
+        auto typeMat = std::shared_ptr<ASCIIgL::Material>(mobMaterial->Clone());
+        typeMat->SetTexture(0, tex.get());
+        std::string matName = "mobMaterial_" + std::to_string(typeId);
+        ASCIIgL::MaterialLibrary::GetInst().Register(matName, std::move(typeMat));
+        ASCIIgL::Logger::Debug("Registered material: " + matName);
+    }
+
     // OOP GUI: create play + inventory screens after textures/materials exist (CreateQuadMesh needs terrainTextureArray)
     entt::entity player = ecs::components::GetPlayerEntity(registry);
     if (player != entt::null) {
@@ -482,11 +543,50 @@ void Game::RenderPlaying() {
 void Game::InitializeWorld() {
     registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, WorldCoord(0, 90, 0), 10));
     ASCIIgL::Logger::Debug("World created and stored in registry context.");
+
+    // Initialize mob factory (loads textures and builds meshes)
+    mobFactory.init();
+
+    // Build a showcase platform and spawn one of each mob type
+    World* world = GetWorldPtr(registry);
+    glm::vec3 sp = world->GetSpawnPoint().ToVec3();
+    int bx = static_cast<int>(sp.x);
+    int bz = static_cast<int>(sp.z);
+    int platformY = 150; // well above terrain
+
+    // Get stone stateId from block state registry
+    auto& bsr = registry.ctx().get<blockstate::BlockStateRegistry>();
+    uint32_t stoneStateId = bsr.GetDefaultState("minecraft:stone");
+
+    // Lay a 40x40 stone platform so the mobs have ground to stand on
+    ChunkManager* cm = world->GetChunkManager();
+    for (int px = -5; px <= 35; ++px) {
+        for (int pz = -5; pz <= 35; ++pz) {
+            cm->SetBlockState(bx + px, platformY, bz + pz, stoneStateId);
+        }
+    }
+    ASCIIgL::Logger::Info("Mob showcase platform built at Y=" + std::to_string(platformY));
+
+    // Spawn each mob type on top of the platform, spaced 3 blocks apart
+    int spawnY = platformY + 1;
+    for (uint32_t id = 1; id <= 11; ++id) {
+        int offsetX = static_cast<int>(id) * 3;
+        auto ent = mobFactory.spawnMob(id, glm::ivec3(bx + offsetX, spawnY, bz));
+        if (ent != entt::null) {
+            ASCIIgL::Logger::Info("Spawned mob type " + std::to_string(id));
+        }
+    }
+
+    // Initialize AI brains for all spawned mobs
+    mobAISystem.initializeMobs();
 }
 
 void Game::InitializePlayer() {
-    playerFactory.createPlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Survival);
-    ASCIIgL::Logger::Debug("Player entity created");
+    // Spawn player on mob showcase platform in spectator mode
+    glm::vec3 sp = GetWorldPtr(registry)->GetSpawnPoint().ToVec3();
+    sp.y = 152.0f; // platform is at Y=150, stand on top
+    playerFactory.createPlayerEnt(sp, GameMode::Spectator);
+    ASCIIgL::Logger::Debug("Player entity created (spectator, on mob platform)");
 }
 
 void Game::InitializeSystems() {

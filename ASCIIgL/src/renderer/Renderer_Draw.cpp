@@ -109,9 +109,23 @@ void Renderer::SortTransparentDraws() {
 
 void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list) {
     Material* lastMat = nullptr;
+    bool cullingDisabled = false; // track rasterizer state to minimize RSSetState calls
 
     for (const auto& dc : list) {
         if (!dc.mesh || !dc.material) continue;
+
+        // Per-draw backface culling toggle.
+        // Most draws use the global setting, but mobs like skeleton/chicken
+        // need both-sided rendering.  We only call RSSetState when the flag
+        // actually changes to avoid redundant D3D11 state switches.
+        if (dc.disableBackfaceCulling != cullingDisabled) {
+            cullingDisabled = dc.disableBackfaceCulling;
+            bool wireframe = GetWireframe();
+            bool backfaceCulling = cullingDisabled ? false : GetBackfaceCulling();
+            bool ccw = GetCCW();
+            int stateIndex = (wireframe ? 1 : 0) + (backfaceCulling ? 2 : 0) + (ccw ? 4 : 0);
+            _context->RSSetState(_rasterizerStates[stateIndex].Get());
+        }
 
         Material* mat = dc.material;
 
@@ -128,6 +142,15 @@ void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list) {
         UploadMaterialConstants(mat);
 
         DrawMesh(dc.mesh);
+    }
+
+    // Restore backface culling if it was disabled
+    if (cullingDisabled) {
+        bool wireframe = GetWireframe();
+        bool backfaceCulling = GetBackfaceCulling();
+        bool ccw = GetCCW();
+        int stateIndex = (wireframe ? 1 : 0) + (backfaceCulling ? 2 : 0) + (ccw ? 4 : 0);
+        _context->RSSetState(_rasterizerStates[stateIndex].Get());
     }
 }
 

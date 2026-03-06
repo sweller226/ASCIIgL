@@ -99,6 +99,7 @@ void InputManager::Initialize() {
     BindKey(Key::E, "interact");
     BindKey(Key::Q, "interact_left");
     BindKey(Key::R, "interact_right");
+    BindKey(Key::F, "attack");
     BindKey(Key::ESCAPE, "quit");
     BindKey(Key::ENTER, "confirm");
     BindKey(Key::TAB, "menu");
