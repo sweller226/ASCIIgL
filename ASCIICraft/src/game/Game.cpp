@@ -66,17 +66,20 @@ bool Game::Initialize() {
 
     ASCIIgL::Logger::Debug("Setting up palette and screen...");
 
-    float lowLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(22, 22, 22));
-    float highLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(220, 220, 220));
+    // Custom 16-shade grayscale ramp (dark → light).
+    // Even steps in sRGB space keep it simple and predictable.
+    auto Gray = [](int v, unsigned short hex) {
+        return ASCIIgL::PaletteEntry(glm::ivec3(v, v, v), hex);
+    };
+    // Clamp range to [22, 222] to avoid extreme black/white.
+    std::array<ASCIIgL::PaletteEntry, 16> customGray = {{
+        Gray(22,  0x0), Gray(35,  0x1), Gray(49,  0x2), Gray(62,  0x3),
+        Gray(75,  0x4), Gray(89,  0x5), Gray(102, 0x6), Gray(115, 0x7),
+        Gray(129, 0x8), Gray(142, 0x9), Gray(155, 0xA), Gray(169, 0xB),
+        Gray(182, 0xC), Gray(195, 0xD), Gray(209, 0xE), Gray(222, 0xF),
+    }};
 
-    // Monochrome palettes (dark→light along hue direction). Swap which one is used to change the look.
-    ASCIIgL::MonochromePalette grayPalette(lowLight, highLight, glm::ivec3(205, 205, 205));
-    ASCIIgL::MonochromePalette sepiaPalette(lowLight, highLight, glm::ivec3(200, 170, 130));
-    ASCIIgL::MonochromePalette greenPalette(lowLight, highLight, glm::ivec3(80, 200, 100));
-    ASCIIgL::MonochromePalette bluePalette(lowLight, highLight, glm::ivec3(120, 160, 220));
-    ASCIIgL::MonochromePalette amberPalette(lowLight, highLight, glm::ivec3(220, 180, 100));
-
-    ASCIIgL::MonochromePalette gamePalette = grayPalette;
+    ASCIIgL::MonochromePalette gamePalette(customGray);
 
     ASCIIgL::Logger::Debug("Initializing screen...");
     if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
@@ -295,6 +298,11 @@ bool Game::LoadResources() {
         ASCIIgL::Logger::Error("Failed to load block texture array");
         return false;
     }
+
+    // Generate full mip chain (16→8→4→2→1) tuned for pixel art with alpha-test cutouts.
+    // AlphaCutoutAny2x2 prevents leaves from \"averaging away\" and being discarded at distance.
+    blockTextureArray->GenerateMipmapsCPU(-1, ASCIIgL::MipFilters::PixelArtAlphaCutoutAny2x2);
+
     
     // Create gradient mapping shader program
     auto terrainVS = ASCIIgL::Shader::CreateFromSource(

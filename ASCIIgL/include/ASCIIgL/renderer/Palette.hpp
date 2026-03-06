@@ -102,6 +102,7 @@ public:
     // Create a gradient palette from dark to light luminance with hue direction (hueDir in 0-255).
     // Colors are interpolated with gamma correction across 16 entries.
     MonochromePalette(float darkL, float lightL, const glm::ivec3& hueDir);
+    MonochromePalette(std::array<PaletteEntry, 16> customEntries);
 
     float GetDarkL() const { return _darkL; }
     float GetLightL() const { return _lightL; }

@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 
 #include <ASCIIgL/renderer/Shader.hpp>
+#include <ASCIIgL/renderer/SamplerType.hpp>
 #include <ASCIIgL/engine/TextureArray.hpp>
 
 #ifdef _WIN32
@@ -32,9 +33,10 @@ struct TextureSlot {
     uint32_t slot;              // Texture slot index (t0, t1, etc.)
     const Texture* texture;     // Currently bound texture (not owned)
     const TextureArray* textureArray; // Currently bound texture array (not owned)
-    
+    SamplerType samplerType = SamplerType::Default;
+
     TextureSlot(const std::string& name, uint32_t slot)
-        : name(name), slot(slot), texture(nullptr), textureArray(nullptr) {}
+        : name(name), slot(slot), texture(nullptr), textureArray(nullptr), samplerType(SamplerType::Default) {}
 };
 
 // =========================================================================
@@ -105,6 +107,11 @@ public:
     void SetTextureArray(uint32_t slot, const TextureArray* textureArray);
     const TextureArray* GetTextureArray(const std::string& name) const;
     const TextureArray* GetTextureArray(uint32_t slot) const;
+
+    /// Per-slot sampler choice (Point vs Anisotropic). Default = renderer infers from resource type.
+    void SetSamplerForSlot(const std::string& name, SamplerType type);
+    void SetSamplerForSlot(uint32_t slot, SamplerType type);
+    SamplerType GetSamplerForSlot(uint32_t slot) const;
 
     // =========================================================================
     // Shader Program Access

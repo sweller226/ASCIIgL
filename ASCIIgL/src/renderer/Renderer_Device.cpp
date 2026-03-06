@@ -289,28 +289,54 @@ bool Renderer::InitializeDepthStencil() {
 }
 
 bool Renderer::InitializeSamplers() {
-    // Create point sampler with linear mipmap blending for pixel art
-    // Point filtering keeps pixels sharp, linear mip blending reduces shimmering at distance
-    D3D11_SAMPLER_DESC samplerDesc = {};
-    samplerDesc.Filter = D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;  // Point filtering with smooth mipmap transitions
-    samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;  // Clamp to prevent bleeding at edges
-    samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-    samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-    samplerDesc.MipLODBias = -0.5f;  // Use slightly sharper mipmaps to reduce atlas bleeding
-    samplerDesc.MaxAnisotropy = 1;
-    samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-    samplerDesc.MinLOD = 0;
-    samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+    // --- Point sampler: pixel-art (GUI, sprites) ---
+    D3D11_SAMPLER_DESC pointDesc = {};
+    pointDesc.Filter = D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
+    pointDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    pointDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    pointDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    pointDesc.MipLODBias = -0.5f;
+    pointDesc.MaxAnisotropy = 1;
+    pointDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    pointDesc.MinLOD = 0;
+    pointDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
-    HRESULT hr = _device->CreateSamplerState(&samplerDesc, &_samplerLinear);
+    HRESULT hr = _device->CreateSamplerState(&pointDesc, &_samplerLinear);
     if (FAILED(hr)) {
         std::ostringstream ss;
         ss << std::hex << hr;
-        Logger::Error("[Renderer] Failed to create sampler state: 0x" + ss.str());
+        Logger::Error("[Renderer] Failed to create point sampler: 0x" + ss.str());
         return false;
     }
 
-    Logger::Debug("[Renderer] Created point sampler with linear mipmap blending for pixel art");
+    if (!CreateAnisotropicSampler()) {
+        return false;
+    }
+
+    Logger::Debug("[Renderer] Created point sampler (pixel-art) and anisotropic sampler (terrain, " +
+                  std::to_string(_maxAnisotropy) + "x)");
+    return true;
+}
+
+bool Renderer::CreateAnisotropicSampler() {
+    D3D11_SAMPLER_DESC anisoDesc = {};
+    anisoDesc.Filter = D3D11_FILTER_ANISOTROPIC;
+    anisoDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    anisoDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    anisoDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    anisoDesc.MipLODBias = 0.0f;
+    anisoDesc.MaxAnisotropy = static_cast<UINT>(_maxAnisotropy);
+    anisoDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    anisoDesc.MinLOD = 0;
+    anisoDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+    HRESULT hr = _device->CreateSamplerState(&anisoDesc, &_samplerAnisotropic);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create anisotropic sampler: 0x" + ss.str());
+        return false;
+    }
     return true;
 }
 
@@ -539,7 +565,8 @@ void Renderer::Shutdown()
     
     // Release sampler
     _samplerLinear.Reset();
-    
+    _samplerAnisotropic.Reset();
+
     // Release all rasterizer states
     for (auto& state : _rasterizerStates) {
         state.Reset();

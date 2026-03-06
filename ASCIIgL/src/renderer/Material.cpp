@@ -264,6 +264,35 @@ const TextureArray* Material::GetTextureArray(uint32_t slot) const {
     return nullptr;
 }
 
+void Material::SetSamplerForSlot(const std::string& name, SamplerType type) {
+    for (auto& slot : _textureSlots) {
+        if (slot.name == name) {
+            slot.samplerType = type;
+            return;
+        }
+    }
+    Logger::Warning("SetSamplerForSlot: texture slot '" + name + "' not found");
+}
+
+void Material::SetSamplerForSlot(uint32_t slot, SamplerType type) {
+    for (auto& texSlot : _textureSlots) {
+        if (texSlot.slot == slot) {
+            texSlot.samplerType = type;
+            return;
+        }
+    }
+    Logger::Warning("SetSamplerForSlot: texture slot " + std::to_string(slot) + " not found");
+}
+
+SamplerType Material::GetSamplerForSlot(uint32_t slot) const {
+    for (const auto& texSlot : _textureSlots) {
+        if (texSlot.slot == slot) {
+            return texSlot.samplerType;
+        }
+    }
+    return SamplerType::Default;
+}
+
 // =========================================================================
 // Shader Program Management
 // =========================================================================

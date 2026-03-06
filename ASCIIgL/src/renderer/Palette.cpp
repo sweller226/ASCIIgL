@@ -5,6 +5,7 @@
 #include <string>
 #include <utility>
 #include <algorithm>
+#include <limits>
 
 namespace ASCIIgL {
 
@@ -159,6 +160,61 @@ MonochromePalette::MonochromePalette(float darkL, float lightL, const glm::ivec3
         Logger::Debug("[MonochromePalette]   index " + std::to_string(i) + " => RGB(" +
             std::to_string(rgb.r) + ", " + std::to_string(rgb.g) + ", " + std::to_string(rgb.b) + ") luminance " + std::to_string(lum));
     }
+}
+
+MonochromePalette::MonochromePalette(std::array<PaletteEntry, 16> customEntries) {
+    for (int i = 0; i < 16; ++i) {
+        entries[i] = customEntries[i];
+    }
+
+    // Ensure entries are sorted by luminance (ascending)
+    std::sort(entries.begin(), entries.end(),
+    [](const PaletteEntry& a, const PaletteEntry& b) {
+        return a.luminance < b.luminance;
+    });
+
+    // Infer parameters for clone()/inspection. Assumes the palette is roughly monochrome:
+    // entries[i].linearRGB ≈ hue * t_i for some direction hue and scalar t_i.
+    glm::vec3 sumDir(0.0f);
+    for (const auto& e : entries) {
+        glm::vec3 lin = PaletteUtil::sRGB255ToLinear1(e.rgb);
+        const float len = glm::length(lin);
+        if (len > 1e-6f) {
+            // Weight by magnitude so brighter samples influence hue more.
+            sumDir += lin;
+        }
+    }
+
+    glm::vec3 hueLin(1.0f, 1.0f, 1.0f);
+    if (glm::length(sumDir) > 1e-6f) {
+        hueLin = glm::normalize(sumDir);
+    }
+
+    // Convert hue direction back to an sRGB-ish 0–255 vector for display/regeneration.
+    glm::vec3 hue255f = PaletteUtil::Linear1ToSrgb255(hueLin);
+    _hueDir = glm::ivec3(
+        static_cast<int>(hue255f.r + 0.5f),
+        static_cast<int>(hue255f.g + 0.5f),
+        static_cast<int>(hue255f.b + 0.5f)
+    );
+
+    // Recover darkL/lightL as the projection range along hueLin.
+    float minT = std::numeric_limits<float>::infinity();
+    float maxT = -std::numeric_limits<float>::infinity();
+    for (const auto& e : entries) {
+        glm::vec3 lin = PaletteUtil::sRGB255ToLinear1(e.rgb);
+        const float t = glm::dot(lin, hueLin); // hueLin is normalized
+        minT = std::min(minT, t);
+        maxT = std::max(maxT, t);
+    }
+
+    if (!std::isfinite(minT) || !std::isfinite(maxT)) {
+        minT = 0.0f;
+        maxT = 0.0f;
+    }
+    if (minT > maxT) std::swap(minT, maxT);
+    _darkL = minT;
+    _lightL = maxT;
 }
 
 std::unique_ptr<Palette> MonochromePalette::clone() const {

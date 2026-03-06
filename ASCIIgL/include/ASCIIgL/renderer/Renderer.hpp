@@ -30,6 +30,7 @@
 #include <ASCIIgL/renderer/Palette.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 #include <ASCIIgL/renderer/Shader.hpp>  // for UniformValue, UniformDescriptor
+#include <ASCIIgL/renderer/SamplerType.hpp>
 
 namespace ASCIIgL {
 
@@ -117,15 +118,11 @@ private:
     // =========================================================================
     // Texture Resources
     // =========================================================================
-    // Single sampler with linear filtering (no anisotropic - MSAA handles AA)
     ComPtr<ID3D11SamplerState> _samplerLinear;
+    ComPtr<ID3D11SamplerState> _samplerAnisotropic;
     ComPtr<ID3D11ShaderResourceView> _currentTextureSRV;
     
-    // Texture cache: Maps Texture* -> ShaderResourceView
-    // Prevents recreating GPU textures every draw call
     std::unordered_map<const Texture*, ComPtr<ID3D11ShaderResourceView>> _textureCache;
-    
-    // Texture array cache: Maps TextureArray* -> ShaderResourceView
     std::unordered_map<const TextureArray*, ComPtr<ID3D11ShaderResourceView>> _textureArrayCache;
 
     // =========================================================================
@@ -166,6 +163,9 @@ private:
     // =========================================================================
     int _antialiasing_samples = 4;
     bool _antialiasing = false;
+
+    // Anisotropic filtering level for texture arrays (1, 2, 4, 8, 16). 1 = off.
+    int _maxAnisotropy = 16;
 
     // =========================================================================
     // Glyphs and Color LUT
@@ -210,6 +210,7 @@ private:
     bool InitializeRenderTarget();
     bool InitializeDepthStencil();
     bool InitializeSamplers();
+    bool CreateAnisotropicSampler();  // (re)creates _samplerAnisotropic using _maxAnisotropy
     bool InitializeRasterizerStates();
     bool InitializeBlendStates();
     bool InitializeStagingTexture();
@@ -316,6 +317,10 @@ public:
     void SetDiagnosticsEnabled(const bool enabled);
     bool GetDiagnosticsEnabled() const;
 
+    /// Anisotropic filtering level for texture arrays. Valid: 1 (off), 2, 4, 8, 16. Default 16.
+    void SetMaxAnisotropy(int level);
+    int GetMaxAnisotropy() const;
+
     // =========================================================================
     // Buffer and Diagnostics
     // =========================================================================
@@ -345,8 +350,8 @@ public:
     void UploadMaterialConstants(Material* material);
 
     // Texture Management (Public)
-    void BindTexture(const Texture* tex, int slot = 0);
-    void BindTextureArray(const TextureArray* texArray, int slot = 0);
+    void BindTexture(const Texture* tex, int slot = 0, SamplerType type = SamplerType::Default);
+    void BindTextureArray(const TextureArray* texArray, int slot = 0, SamplerType type = SamplerType::Default);
     
     // Unbind any texture
     void UnbindTexture(int slot = 0);

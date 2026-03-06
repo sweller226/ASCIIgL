@@ -900,6 +900,29 @@ bool Renderer::GetDiagnosticsEnabled() const {
     return _diagnostics_enabled;
 }
 
+void Renderer::SetMaxAnisotropy(int level) {
+    if (level <= 1) level = 1;
+    else if (level <= 2) level = 2;
+    else if (level <= 4) level = 4;
+    else if (level <= 8) level = 8;
+    else level = 16;
+
+    if (level == _maxAnisotropy) return;
+
+    _maxAnisotropy = level;
+
+    if (_initialized) {
+        _samplerAnisotropic.Reset();
+        if (!CreateAnisotropicSampler()) {
+            Logger::Error("[Renderer] Failed to recreate anisotropic sampler at " + std::to_string(_maxAnisotropy) + "x");
+        }
+    }
+}
+
+int Renderer::GetMaxAnisotropy() const {
+    return _maxAnisotropy;
+}
+
 void Renderer::ResetDiagnostics() {
     if (!_diagnostics_enabled) return;
 }
@@ -975,12 +998,12 @@ void Renderer::BindMaterial(Material* material) {
         BindShaderProgram(program.get());
     }
     
-    // Bind textures
+    // Bind textures (material's per-slot sampler type is used)
     for (const auto& slot : material->_textureSlots) {
         if (slot.texture) {
-            BindTexture(slot.texture, slot.slot);
+            BindTexture(slot.texture, slot.slot, slot.samplerType);
         } else if (slot.textureArray) {
-            BindTextureArray(slot.textureArray, slot.slot);
+            BindTextureArray(slot.textureArray, slot.slot, slot.samplerType);
         }
     }
     

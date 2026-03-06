@@ -1,6 +1,7 @@
 #include <ASCIIgL/engine/Texture.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/engine/MipChain.hpp>
 #include <stb_image/stb_image.h>
 #include <algorithm>
 
@@ -123,46 +124,17 @@ void Texture::Impl::AddCustomMipLevel(int w, int h, const std::vector<uint8_t>& 
 void Texture::Impl::GenerateMipmapsCPU(int maxLevels, MipFilters::MipFilterFn filter) {
     if (mipChain.empty()) return;
 
-    // Clear any previously generated mips (keep only base level)
-    mipChain.resize(1);
+    // Move base out, rebuild full chain, then move back into our mipChain type.
+    const int baseW = mipChain[0].width;
+    const int baseH = mipChain[0].height;
+    std::vector<uint8_t> baseData = std::move(mipChain[0].data);
 
-    int w = mipChain[0].width;
-    int h = mipChain[0].height;
+    auto built = MipChain::BuildRGBA8(std::move(baseData), baseW, baseH, maxLevels, filter);
 
-    // Compute maximum possible levels
-    int maxPossible = 1;
-    int tw = w, th = h;
-    while (tw > 1 || th > 1) {
-        tw = std::max(1, tw / 2);
-        th = std::max(1, th / 2);
-        maxPossible++;
-    }
-
-    if (maxLevels < 0 || maxLevels > maxPossible)
-        maxLevels = maxPossible;
-
-    mipChain.reserve(maxLevels);
-
-    // Use default BoxFilter if none provided
-    if (!filter)
-        filter = MipFilters::BoxFilter;
-
-    for (int level = 1; level < maxLevels; ++level) {
-        const MipLevel& prev = mipChain[level - 1];
-
-        int newW = std::max(1, prev.width / 2);
-        int newH = std::max(1, prev.height / 2);
-
-        MipLevel next;
-        next.width = newW;
-        next.height = newH;
-        next.data.resize(newW * newH * 4);
-
-        // Call user-supplied or default filter
-        filter(prev.data.data(), prev.width, prev.height,
-               next.data.data(), newW, newH);
-
-        mipChain.push_back(std::move(next));
+    mipChain.clear();
+    mipChain.reserve(built.size());
+    for (auto& lvl : built) {
+        mipChain.push_back({ lvl.width, lvl.height, std::move(lvl.data) });
     }
     
     // Mark as having custom mipmaps if we generated more than just base level
