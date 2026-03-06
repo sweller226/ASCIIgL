@@ -16,7 +16,7 @@ Renderer::~Renderer() {
     _color_buffer.clear();
 }
 
-void Renderer::Initialize(bool antialiasing, int antialiasing_samples) {
+void Renderer::Initialize(bool antialiasing, int antialiasing_samples, const wchar_t* charRamp) {
     _antialiasing = antialiasing;
     _antialiasing_samples = antialiasing_samples;
     
@@ -34,7 +34,7 @@ void Renderer::Initialize(bool antialiasing, int antialiasing_samples) {
     auto& screen = Screen::GetInst();
     _color_buffer.resize(screen.GetWidth() * screen.GetHeight());
 
-    LoadCharCoverageFromJson();
+    LoadCharCoverageFromJson(charRamp);
 
     Logger::Info("[Renderer] Initializing DirectX 11...");
 

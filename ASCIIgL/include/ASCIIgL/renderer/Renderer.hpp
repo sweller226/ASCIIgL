@@ -173,7 +173,7 @@ private:
     std::vector<wchar_t> _charRamp;
     std::vector<float> _charCoverage;
 
-    void LoadCharCoverageFromJson();
+    void LoadCharCoverageFromJson(const wchar_t* charRamp = nullptr);
     void PrecomputeColorLUT();
     void PrecomputeMonochromeColorLUT(Palette& palette);
     void PrecomputeMultiColorLUT(Palette& palette);
@@ -258,7 +258,8 @@ public:
     // =========================================================================
     // Initialization and Core API
     // =========================================================================
-    void Initialize(bool antialiasing = false, int antialiasing_samples = 4);
+    /// charRamp: restricted set of chars for coverage; nullptr or empty = use default ramp.
+    void Initialize(bool antialiasing = false, int antialiasing_samples = 4, const wchar_t* charRamp = nullptr);
     bool IsInitialized() const;
 
     // =========================================================================

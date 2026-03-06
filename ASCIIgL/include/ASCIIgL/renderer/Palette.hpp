@@ -41,7 +41,8 @@ public:
     // Build palette from explicit textures and texture arrays with weights.
     Palette(
         const std::vector<std::pair<float, std::shared_ptr<Texture>>>& textures,
-        const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays
+        const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays,
+        bool sortByLuminance = true
     );
 
     Palette(std::array<PaletteEntry, 16> customEntries);
@@ -85,6 +86,10 @@ public:
     // Colors are interpolated with gamma correction across 16 entries.
     MonochromePalette(float darkL, float lightL, const glm::ivec3& hueDir);
     MonochromePalette(std::array<PaletteEntry, 16> customEntries);
+    MonochromePalette(
+        const std::vector<std::pair<float, std::shared_ptr<Texture>>>& textures,
+        const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays
+    );
 
     float GetDarkL() const { return _darkL; }
     float GetLightL() const { return _lightL; }
@@ -93,6 +98,8 @@ public:
     std::unique_ptr<Palette> clone() const override;
 
 private:
+    void InferParamsFromEntries();
+
     float _darkL = 0.0f;
     float _lightL = 0.0f;
     glm::ivec3 _hueDir = glm::ivec3(0);

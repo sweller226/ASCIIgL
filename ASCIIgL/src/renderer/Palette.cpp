@@ -56,7 +56,8 @@ Palette::Palette() {
 
 Palette::Palette(
     const std::vector<std::pair<float, std::shared_ptr<Texture>>>& textures,
-    const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays)
+    const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays,
+    bool sortByLuminance)
 {
     // Collect color samples from given textures/arrays, using the float as a weight.
     std::vector<glm::vec3> samples;
@@ -197,6 +198,13 @@ Palette::Palette(
         // No samples; fall back to default palette.
         SetDefaultEntries();
     }
+
+    if (sortByLuminance) {
+        std::sort(entries.begin(), entries.end(),
+                  [](const PaletteEntry& a, const PaletteEntry& b) {
+                      return a.luminance < b.luminance;
+                  });
+    }
 }
 
 Palette::Palette(std::array<PaletteEntry, 16> customEntries) {
@@ -251,25 +259,19 @@ MonochromePalette::MonochromePalette(float darkL, float lightL, const glm::ivec3
     }
 }
 
-MonochromePalette::MonochromePalette(std::array<PaletteEntry, 16> customEntries) {
-    for (int i = 0; i < 16; ++i) {
-        entries[i] = customEntries[i];
-    }
-
+void MonochromePalette::InferParamsFromEntries() {
     // Ensure entries are sorted by luminance (ascending)
     std::sort(entries.begin(), entries.end(),
-    [](const PaletteEntry& a, const PaletteEntry& b) {
-        return a.luminance < b.luminance;
-    });
+              [](const PaletteEntry& a, const PaletteEntry& b) {
+                  return a.luminance < b.luminance;
+              });
 
     // Infer parameters for clone()/inspection. Assumes the palette is roughly monochrome:
     // entries[i].linearRGB ≈ hue * t_i for some direction hue and scalar t_i.
     glm::vec3 sumDir(0.0f);
     for (const auto& e : entries) {
         glm::vec3 lin = PaletteUtil::sRGB255ToLinear1(e.rgb);
-        const float len = glm::length(lin);
-        if (len > 1e-6f) {
-            // Weight by magnitude so brighter samples influence hue more.
+        if (glm::length(lin) > 1e-6f) {
             sumDir += lin;
         }
     }
@@ -279,7 +281,6 @@ MonochromePalette::MonochromePalette(std::array<PaletteEntry, 16> customEntries)
         hueLin = glm::normalize(sumDir);
     }
 
-    // Convert hue direction back to an sRGB-ish 0–255 vector for display/regeneration.
     glm::vec3 hue255f = PaletteUtil::Linear1ToSrgb255(hueLin);
     _hueDir = glm::ivec3(
         static_cast<int>(hue255f.r + 0.5f),
@@ -287,12 +288,11 @@ MonochromePalette::MonochromePalette(std::array<PaletteEntry, 16> customEntries)
         static_cast<int>(hue255f.b + 0.5f)
     );
 
-    // Recover darkL/lightL as the projection range along hueLin.
     float minT = std::numeric_limits<float>::infinity();
     float maxT = -std::numeric_limits<float>::infinity();
     for (const auto& e : entries) {
         glm::vec3 lin = PaletteUtil::sRGB255ToLinear1(e.rgb);
-        const float t = glm::dot(lin, hueLin); // hueLin is normalized
+        const float t = glm::dot(lin, hueLin);
         minT = std::min(minT, t);
         maxT = std::max(maxT, t);
     }
@@ -304,6 +304,21 @@ MonochromePalette::MonochromePalette(std::array<PaletteEntry, 16> customEntries)
     if (minT > maxT) std::swap(minT, maxT);
     _darkL = minT;
     _lightL = maxT;
+}
+
+MonochromePalette::MonochromePalette(std::array<PaletteEntry, 16> customEntries) {
+    for (int i = 0; i < 16; ++i) {
+        entries[i] = customEntries[i];
+    }
+    InferParamsFromEntries();
+}
+
+MonochromePalette::MonochromePalette(
+    const std::vector<std::pair<float, std::shared_ptr<Texture>>>& textures,
+    const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays)
+    : Palette(textures, textureArrays, false)
+{
+    InferParamsFromEntries();
 }
 
 std::unique_ptr<Palette> MonochromePalette::clone() const {

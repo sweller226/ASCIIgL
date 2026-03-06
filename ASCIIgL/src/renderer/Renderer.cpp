@@ -9,6 +9,7 @@
 #include <iostream>
 #include <fstream>
 #include <unordered_set>
+#include <unordered_map>
 #include <Windows.h>
 
 #include <nlohmann/json.hpp>
@@ -403,14 +404,24 @@ void Renderer::OverwritePxBuffWithColBuff() {
 static const wchar_t CHAR_RAMP_DEFAULT[] =
     L" ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890.:,;'\"(!?)+-*/=\"";
 
-void Renderer::LoadCharCoverageFromJson() {
+static void ApplyFallbackRamp(std::vector<wchar_t>& ramp, std::vector<float>& coverage, const wchar_t* chars) {
+    ramp.clear();
+    coverage.clear();
+    for (const wchar_t* p = chars; *p; ++p) {
+        ramp.push_back(*p);
+        coverage.push_back(0.5f);
+    }
+}
+
+void Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp) {
     _charRamp.clear();
     _charCoverage.clear();
     _colorLUTState = ColorLUTState::NotComputed;
 
+    const wchar_t* rampToUse = (charRamp && *charRamp) ? charRamp : CHAR_RAMP_DEFAULT;
+
     float fontSize = Screen::GetInst().GetFontSize();
 
-    // Try exe-relative (ASCIICraft copy) then project-root-relative (run from ASCIICraft root)
     const char* paths[] = {
         "res/ASCIIgL/coverage_cleartype.json",
     };
@@ -422,10 +433,7 @@ void Renderer::LoadCharCoverageFromJson() {
     }
     if (!file.good()) {
         Logger::Warning("[Renderer] coverage_cleartype.json not found; using fallback char ramp.");
-        for (size_t i = 0; CHAR_RAMP_DEFAULT[i]; ++i) {
-            _charRamp.push_back(CHAR_RAMP_DEFAULT[i]);
-            _charCoverage.push_back(0.5f);
-        }
+        ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
         return;
     }
 
@@ -434,20 +442,14 @@ void Renderer::LoadCharCoverageFromJson() {
         j = nlohmann::json::parse(file);
     } catch (const std::exception& e) {
         Logger::Warning(std::string("[Renderer] Failed to parse coverage_cleartype.json: ") + e.what());
-        for (size_t i = 0; CHAR_RAMP_DEFAULT[i]; ++i) {
-            _charRamp.push_back(CHAR_RAMP_DEFAULT[i]);
-            _charCoverage.push_back(0.5f);
-        }
+        ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
         return;
     }
     file.close();
 
     if (!j.contains("intervals") || !j["intervals"].is_array() || j["intervals"].empty()) {
         Logger::Warning("[Renderer] coverage_cleartype.json has no intervals.");
-        for (size_t i = 0; CHAR_RAMP_DEFAULT[i]; ++i) {
-            _charRamp.push_back(CHAR_RAMP_DEFAULT[i]);
-            _charCoverage.push_back(0.5f);
-        }
+        ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
         return;
     }
 
@@ -476,31 +478,31 @@ void Renderer::LoadCharCoverageFromJson() {
     const auto& coverages = iv["coverages"];
     if (!coverages.is_array()) {
         Logger::Warning("[Renderer] Selected interval has no coverages array.");
-        for (size_t i = 0; CHAR_RAMP_DEFAULT[i]; ++i) {
-            _charRamp.push_back(CHAR_RAMP_DEFAULT[i]);
-            _charCoverage.push_back(0.5f);
-        }
+        ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
         return;
     }
 
-    size_t n = coverages.size();
-    _charCoverage.reserve(n);
-    for (size_t i = 0; i < n; ++i)
-        _charCoverage.push_back(coverages[i].get<float>());
+    // Build char -> coverage map from JSON (chars[i] -> coverages[i])
+    std::unordered_map<unsigned, float> charToCoverage;
+    const size_t jsonN = coverages.size();
+    const bool hasChars = j.contains("chars") && j["chars"].is_array() && j["chars"].size() >= jsonN;
+    for (size_t i = 0; i < jsonN; ++i) {
+        unsigned cp = hasChars ? j["chars"][i].get<unsigned>() : static_cast<unsigned>(CHAR_RAMP_DEFAULT[i]);
+        charToCoverage[cp] = coverages[i].get<float>();
+    }
 
-    _charRamp.clear();
-    _charRamp.reserve(n);
-    if (j.contains("chars") && j["chars"].is_array() && j["chars"].size() >= n) {
-        for (size_t i = 0; i < n; ++i)
-            _charRamp.push_back(static_cast<wchar_t>(j["chars"][i].get<unsigned>()));
-    } else {
-        for (const wchar_t* p = CHAR_RAMP_DEFAULT; *p && _charRamp.size() < n; ++p)
-            _charRamp.push_back(*p);
-        while (_charRamp.size() < n)
-            _charRamp.push_back(L' ');
+    // Fill ramp and coverage from the requested ramp, looking up coverage from JSON
+    for (const wchar_t* p = rampToUse; *p; ++p) {
+        wchar_t ch = *p;
+        unsigned cp = static_cast<unsigned>(ch);
+        auto it = charToCoverage.find(cp);
+        float cov = (it != charToCoverage.end()) ? it->second : 0.5f;
+        _charRamp.push_back(ch);
+        _charCoverage.push_back(cov);
     }
 
     // Sort ramp by coverage ascending (low-coverage chars first, high last)
+    const size_t n = _charRamp.size();
     std::vector<size_t> order(n);
     std::iota(order.begin(), order.end(), size_t(0));
     std::sort(order.begin(), order.end(), [this](size_t a, size_t b) { return _charCoverage[a] < _charCoverage[b]; });
@@ -581,8 +583,9 @@ void Renderer::PrecomputeMonochromeColorLUT(Palette& palette) {
     glm::vec3 lowLinear = PaletteUtil::sRGB1ToLinear1(lowRGB);
     glm::vec3 highLinear = PaletteUtil::sRGB1ToLinear1(highRGB);
 
-    for (int i = 0; i <= 1023; ++i) {
-        float t = static_cast<float>(i) / 1023.0f;
+    const float denom = (_monochromeLUTSize > 1) ? static_cast<float>(_monochromeLUTSize - 1) : 1.0f;
+    for (size_t i = 0; i < _monochromeLUTSize; ++i) {
+        float t = static_cast<float>(i) / denom;
         glm::vec3 targetLinear = glm::mix(lowLinear, highLinear, t);
         float targetLuminance = PaletteUtil::LinearRGB_Luminance(targetLinear);
 

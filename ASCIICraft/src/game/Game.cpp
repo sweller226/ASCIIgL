@@ -76,7 +76,7 @@ bool Game::Initialize() {
         {1.0f, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray")}
     };
 
-    ASCIIgL::Palette gamePalette(textureWeights, textureArrayWeights);
+    ASCIIgL::MonochromePalette gamePalette(textureWeights, textureArrayWeights);
 
     ASCIIgL::Logger::Debug("Initializing screen...");
     if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
@@ -99,7 +99,7 @@ bool Game::Initialize() {
     renderer.SetDiagnosticsEnabled(true);
 
     ASCIIgL::Logger::Debug("Initializing renderer...");
-    renderer.Initialize(true, 4);
+    renderer.Initialize(true, 4, L" .:-=+*#%@");
 
     ASCIIgL::Renderer::GetInst().SetBlendEnabled(true);
 
@@ -289,8 +289,8 @@ bool Game::LoadTextures() {
     ASCIIgL::Logger::Info("Loading game textures...");
 
     glm::ivec3 grayHue = glm::ivec3(22, 22, 22);
-    float darkL  = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(22, 22, 22));
-    float lightL = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(219, 219, 219));
+    float darkL  = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(20, 20, 20));
+    float lightL = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(220, 220, 220));
 
     // Build monochrome mapping from the current screen palette if possible.
     ASCIIgL::MonochromeMapping monoMap;
