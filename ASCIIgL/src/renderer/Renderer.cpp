@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <execution>
+#include <limits>
 #include <numeric>
 #include <sstream>
 #include <mutex>
@@ -413,12 +414,28 @@ static void ApplyFallbackRamp(std::vector<wchar_t>& ramp, std::vector<float>& co
     }
 }
 
-void Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp) {
+/// Subsample current ramp to K evenly spaced indices (for fallback when all coverage is equal).
+static void SubsampleRampByIndex(std::vector<wchar_t>& ramp, std::vector<float>& coverage, int K) {
+    const size_t n = ramp.size();
+    if (K <= 0 || static_cast<size_t>(K) >= n) return;
+    std::vector<wchar_t> out(static_cast<size_t>(K));
+    std::vector<float> outCov(static_cast<size_t>(K));
+    for (int i = 0; i < K; ++i) {
+        size_t j = (K > 1) ? (static_cast<size_t>(i) * (n - 1)) / static_cast<size_t>(K - 1) : n / 2;
+        out[static_cast<size_t>(i)] = ramp[j];
+        outCov[static_cast<size_t>(i)] = coverage[j];
+    }
+    ramp = std::move(out);
+    coverage = std::move(outCov);
+}
+
+void Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp, int charRampCount) {
     _charRamp.clear();
     _charCoverage.clear();
     _colorLUTState = ColorLUTState::NotComputed;
 
-    const wchar_t* rampToUse = (charRamp && *charRamp) ? charRamp : CHAR_RAMP_DEFAULT;
+    const bool useCustomRamp = (charRamp && *charRamp);
+    const wchar_t* rampToUse = useCustomRamp ? charRamp : CHAR_RAMP_DEFAULT;
 
     float fontSize = Screen::GetInst().GetFontSize();
 
@@ -434,6 +451,8 @@ void Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp) {
     if (!file.good()) {
         Logger::Warning("[Renderer] coverage_cleartype.json not found; using fallback char ramp.");
         ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
+        if (!useCustomRamp && charRampCount > 0)
+            SubsampleRampByIndex(_charRamp, _charCoverage, charRampCount);
         return;
     }
 
@@ -443,6 +462,8 @@ void Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp) {
     } catch (const std::exception& e) {
         Logger::Warning(std::string("[Renderer] Failed to parse coverage_cleartype.json: ") + e.what());
         ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
+        if (!useCustomRamp && charRampCount > 0)
+            SubsampleRampByIndex(_charRamp, _charCoverage, charRampCount);
         return;
     }
     file.close();
@@ -450,6 +471,8 @@ void Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp) {
     if (!j.contains("intervals") || !j["intervals"].is_array() || j["intervals"].empty()) {
         Logger::Warning("[Renderer] coverage_cleartype.json has no intervals.");
         ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
+        if (!useCustomRamp && charRampCount > 0)
+            SubsampleRampByIndex(_charRamp, _charCoverage, charRampCount);
         return;
     }
 
@@ -479,6 +502,8 @@ void Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp) {
     if (!coverages.is_array()) {
         Logger::Warning("[Renderer] Selected interval has no coverages array.");
         ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
+        if (!useCustomRamp && charRampCount > 0)
+            SubsampleRampByIndex(_charRamp, _charCoverage, charRampCount);
         return;
     }
 
@@ -514,6 +539,56 @@ void Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp) {
     }
     _charRamp = std::move(sortedRamp);
     _charCoverage = std::move(sortedCoverage);
+
+    // When using default ramp (no custom string), optionally subsample to charRampCount chars with evenly spaced coverage
+    if (!useCustomRamp && charRampCount > 0) {
+        const size_t n = _charRamp.size();
+        const int K = charRampCount;
+        if (n > 0 && static_cast<size_t>(K) < n) {
+            const float c_min = _charCoverage[0];
+            const float c_max = _charCoverage[n - 1];
+            std::vector<size_t> chosen;
+            chosen.reserve(static_cast<size_t>(K));
+            for (int i = 0; i < K; ++i) {
+                float target = (K > 1) ? (c_min + (c_max - c_min) * static_cast<float>(i) / (K - 1)) : (0.5f * (c_min + c_max));
+                size_t best = 0;
+                float bestDist = std::abs(_charCoverage[0] - target);
+                for (size_t j = 1; j < n; ++j) {
+                    float d = std::abs(_charCoverage[j] - target);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        best = j;
+                    }
+                }
+                // If this index was already chosen, pick next closest that isn't chosen (keep distinct chars)
+                auto alreadyChosen = [&chosen](size_t idx) {
+                    return std::find(chosen.begin(), chosen.end(), idx) != chosen.end();
+                };
+                if (alreadyChosen(best)) {
+                    bestDist = std::numeric_limits<float>::max();
+                    for (size_t j = 0; j < n; ++j) {
+                        if (alreadyChosen(j)) continue;
+                        float d = std::abs(_charCoverage[j] - target);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            best = j;
+                        }
+                    }
+                }
+                chosen.push_back(best);
+            }
+            // Sort chosen by coverage so ramp stays ascending
+            std::sort(chosen.begin(), chosen.end(), [this](size_t a, size_t b) { return _charCoverage[a] < _charCoverage[b]; });
+            std::vector<wchar_t> subRamp(static_cast<size_t>(K));
+            std::vector<float> subCoverage(static_cast<size_t>(K));
+            for (int i = 0; i < K; ++i) {
+                subRamp[static_cast<size_t>(i)] = _charRamp[chosen[static_cast<size_t>(i)]];
+                subCoverage[static_cast<size_t>(i)] = _charCoverage[chosen[static_cast<size_t>(i)]];
+            }
+            _charRamp = std::move(subRamp);
+            _charCoverage = std::move(subCoverage);
+        }
+    }
 
     Logger::Info("[Renderer] Loaded char coverage for font size " + std::to_string(fontSize) + " (" + std::to_string(_charRamp.size()) + " glyphs)");
     for (size_t i = 0; i < _charRamp.size() && i < _charCoverage.size(); ++i) {
@@ -627,140 +702,6 @@ void Renderer::PrecomputeMonochromeColorLUT(Palette& palette) {
               [](const std::pair<float, CHAR_INFO>& a, const std::pair<float, CHAR_INFO>& b) {
                   return a.first < b.first;
               });
-
-    LogMonochromeLUTStats(palette);
-}
-
-void Renderer::LogMonochromeLUTStats(Palette& palette) {
-    using ASCIIgL::Logger;
-
-    // 1) Count unique CHAR_INFO entries (glyph + color attributes)
-    std::unordered_set<uint64_t> uniqueEntries;
-    uniqueEntries.reserve(_monochromeLUTSize);
-
-    // 4) Color usage distribution (by palette index)
-    const int colorCount = static_cast<int>(palette.COLOR_COUNT);
-    std::vector<int> fgCounts(colorCount, 0);
-    std::vector<int> bgCounts(colorCount, 0);
-
-    auto attrToFgIndex = [&palette, colorCount](unsigned short fgAttr) -> int {
-        for (int i = 0; i < colorCount; ++i) {
-            if (palette.GetFgColor(i) == fgAttr)
-                return i;
-        }
-        return -1;
-    };
-    auto attrToBgIndex = [&palette, colorCount](unsigned short bgAttr) -> int {
-        for (int i = 0; i < colorCount; ++i) {
-            if (palette.GetBgColor(i) == bgAttr)
-                return i;
-        }
-        return -1;
-    };
-
-    // 5) Distinct (fg, bg) pairs (by palette index)
-    std::unordered_set<uint32_t> pairSet;
-    pairSet.reserve(_monochromeLUTSize);
-
-    int minFgIdx = colorCount, maxFgIdx = -1;
-    int minBgIdx = colorCount, maxBgIdx = -1;
-
-    for (size_t i = 0; i < _monochromeLUTSize; ++i) {
-        const CHAR_INFO& ci = _monochromeLUT[i].second;
-        wchar_t glyph = ci.Char.UnicodeChar;
-        unsigned short attrs = ci.Attributes;
-
-        uint64_t key = (static_cast<uint64_t>(glyph) << 16) | attrs;
-        uniqueEntries.insert(key);
-
-        unsigned short fgAttr = attrs & 0x0F;
-        unsigned short bgAttr = attrs & 0xF0;
-
-        int fgIdx = attrToFgIndex(fgAttr);
-        int bgIdx = attrToBgIndex(bgAttr);
-
-        if (fgIdx >= 0) {
-            fgCounts[fgIdx]++;
-            if (fgIdx < minFgIdx) minFgIdx = fgIdx;
-            if (fgIdx > maxFgIdx) maxFgIdx = fgIdx;
-        }
-        if (bgIdx >= 0) {
-            bgCounts[bgIdx]++;
-            if (bgIdx < minBgIdx) minBgIdx = bgIdx;
-            if (bgIdx > maxBgIdx) maxBgIdx = bgIdx;
-        }
-        if (fgIdx >= 0 && bgIdx >= 0) {
-            uint32_t pairKey = (static_cast<uint32_t>(bgIdx) << 16) | static_cast<uint32_t>(fgIdx & 0xFFFF);
-            pairSet.insert(pairKey);
-        }
-    }
-
-    const size_t totalEntries = _monochromeLUTSize;
-    const size_t uniqueCount = uniqueEntries.size();
-
-    int fgUsed = 0, bgUsed = 0;
-    for (int i = 0; i < colorCount; ++i) {
-        if (fgCounts[i] > 0) fgUsed++;
-        if (bgCounts[i] > 0) bgUsed++;
-    }
-
-    Logger::Info(
-        "[Renderer] Monochrome LUT: " +
-        std::to_string(totalEntries) + " entries, " +
-        std::to_string(uniqueCount) + " unique CHAR_INFO (" +
-        std::to_string((100.0 * uniqueCount) / totalEntries) + "%)"
-    );
-
-    Logger::Info(
-        "[Renderer] Monochrome LUT: FG colors used " +
-        std::to_string(fgUsed) + "/" + std::to_string(colorCount) +
-        ", BG colors used " +
-        std::to_string(bgUsed) + "/" + std::to_string(colorCount)
-    );
-
-    Logger::Info(
-        "[Renderer] Monochrome LUT: distinct (fg,bg) pairs = " +
-        std::to_string(pairSet.size())
-    );
-
-    if (minFgIdx <= maxFgIdx) {
-        Logger::Info(
-            "[Renderer] Monochrome LUT: FG palette index range [" +
-            std::to_string(minFgIdx) + ", " + std::to_string(maxFgIdx) + "]"
-        );
-    }
-    if (minBgIdx <= maxBgIdx) {
-        Logger::Info(
-            "[Renderer] Monochrome LUT: BG palette index range [" +
-            std::to_string(minBgIdx) + ", " + std::to_string(maxBgIdx) + "]"
-        );
-    }
-
-    // Optional: dump full LUT mapping when diagnostics are enabled
-    if (_diagnostics_enabled) {
-        Logger::Debug("[Renderer] Monochrome LUT entries (index, targetL, glyphCode, fgIdx, bgIdx, attrs):");
-        for (size_t i = 0; i < _monochromeLUTSize; ++i) {
-            float targetL = _monochromeLUT[i].first;
-            const CHAR_INFO& ci = _monochromeLUT[i].second;
-            unsigned short attrs = ci.Attributes;
-            unsigned short fgAttr = attrs & 0x0F;
-            unsigned short bgAttr = attrs & 0xF0;
-
-            int fgIdx = attrToFgIndex(fgAttr);
-            int bgIdx = attrToBgIndex(bgAttr);
-
-            unsigned int glyphCode = static_cast<unsigned int>(ci.Char.UnicodeChar);
-
-            Logger::Debug(
-                "[Renderer] MonoLUT[" + std::to_string(i) +
-                "]: L=" + std::to_string(targetL) +
-                " glyph=U+" + std::to_string(glyphCode) +
-                " fgIdx=" + std::to_string(fgIdx) +
-                " bgIdx=" + std::to_string(bgIdx) +
-                " attrs=" + std::to_string(attrs)
-            );
-        }
-    }
 }
 
 void Renderer::PrecomputeMultiColorLUT(Palette& palette) {

@@ -173,11 +173,10 @@ private:
     std::vector<wchar_t> _charRamp;
     std::vector<float> _charCoverage;
 
-    void LoadCharCoverageFromJson(const wchar_t* charRamp = nullptr);
+    void LoadCharCoverageFromJson(const wchar_t* charRamp = nullptr, int charRampCount = 10);
     void PrecomputeColorLUT();
     void PrecomputeMonochromeColorLUT(Palette& palette);
     void PrecomputeMultiColorLUT(Palette& palette);
-    void LogMonochromeLUTStats(Palette& palette);
     /// Map luminance L to index in [0, 1023] for monochrome LUT lookup.
     size_t MonochromeLuminanceToIndex(float L) const;
 
@@ -258,8 +257,9 @@ public:
     // =========================================================================
     // Initialization and Core API
     // =========================================================================
-    /// charRamp: restricted set of chars for coverage; nullptr or empty = use default ramp.
-    void Initialize(bool antialiasing = false, int antialiasing_samples = 4, const wchar_t* charRamp = nullptr);
+    /// charRamp: custom chars for coverage; nullptr or empty = use default ramp.
+    /// charRampCount: when using default ramp, subsample to this many chars with evenly spaced coverage (default 10); ignored if charRamp is set.
+    void Initialize(bool antialiasing = false, int antialiasing_samples = 4, const wchar_t* charRamp = nullptr, int charRampCount = 10);
     bool IsInitialized() const;
 
     // =========================================================================

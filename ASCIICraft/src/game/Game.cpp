@@ -99,7 +99,7 @@ bool Game::Initialize() {
     renderer.SetDiagnosticsEnabled(true);
 
     ASCIIgL::Logger::Debug("Initializing renderer...");
-    renderer.Initialize(true, 4, L" .:-=+*#%@");
+    renderer.Initialize(true, 4, nullptr, 10);
 
     ASCIIgL::Renderer::GetInst().SetBlendEnabled(true);
 
