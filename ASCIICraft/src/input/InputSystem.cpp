@@ -4,7 +4,7 @@
 #include <ASCIICraft/events/InputEvents.hpp>
 #include <ASCIIgL/engine/InputManager.hpp>
 
-namespace ASCIICraft::input {
+namespace input {
 
 InputSystem::InputSystem(EventBus& eventBus)
     : m_eventBus(eventBus)
@@ -45,4 +45,4 @@ float InputSystem::GetMouseSensitivity() const {
     return ASCIIgL::InputManager::GetInst().GetMouseSensitivity();
 }
 
-} // namespace ASCIICraft::input
+} // namespace input

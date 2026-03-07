@@ -6,7 +6,7 @@
 #include <ASCIICraft/events/EventBus.hpp>
 #include <ASCIICraft/events/GUIEvents.hpp>
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 Slot::Slot(entt::registry& registry, EventBus& eventBus, entt::entity inventoryOwner, int slotIndex)
     : m_registry(registry)
@@ -54,4 +54,4 @@ void Slot::OnClicked(int mouseButton, bool shift) {
     });
 }
 
-} // namespace ASCIICraft::gui
+} // namespace gui

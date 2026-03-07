@@ -16,7 +16,7 @@ Renderer::~Renderer() {
     _color_buffer.clear();
 }
 
-void Renderer::Initialize(bool antialiasing, int antialiasing_samples) {
+void Renderer::Initialize(bool antialiasing, int antialiasing_samples, const wchar_t* charRamp, int charRampCount) {
     _antialiasing = antialiasing;
     _antialiasing_samples = antialiasing_samples;
     
@@ -33,6 +33,8 @@ void Renderer::Initialize(bool antialiasing, int antialiasing_samples) {
     }
     auto& screen = Screen::GetInst();
     _color_buffer.resize(screen.GetWidth() * screen.GetHeight());
+
+    LoadCharCoverageFromJson(charRamp, charRampCount);
 
     Logger::Info("[Renderer] Initializing DirectX 11...");
 
@@ -143,7 +145,7 @@ bool Renderer::InitializeRenderTarget() {
         
         // Check MSAA quality support
         UINT numQualityLevels = 0;
-        _device->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, sampleCount, &numQualityLevels);
+        _device->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, sampleCount, &numQualityLevels);
         if (numQualityLevels > 0) {
             qualityLevel = 0; 
         } else {
@@ -160,7 +162,7 @@ bool Renderer::InitializeRenderTarget() {
     texDesc.Height = Screen::GetInst().GetHeight();
     texDesc.MipLevels = 1;
     texDesc.ArraySize = 1;
-    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     texDesc.SampleDesc.Count = sampleCount;
     texDesc.SampleDesc.Quality = qualityLevel;
     texDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -287,28 +289,56 @@ bool Renderer::InitializeDepthStencil() {
 }
 
 bool Renderer::InitializeSamplers() {
-    // Create point sampler with linear mipmap blending for pixel art
-    // Point filtering keeps pixels sharp, linear mip blending reduces shimmering at distance
-    D3D11_SAMPLER_DESC samplerDesc = {};
-    samplerDesc.Filter = D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;  // Point filtering with smooth mipmap transitions
-    samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;  // Clamp to prevent bleeding at edges
-    samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-    samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-    samplerDesc.MipLODBias = -0.5f;  // Use slightly sharper mipmaps to reduce atlas bleeding
-    samplerDesc.MaxAnisotropy = 1;
-    samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-    samplerDesc.MinLOD = 0;
-    samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+    // --- Point sampler: pixel-art (GUI, sprites) ---
+    D3D11_SAMPLER_DESC pointDesc = {};
+    pointDesc.Filter = D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
+    pointDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    pointDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    pointDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    // Slight positive LOD bias to favor slightly coarser mips (reduce aliasing).
+    pointDesc.MipLODBias = 0.0f;
+    pointDesc.MaxAnisotropy = 1;
+    pointDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    pointDesc.MinLOD = 0;
+    pointDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
-    HRESULT hr = _device->CreateSamplerState(&samplerDesc, &_samplerLinear);
+    HRESULT hr = _device->CreateSamplerState(&pointDesc, &_samplerLinear);
     if (FAILED(hr)) {
         std::ostringstream ss;
         ss << std::hex << hr;
-        Logger::Error("[Renderer] Failed to create sampler state: 0x" + ss.str());
+        Logger::Error("[Renderer] Failed to create point sampler: 0x" + ss.str());
         return false;
     }
 
-    Logger::Debug("[Renderer] Created point sampler with linear mipmap blending for pixel art");
+    if (!CreateAnisotropicSampler()) {
+        return false;
+    }
+
+    Logger::Debug("[Renderer] Created point sampler (pixel-art) and anisotropic sampler (terrain, " +
+                  std::to_string(_maxAnisotropy) + "x)");
+    return true;
+}
+
+bool Renderer::CreateAnisotropicSampler() {
+    D3D11_SAMPLER_DESC anisoDesc = {};
+    anisoDesc.Filter = D3D11_FILTER_ANISOTROPIC;
+    anisoDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    anisoDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    anisoDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    // Match point sampler: slight positive bias for terrain/aniso paths as well.
+    anisoDesc.MipLODBias = 0.0f;
+    anisoDesc.MaxAnisotropy = static_cast<UINT>(_maxAnisotropy);
+    anisoDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    anisoDesc.MinLOD = 0;
+    anisoDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+    HRESULT hr = _device->CreateSamplerState(&anisoDesc, &_samplerAnisotropic);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create anisotropic sampler: 0x" + ss.str());
+        return false;
+    }
     return true;
 }
 
@@ -385,7 +415,7 @@ bool Renderer::InitializeStagingTexture() {
     stagingDesc.Height = Screen::GetInst().GetHeight();
     stagingDesc.MipLevels = 1;
     stagingDesc.ArraySize = 1;
-    stagingDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    stagingDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     stagingDesc.SampleDesc.Count = 1;
     stagingDesc.SampleDesc.Quality = 0;
     stagingDesc.Usage = D3D11_USAGE_STAGING;
@@ -487,39 +517,33 @@ void Renderer::DownloadFramebuffer()
         return;
     }
 
-    // Copy pixels to color buffer (keep 0-255, convert to 0-15 at LUT lookup)
-    uint8_t* src = static_cast<uint8_t*>(mapped.pData);
+    // Copy pixels to color buffer (keep 0-255, convert to 0-15 at LUT lookup).
+    // Row-by-row with advancing pointers and unrolled inner loop for better cache and fewer ops.
+    const size_t rowPitch = mapped.RowPitch;
+    glm::ivec4* dest = _color_buffer.data();
+    const int width4 = (width / 4) * 4;
+
     for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            uint8_t* pixel = src + y * mapped.RowPitch + x * 4; // RGBA
-            int index = y * width + x;
-            
-            // Keep 0-255 precision in color buffer
-            _color_buffer[index] = glm::ivec4(
-                pixel[0],  // R (0-255)
-                pixel[1],  // G (0-255)
-                pixel[2],  // B (0-255)
-                pixel[3]   // A (0-255)
-            );
+        const uint8_t* row = static_cast<const uint8_t*>(mapped.pData) + y * rowPitch;
+
+        for (int x = 0; x < width4; x += 4) {
+            dest[0] = glm::ivec4(row[0], row[1], row[2], row[3]);
+            row += 4;
+            dest[1] = glm::ivec4(row[0], row[1], row[2], row[3]);
+            row += 4;
+            dest[2] = glm::ivec4(row[0], row[1], row[2], row[3]);
+            row += 4;
+            dest[3] = glm::ivec4(row[0], row[1], row[2], row[3]);
+            row += 4;
+            dest += 4;
+        }
+        for (int x = width4; x < width; ++x) {
+            *dest++ = glm::ivec4(row[0], row[1], row[2], row[3]);
+            row += 4;
         }
     }
 
     _context->Unmap(_stagingTexture.Get(), 0);
-    
-    // Sample some pixels to verify we have actual data
-    int nonBlackPixels = 0;
-    for (int i = 0; i < width * height; i++) {
-        auto& pixel = _color_buffer[i];
-        if (pixel.r != 0 || pixel.g != 0 || pixel.b != 0) {
-            nonBlackPixels++;
-        }
-    }
-    Logger::Debug("DownloadFramebuffer: Successfully downloaded " + std::to_string(width * height) + " pixels, " + std::to_string(nonBlackPixels) + " non-black");
-    
-    // Sample center pixel
-    int centerIdx = (height / 2) * width + (width / 2);
-    auto& centerPixel = _color_buffer[centerIdx];
-    Logger::Debug("Center pixel color: R=" + std::to_string(centerPixel.r) + " G=" + std::to_string(centerPixel.g) + " B=" + std::to_string(centerPixel.b));
 }
 
 // =========================================================================
@@ -537,7 +561,8 @@ void Renderer::Shutdown()
     
     // Release sampler
     _samplerLinear.Reset();
-    
+    _samplerAnisotropic.Reset();
+
     // Release all rasterizer states
     for (auto& state : _rasterizerStates) {
         state.Reset();

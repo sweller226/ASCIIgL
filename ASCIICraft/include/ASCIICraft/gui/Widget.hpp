@@ -7,7 +7,7 @@
 namespace ASCIIgL { class Texture; }
 namespace ecs::systems { class RenderSystem; }
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 /// Base for all GUI widgets. Layout uses anchor/pivot/offset/size; optional parent for relative layout.
 class Widget {
@@ -44,4 +44,4 @@ protected:
     Widget* parent = nullptr;
 };
 
-} // namespace ASCIICraft::gui
+} // namespace gui

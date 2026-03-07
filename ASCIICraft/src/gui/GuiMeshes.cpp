@@ -6,7 +6,7 @@
 
 #include <vector>
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 std::shared_ptr<ASCIIgL::Mesh> CreateQuadMesh() {
     using V = ASCIIgL::VertStructs::PosUV;
@@ -35,4 +35,4 @@ std::shared_ptr<ASCIIgL::Mesh> CreateQuadMesh() {
     );
 }
 
-} // namespace ASCIICraft::gui
+} // namespace gui

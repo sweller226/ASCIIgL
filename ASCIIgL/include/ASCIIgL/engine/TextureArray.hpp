@@ -7,6 +7,7 @@
 #include <functional>
 
 #include <ASCIIgL/engine/MipFilters.hpp>
+#include <ASCIIgL/engine/MonochromeMapping.hpp>
 
 namespace ASCIIgL {
 
@@ -15,12 +16,15 @@ namespace ASCIIgL {
 class TextureArray {
 public:
     // Load from existing atlas image (splits into tiles)
-    // atlasPath: path to terrain.png or similar atlas
+    // atlasPath: path to terrain2.png or similar atlas
     // tileSize: size of each tile (e.g., 16 for 16x16 tiles)
-    TextureArray(const std::string& atlasPath, int tileSize);
+    // Optional monochrome mapping can bake tiles to a gradient on load.
+    TextureArray(const std::string& atlasPath, int tileSize,
+                 const MonochromeMapping& mono = MonochromeMapping{});
     
     // Load from individual tile files
-    TextureArray(const std::vector<std::string>& tilePaths);
+    TextureArray(const std::vector<std::string>& tilePaths,
+                 const MonochromeMapping& mono = MonochromeMapping{});
     
     ~TextureArray();
     

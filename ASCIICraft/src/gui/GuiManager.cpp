@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <glm/vec2.hpp>
 
-namespace ASCIICraft::gui {
+namespace gui {
 
-GuiManager::GuiManager(entt::registry& registry, EventBus& eventBus, ASCIICraft::IGameInputSource& input)
+GuiManager::GuiManager(entt::registry& registry, EventBus& eventBus, IInputSource& input)
     : m_registry(registry)
     , m_eventBus(eventBus)
     , m_input(input)
@@ -102,4 +102,4 @@ bool GuiManager::IsInventoryOpen() const {
     return std::find(m_screenStack.begin(), m_screenStack.end(), m_inventoryScreen.get()) != m_screenStack.end();
 }
 
-} // namespace ASCIICraft::gui
+} // namespace gui

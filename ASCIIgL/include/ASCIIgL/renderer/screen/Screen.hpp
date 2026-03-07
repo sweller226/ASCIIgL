@@ -37,7 +37,7 @@ private:
     unsigned int _screen_height = 0;
     std::wstring _title;
     float _fontSize = 0.0f;
-    Palette _palette;
+    std::unique_ptr<Palette> _palette;
 
     Screen();
     ~Screen();
@@ -49,7 +49,7 @@ public:
         static Screen instance;
         return instance;
     }
-    int Initialize(unsigned int width, unsigned int height, const std::wstring title, float fontSize, const Palette palette = Palette());
+    int Initialize(unsigned int width, unsigned int height, const std::wstring title, float fontSize, const Palette& palette);
     bool IsInitialized() const;
 
     void RenderTabTitle();
@@ -67,6 +67,10 @@ public:
     unsigned int GetHeight() const;
     unsigned int GetWidth() const;
     Palette& GetPalette();
+    /// Returns a pointer to the palette as a MonochromePalette if and only if
+    /// the current palette is monochrome. Otherwise returns nullptr.
+    MonochromePalette* GetMonochromePalette();
+    bool IsMonochromePalette() const;
     std::vector<CHAR_INFO>& GetPixelBuffer();
 };
 

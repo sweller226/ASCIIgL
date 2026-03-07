@@ -7,6 +7,10 @@
 #include <unordered_map>
 #include <string>
 #include <stdexcept>
+#include <mutex>
+#include <optional>
+#include <list>
+#include <memory>
 
 #include <ASCIICraft/world/Chunk.hpp>
 #include <ASCIICraft/world/Coords.hpp>
@@ -94,8 +98,8 @@ public:
     RegionFile(const RegionFile&) = delete;
     RegionFile& operator=(const RegionFile&) = delete;
 
-    RegionFile(RegionFile&&) noexcept = default;
-    RegionFile& operator=(RegionFile&&) noexcept = default;
+    RegionFile(RegionFile&&) = delete;
+    RegionFile& operator=(RegionFile&&) = delete;
 
     bool LoadChunk(Chunk* out);
     bool SaveChunk(const Chunk* data);
@@ -103,13 +107,32 @@ public:
     bool LoadMetaData(const ChunkCoord& pos, MetaBucket* out);
     bool SaveMetaData(const ChunkCoord& pos, const MetaBucket* data);
 
+    /// Used by unload callback: save chunk + optional meta under region lock, then optionally Close(). Thread-safe.
+    void SaveChunkForUnload(const Chunk* data, const ChunkCoord& pos, const MetaBucket* meta, bool closeAfter);
+
+    /// Batch save: open once, write multiple chunks/metas, flush once. Much faster than N separate SaveChunk/SaveMetaData.
+    bool BeginBatchSave();
+    void SaveChunkInBatch(const Chunk* data);
+    void SaveMetaDataInBatch(const ChunkCoord& pos, const MetaBucket* data);
+    void EndBatchSave();
+
     const RegionCoord& GetRegionCoord() const;
     const std::string& GetPath() const;
 
+    /// Flush and close. Caller must hold _mutex (e.g. from unload callback or EndBatchSave).
+    void Close();
+    bool IsFileOpen() const { return _file.is_open(); }
+    std::unique_lock<std::mutex> Lock() { return std::unique_lock<std::mutex>(_mutex); }
+
 private:
+    mutable std::mutex _mutex;
+    std::optional<std::unique_lock<std::mutex>> _batchLock;  // held from BeginBatchSave until EndBatchSave
     std::fstream _file;
     std::string _path;
     const RegionCoord _coord;
+
+    /// Open file if not open (read-write), read header/index if file exists. Caller must hold _mutex.
+    bool EnsureOpen();
 
     RegionHeader header{};
     std::vector<ChunkIndexEntry> chunkIndexes;
@@ -127,6 +150,10 @@ private:
     void writeHeaderAndIndex();
     void readHeaderAndIndex();
 
+    /// Append one chunk/meta blob and update in-memory index. Caller must have file open (e.g. openForReadWrite or BeginBatchSave).
+    void appendChunkBlobAndUpdateIndex(const Chunk* data);
+    void appendMetaBlobAndUpdateIndex(const ChunkCoord& pos, const MetaBucket* data);
+
     void parseChunkBlob(const std::vector<uint8_t>& blob, Chunk* out);
     std::vector<uint8_t> buildChunkBlob(const Chunk* data);
 
@@ -137,16 +164,20 @@ private:
 class RegionManager {
 public:
     RegionManager() = default;
-    ~RegionManager() = default; // default is fine; list elements are destroyed automatically
+    ~RegionManager() = default;
 
-    static constexpr int MAX_REGIONS = 32; 
+    static constexpr int MAX_REGIONS = 32;
 
-    void AddRegion(RegionFile&& rf);
+    void AddRegion(const RegionCoord& coord);
     void RemoveRegion(const RegionCoord& coord);
-    RegionFile& AccessRegion(const RegionCoord& coord);
+    std::shared_ptr<RegionFile> AccessRegion(const RegionCoord& coord);
     bool FilePresent(const RegionCoord& coord);
+    /// Thread-safe: return existing region or create and return new one. Keeps region alive until shared_ptr is released.
+    std::shared_ptr<RegionFile> GetOrCreate(const RegionCoord& coord);
 
 private:
-    std::unordered_map<RegionCoord, std::list<RegionFile>::iterator> regionFiles;
-    std::list<RegionFile> regionList;
+    mutable std::mutex mutex_;
+    using RegionList = std::list<std::shared_ptr<RegionFile>>;
+    std::unordered_map<RegionCoord, RegionList::iterator> regionFiles;
+    RegionList regionList;
 };

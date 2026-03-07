@@ -6,18 +6,19 @@
 #include <ASCIIgL/renderer/Palette.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
+#include <ASCIIgL/renderer/HLSLIncludes.hpp>
 
 #include <ASCIIgL/engine/TextureLibrary.hpp>
 #include <ASCIIgL/engine/MipFilters.hpp>
+#include <ASCIIgL/engine/MonochromeMapping.hpp>
 #include <ASCIIgL/engine/Camera2D.hpp>
+#include <ASCIIgL/engine/FPSClock.hpp>
+
+#include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/util/Profiler.hpp>
 
 #include <glm/vec2.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-
-#include <ASCIIgL/util/Logger.hpp>
-#include <ASCIIgL/engine/FPSClock.hpp>
-
-#include <ASCIIgL/util/Profiler.hpp>
 
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
 #include <ASCIICraft/ecs/data/ItemIndex.hpp>
@@ -63,27 +64,19 @@ Game::~Game() {
 bool Game::Initialize() {
     ASCIIgL::Logger::Info("Initializing ASCIICraft...");
 
-    ASCIIgL::Logger::Debug("Setting up palette and screen...");
+    ASCIIgL::Logger::Debug("Preloading textures for palette generation...");
 
-    float lowLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(18, 18, 18));
-    float highLight = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(210, 210, 210));
+    LoadTextures();
 
-    // gray
-    ASCIIgL::Palette grayPalette(
-        lowLight,
-        highLight,
-        glm::ivec3(205, 205, 205)
-    );
+    std::vector<std::pair<float, std::shared_ptr<ASCIIgL::Texture>>> textureWeights = {
+        {1.0f, ASCIIgL::TextureLibrary::GetInst().GetTexture("inventoryTexture")}
+    };
 
-    // silver blue
-    ASCIIgL::Palette silverBluePalette(
-        lowLight,
-        highLight,
-        glm::ivec3(190, 205, 230)
-    );
+    std::vector<std::pair<float, std::shared_ptr<ASCIIgL::TextureArray>>> textureArrayWeights = {
+        {1.0f, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray")}
+    };
 
-    // choose your active palette
-    ASCIIgL::Palette gamePalette = grayPalette;
+    ASCIIgL::MonochromePalette gamePalette(textureWeights, textureArrayWeights);
 
     ASCIIgL::Logger::Debug("Initializing screen...");
     if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
@@ -98,18 +91,15 @@ bool Game::Initialize() {
     ASCIIgL::FPSClock::GetInst().Initialize(static_cast<unsigned int>(TARGET_FPS), 1.0f);
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
 
-
-    // Using a monochromatic gradient palette, so use Monochrome optimization
-    ASCIIgL::Renderer::GetInst().SetPaletteMode(ASCIIgL::PaletteMode::Monochrome);
-
-    ASCIIgL::Renderer::GetInst().SetBackgroundCol(gamePalette.GetRGB(8));
-    ASCIIgL::Renderer::GetInst().SetWireframe(false);
-    ASCIIgL::Renderer::GetInst().SetBackfaceCulling(true);
-    ASCIIgL::Renderer::GetInst().SetCCW(true);
-    ASCIIgL::Renderer::GetInst().SetDiagnosticsEnabled(true);
+    ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
+    renderer.SetBackgroundCol(gamePalette.GetRGB(8));
+    renderer.SetWireframe(false);
+    renderer.SetBackfaceCulling(true);
+    renderer.SetCCW(true);
+    renderer.SetDiagnosticsEnabled(true);
 
     ASCIIgL::Logger::Debug("Initializing renderer...");
-    ASCIIgL::Renderer::GetInst().Initialize(true, 4);
+    renderer.Initialize(true, 4, nullptr, 10);
 
     ASCIIgL::Renderer::GetInst().SetBlendEnabled(true);
 
@@ -188,7 +178,7 @@ void Game::Update() {
     ASCIIgL::Logger::Debug("Game::Update - state = " +
         std::to_string(static_cast<int>(gameState)));
 
-    inputSystem.SetInputMode(guiManager.IsBlockingInput() ? ASCIICraft::input::InputMode::GUI : ASCIICraft::input::InputMode::Gameplay);
+    inputSystem.SetInputMode(guiManager.IsBlockingInput() ? input::InputMode::GUI : input::InputMode::Gameplay);
     inputSystem.Update();
 
     for ([[maybe_unused]] const auto& e : eventBus.view<events::ToggleInventoryEvent>()) {
@@ -221,9 +211,6 @@ void Game::Update() {
             ASCIIgL::Logger::Debug("Update: Running block update system");
             blockUpdateSystem.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running world update");
-            world->Update();
-
             ASCIIgL::Logger::Debug("Update: Running movement system");
             movementSystem.Update();
             ASCIIgL::Logger::Debug("Update: Running camera system");
@@ -231,6 +218,9 @@ void Game::Update() {
 
             ASCIIgL::Logger::Debug("Update: Running physics system");
             physicsSystem.Update();
+
+            ASCIIgL::Logger::Debug("Update: Running world update");
+            world->Update();
 
             break;
         }
@@ -295,16 +285,39 @@ void Game::Shutdown() {
     ASCIIgL::Logger::Info("ASCIICraft shutdown complete");
 }
 
-bool Game::LoadResources() {
-    ASCIIgL::Logger::Info("Loading game resources...");
+bool Game::LoadTextures() {
+    ASCIIgL::Logger::Info("Loading game textures...");
+
+    glm::ivec3 grayHue = glm::ivec3(22, 22, 22);
+    float darkL  = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(20, 20, 20));
+    float lightL = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(220, 220, 220));
+
+    // Build monochrome mapping from the current screen palette if possible.
+    ASCIIgL::MonochromeMapping monoMap;
+    monoMap.enabled = true;
+    monoMap.darkL = darkL;
+    monoMap.lightL = lightL;
+    monoMap.hueDir = grayHue;
 
     // Load block textures via TextureLibrary which takes ownership
-    auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray("res/textures/terrain.png", 16, "terrainTextureArray");
+    auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray("res/textures/terrain2.png", 16, "terrainTextureArray", monoMap);
 
     if (!blockTextureArray || !blockTextureArray->IsValid()) {
         ASCIIgL::Logger::Error("Failed to load block texture array");
         return false;
     }
+
+    auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture("res/textures/gui/inventory.png", "inventoryTexture", monoMap);
+    if (!inventoryTexture) {
+        ASCIIgL::Logger::Error("Failed to load inventory texture");
+        return false;
+    }
+
+    return true;
+}
+
+bool Game::LoadResources() {
+    ASCIIgL::Logger::Info("Loading game resources...");
     
     // Create gradient mapping shader program
     auto terrainVS = ASCIIgL::Shader::CreateFromSource(
@@ -312,9 +325,13 @@ bool Game::LoadResources() {
         ASCIIgL::ShaderType::Vertex
     );
     
+    ASCIIgL::ShaderIncludeMap terrainIncludes;
+    ASCIIgL::HLSLIncludes::AddToMap(terrainIncludes);
     auto terrainPS = ASCIIgL::Shader::CreateFromSource(
         TerrainShaders::GetTerrainPSSource(),
-        ASCIIgL::ShaderType::Pixel
+        ASCIIgL::ShaderType::Pixel,
+        "main",
+        &terrainIncludes
     );
     
     if (!terrainVS || !terrainVS->IsValid()) {
@@ -327,11 +344,11 @@ bool Game::LoadResources() {
         return false;
     }
     
-    // Create shader program with gradient map uniform layout
+    // Create shader program with gradient map uniform layout (PosUVLayerLight = terrain + per-vertex light)
     auto blockShaderProgram = ASCIIgL::ShaderProgram::Create(
         std::move(terrainVS),
         std::move(terrainPS),
-        ASCIIgL::VertFormats::PosUVLayer(),
+        ASCIIgL::VertFormats::PosUVLayerLight(),
         TerrainShaders::GetTerrainPSUniformLayout()
     );
     
@@ -349,31 +366,28 @@ bool Game::LoadResources() {
     }
     
     // Set texture array (weak reference inside Material, owned by TextureLibrary)
-    blockMaterial->SetTextureArray(0, blockTextureArray.get());
+    blockMaterial->SetTextureArray(0, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get());
     
-    // Set gradient colors (dark to bright, normalized 0-1 range)
-    // These correspond to palette colors: dark end = black, bright end = white
+    // Set gradient colors from palette entries with smallest and largest luminance (matches monochrome LUT)
     auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
-    blockMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(0), 1.0f));  // Black
-    blockMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(15), 1.0f));  // Bright (matches palette)
+    blockMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
+    blockMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
 
     // Register material
     ASCIIgL::MaterialLibrary::GetInst().Register("blockMaterial", std::move(blockMaterial));
-
-    auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture("res/textures/gui/inventory.png", "inventoryTexture");
-    if (!inventoryTexture) {
-        ASCIIgL::Logger::Error("Failed to load inventory texture");
-        return false;
-    }
 
     auto guiVS = ASCIIgL::Shader::CreateFromSource(
         GUIShaders::GetGUIVSSource(),
         ASCIIgL::ShaderType::Vertex
     );
 
+    ASCIIgL::ShaderIncludeMap guiIncludes;
+    ASCIIgL::HLSLIncludes::AddToMap(guiIncludes);
     auto guiPS = ASCIIgL::Shader::CreateFromSource(
         GUIShaders::GetGUIPSSource(),
-        ASCIIgL::ShaderType::Pixel
+        ASCIIgL::ShaderType::Pixel,
+        "main",
+        &guiIncludes
     );
 
     if (!guiVS || !guiVS->IsValid()) {
@@ -405,18 +419,27 @@ bool Game::LoadResources() {
         return false;
     }
 
+    {
+        auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
+        guiMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
+        guiMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
+    }
     // Register material (textures are set per-item via AddGuiItem texture parameter)
     ASCIIgL::MaterialLibrary::GetInst().Register("guiMaterial", std::move(guiMaterial));
 
-    // GUI item material: PosUVLayer + texture array for item icons in slots
+    // GUI item material: PosUVLayerLight + texture array for item icons in slots
     auto itemVS = ASCIIgL::Shader::CreateFromSource(
         GUIShaders::GetItemVSSource(),
         ASCIIgL::ShaderType::Vertex
     );
 
+    ASCIIgL::ShaderIncludeMap itemIncludes;
+    ASCIIgL::HLSLIncludes::AddToMap(itemIncludes);
     auto itemPS = ASCIIgL::Shader::CreateFromSource(
         GUIShaders::GetItemPSSource(),
-        ASCIIgL::ShaderType::Pixel
+        ASCIIgL::ShaderType::Pixel,
+        "main",
+        &itemIncludes
     );
 
     if (!itemVS || !itemVS->IsValid() || !itemPS || !itemPS->IsValid()) {
@@ -427,7 +450,7 @@ bool Game::LoadResources() {
     auto guiItemShaderProgram = ASCIIgL::ShaderProgram::Create(
         std::move(itemVS),
         std::move(itemPS),
-        ASCIIgL::VertFormats::PosUVLayer(),
+        ASCIIgL::VertFormats::PosUVLayerLight(),
         GUIShaders::GetItemPSUniformLayout()
     );
 
@@ -442,6 +465,12 @@ bool Game::LoadResources() {
         return false;
     }
 
+    {
+        auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
+        guiItemMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
+        guiItemMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
+    }
+
     auto* terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get();
     guiItemMaterial->SetTextureArray(0, terrainTextureArray);
     ASCIIgL::MaterialLibrary::GetInst().Register("guiItemMaterial", std::move(guiItemMaterial));
@@ -449,13 +478,13 @@ bool Game::LoadResources() {
     // OOP GUI: create play + inventory screens after textures/materials exist (CreateQuadMesh needs terrainTextureArray)
     entt::entity player = ecs::components::GetPlayerEntity(registry);
     if (player != entt::null) {
-        auto guiQuad = ASCIICraft::gui::CreateQuadMesh();
-        guiManager.SetPlayScreen(std::make_unique<ASCIICraft::gui::PlayHUDScreen>(
+        auto guiQuad = gui::CreateQuadMesh();
+        guiManager.SetPlayScreen(std::make_unique<gui::PlayHUDScreen>(
             registry, eventBus, player));
         auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().GetTexture("inventoryTexture");
         if (!inventoryTexture)
             ASCIIgL::Logger::Warning("LoadResources: inventoryTexture is null; inventory GUI will have no texture");
-        guiManager.SetInventoryScreen(std::make_unique<ASCIICraft::gui::InventoryScreen>(
+        guiManager.SetInventoryScreen(std::make_unique<gui::InventoryScreen>(
             registry, eventBus, player, guiQuad, inventoryTexture));
     }
 
@@ -480,7 +509,7 @@ void Game::RenderPlaying() {
 }
 
 void Game::InitializeWorld() {
-    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, WorldCoord(0, 90, 0), 10));
+    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, WorldCoord(0, 120, 0), 10));
     ASCIIgL::Logger::Debug("World created and stored in registry context.");
 }
 

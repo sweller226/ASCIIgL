@@ -5,7 +5,7 @@
 
 namespace ecs::systems {
 
-CameraSystem::CameraSystem(entt::registry& registry, ASCIICraft::IGameInputSource& input)
+CameraSystem::CameraSystem(entt::registry& registry, IInputSource& input)
     : m_registry(registry)
     , m_input(input)
 {}

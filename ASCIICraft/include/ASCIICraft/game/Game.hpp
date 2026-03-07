@@ -67,14 +67,14 @@ private:
     EventBus eventBus;
     
     // ecs systems (inputSystem first; gameplayInputFilter wraps it for movement/camera so GUI blocks input there)
-    ASCIICraft::input::InputSystem inputSystem;
-    ASCIICraft::GameplayInputFilter gameplayInputFilter;
+    input::InputSystem inputSystem;
+    GameplayInputFilter gameplayInputFilter;
     ecs::systems::MovementSystem movementSystem;
     ecs::systems::CameraSystem cameraSystem;
     ecs::systems::PhysicsSystem physicsSystem;
     ecs::systems::RenderSystem renderSystem;
 
-    ASCIICraft::gui::GuiManager guiManager;
+    gui::GuiManager guiManager;
 
     // block updates
     ecs::systems::BlockUpdateSystem blockUpdateSystem;
@@ -91,6 +91,7 @@ private:
     
     // Private methods
     bool LoadResources();
+    bool LoadTextures();
     void InitializeWorld();
     void InitializePlayer();
     void InitializeSystems();
@@ -99,8 +100,8 @@ private:
     void InitializeBlockStates();
     
     // Constants
-    static inline int SCREEN_WIDTH = 550;
+    static inline int SCREEN_WIDTH = 700;
     static inline int SCREEN_HEIGHT = 350;
-    static constexpr float FONT_SIZE = 2.5f;
+    static constexpr float FONT_SIZE = 3.0f;
     static constexpr float TARGET_FPS = 60.0f;
 };

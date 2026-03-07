@@ -1,14 +1,12 @@
 #pragma once
 
-#include <ASCIICraft/input/IGameInputSource.hpp>
+#include <ASCIICraft/input/IInputSource.hpp>
 #include <ASCIICraft/input/InputSystem.hpp>
-
-namespace ASCIICraft {
 
 /// Wraps the real input source and blocks all gameplay input when GUI is active.
 /// Pass this to MovementSystem and CameraSystem so they see "no input" when the GUI is open,
 /// while GuiManager continues to use the real InputSystem for cursor and clicks.
-class GameplayInputFilter : public IGameInputSource {
+class GameplayInputFilter : public IInputSource {
 public:
     explicit GameplayInputFilter(input::InputSystem& inputSystem)
         : m_inputSystem(inputSystem) {}
@@ -32,5 +30,3 @@ public:
 private:
     input::InputSystem& m_inputSystem;
 };
-
-} // namespace ASCIICraft

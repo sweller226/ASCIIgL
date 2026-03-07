@@ -1,10 +1,10 @@
 #include <ASCIICraft/gui/screens/InventoryScreen.hpp>
 #include <ASCIICraft/gui/Slot.hpp>
 #include <ASCIICraft/gui/Panel.hpp>
-#include <ASCIICraft/gui/GuiMaterialCache.hpp>
+#include <ASCIIgL/renderer/Material.hpp>
 #include <ASCIICraft/ecs/systems/RenderSystem.hpp>
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 InventoryScreen::InventoryScreen(entt::registry& registry, EventBus& eventBus, entt::entity playerEntity,
                                   std::shared_ptr<ASCIIgL::Mesh> panelQuad,
@@ -31,9 +31,9 @@ InventoryScreen::InventoryScreen(entt::registry& registry, EventBus& eventBus, e
     layer = 100;
     SetBackgroundMesh(panelQuad);
     
-    // Create material for this panel's texture
+    // Create material for this panel's texture (cached by MaterialLibrary)
     if (m_inventoryTexture) {
-        auto material = GuiMaterialCache::GetInst().GetMaterialForTexture(m_inventoryTexture);
+        auto material = ASCIIgL::MaterialLibrary::GetInst().GetOrCreateFromTemplate("guiMaterial", m_inventoryTexture.get());
         SetBackgroundMaterial(material);
     }
 
@@ -68,4 +68,4 @@ bool InventoryScreen::OnClick(glm::vec2 position, int button) {
     return false;
 }
 
-} // namespace ASCIICraft::gui
+} // namespace gui

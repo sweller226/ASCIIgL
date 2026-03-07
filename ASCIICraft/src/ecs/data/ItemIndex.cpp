@@ -123,22 +123,28 @@ void ItemIndex::Clear() {
 
 std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetQuadItemMesh(int layer)
 {
-    using V = ASCIIgL::VertStructs::PosUVLayer;
+    using V = ASCIIgL::VertStructs::PosUVLayerLight;
+    const float fullBright = 1.0f;
 
     std::vector<V> vertices;
     std::vector<int> indices;
 
-    // A simple 2D quad in the XY plane (Z = 0)
-    // CCW winding
-    vertices.push_back({ -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, (float)layer }); // bottom-left
-    vertices.push_back({ -1.0f,  1.0f, 0.0f, 0.0f, 1.0f, (float)layer }); // top-left
-    vertices.push_back({  1.0f,  1.0f, 0.0f, 1.0f, 1.0f, (float)layer }); // top-right
-    vertices.push_back({  1.0f, -1.0f, 0.0f, 1.0f, 0.0f, (float)layer }); // bottom-right
+    // A simple 2D quad in the XY plane (Z = 0), full bright for UI (mutators return void, so build each vertex in steps)
+    auto addQuadVert = [&](float x, float y, float u, float v) {
+        V vert;
+        vert.SetXYZ(glm::vec3(x, y, 0.0f));
+        vert.SetUV(glm::vec2(u, v));
+        vert.SetLayer((float)layer);
+        vert.SetLight(fullBright);
+        vertices.push_back(vert);
+    };
+    addQuadVert(-1.0f, -1.0f, 0.0f, 0.0f);
+    addQuadVert(-1.0f,  1.0f, 0.0f, 1.0f);
+    addQuadVert( 1.0f,  1.0f, 1.0f, 1.0f);
+    addQuadVert( 1.0f, -1.0f, 1.0f, 0.0f);
 
-    // Two triangles
     indices = { 0, 1, 2, 0, 2, 3 };
 
-    // Convert vertices to byte buffer
     std::vector<std::byte> byteVertices(
         reinterpret_cast<std::byte*>(vertices.data()),
         reinterpret_cast<std::byte*>(vertices.data()) + vertices.size() * sizeof(V)
@@ -146,14 +152,15 @@ std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetQuadItemMesh(int layer)
 
     return std::make_shared<ASCIIgL::Mesh>(
         std::move(byteVertices),
-        ASCIIgL::VertFormats::PosUVLayer(),
+        ASCIIgL::VertFormats::PosUVLayerLight(),
         std::move(indices),
         ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get()
     );
 }
 
 std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetBlockMeshFromState(const blockstate::BlockState& state) {
-    using V = ASCIIgL::VertStructs::PosUVLayer;
+    using V = ASCIIgL::VertStructs::PosUVLayerLight;
+    const float fullBright = 1.0f; // Item/block meshes (hand, inventory) use full bright
 
     std::vector<V> vertices;
     std::vector<int> indices;
@@ -165,18 +172,24 @@ std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetBlockMeshFromState(const blockstate
                         const glm::vec3& v3)
     {
         int layer = state.faceTextureLayers[static_cast<int>(face)];
-
         int startIndex = static_cast<int>(vertices.size());
 
-        vertices.push_back({ v0.x, v0.y, v0.z, 0.0f, 0.0f, (float)layer });
-        vertices.push_back({ v1.x, v1.y, v1.z, 0.0f, 1.0f, (float)layer });
-        vertices.push_back({ v2.x, v2.y, v2.z, 1.0f, 1.0f, (float)layer });
-        vertices.push_back({ v3.x, v3.y, v3.z, 1.0f, 0.0f, (float)layer });
+        auto addVert = [&](const glm::vec3& pos, float u, float v) {
+            V vert;
+            vert.SetXYZ(pos);
+            vert.SetUV(glm::vec2(u, v));
+            vert.SetLayer((float)layer);
+            vert.SetLight(fullBright);
+            vertices.push_back(vert);
+        };
+        addVert(v0, 0.0f, 0.0f);
+        addVert(v1, 0.0f, 1.0f);
+        addVert(v2, 1.0f, 1.0f);
+        addVert(v3, 1.0f, 0.0f);
 
         indices.push_back(startIndex + 0);
         indices.push_back(startIndex + 1);
         indices.push_back(startIndex + 2);
-
         indices.push_back(startIndex + 0);
         indices.push_back(startIndex + 2);
         indices.push_back(startIndex + 3);
@@ -212,7 +225,7 @@ std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetBlockMeshFromState(const blockstate
 
     return std::make_shared<ASCIIgL::Mesh>(
         std::move(byteVertices),
-        ASCIIgL::VertFormats::PosUVLayer(),
+        ASCIIgL::VertFormats::PosUVLayerLight(),
         std::move(indices),
         ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get()
     );

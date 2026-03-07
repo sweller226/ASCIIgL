@@ -1,5 +1,8 @@
 #include <ASCIIgL/engine/TextureArray.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
+#include <ASCIIgL/engine/MipChain.hpp>
+#include <ASCIIgL/engine/MipFilters.hpp>
+#include <ASCIIgL/engine/MonochromeMapping.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 
 #include <cstring>
@@ -10,11 +13,6 @@
 
 namespace ASCIIgL {
 
-// Forward declaration of BoxFilter from Texture.cpp
-namespace MipFilters {
-    void BoxFilter(const uint8_t* srcData, int srcW, int srcH, uint8_t* dstData, int dstW, int dstH);
-}
-
 // PIMPL Implementation
 class TextureArray::Impl {
 public:
@@ -22,6 +20,7 @@ public:
     int layerCount = 0;
     bool valid = false;
     bool hasCustomMipmaps = false;
+    MonochromeMapping monoMapping;
     
     struct Layer {
         struct MipLevel {
@@ -35,16 +34,16 @@ public:
     std::vector<Layer> layers;
     
     // Load from atlas image
-    bool LoadFromAtlas(const std::string& atlasPath, int tileSize);
+    bool LoadFromAtlas(const std::string& atlasPath, int tileSize, const MonochromeMapping& mono);
     
     // Load from individual files
-    bool LoadFromFiles(const std::vector<std::string>& tilePaths);
+    bool LoadFromFiles(const std::vector<std::string>& tilePaths, const MonochromeMapping& mono);
     
     // Generate mipmaps for all layers
     void GenerateMipmapsCPU(int maxLevels, MipFilters::MipFilterFn filter);
 };
 
-bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileSize) {
+bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileSize, const MonochromeMapping& mono) {
     Logger::Info("TEXTURE_ARRAY: Loading from atlas: " + atlasPath);
     
     stbi_set_flip_vertically_on_load(0);
@@ -58,6 +57,7 @@ bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileS
     }
     
     tileSize = inTileSize;
+    monoMapping = mono;
     const int tilesX = atlasW / tileSize;
     const int tilesY = atlasH / tileSize;
     layerCount = tilesX * tilesY;
@@ -88,6 +88,11 @@ bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileS
                 uint8_t* dstRow = mip0.data.data() + y * tileSize * 4;
                 std::memcpy(dstRow, srcRow, tileSize * 4);
             }
+
+            // Optional: bake tile to monochrome gradient on load.
+            if (monoMapping.enabled) {
+                ApplyMonochromeMappingRGBA8(mip0.data.data(), tileSize, tileSize, monoMapping);
+            }
         }
     }
     
@@ -98,7 +103,7 @@ bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileS
     return true;
 }
 
-bool TextureArray::Impl::LoadFromFiles(const std::vector<std::string>& tilePaths) {
+bool TextureArray::Impl::LoadFromFiles(const std::vector<std::string>& tilePaths, const MonochromeMapping& mono) {
     if (tilePaths.empty()) {
         Logger::Error("TEXTURE_ARRAY: No tile paths provided");
         return false;
@@ -109,6 +114,7 @@ bool TextureArray::Impl::LoadFromFiles(const std::vector<std::string>& tilePaths
     stbi_set_flip_vertically_on_load(0);
     
     layerCount = static_cast<int>(tilePaths.size());
+    monoMapping = mono;
     layers.resize(layerCount);
     tileSize = 0;
     
@@ -142,6 +148,10 @@ bool TextureArray::Impl::LoadFromFiles(const std::vector<std::string>& tilePaths
         mip0.height = tileSize;
         mip0.data.resize(tileSize * tileSize * 4);
         std::memcpy(mip0.data.data(), data, tileSize * tileSize * 4);
+
+        if (monoMapping.enabled) {
+            ApplyMonochromeMappingRGBA8(mip0.data.data(), tileSize, tileSize, monoMapping);
+        }
         
         stbi_image_free(data);
     }
@@ -154,65 +164,47 @@ bool TextureArray::Impl::LoadFromFiles(const std::vector<std::string>& tilePaths
 void TextureArray::Impl::GenerateMipmapsCPU(int maxLevels, MipFilters::MipFilterFn filter) {
     if (!valid || layers.empty()) return;
     
-    if (!filter) {
-        filter = MipFilters::BoxFilter;
-    }
-    
-    // Calculate max possible mip levels
-    int maxPossible = 0;
-    int size = tileSize;
-    while (size >= 1) {
-        maxPossible++;
-        size /= 2;
-    }
-    
-    int targetLevels = (maxLevels < 0) ? maxPossible : std::min(maxLevels, maxPossible);
+    const int targetLevels = MipChain::ClampTargetLevels(tileSize, tileSize, maxLevels);
     
     Logger::Debug("TEXTURE_ARRAY: Generating " + std::to_string(targetLevels) + " mip levels for " +
                   std::to_string(layerCount) + " layers");
     
     for (Layer& layer : layers) {
-        // Clear existing mips beyond level 0
-        layer.mipChain.resize(1);
-        
-        int prevW = layer.mipChain[0].width;
-        int prevH = layer.mipChain[0].height;
-        
-        for (int level = 1; level < targetLevels; ++level) {
-            int newW = std::max(1, prevW / 2);
-            int newH = std::max(1, prevH / 2);
-            
+        if (layer.mipChain.empty()) continue;
+
+        const int baseW = layer.mipChain[0].width;
+        const int baseH = layer.mipChain[0].height;
+        std::vector<uint8_t> baseData = std::move(layer.mipChain[0].data);
+
+        auto built = MipChain::BuildRGBA8(std::move(baseData), baseW, baseH, targetLevels, filter);
+
+        layer.mipChain.clear();
+        layer.mipChain.reserve(built.size());
+        for (auto& lvl : built) {
             Layer::MipLevel newMip;
-            newMip.width = newW;
-            newMip.height = newH;
-            newMip.data.resize(newW * newH * 4);
-            
-            const Layer::MipLevel& prevMip = layer.mipChain[level - 1];
-            filter(prevMip.data.data(), prevW, prevH, newMip.data.data(), newW, newH);
-            
+            newMip.width = lvl.width;
+            newMip.height = lvl.height;
+            newMip.data = std::move(lvl.data);
             layer.mipChain.push_back(std::move(newMip));
-            
-            prevW = newW;
-            prevH = newH;
         }
     }
     
-    hasCustomMipmaps = true;
+    hasCustomMipmaps = (targetLevels > 1);
     Logger::Debug("TEXTURE_ARRAY: Mipmap generation complete");
 }
 
 // TextureArray public interface
 
-TextureArray::TextureArray(const std::string& atlasPath, int tileSize)
+TextureArray::TextureArray(const std::string& atlasPath, int tileSize, const MonochromeMapping& mono)
     : pImpl(std::make_unique<Impl>())
 {
-    pImpl->LoadFromAtlas(atlasPath, tileSize);
+    pImpl->LoadFromAtlas(atlasPath, tileSize, mono);
 }
 
-TextureArray::TextureArray(const std::vector<std::string>& tilePaths)
+TextureArray::TextureArray(const std::vector<std::string>& tilePaths, const MonochromeMapping& mono)
     : pImpl(std::make_unique<Impl>())
 {
-    pImpl->LoadFromFiles(tilePaths);
+    pImpl->LoadFromFiles(tilePaths, mono);
 }
 
 TextureArray::~TextureArray() = default;

@@ -30,3 +30,28 @@ ASCIICraft
 
     Rebuild Library
     ./scripts/build_ASCIIgL_ASCIICraft.ps1
+
+CharCoverage
+    Build Release
+    cd tools\CharCoverage; .\build.ps1
+
+    Build Debug
+    cd tools\CharCoverage; .\build.ps1 -Debug
+
+    Run (single size, stdout)
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\tools\CharCoverage\build\Release"
+    .\char_coverage.exe --size 3
+
+    Run scan, output to file, aliased
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\tools\CharCoverage\build\Release"
+    .\char_coverage.exe --scan -o coverage_aliased.json
+
+    Run scan, output to file, cleartype
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\tools\CharCoverage\build\Release"
+    .\char_coverage.exe --cleartype --scan -o coverage_cleartype.json
+
+    Rebuild and run coverage, and copy to ASCIIgL
+    .\scripts\new_coverage_ASCIIgL.ps1 -Rebuild -Regenerate
+
+
+

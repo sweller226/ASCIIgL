@@ -196,7 +196,7 @@ bool Renderer::CreateTextureFromASCIIgLTexture(const Texture* tex, ID3D11ShaderR
     return true;
 }
 
-void Renderer::BindTexture(const Texture* tex, int slot) {
+void Renderer::BindTexture(const Texture* tex, int slot, SamplerType type) {
     if (!_initialized) {
         UnbindTexture(slot);
         return;
@@ -224,6 +224,11 @@ void Renderer::BindTexture(const Texture* tex, int slot) {
 
     _context->PSSetShaderResources(slot, 1, &srv);
     _currentTextureSRV = srv;
+
+    // Resolve Default: single texture → Point
+    SamplerType resolved = (type == SamplerType::Default) ? SamplerType::Point : type;
+    ID3D11SamplerState* sampler = (resolved == SamplerType::Anisotropic) ? _samplerAnisotropic.Get() : _samplerLinear.Get();
+    _context->PSSetSamplers(slot, 1, &sampler);
 }
 
 void Renderer::UnbindTexture(int slot) {
@@ -250,7 +255,7 @@ bool Renderer::CreateTextureArraySRV(const TextureArray* texArray, ID3D11ShaderR
     desc.Width = tileSize;
     desc.Height = tileSize;
     desc.ArraySize = layerCount;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
@@ -306,9 +311,9 @@ bool Renderer::CreateTextureArraySRV(const TextureArray* texArray, ID3D11ShaderR
         }
     }
 
-    // Create SRV for Texture2DArray
+    // Create SRV for Texture2DArray (sRGB format so sampling returns linear RGB)
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
     srvDesc.Texture2DArray.MostDetailedMip = 0;
     srvDesc.Texture2DArray.MipLevels = hasCustom ? mipCount : -1;
@@ -329,7 +334,7 @@ bool Renderer::CreateTextureArraySRV(const TextureArray* texArray, ID3D11ShaderR
     return true;
 }
 
-void Renderer::BindTextureArray(const TextureArray* texArray, int slot) {
+void Renderer::BindTextureArray(const TextureArray* texArray, int slot, SamplerType type) {
     if (!_initialized || !texArray || !texArray->IsValid()) {
         UnbindTextureArray(slot);
         return;
@@ -353,8 +358,10 @@ void Renderer::BindTextureArray(const TextureArray* texArray, int slot) {
         ID3D11ShaderResourceView* srvs[] = { srv.Get() };
         _context->PSSetShaderResources(slot, 1, srvs);
 
-        ID3D11SamplerState* samplers[] = { _samplerLinear.Get() };
-        _context->PSSetSamplers(slot, 1, samplers);
+        // Resolve Default: texture array → Point
+        SamplerType resolved = (type == SamplerType::Default) ? SamplerType::Point : type;
+        ID3D11SamplerState* sampler = (resolved == SamplerType::Anisotropic) ? _samplerAnisotropic.Get() : _samplerLinear.Get();
+        _context->PSSetSamplers(slot, 1, &sampler);
     }
 }
 

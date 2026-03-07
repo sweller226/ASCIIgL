@@ -1,5 +1,6 @@
 #include <ASCIIgL/renderer/Shader.hpp>
 
+#include <cstring>
 #include <iostream>
 
 #include <ASCIIgL/renderer/Renderer.hpp>
@@ -121,13 +122,19 @@ std::unique_ptr<Shader> Shader::CreateFromSource(
     ShaderType type,
     const std::string& entryPoint)
 {
+    return CreateFromSource(source, type, entryPoint, nullptr);
+}
+
+std::unique_ptr<Shader> Shader::CreateFromSource(
+    const std::string& source,
+    ShaderType type,
+    const std::string& entryPoint,
+    const ShaderIncludeMap* pIncludes)
+{
     auto shader = std::unique_ptr<Shader>(new Shader(type));
-    
-    if (!shader->CompileFromSource(source, entryPoint)) {
+    if (!shader->CompileFromSource(source, entryPoint, pIncludes)) {
         Logger::Error("Failed to compile shader: " + shader->_compileError);
-        // Still return the shader so caller can check the error
     }
-    
     return shader;
 }
 
@@ -146,18 +153,58 @@ std::unique_ptr<Shader> Shader::CreateFromBytecode(
 
 #ifdef _WIN32
 
-bool Shader::CompileFromSource(const std::string& source, const std::string& entryPoint) {
+namespace {
+
+// Implements ID3DInclude so HLSL #include "Name.hlsl" resolves from in-memory map.
+class ShaderIncludeHandler : public ID3DInclude {
+public:
+    explicit ShaderIncludeHandler(const ShaderIncludeMap* map) : _map(map) {}
+
+    HRESULT STDMETHODCALLTYPE Open(
+        D3D_INCLUDE_TYPE /*IncludeType*/,
+        LPCSTR pFileName,
+        LPCVOID /*pParentData*/,
+        LPCVOID* ppData,
+        UINT* pBytes) override
+    {
+        if (!_map || !ppData || !pBytes) return E_INVALIDARG;
+        auto it = _map->find(pFileName);
+        if (it == _map->end()) {
+            // Try basename in case compiler passed a path
+            const char* base = std::strrchr(pFileName, '/');
+            if (!base) base = std::strrchr(pFileName, '\\');
+            const char* name = base ? base + 1 : pFileName;
+            it = _map->find(name);
+        }
+        if (it == _map->end()) return E_FAIL;
+        *ppData = it->second.data();
+        *pBytes = static_cast<UINT>(it->second.size());
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE Close(LPCVOID /*pData*/) override { return S_OK; }
+
+private:
+    const ShaderIncludeMap* _map;
+};
+
+} // namespace
+
+bool Shader::CompileFromSource(const std::string& source, const std::string& entryPoint,
+                              const ShaderIncludeMap* pIncludes) {
     const char* target = (_type == ShaderType::Vertex) ? "vs_5_0" : "ps_5_0";
     
     ID3DBlob* errorBlob = nullptr;
     ID3DBlob* shaderBlob = nullptr;
-    
+    ShaderIncludeHandler includeHandler(pIncludes);
+    ID3DInclude* pInclude = pIncludes && !pIncludes->empty() ? &includeHandler : nullptr;
+
     HRESULT hr = D3DCompile(
         source.c_str(),
         source.length(),
         nullptr,
         nullptr,
-        nullptr,
+        pInclude,
         entryPoint.c_str(),
         target,
         D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG,
@@ -261,7 +308,7 @@ bool Shader::LoadFromBytecode(const std::vector<uint8_t>& bytecode) {
 
 #else
 // Stub implementations for non-Windows platforms
-bool Shader::CompileFromSource(const std::string&, const std::string&) {
+bool Shader::CompileFromSource(const std::string&, const std::string&, const ShaderIncludeMap*) {
     _compileError = "Shaders not supported on this platform";
     return false;
 }

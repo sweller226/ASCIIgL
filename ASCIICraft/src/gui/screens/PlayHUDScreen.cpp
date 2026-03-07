@@ -2,7 +2,7 @@
 #include <ASCIICraft/gui/Slot.hpp>
 #include <ASCIICraft/gui/Panel.hpp>
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 PlayHUDScreen::PlayHUDScreen(entt::registry& registry, EventBus& eventBus, entt::entity playerEntity)
     : m_registry(&registry)
@@ -43,4 +43,4 @@ bool PlayHUDScreen::OnClick(glm::vec2 position, int button) {
     return false;
 }
 
-} // namespace ASCIICraft::gui
+} // namespace gui

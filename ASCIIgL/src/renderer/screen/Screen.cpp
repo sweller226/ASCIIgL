@@ -26,7 +26,7 @@
 namespace ASCIIgL {
 
 // Custom constructor and destructor for PIMPL pattern - must be defined where ScreenWinImpl is complete
-Screen::Screen() = default;
+Screen::Screen() : _palette(std::make_unique<Palette>()) {}
 Screen::~Screen() {
     _impl.reset();
 }
@@ -36,7 +36,7 @@ int Screen::Initialize(
     unsigned int height, 
     const std::wstring title, 
     float fontSize, 
-    const Palette palette
+    const Palette& palette
 ) {
     if (!_initialized) {
         Logger::Info("Initializing Screen...");
@@ -55,25 +55,25 @@ int Screen::Initialize(
 
     // Enforce minimum font size
     const float MIN_FONT_SIZE = 2.0f;
-    float adjustedFontSize = std::max(MIN_FONT_SIZE, fontSize);
+    const float MAX_FONT_SIZE = 11.0f;
+    _fontSize = std::clamp(fontSize, MIN_FONT_SIZE, MAX_FONT_SIZE);
     
-    Logger::Debug(L"Setting font size to " + std::to_wstring(adjustedFontSize));
-    _fontSize = adjustedFontSize;
+    Logger::Debug(L"Setting font size to " + std::to_wstring(_fontSize));
 
-    // setting palette reference
+    // Clone palette so we preserve type (Palette vs MonochromePalette)
     if (palette.entries.size() != Palette::COLOR_COUNT) {
         Logger::Warning(L"Palette does not have exactly " + std::to_wstring(Palette::COLOR_COUNT) + L" colors. Using default palette.");
-        _palette = Palette(); // Default palette
+        _palette = std::make_unique<Palette>();
     } else {
-        _palette = palette;
+        _palette = palette.clone();
     }
 
 #ifdef _WIN32
     // Use unified Windows implementation for both CMD and Windows Terminal
     _impl = std::make_unique<ScreenWinImpl>(*this);
     
-    // Windows-specific initialization through delegation
-    int initResult = _impl->Initialize(width, height, adjustedFontSize, palette);
+    // Windows-specific initialization through delegation (use stored clone)
+    int initResult = _impl->Initialize(width, height, _fontSize, *_palette);
     if (initResult) { return initResult; }
 
 #else
@@ -159,7 +159,16 @@ bool Screen::IsInitialized() const {
 }
 
 Palette& Screen::GetPalette() {
-    return _palette;
+    return *_palette;
+}
+
+MonochromePalette* Screen::GetMonochromePalette() {
+    return dynamic_cast<MonochromePalette*>(_palette.get());
+}
+
+bool Screen::IsMonochromePalette() const {
+    // Detect dynamic type of the owned palette
+    return dynamic_cast<MonochromePalette*>(_palette.get()) != nullptr;
 }
 
 } // namespace ASCIIgL

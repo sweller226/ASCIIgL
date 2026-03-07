@@ -30,6 +30,7 @@
 #include <ASCIIgL/renderer/Palette.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 #include <ASCIIgL/renderer/Shader.hpp>  // for UniformValue, UniformDescriptor
+#include <ASCIIgL/renderer/SamplerType.hpp>
 
 namespace ASCIIgL {
 
@@ -41,12 +42,6 @@ class Material;
 // ComPtr alias for cleaner code
 template<typename T>
 using ComPtr = Microsoft::WRL::ComPtr<T>;
-
-// Palette matching mode for color LUT computation
-enum class PaletteMode {
-    Monochrome,   // Single hue - compare by luminance only (fast)
-    MultiColor    // Full color - linearized sRGB comparison (accurate)
-};
 
 class Renderer
 {
@@ -123,15 +118,11 @@ private:
     // =========================================================================
     // Texture Resources
     // =========================================================================
-    // Single sampler with linear filtering (no anisotropic - MSAA handles AA)
     ComPtr<ID3D11SamplerState> _samplerLinear;
+    ComPtr<ID3D11SamplerState> _samplerAnisotropic;
     ComPtr<ID3D11ShaderResourceView> _currentTextureSRV;
     
-    // Texture cache: Maps Texture* -> ShaderResourceView
-    // Prevents recreating GPU textures every draw call
     std::unordered_map<const Texture*, ComPtr<ID3D11ShaderResourceView>> _textureCache;
-    
-    // Texture array cache: Maps TextureArray* -> ShaderResourceView
     std::unordered_map<const TextureArray*, ComPtr<ID3D11ShaderResourceView>> _textureArrayCache;
 
     // =========================================================================
@@ -173,38 +164,30 @@ private:
     int _antialiasing_samples = 4;
     bool _antialiasing = false;
 
+    // Anisotropic filtering level for texture arrays (1, 2, 4, 8, 16). 1 = off.
+    int _maxAnisotropy = 16;
+
     // =========================================================================
     // Glyphs and Color LUT
     // =========================================================================
-    static constexpr std::array<wchar_t, 12> _charRamp = {
-        L' ', L'.', L'-', L':',
-        L'o', L'+', L'O', L'A',
-        L'E', L'0', L'B', L'@'
-    };
-    
-    static constexpr std::array<float, 12> _charCoverage = {
-        0.00f,   // ' '
-        0.056f,  // '.'
-        0.084f,  // '-'
-        0.140f,  // ':'
-        0.224f,  // 'o'
-        0.294f,  // 'E'
-        0.294f,  // '+'
-        0.350f,  // 'O'
-        0.434f,  // 'A'
-        0.574f,  // '0'
-        0.630f,  // 'B'
-        0.672f   // '@'
-    };
+    std::vector<wchar_t> _charRamp;
+    std::vector<float> _charCoverage;
 
-    // TODO, go throuh each character and eyeball it better than just getting chat to guess
-    // or make a program that simulates the font and windows antialiasing to get the values
-
+    void LoadCharCoverageFromJson(const wchar_t* charRamp = nullptr, int charRampCount = 10);
     void PrecomputeColorLUT();
-    PaletteMode _paletteMode = PaletteMode::MultiColor;
-    bool _colorLUTComputed = false;
-    static constexpr unsigned int _rgbLUTDepth = 16;
+    void PrecomputeMonochromeColorLUT(Palette& palette);
+    void PrecomputeMultiColorLUT(Palette& palette);
+    /// Map luminance L to index in [0, 1023] for monochrome LUT lookup.
+    size_t MonochromeLuminanceToIndex(float L) const;
+
+    enum class ColorLUTState { NotComputed, Monochrome, MultiColor };
+    ColorLUTState _colorLUTState = ColorLUTState::NotComputed;
+    static constexpr unsigned int _rgbLUTDepth = 16; // DO NOT CHANGE THIS VALUE (WILL BREAK THE LUT)
     std::array<CHAR_INFO, _rgbLUTDepth*_rgbLUTDepth*_rgbLUTDepth> _colorLUT;
+
+    static constexpr size_t _monochromeLUTSize = 1024;
+    // Each entry stores (target luminance, CHAR_INFO)
+    std::array<std::pair<float, CHAR_INFO>, _monochromeLUTSize> _monochromeLUT;
 
     // =========================================================================
     // Diagnostics
@@ -226,6 +209,7 @@ private:
     bool InitializeRenderTarget();
     bool InitializeDepthStencil();
     bool InitializeSamplers();
+    bool CreateAnisotropicSampler();  // (re)creates _samplerAnisotropic using _maxAnisotropy
     bool InitializeRasterizerStates();
     bool InitializeBlendStates();
     bool InitializeStagingTexture();
@@ -273,7 +257,9 @@ public:
     // =========================================================================
     // Initialization and Core API
     // =========================================================================
-    void Initialize(bool antialiasing = false, int antialiasing_samples = 4);
+    /// charRamp: custom chars for coverage; nullptr or empty = use default ramp.
+    /// charRampCount: when using default ramp, subsample to this many chars with evenly spaced coverage (default 10); ignored if charRamp is set.
+    void Initialize(bool antialiasing = false, int antialiasing_samples = 4, const wchar_t* charRamp = nullptr, int charRampCount = 10);
     bool IsInitialized() const;
 
     // =========================================================================
@@ -332,10 +318,10 @@ public:
     void SetDiagnosticsEnabled(const bool enabled);
     bool GetDiagnosticsEnabled() const;
 
-    // Palette Mode for Color LUT
-    void SetPaletteMode(PaletteMode mode);
-    PaletteMode GetPaletteMode() const;
-    
+    /// Anisotropic filtering level for texture arrays. Valid: 1 (off), 2, 4, 8, 16. Default 16.
+    void SetMaxAnisotropy(int level);
+    int GetMaxAnisotropy() const;
+
     // =========================================================================
     // Buffer and Diagnostics
     // =========================================================================
@@ -365,8 +351,8 @@ public:
     void UploadMaterialConstants(Material* material);
 
     // Texture Management (Public)
-    void BindTexture(const Texture* tex, int slot = 0);
-    void BindTextureArray(const TextureArray* texArray, int slot = 0);
+    void BindTexture(const Texture* tex, int slot = 0, SamplerType type = SamplerType::Default);
+    void BindTextureArray(const TextureArray* texArray, int slot = 0, SamplerType type = SamplerType::Default);
     
     // Unbind any texture
     void UnbindTexture(int slot = 0);

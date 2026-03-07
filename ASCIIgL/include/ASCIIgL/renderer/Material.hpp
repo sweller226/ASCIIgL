@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 
 #include <ASCIIgL/renderer/Shader.hpp>
+#include <ASCIIgL/renderer/SamplerType.hpp>
 #include <ASCIIgL/engine/TextureArray.hpp>
 
 #ifdef _WIN32
@@ -32,9 +33,10 @@ struct TextureSlot {
     uint32_t slot;              // Texture slot index (t0, t1, etc.)
     const Texture* texture;     // Currently bound texture (not owned)
     const TextureArray* textureArray; // Currently bound texture array (not owned)
-    
+    SamplerType samplerType = SamplerType::Default;
+
     TextureSlot(const std::string& name, uint32_t slot)
-        : name(name), slot(slot), texture(nullptr), textureArray(nullptr) {}
+        : name(name), slot(slot), texture(nullptr), textureArray(nullptr), samplerType(SamplerType::Default) {}
 };
 
 // =========================================================================
@@ -106,6 +108,11 @@ public:
     const TextureArray* GetTextureArray(const std::string& name) const;
     const TextureArray* GetTextureArray(uint32_t slot) const;
 
+    /// Per-slot sampler choice (Point vs Anisotropic). Default = renderer infers from resource type.
+    void SetSamplerForSlot(const std::string& name, SamplerType type);
+    void SetSamplerForSlot(uint32_t slot, SamplerType type);
+    SamplerType GetSamplerForSlot(uint32_t slot) const;
+
     // =========================================================================
     // Shader Program Access
     // =========================================================================
@@ -171,6 +178,12 @@ public:
     
     // Get a registered material (returns nullptr if not found)
     std::shared_ptr<Material> Get(const std::string& name) const;
+
+    /// Get or create a material by cloning a registered template and binding a texture.
+    /// Cached by (templateName, texture pointer); same texture returns same material.
+    /// Returns nullptr if the template is not registered.
+    std::shared_ptr<Material> GetOrCreateFromTemplate(const std::string& templateName,
+        const Texture* texture, uint32_t textureSlot = 0);
     
     // Check if material exists
     bool Has(const std::string& name) const;
@@ -190,8 +203,10 @@ private:
     MaterialLibrary(const MaterialLibrary&) = delete;
     MaterialLibrary& operator=(const MaterialLibrary&) = delete;
 
+    static constexpr const char* _defaultMaterialName = "default";
+
     std::unordered_map<std::string, std::shared_ptr<Material>> _materials;
-    std::shared_ptr<Material> _defaultMaterial;
+    std::unordered_map<std::string, std::weak_ptr<Material>> _templateTextureCache;
 };
 
 } // namespace ASCIIgL

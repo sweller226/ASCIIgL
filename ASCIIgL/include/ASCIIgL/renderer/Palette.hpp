@@ -2,43 +2,15 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
+#include <vector>
 #include <glm/glm.hpp>
+#include <ASCIIgL/renderer/PaletteUtil.hpp>
 
 namespace ASCIIgL {
 
-namespace PaletteUtil {
-    // -------------------------
-    // sRGB → Linear
-    // -------------------------
-
-    // Convert a single sRGB channel (0–255) to linear (0–1)
-    float sRGB255ToLinear1(float s);
-    glm::vec3 sRGB1ToLinear1(const glm::vec3& c);
-
-    // Convert sRGB 0–255 → linear 0–1
-    glm::vec3 sRGB255ToLinear1(const glm::ivec3& c);
-
-    // -------------------------
-    // Luminance
-    // -------------------------
-
-    // Luminance from sRGB 0–255
-    float sRGB255_Luminance(const glm::ivec3& c);
-    float sRGB1_Luminance(const glm::vec3& c);
-
-    // Luminance from linear RGB 0–1
-    float LinearRGB_Luminance(const glm::vec3& c);
-
-    // -------------------------
-    // Linear → sRGB
-    // -------------------------
-
-    // Convert linear channel (0–1) → sRGB 0–255
-    float Linear1ToSrgb255(float c);
-
-    // Convert linear RGB (0–1) → sRGB 0–255
-    glm::vec3 Linear1ToSrgb255(const glm::vec3& c);
-}
+class Texture;
+class TextureArray;
 
 // A palette entry with cached color representations
 struct PaletteEntry {
@@ -63,12 +35,22 @@ public:
     static constexpr unsigned int COLOR_COUNT = 16;
     std::array<PaletteEntry, COLOR_COUNT> entries;
 
+    // Default palette (classic 16-color terminal palette).
     Palette();
+
+    // Build palette from explicit textures and texture arrays with weights.
+    Palette(
+        const std::vector<std::pair<float, std::shared_ptr<Texture>>>& textures,
+        const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays,
+        bool sortByLuminance = true
+    );
+
     Palette(std::array<PaletteEntry, 16> customEntries);
-    
-    // Create a gradient palette from dark to light luminance with hue direction (colors in 0-255 range)
-    // Colors are interpolated with gamma correction across 16 entries
-    Palette(float darkL, float lightL, const glm::ivec3& hueDir);
+
+    virtual ~Palette() = default;
+
+    /// Deep copy; returns MonochromePalette when called on MonochromePalette.
+    virtual std::unique_ptr<Palette> clone() const;
 
     // Get color in 0-255 range (for rendering, shaders, etc.)
     glm::ivec3 GetRGB(unsigned int idx) const;
@@ -81,11 +63,46 @@ public:
     
     // Get luminance (perceptual brightness, Rec. 709)
     float GetLuminance(unsigned int idx) const;
+
+    /// Index of the palette entry with smallest luminance (darkest).
+    unsigned int GetMinLumIdx() const;
+    /// Index of the palette entry with largest luminance (brightest).
+    unsigned int GetMaxLumIdx() const;
     
     // Terminal attribute methods (use hex value for console)
     unsigned short GetHex(unsigned int idx) const;
     unsigned short GetFgColor(unsigned int idx) const;
     unsigned short GetBgColor(unsigned int idx) const;
+
+private:
+    void SetDefaultEntries();
+};
+
+// Gradient palette (dark to light) along a hue direction; inherits from Palette.
+// Stores darkL, lightL, and hueDir for inspection or regeneration.
+class MonochromePalette : public Palette {
+public:
+    // Create a gradient palette from dark to light luminance with hue direction (hueDir in 0-255).
+    // Colors are interpolated with gamma correction across 16 entries.
+    MonochromePalette(float darkL, float lightL, const glm::ivec3& hueDir);
+    MonochromePalette(std::array<PaletteEntry, 16> customEntries);
+    MonochromePalette(
+        const std::vector<std::pair<float, std::shared_ptr<Texture>>>& textures,
+        const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays
+    );
+
+    float GetDarkL() const { return _darkL; }
+    float GetLightL() const { return _lightL; }
+    const glm::ivec3& GetHueDir() const { return _hueDir; }
+
+    std::unique_ptr<Palette> clone() const override;
+
+private:
+    void InferParamsFromEntries();
+
+    float _darkL = 0.0f;
+    float _lightL = 0.0f;
+    glm::ivec3 _hueDir = glm::ivec3(0);
 };
 
 } // namespace ASCIIgL

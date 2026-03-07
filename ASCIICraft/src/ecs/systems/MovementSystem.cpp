@@ -19,7 +19,7 @@
 
 namespace ecs::systems {
 
-MovementSystem::MovementSystem(entt::registry& registry, ASCIICraft::IGameInputSource& input, EventBus& eventBus)
+MovementSystem::MovementSystem(entt::registry& registry, IInputSource& input, EventBus& eventBus)
     : m_registry(registry)
     , m_input(input)
     , m_eventBus(eventBus)

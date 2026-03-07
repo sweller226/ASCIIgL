@@ -41,12 +41,10 @@ enum class VertexElementSemantic {
     Tangent,
     Bitangent,
     Color,
-    TexCoord0,
-    TexCoord1,
-    TexCoord2,
-    TexCoord3,
+    TexCoord,   // Use semanticIndex when adding (0 = TEXCOORD0, 1 = TEXCOORD1, ...)
     BoneIndices,
     BoneWeights,
+    Light,     // Per-vertex light multiplier (e.g. directional prebake)
     Custom0,   // User-defined semantics
     Custom1,
     Custom2,
@@ -159,6 +157,9 @@ namespace VertFormats {
     
     // Position (XYZ) + TexCoord (UV) + Layer Index - For Texture2DArray rendering
     const VertFormat& PosUVLayer();
+
+    // Position (XYZ) + TexCoord (UV) + Layer + Light (directional multiplier) - Terrain with per-vertex lighting
+    const VertFormat& PosUVLayerLight();
 }
 
 // =========================================================================
@@ -239,6 +240,33 @@ struct PosUVLayer {
     void SetUV(const glm::vec2 v) { data[3] = v.x; data[4] = v.y; }
     void SetUVLayer(const glm::vec3 v) { data[3] = v.x; data[4] = v.y; data[5] = v.z; }
     void SetLayer(float layer) { data[5] = layer; }
+};
+
+// PosUVLayerLight vertex: XYZ + UV + Layer + Light (7 floats = 28 bytes) - Terrain with per-vertex directional light
+struct PosUVLayerLight {
+    float data[7];
+
+    // Accessors
+    float X() const { return data[0]; }
+    float Y() const { return data[1]; }
+    float Z() const { return data[2]; }
+    float U() const { return data[3]; }
+    float V() const { return data[4]; }
+    float Layer() const { return data[5]; }
+    float Light() const { return data[6]; }
+
+    glm::vec2 GetXY() const { return glm::vec2(data[0], data[1]); }
+    glm::vec3 GetXYZ() const { return glm::vec3(data[0], data[1], data[2]); }
+    glm::vec2 GetUV() const { return glm::vec2(data[3], data[4]); }
+    glm::vec3 GetUVLayer() const { return glm::vec3(data[3], data[4], data[5]); }
+
+    // Mutators
+    void SetXY(const glm::vec2 v) { data[0] = v.x; data[1] = v.y; }
+    void SetXYZ(const glm::vec3 v) { data[0] = v.x; data[1] = v.y; data[2] = v.z; }
+    void SetUV(const glm::vec2 v) { data[3] = v.x; data[4] = v.y; }
+    void SetUVLayer(const glm::vec3 v) { data[3] = v.x; data[4] = v.y; data[5] = v.z; }
+    void SetLayer(float layer) { data[5] = layer; }
+    void SetLight(float light) { data[6] = light; }
 };
 
 } // namespace VertStructs

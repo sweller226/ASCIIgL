@@ -7,7 +7,7 @@
 namespace ASCIIgL { class Mesh; class Material; }
 namespace ecs::systems { class RenderSystem; }
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 /// Widget that draws a background quad and contains child widgets.
 class Panel : public Widget {
@@ -32,4 +32,4 @@ private:
     std::vector<std::unique_ptr<Widget>> children;
 };
 
-} // namespace ASCIICraft::gui
+} // namespace gui

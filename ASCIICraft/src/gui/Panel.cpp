@@ -1,7 +1,7 @@
 #include <ASCIICraft/gui/Panel.hpp>
 #include <ASCIICraft/ecs/systems/RenderSystem.hpp>
 
-namespace ASCIICraft::gui {
+namespace gui {
 
 void Panel::AddChild(std::unique_ptr<Widget> child) {
     if (child) {
@@ -48,4 +48,4 @@ void Panel::Draw(::ecs::systems::RenderSystem& renderSystem) const {
         c->Draw(renderSystem);
 }
 
-} // namespace ASCIICraft::gui
+} // namespace gui

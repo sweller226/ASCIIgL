@@ -2,14 +2,18 @@
 
 #include <algorithm>
 #include <execution>
+#include <limits>
 #include <numeric>
 #include <sstream>
 #include <mutex>
 #include <thread>
 #include <iostream>
+#include <fstream>
+#include <unordered_set>
+#include <unordered_map>
 #include <Windows.h>
 
-#include <tbb/parallel_for_each.h>
+#include <nlohmann/json.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/Collision.hpp>
@@ -18,6 +22,7 @@
 #include <ASCIIgL/util/Profiler.hpp>
 
 #include <ASCIIgL/renderer/screen/Screen.hpp>
+#include <ASCIIgL/renderer/Palette.hpp>
 #include <ASCIIgL/renderer/Shader.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
@@ -140,11 +145,11 @@ void Renderer::DrawClippedLinePxBuff(int x0, int y0, int x1, int y1, int minX, i
 }
 
 void Renderer::DrawScreenBorderPxBuff(const unsigned short col) {
-    // DRAWING BORDERS
-    DrawLinePxBuff(0, 0, Screen::GetInst().GetWidth() - 1, 0, _charRamp.back(), col);
-    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, 0, Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, _charRamp.back(), col);
-    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, _charRamp.back(), col);
-    DrawLinePxBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, _charRamp.back(), col);
+    wchar_t borderChar = _charRamp.empty() ? L'#' : _charRamp.back();
+    DrawLinePxBuff(0, 0, Screen::GetInst().GetWidth() - 1, 0, borderChar, col);
+    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, 0, Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, borderChar, col);
+    DrawLinePxBuff(Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, borderChar, col);
+    DrawLinePxBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, borderChar, col);
 }
 
 // =============================================================================
@@ -294,14 +299,9 @@ void Renderer::BeginColBuffFrame() {
 
     Logger::Debug("BeginFrame: Clearing render target and setting up pipeline");
 
-    // Clear render target (convert 0-255 integer color to 0-1 float)
-    glm::ivec3 bgCol = GetBackgroundCol();
-    float clear_color[4] = { 
-        static_cast<float>(bgCol.x) / 255.0f, 
-        static_cast<float>(bgCol.y) / 255.0f, 
-        static_cast<float>(bgCol.z) / 255.0f, 
-        1.0f 
-    };
+    // Clear render target: background is sRGB 0-255; RTV is sRGB so clear expects linear 0-1
+    glm::vec3 linearBg = PaletteUtil::sRGB255ToLinear1(GetBackgroundCol());
+    float clear_color[4] = { linearBg.r, linearBg.g, linearBg.b, 1.0f };
     _context->ClearRenderTargetView(_renderTargetView.Get(), clear_color);
 
     // Clear depth stencil
@@ -346,49 +346,49 @@ std::vector<glm::ivec4>& Renderer::GetColorBuffer() {
 }
 
 void Renderer::OverwritePxBuffWithColBuff() {
-
-
     LogDiagnostics();
     ResetDiagnostics();
 
     auto& screen = Screen::GetInst();
     auto& pixelBuffer = screen.GetPixelBuffer();
     const size_t bufferSize = _color_buffer.size();
-    
-    if (!_colorLUTComputed) {
+
+    if (_colorLUTState == ColorLUTState::NotComputed) {
         PrecomputeColorLUT();
     }
-    
+
+    if (_colorLUTState == ColorLUTState::Monochrome) {
+        for (size_t i = 0; i < bufferSize; ++i) {
+            const auto& c = _color_buffer[i];
+            float L = PaletteUtil::sRGB255_Luminance(glm::ivec3(c.r, c.g, c.b));
+            size_t idx = MonochromeLuminanceToIndex(L);
+            pixelBuffer[i] = _monochromeLUT[idx].second;
+        }
+        return;
+    }
+
     const size_t unrollFactor = 4;
     const size_t unrolledEnd = (bufferSize / unrollFactor) * unrollFactor;
-    
-    // Lambda to convert 0-255 to 0-15 for LUT indexing
     auto to16 = [](int v) { return (v * 15 + 127) / 255; };
-    
     size_t i = 0;
     for (; i < unrolledEnd; i += unrollFactor) {
         const auto& color0 = _color_buffer[i];
         const auto& color1 = _color_buffer[i + 1];
         const auto& color2 = _color_buffer[i + 2];
         const auto& color3 = _color_buffer[i + 3];
-        
-        // Convert 0-255 to 0-15 for LUT indexing
         const int r0 = to16(color0.r), g0 = to16(color0.g), b0 = to16(color0.b);
         const int r1 = to16(color1.r), g1 = to16(color1.g), b1 = to16(color1.b);
         const int r2 = to16(color2.r), g2 = to16(color2.g), b2 = to16(color2.b);
         const int r3 = to16(color3.r), g3 = to16(color3.g), b3 = to16(color3.b);
-
         const int index0 = (r0 * _rgbLUTDepth * _rgbLUTDepth) + (g0 * _rgbLUTDepth) + b0;
         const int index1 = (r1 * _rgbLUTDepth * _rgbLUTDepth) + (g1 * _rgbLUTDepth) + b1;
         const int index2 = (r2 * _rgbLUTDepth * _rgbLUTDepth) + (g2 * _rgbLUTDepth) + b2;
         const int index3 = (r3 * _rgbLUTDepth * _rgbLUTDepth) + (g3 * _rgbLUTDepth) + b3;
-        
         pixelBuffer[i] = _colorLUT[index0];
         pixelBuffer[i + 1] = _colorLUT[index1];
         pixelBuffer[i + 2] = _colorLUT[index2];
         pixelBuffer[i + 3] = _colorLUT[index3];
     }
-    
     for (; i < bufferSize; ++i) {
         const auto& color = _color_buffer[i];
         const int r = to16(color.r), g = to16(color.g), b = to16(color.b);
@@ -398,139 +398,389 @@ void Renderer::OverwritePxBuffWithColBuff() {
 }
 
 // =============================================================================
+// CHAR COVERAGE (loaded from JSON to match char_coverage tool)
+// =============================================================================
+
+// Character ramp order must match tools/CharCoverage DEFAULT_CHARS (coverages array index = ramp index).
+static const wchar_t CHAR_RAMP_DEFAULT[] =
+    L" ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890.:,;'\"(!?)+-*/=\"";
+
+static void ApplyFallbackRamp(std::vector<wchar_t>& ramp, std::vector<float>& coverage, const wchar_t* chars) {
+    ramp.clear();
+    coverage.clear();
+    for (const wchar_t* p = chars; *p; ++p) {
+        ramp.push_back(*p);
+        coverage.push_back(0.5f);
+    }
+}
+
+/// Subsample current ramp to K evenly spaced indices (for fallback when all coverage is equal).
+static void SubsampleRampByIndex(std::vector<wchar_t>& ramp, std::vector<float>& coverage, int K) {
+    const size_t n = ramp.size();
+    if (K <= 0 || static_cast<size_t>(K) >= n) return;
+    std::vector<wchar_t> out(static_cast<size_t>(K));
+    std::vector<float> outCov(static_cast<size_t>(K));
+    for (int i = 0; i < K; ++i) {
+        size_t j = (K > 1) ? (static_cast<size_t>(i) * (n - 1)) / static_cast<size_t>(K - 1) : n / 2;
+        out[static_cast<size_t>(i)] = ramp[j];
+        outCov[static_cast<size_t>(i)] = coverage[j];
+    }
+    ramp = std::move(out);
+    coverage = std::move(outCov);
+}
+
+void Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp, int charRampCount) {
+    _charRamp.clear();
+    _charCoverage.clear();
+    _colorLUTState = ColorLUTState::NotComputed;
+
+    const bool useCustomRamp = (charRamp && *charRamp);
+    const wchar_t* rampToUse = useCustomRamp ? charRamp : CHAR_RAMP_DEFAULT;
+
+    float fontSize = Screen::GetInst().GetFontSize();
+
+    const char* paths[] = {
+        "res/ASCIIgL/coverage_cleartype.json",
+    };
+    std::ifstream file;
+    for (const char* path : paths) {
+        file.open(path);
+        if (file.good()) break;
+        file.close();
+    }
+    if (!file.good()) {
+        Logger::Warning("[Renderer] coverage_cleartype.json not found; using fallback char ramp.");
+        ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
+        if (!useCustomRamp && charRampCount > 0)
+            SubsampleRampByIndex(_charRamp, _charCoverage, charRampCount);
+        return;
+    }
+
+    nlohmann::json j;
+    try {
+        j = nlohmann::json::parse(file);
+    } catch (const std::exception& e) {
+        Logger::Warning(std::string("[Renderer] Failed to parse coverage_cleartype.json: ") + e.what());
+        ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
+        if (!useCustomRamp && charRampCount > 0)
+            SubsampleRampByIndex(_charRamp, _charCoverage, charRampCount);
+        return;
+    }
+    file.close();
+
+    if (!j.contains("intervals") || !j["intervals"].is_array() || j["intervals"].empty()) {
+        Logger::Warning("[Renderer] coverage_cleartype.json has no intervals.");
+        ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
+        if (!useCustomRamp && charRampCount > 0)
+            SubsampleRampByIndex(_charRamp, _charCoverage, charRampCount);
+        return;
+    }
+
+    const auto& intervals = j["intervals"];
+    size_t bestIdx = 0;
+    bool found = false;
+    for (size_t i = 0; i < intervals.size(); ++i) {
+        const auto& iv = intervals[i];
+        if (!iv.contains("sizeMin") || !iv.contains("sizeMax") || !iv.contains("coverages")) continue;
+        float smin = iv["sizeMin"].get<float>();
+        float smax = iv["sizeMax"].get<float>();
+        if (fontSize >= smin && fontSize <= smax) {
+            bestIdx = i;
+            found = true;
+            break;
+        }
+    }
+    if (!found && !intervals.empty()) {
+        if (fontSize <= intervals[0]["sizeMin"].get<float>())
+            bestIdx = 0;
+        else
+            bestIdx = intervals.size() - 1;
+    }
+
+    const auto& iv = intervals[bestIdx];
+    const auto& coverages = iv["coverages"];
+    if (!coverages.is_array()) {
+        Logger::Warning("[Renderer] Selected interval has no coverages array.");
+        ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
+        if (!useCustomRamp && charRampCount > 0)
+            SubsampleRampByIndex(_charRamp, _charCoverage, charRampCount);
+        return;
+    }
+
+    // Build char -> coverage map from JSON (chars[i] -> coverages[i])
+    std::unordered_map<unsigned, float> charToCoverage;
+    const size_t jsonN = coverages.size();
+    const bool hasChars = j.contains("chars") && j["chars"].is_array() && j["chars"].size() >= jsonN;
+    for (size_t i = 0; i < jsonN; ++i) {
+        unsigned cp = hasChars ? j["chars"][i].get<unsigned>() : static_cast<unsigned>(CHAR_RAMP_DEFAULT[i]);
+        charToCoverage[cp] = coverages[i].get<float>();
+    }
+
+    // Fill ramp and coverage from the requested ramp, looking up coverage from JSON
+    for (const wchar_t* p = rampToUse; *p; ++p) {
+        wchar_t ch = *p;
+        unsigned cp = static_cast<unsigned>(ch);
+        auto it = charToCoverage.find(cp);
+        float cov = (it != charToCoverage.end()) ? it->second : 0.5f;
+        _charRamp.push_back(ch);
+        _charCoverage.push_back(cov);
+    }
+
+    // Sort ramp by coverage ascending (low-coverage chars first, high last)
+    const size_t n = _charRamp.size();
+    std::vector<size_t> order(n);
+    std::iota(order.begin(), order.end(), size_t(0));
+    std::sort(order.begin(), order.end(), [this](size_t a, size_t b) { return _charCoverage[a] < _charCoverage[b]; });
+    std::vector<wchar_t> sortedRamp(n);
+    std::vector<float> sortedCoverage(n);
+    for (size_t i = 0; i < n; ++i) {
+        sortedRamp[i] = _charRamp[order[i]];
+        sortedCoverage[i] = _charCoverage[order[i]];
+    }
+    _charRamp = std::move(sortedRamp);
+    _charCoverage = std::move(sortedCoverage);
+
+    // When using default ramp (no custom string), optionally subsample to charRampCount chars with evenly spaced coverage
+    if (!useCustomRamp && charRampCount > 0) {
+        const size_t n = _charRamp.size();
+        const int K = charRampCount;
+        if (n > 0 && static_cast<size_t>(K) < n) {
+            const float c_min = _charCoverage[0];
+            const float c_max = _charCoverage[n - 1];
+            std::vector<size_t> chosen;
+            chosen.reserve(static_cast<size_t>(K));
+            for (int i = 0; i < K; ++i) {
+                float target = (K > 1) ? (c_min + (c_max - c_min) * static_cast<float>(i) / (K - 1)) : (0.5f * (c_min + c_max));
+                size_t best = 0;
+                float bestDist = std::abs(_charCoverage[0] - target);
+                for (size_t j = 1; j < n; ++j) {
+                    float d = std::abs(_charCoverage[j] - target);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        best = j;
+                    }
+                }
+                // If this index was already chosen, pick next closest that isn't chosen (keep distinct chars)
+                auto alreadyChosen = [&chosen](size_t idx) {
+                    return std::find(chosen.begin(), chosen.end(), idx) != chosen.end();
+                };
+                if (alreadyChosen(best)) {
+                    bestDist = std::numeric_limits<float>::max();
+                    for (size_t j = 0; j < n; ++j) {
+                        if (alreadyChosen(j)) continue;
+                        float d = std::abs(_charCoverage[j] - target);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            best = j;
+                        }
+                    }
+                }
+                chosen.push_back(best);
+            }
+            // Sort chosen by coverage so ramp stays ascending
+            std::sort(chosen.begin(), chosen.end(), [this](size_t a, size_t b) { return _charCoverage[a] < _charCoverage[b]; });
+            std::vector<wchar_t> subRamp(static_cast<size_t>(K));
+            std::vector<float> subCoverage(static_cast<size_t>(K));
+            for (int i = 0; i < K; ++i) {
+                subRamp[static_cast<size_t>(i)] = _charRamp[chosen[static_cast<size_t>(i)]];
+                subCoverage[static_cast<size_t>(i)] = _charCoverage[chosen[static_cast<size_t>(i)]];
+            }
+            _charRamp = std::move(subRamp);
+            _charCoverage = std::move(subCoverage);
+        }
+    }
+
+    Logger::Info("[Renderer] Loaded char coverage for font size " + std::to_string(fontSize) + " (" + std::to_string(_charRamp.size()) + " glyphs)");
+    for (size_t i = 0; i < _charRamp.size() && i < _charCoverage.size(); ++i) {
+        wchar_t ch = _charRamp[i];
+        float cov = _charCoverage[i];
+        std::wstring charDesc;
+        if (ch == L' ') charDesc = L"' '";
+        else if (ch == L'"') charDesc = L"'\"'";
+        else if (ch == L'\\') charDesc = L"'\\\\'";
+        else if (ch >= 32 && ch < 127) charDesc = std::wstring(L"'") + ch + L"'";
+        else {
+            charDesc = L"U+";
+            wchar_t hex[8];
+            swprintf_s(hex, L"%04X", (unsigned)(unsigned short)ch);
+            charDesc += hex;
+        }
+        Logger::Debug(L"[Renderer] char coverage " + charDesc + L" => " + std::to_wstring(cov));
+    }
+}
+
+// =============================================================================
 // COLOR LOOKUP TABLE (LUT)
 // =============================================================================
 
+size_t Renderer::MonochromeLuminanceToIndex(float L) const {
+    // Monochrome luminance samples were built by linearly interpolating between
+    // lowLinear and highLinear and then taking LinearRGB_Luminance, so the
+    // luminance samples are effectively uniform between [L_min, L_max].
+    // We can therefore invert using a simple affine mapping + round,
+    // clamped to [0, _monochromeLUTSize-1].
+    const float Lmin = _monochromeLUT.front().first;
+    const float Lmax = _monochromeLUT.back().first;
+    if (L <= Lmin) return 0;
+    if (L >= Lmax) return _monochromeLUTSize - 1;
+
+    const float t = (L - Lmin) / (Lmax - Lmin); // in (0,1)
+    float fIdx = t * static_cast<float>(_monochromeLUTSize - 1);
+    // Round to nearest index
+    size_t idx = static_cast<size_t>(std::floor(fIdx + 0.5f));
+    if (idx >= _monochromeLUTSize) idx = _monochromeLUTSize - 1;
+    return idx;
+}
+
 void Renderer::PrecomputeColorLUT() {
     Palette& palette = Screen::GetInst().GetPalette();
-    if (_colorLUTComputed) return;
-    
-    // Use the configured palette mode
-    PaletteMode mode = _paletteMode;
-    
+    if (_colorLUTState != ColorLUTState::NotComputed) return;
+    if (_charRamp.empty() || _charRamp.size() != _charCoverage.size()) return;
+
+    if (Screen::GetInst().IsMonochromePalette()) {
+        PrecomputeMonochromeColorLUT(palette);
+        return;
+    }
+
+    PrecomputeMultiColorLUT(palette);
+}
+
+void Renderer::PrecomputeMonochromeColorLUT(Palette& palette) {
+    Logger::Info("[Renderer] Precomputing monochrome color LUT...");
+
+    _colorLUTState = ColorLUTState::Monochrome;
+
+    // ===== MONOCHROME: 1-D LUT sweep from lowest to highest palette color (0..1023) =====
+    unsigned int minLumIdx = palette.GetMinLumIdx();
+    unsigned int maxLumIdx = palette.GetMaxLumIdx();
+    glm::vec3 lowRGB = palette.GetRGBNormalized(minLumIdx);
+    glm::vec3 highRGB = palette.GetRGBNormalized(maxLumIdx);
+    glm::vec3 lowLinear = PaletteUtil::sRGB1ToLinear1(lowRGB);
+    glm::vec3 highLinear = PaletteUtil::sRGB1ToLinear1(highRGB);
+
+    const float denom = (_monochromeLUTSize > 1) ? static_cast<float>(_monochromeLUTSize - 1) : 1.0f;
+    for (size_t i = 0; i < _monochromeLUTSize; ++i) {
+        float t = static_cast<float>(i) / denom;
+        glm::vec3 targetLinear = glm::mix(lowLinear, highLinear, t);
+        float targetLuminance = PaletteUtil::LinearRGB_Luminance(targetLinear);
+
+        float minError = FLT_MAX;
+        int bestFgIndex = 0, bestBgIndex = 0, bestCharIndex = 0;
+
+        for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
+            float fgLuminance = palette.GetLuminance(fgIdx);
+            for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
+                float bgLuminance = palette.GetLuminance(bgIdx);
+                for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
+                    float coverage = _charCoverage[charIdx];
+                    float simLum = coverage * fgLuminance + (1.0f - coverage) * bgLuminance;
+                    float error = std::abs(targetLuminance - simLum);
+                    if (error < minError) {
+                        minError = error;
+                        bestFgIndex = fgIdx;
+                        bestBgIndex = bgIdx;
+                        bestCharIndex = charIdx;
+                    }
+                }
+            }
+        }
+
+        wchar_t glyph = _charRamp[bestCharIndex];
+        unsigned short fgColor = static_cast<unsigned short>(palette.GetFgColor(bestFgIndex));
+        unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
+        unsigned short combinedColor = fgColor | bgColor;
+        if (fgColor > 0xF || bgColor > 0xF0) {
+            fgColor = fgColor & 0xF;
+            bgColor = bgColor & 0xF0;
+            combinedColor = fgColor | bgColor;
+        }
+        _monochromeLUT[i] = std::make_pair(targetLuminance, CHAR_INFO{ glyph, combinedColor });
+    }
+
+    // Make sure LUT is sorted by target luminance (ascending)
+    std::sort(_monochromeLUT.begin(), _monochromeLUT.end(),
+              [](const std::pair<float, CHAR_INFO>& a, const std::pair<float, CHAR_INFO>& b) {
+                  return a.first < b.first;
+              });
+}
+
+void Renderer::PrecomputeMultiColorLUT(Palette& palette) {
+    Logger::Info("[Renderer] Precomputing multi-color color LUT...");
+
+    _colorLUTState = ColorLUTState::MultiColor;
+    // ===== MULTICOLOR: full 16×16×16 RGB cube =====
     const float invPaletteDepth = 1.0f / 15.0f;
-    
-    // sRGB to linear conversion (IEC 61966-2-1)
     auto srgbToLinear = [](float s) {
         return s <= 0.04045f ? s / 12.92f : std::pow((s + 0.055f) / 1.055f, 2.4f);
     };
-    
     auto srgbToLinearVec = [&srgbToLinear](const glm::vec3& c) {
         return glm::vec3(srgbToLinear(c.r), srgbToLinear(c.g), srgbToLinear(c.b));
     };
-    
-    // Precompute all possible RGB combinations
+
     for (int r = 0; r < static_cast<int>(_rgbLUTDepth); ++r) {
         for (int g = 0; g < static_cast<int>(_rgbLUTDepth); ++g) {
             for (int b = 0; b < static_cast<int>(_rgbLUTDepth); ++b) {
-                // Convert discrete RGB to normalized [0,1] sRGB range
                 glm::vec3 targetSRGB(
                     r * invPaletteDepth,
                     g * invPaletteDepth,
                     b * invPaletteDepth
                 );
+                glm::vec3 targetLinear = srgbToLinearVec(targetSRGB);
 
                 float minError = FLT_MAX;
                 int bestFgIndex = 0, bestBgIndex = 0, bestCharIndex = 0;
 
-                if (mode == PaletteMode::Monochrome) {
-                    // ===== MONOCHROME PATH: Compare by luminance only =====
-                    // For monochrome palettes (grayscale, amber, sepia), all colors
-                    // lie on the same hue line. Comparing by luminance is faster
-                    // and more accurate than RGB distance.
-                    
-                    float targetLuminance = PaletteUtil::sRGB1_Luminance(targetSRGB);
-                    
-                    for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
-                        float fgLuminance = palette.GetLuminance(fgIdx);
-                        
-                        for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
-                            float bgLuminance = palette.GetLuminance(bgIdx);
-                            
-                            for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
-                                float coverage = _charCoverage[charIdx];
-                                
-                                // Simulate luminance as weighted blend
-                                float simLuminance = coverage * fgLuminance + (1.0f - coverage) * bgLuminance;
-                                float error = std::abs(targetLuminance - simLuminance);
-
-                                if (error < minError) {
-                                    minError = error;
-                                    bestFgIndex = fgIdx;
-                                    bestBgIndex = bgIdx;
-                                    bestCharIndex = charIdx;
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // ===== MULTICOLOR PATH: Linearized sRGB with weighted distance =====
-                    // For full-color palettes, linearize sRGB before comparison and use
-                    // perceptually weighted Euclidean distance (green-sensitive).
-                    
-                    glm::vec3 targetLinear = srgbToLinearVec(targetSRGB);
-                    
-                    for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
-                        glm::vec3 fgLinear = srgbToLinearVec(palette.GetRGBNormalized(fgIdx));
-                        
-                        for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
-                            glm::vec3 bgLinear = srgbToLinearVec(palette.GetRGBNormalized(bgIdx));
-                            
-                            for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
-                                float coverage = _charCoverage[charIdx];
-                                
-                                // Simulate color in linear space
-                                glm::vec3 simLinear = coverage * fgLinear + (1.0f - coverage) * bgLinear;
-                                glm::vec3 diff = targetLinear - simLinear;
-                                
-                                // Weighted Euclidean distance (Rec. 709 luminance weights)
-                                float error = 0.2126f * diff.r * diff.r 
-                                            + 0.7152f * diff.g * diff.g 
-                                            + 0.0722f * diff.b * diff.b;
-
-                                if (error < minError) {
-                                    minError = error;
-                                    bestFgIndex = fgIdx;
-                                    bestBgIndex = bgIdx;
-                                    bestCharIndex = charIdx;
-                                }
+                for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
+                    glm::vec3 fgLinear = srgbToLinearVec(palette.GetRGBNormalized(fgIdx));
+                    for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
+                        glm::vec3 bgLinear = srgbToLinearVec(palette.GetRGBNormalized(bgIdx));
+                        for (int charIdx = 0; charIdx < static_cast<int>(_charRamp.size()); ++charIdx) {
+                            float coverage = _charCoverage[charIdx];
+                            glm::vec3 simLinear = coverage * fgLinear + (1.0f - coverage) * bgLinear;
+                            glm::vec3 diff = targetLinear - simLinear;
+                            float error = 0.2126f * diff.r * diff.r
+                                + 0.7152f * diff.g * diff.g
+                                + 0.0722f * diff.b * diff.b;
+                            if (error < minError) {
+                                minError = error;
+                                bestFgIndex = fgIdx;
+                                bestBgIndex = bgIdx;
+                                bestCharIndex = charIdx;
                             }
                         }
                     }
                 }
 
-                // Store precomputed result
                 int index = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
                 wchar_t glyph = _charRamp[bestCharIndex];
                 unsigned short fgColor = static_cast<unsigned short>(palette.GetFgColor(bestFgIndex));
                 unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
                 unsigned short combinedColor = fgColor | bgColor;
-
                 if (fgColor > 0xF || bgColor > 0xF0) {
-                    // Clamp to valid range
                     fgColor = fgColor & 0xF;
                     bgColor = bgColor & 0xF0;
                     combinedColor = fgColor | bgColor;
                 }
-
                 _colorLUT[index] = {glyph, combinedColor};
             }
         }
     }
-
-    _colorLUTComputed = true;
 }
 
 CHAR_INFO Renderer::GetCharInfo(const glm::ivec3& rgb) {
-    if (!_colorLUTComputed) {
+    if (_colorLUTState == ColorLUTState::NotComputed) {
         PrecomputeColorLUT();
     }
 
-    // Convert 0-255 to 0-15 for LUT indexing
+    if (_colorLUTState == ColorLUTState::Monochrome) {
+        float L = PaletteUtil::sRGB255_Luminance(rgb);
+        size_t idx = MonochromeLuminanceToIndex(L);
+        return _monochromeLUT[idx].second;
+    }
+
     auto to16 = [](int v) { return (v * 15 + 127) / 255; };
     const int r = to16(rgb.r), g = to16(rgb.g), b = to16(rgb.b);
     const int index = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
-
     return _colorLUT[index];
 }
 
@@ -594,6 +844,29 @@ bool Renderer::GetDiagnosticsEnabled() const {
     return _diagnostics_enabled;
 }
 
+void Renderer::SetMaxAnisotropy(int level) {
+    if (level <= 1) level = 1;
+    else if (level <= 2) level = 2;
+    else if (level <= 4) level = 4;
+    else if (level <= 8) level = 8;
+    else level = 16;
+
+    if (level == _maxAnisotropy) return;
+
+    _maxAnisotropy = level;
+
+    if (_initialized) {
+        _samplerAnisotropic.Reset();
+        if (!CreateAnisotropicSampler()) {
+            Logger::Error("[Renderer] Failed to recreate anisotropic sampler at " + std::to_string(_maxAnisotropy) + "x");
+        }
+    }
+}
+
+int Renderer::GetMaxAnisotropy() const {
+    return _maxAnisotropy;
+}
+
 void Renderer::ResetDiagnostics() {
     if (!_diagnostics_enabled) return;
 }
@@ -629,17 +902,6 @@ void Renderer::EndColBuffFrame() {
     DownloadFramebuffer();
 
     OverwritePxBuffWithColBuff();
-}
-
-void Renderer::SetPaletteMode(PaletteMode mode) {
-    if (_paletteMode != mode) {
-        _paletteMode = mode;
-        _colorLUTComputed = false; // Invalidate LUT to force recomputation
-    }
-}
-
-PaletteMode Renderer::GetPaletteMode() const {
-    return _paletteMode;
 }
 
 // =========================================================================
@@ -680,12 +942,12 @@ void Renderer::BindMaterial(Material* material) {
         BindShaderProgram(program.get());
     }
     
-    // Bind textures
+    // Bind textures (material's per-slot sampler type is used)
     for (const auto& slot : material->_textureSlots) {
         if (slot.texture) {
-            BindTexture(slot.texture, slot.slot);
+            BindTexture(slot.texture, slot.slot, slot.samplerType);
         } else if (slot.textureArray) {
-            BindTextureArray(slot.textureArray, slot.slot);
+            BindTextureArray(slot.textureArray, slot.slot, slot.samplerType);
         }
     }
     
