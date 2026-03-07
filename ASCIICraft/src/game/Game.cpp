@@ -307,8 +307,6 @@ bool Game::LoadTextures() {
         return false;
     }
 
-    blockTextureArray->GenerateMipmapsCPU(-1, ASCIIgL::MipFilters::PixelArtAlphaCutoutAny2x2);
-
     auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture("res/textures/gui/inventory.png", "inventoryTexture", monoMap);
     if (!inventoryTexture) {
         ASCIIgL::Logger::Error("Failed to load inventory texture");
