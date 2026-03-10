@@ -2,10 +2,7 @@
 
 #include <vector>
 #include <array>
-#include <string>
-#include <unordered_map>
 #include <cstddef>
-#include <memory>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -157,6 +154,8 @@ private:
     // =========================================================================
     std::vector<glm::ivec4> _color_buffer;
     void OverwritePxBuffWithColBuff();
+    void OverwritePxBuffWithColBuff_Monochrome(std::vector<CHAR_INFO>& pixelBuffer, int width, size_t bufferSize);
+    void OverwritePxBuffWithColBuff_MultiColor(std::vector<CHAR_INFO>& pixelBuffer, size_t bufferSize);
 
     // =========================================================================
     // Antialiasing
@@ -189,12 +188,7 @@ private:
     // Each entry stores (target luminance, CHAR_INFO)
     std::array<std::pair<float, CHAR_INFO>, _monochromeLUTSize> _monochromeLUT;
 
-    // =========================================================================
-    // Diagnostics
-    // =========================================================================
-    void ResetDiagnostics();
-    void LogDiagnostics() const;
-    bool _diagnostics_enabled = false;
+    bool _monochromeDitherEnabled = false;
 
     // =========================================================================
     // Helper Drawing Functions
@@ -315,8 +309,10 @@ public:
     glm::ivec3 GetBackgroundCol() const;
     void SetBackgroundCol(const glm::ivec3& color);
 
-    void SetDiagnosticsEnabled(const bool enabled);
-    bool GetDiagnosticsEnabled() const;
+    /// Enables 4x4 Bayer ordered dithering for the monochrome LUT path.
+    /// Default: false.
+    void SetMonochromeDitherEnabled(bool enabled) { _monochromeDitherEnabled = enabled; }
+    bool GetMonochromeDitherEnabled() const { return _monochromeDitherEnabled; }
 
     /// Anisotropic filtering level for texture arrays. Valid: 1 (off), 2, 4, 8, 16. Default 16.
     void SetMaxAnisotropy(int level);
