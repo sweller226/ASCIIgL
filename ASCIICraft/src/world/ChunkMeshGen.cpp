@@ -18,6 +18,10 @@ static int GetBlockIndex(int x, int y, int z) {
     return x + y * SIZE + z * SIZE * SIZE;
 }
 
+static float TestFaceLightConstant() {
+    return 1.0f;
+}
+
 static bool IsValidBlockCoord(int x, int y, int z) {
     return x >= 0 && x < SIZE && y >= 0 && y < SIZE && z >= 0 && z < SIZE;
 }
@@ -98,9 +102,7 @@ ChunkMeshData BuildChunkMeshData(
     };
     const int faceIndices[6] = { 0, 1, 2, 0, 2, 3 };
 
-    // Directional light multipliers: top bright8st, bottom darkest, sides in between
-    const float faceLight[6] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f }; // +Y, -Y, +Z, -Z, +X, -X
-
+    // Directional light multipliers.
     const unsigned int stride = static_cast<unsigned int>(ASCIIgL::VertFormats::PosUVLayerLight().GetStride());
 
     for (int x = 0; x < SIZE; ++x) {
@@ -148,13 +150,16 @@ ChunkMeshData BuildChunkMeshData(
                             static_cast<uint8_t>(blockFacing)
                         });
                     } else {
-                        int baseVertexIndex = static_cast<int>(verticesOpaque.size()) / static_cast<int>(stride);
-                        float light = faceLight[face];
+                        const int baseVertexIndex = static_cast<int>(verticesOpaque.size()) / static_cast<int>(stride);
+                        const int blockWorldX = coord.x * SIZE + x;
+                        const int blockWorldY = coord.y * SIZE + y;
+                        const int blockWorldZ = coord.z * SIZE + z;
+                        const float light = TestFaceLightConstant();
                         for (int vertIdx = 0; vertIdx < 4; ++vertIdx) {
                             glm::vec3 worldCoord = glm::vec3(
-                                coord.x * SIZE + x,
-                                coord.y * SIZE + y,
-                                coord.z * SIZE + z
+                                blockWorldX,
+                                blockWorldY,
+                                blockWorldZ
                             ) + faceVerticesIndexed[face][vertIdx];
                             glm::vec2 faceUV = faceUVsIndexed[vertIdx];
                             if (face == 0 || face == 1)
@@ -195,13 +200,16 @@ ChunkMeshData BuildChunkMeshData(
             int textureLayer = tf.textureLayer;
             BlockFace bf = static_cast<BlockFace>(tf.blockFacing);
             int baseVertexIndex = static_cast<int>(out.transparentVertices.size()) / static_cast<int>(stride);
-            float light = faceLight[face];
+            const int blockWorldX = coord.x * SIZE + tf.x;
+            const int blockWorldY = coord.y * SIZE + tf.y;
+            const int blockWorldZ = coord.z * SIZE + tf.z;
+            const float light = TestFaceLightConstant();
 
             for (int vertIdx = 0; vertIdx < 4; ++vertIdx) {
                 glm::vec3 worldCoord = glm::vec3(
-                    coord.x * SIZE + tf.x,
-                    coord.y * SIZE + tf.y,
-                    coord.z * SIZE + tf.z
+                    blockWorldX,
+                    blockWorldY,
+                    blockWorldZ
                 ) + faceVerticesIndexed[face][vertIdx];
                 glm::vec2 faceUV = faceUVsIndexed[vertIdx];
                 if (face == 0 || face == 1)

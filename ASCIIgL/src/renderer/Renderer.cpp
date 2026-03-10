@@ -1,6 +1,7 @@
 #include <ASCIIgL/renderer/Renderer.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <execution>
 #include <limits>
 #include <numeric>
@@ -345,19 +346,8 @@ std::vector<glm::ivec4>& Renderer::GetColorBuffer() {
     return _color_buffer;
 }
 
-void Renderer::OverwritePxBuffWithColBuff() {
-    LogDiagnostics();
-    ResetDiagnostics();
-
-    auto& screen = Screen::GetInst();
-    auto& pixelBuffer = screen.GetPixelBuffer();
-    const size_t bufferSize = _color_buffer.size();
-
-    if (_colorLUTState == ColorLUTState::NotComputed) {
-        PrecomputeColorLUT();
-    }
-
-    if (_colorLUTState == ColorLUTState::Monochrome) {
+void Renderer::OverwritePxBuffWithColBuff_Monochrome(std::vector<CHAR_INFO>& pixelBuffer, int width, size_t bufferSize) {
+    if (!_monochromeDitherEnabled) {
         for (size_t i = 0; i < bufferSize; ++i) {
             const auto& c = _color_buffer[i];
             float L = PaletteUtil::sRGB255_Luminance(glm::ivec3(c.r, c.g, c.b));
@@ -367,9 +357,53 @@ void Renderer::OverwritePxBuffWithColBuff() {
         return;
     }
 
+    // 4x4 Bayer ordered dithering in LUT-index space.
+    static constexpr uint8_t BAYER4[16] = {
+        0,  8,  2, 10,
+        12, 4, 14, 6,
+        3, 11, 1, 9,
+        15, 7, 13, 5
+    };
+
+    const float Lmin = _monochromeLUT.front().first;
+    const float Lmax = _monochromeLUT.back().first;
+    const float denom = Lmax - Lmin;
+
+    for (size_t i = 0; i < bufferSize; ++i) {
+        const auto& c = _color_buffer[i];
+        float L = PaletteUtil::sRGB255_Luminance(glm::ivec3(c.r, c.g, c.b));
+
+        size_t idx = 0;
+        if (!(denom > 1e-8f)) {
+            idx = 0;
+        } else if (L <= Lmin) {
+            idx = 0;
+        } else if (L >= Lmax) {
+            idx = _monochromeLUTSize - 1;
+        } else {
+            const int x = static_cast<int>(i % static_cast<size_t>(width));
+            const int y = static_cast<int>(i / static_cast<size_t>(width));
+            const float threshold = (static_cast<float>(BAYER4[((y & 3) << 2) | (x & 3)]) + 0.5f) * (1.0f / 16.0f);
+
+            const float t = (L - Lmin) / denom; // in (0,1)
+            const float fIdx = t * static_cast<float>(_monochromeLUTSize - 1);
+            const float baseF = std::floor(fIdx);
+            const float frac = fIdx - baseF;
+            size_t base = static_cast<size_t>(baseF);
+
+            idx = base + ((frac > threshold) ? 1u : 0u);
+            if (idx >= _monochromeLUTSize) idx = _monochromeLUTSize - 1;
+        }
+
+        pixelBuffer[i] = _monochromeLUT[idx].second;
+    }
+}
+
+void Renderer::OverwritePxBuffWithColBuff_MultiColor(std::vector<CHAR_INFO>& pixelBuffer, size_t bufferSize) {
     const size_t unrollFactor = 4;
     const size_t unrolledEnd = (bufferSize / unrollFactor) * unrollFactor;
     auto to16 = [](int v) { return (v * 15 + 127) / 255; };
+
     size_t i = 0;
     for (; i < unrolledEnd; i += unrollFactor) {
         const auto& color0 = _color_buffer[i];
@@ -395,6 +429,23 @@ void Renderer::OverwritePxBuffWithColBuff() {
         const int index = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
         pixelBuffer[i] = _colorLUT[index];
     }
+}
+
+void Renderer::OverwritePxBuffWithColBuff() {
+    auto& screen = Screen::GetInst();
+    auto& pixelBuffer = screen.GetPixelBuffer();
+    const size_t bufferSize = _color_buffer.size();
+
+    if (_colorLUTState == ColorLUTState::NotComputed) {
+        PrecomputeColorLUT();
+    }
+
+    if (_colorLUTState == ColorLUTState::Monochrome) {
+        OverwritePxBuffWithColBuff_Monochrome(pixelBuffer, screen.GetWidth(), bufferSize);
+        return;
+    }
+
+    OverwritePxBuffWithColBuff_MultiColor(pixelBuffer, bufferSize);
 }
 
 // =============================================================================
@@ -832,18 +883,6 @@ int Renderer::GetAntialiasingsamples() const {
     return _antialiasing_samples;
 }
 
-// =============================================================================
-// DIAGNOSTICS
-// =============================================================================
-
-void Renderer::SetDiagnosticsEnabled(bool enabled) {
-    _diagnostics_enabled = enabled;
-}
-
-bool Renderer::GetDiagnosticsEnabled() const {
-    return _diagnostics_enabled;
-}
-
 void Renderer::SetMaxAnisotropy(int level) {
     if (level <= 1) level = 1;
     else if (level <= 2) level = 2;
@@ -865,14 +904,6 @@ void Renderer::SetMaxAnisotropy(int level) {
 
 int Renderer::GetMaxAnisotropy() const {
     return _maxAnisotropy;
-}
-
-void Renderer::ResetDiagnostics() {
-    if (!_diagnostics_enabled) return;
-}
-
-void Renderer::LogDiagnostics() const {
-    if (!_diagnostics_enabled) return;
 }
 
 void Renderer::EndColBuffFrame() {
@@ -899,9 +930,16 @@ void Renderer::EndColBuffFrame() {
         _debugSwapChain->Present(0, 0);
     }
 
-    DownloadFramebuffer();
+    {
+        ASCIIgL::PROFILE_SCOPE("Renderer.DownloadFramebuffer");
+        DownloadFramebuffer();
+    }
 
-    OverwritePxBuffWithColBuff();
+    {
+        ASCIIgL::PROFILE_SCOPE("Renderer.OverwritePxBuffWithColBuff");
+        OverwritePxBuffWithColBuff();
+    }
+
 }
 
 // =========================================================================

@@ -92,11 +92,11 @@ bool Game::Initialize() {
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
 
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
-    renderer.SetBackgroundCol(gamePalette.GetRGB(8));
+    renderer.SetMonochromeDitherEnabled(true);
+    renderer.SetBackgroundCol(gamePalette.GetRGB(1));
     renderer.SetWireframe(false);
     renderer.SetBackfaceCulling(true);
     renderer.SetCCW(true);
-    renderer.SetDiagnosticsEnabled(true);
 
     ASCIIgL::Logger::Debug("Initializing renderer...");
     renderer.Initialize(true, 4, nullptr, 10);
@@ -288,9 +288,9 @@ void Game::Shutdown() {
 bool Game::LoadTextures() {
     ASCIIgL::Logger::Info("Loading game textures...");
 
-    glm::ivec3 grayHue = glm::ivec3(22, 22, 22);
-    float darkL  = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(20, 20, 20));
-    float lightL = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(220, 220, 220));
+    glm::ivec3 grayHue = glm::ivec3(14, 14, 14);
+    float darkL  = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(22, 22, 22));
+    float lightL = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(210, 210, 210));
 
     // Build monochrome mapping from the current screen palette if possible.
     ASCIIgL::MonochromeMapping monoMap;
