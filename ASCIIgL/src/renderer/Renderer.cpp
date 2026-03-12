@@ -45,21 +45,6 @@ void Renderer::DrawTriangleWireframePxBuff(const glm::vec2& vert1, const glm::ve
 }
 
 // =============================================================================
-// TRIANGLE RASTERIZATION - WIREFRAME (COLOR BUFFER)
-// =============================================================================
-
-void Renderer::DrawTriangleWireframeColBuff(const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, const glm::ivec4& col) {
-    // RENDERING LINES BETWEEN VERTICES
-    DrawLineColBuff((int) vert1.x, (int) vert1.y, (int) vert2.x, (int) vert2.y, col);
-    DrawLineColBuff((int) vert2.x, (int) vert2.y, (int) vert3.x, (int) vert3.y, col);
-    DrawLineColBuff((int) vert3.x, (int) vert3.y, (int) vert1.x, (int) vert1.y, col);
-}
-
-void Renderer::DrawTriangleWireframeColBuff(const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, const glm::ivec3& col) {
-    DrawTriangleWireframeColBuff(vert1, vert2, vert3, glm::ivec4(col, 1));
-}
-
-// =============================================================================
 // LINE DRAWING - PIXEL BUFFER
 // =============================================================================
 
@@ -154,141 +139,6 @@ void Renderer::DrawScreenBorderPxBuff(const unsigned short col) {
 }
 
 // =============================================================================
-// LINE DRAWING - COLOR BUFFER
-// =============================================================================
-
-void Renderer::DrawLineColBuff(const int x1, const int y1, const int x2, const int y2, const glm::ivec4& col) {
-    int dx = abs(x2 - x1);
-    int dy = abs(y2 - y1);
-    int incx = (x2 > x1) ? 1 : -1;
-    int incy = (y2 > y1) ? 1 : -1;
-    int x = x1, y = y1;
-
-    PlotColorBlend(x, y, col);
-
-    if (dx > dy) {
-        int e = 2 * dy - dx;
-        for (int i = 0; i < dx; ++i) {
-            x += incx;
-            if (e >= 0) {
-                y += incy;
-                e += 2 * (dy - dx);
-            } else {
-                e += 2 * dy;
-            }
-            PlotColorBlend(x, y, col);
-        }
-    } else {
-        int e = 2 * dx - dy;
-        for (int i = 0; i < dy; ++i) {
-            y += incy;
-            if (e >= 0) {
-                x += incx;
-                e += 2 * (dx - dy);
-            } else {
-                e += 2 * dx;
-            }
-            PlotColorBlend(x, y, col);
-        }
-    }
-}
-
-void Renderer::DrawLineColBuff(int x1, int y1, int x2, int y2, const glm::ivec3& col) {
-    DrawLineColBuff(x1, y1, x2, y2, glm::ivec4(col, 1));
-}
-
-void Renderer::DrawClippedLineColBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, const glm::ivec4& col) {
-    // Bresenham's line algorithm with tile bounds clipping
-    int dx = abs(x1 - x0);
-    int dy = abs(y1 - y0);
-    int incx = (x1 > x0) ? 1 : -1;
-    int incy = (y1 > y0) ? 1 : -1;
-    int x = x0, y = y0;
-
-    // Plot first pixel if within bounds
-    if (x >= minX && x < maxX && y >= minY && y < maxY) {
-        PlotColorBlend(x, y, col);
-    }
-
-    if (dx > dy) {
-        int e = 2 * dy - dx;
-        for (int i = 0; i < dx; ++i) {
-            x += incx;
-            if (e >= 0) {
-                y += incy;
-                e += 2 * (dy - dx);
-            } else {
-                e += 2 * dy;
-            }
-            // Only plot if within tile bounds
-            if (x >= minX && x < maxX && y >= minY && y < maxY) {
-                PlotColorBlend(x, y, col);
-            }
-        }
-    } else {
-        int e = 2 * dx - dy;
-        for (int i = 0; i < dy; ++i) {
-            y += incy;
-            if (e >= 0) {
-                x += incx;
-                e += 2 * (dx - dy);
-            } else {
-                e += 2 * dx;
-            }
-            // Only plot if within tile bounds
-            if (x >= minX && x < maxX && y >= minY && y < maxY) {
-                PlotColorBlend(x, y, col);
-            }
-        }
-    }
-}
-
-void Renderer::DrawScreenBorderColBuff(const glm::vec3& col) {
-    // DRAWING BORDERS
-    DrawLineColBuff(0, 0, Screen::GetInst().GetWidth() - 1, 0, col);
-    DrawLineColBuff(Screen::GetInst().GetWidth() - 1, 0, Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, col);
-    DrawLineColBuff(Screen::GetInst().GetWidth() - 1, Screen::GetInst().GetHeight() - 1, 0, Screen::GetInst().GetHeight() - 1, col);
-    DrawLineColBuff(0, 0, 0, Screen::GetInst().GetHeight() - 1, col);
-}
-
-// =============================================================================
-// PIXEL PLOTTING - COLOR BUFFER
-// =============================================================================
-
-void Renderer::PlotColor(int x, int y, const glm::ivec3& color) {
-    const int screenWidth = Screen::GetInst().GetWidth();
-    const int screenHeight = Screen::GetInst().GetHeight();
-    
-    if (x < 0 || x >= screenWidth || y < 0 || y >= screenHeight) {
-        return;
-    }
-
-    _color_buffer[y * screenWidth + x] = glm::ivec4(color, 1);
-}
-
-void Renderer::PlotColor(int x, int y, const glm::ivec4& color) {
-    const int screenWidth = Screen::GetInst().GetWidth();
-    const int screenHeight = Screen::GetInst().GetHeight();
-    
-    if (x < 0 || x >= screenWidth || y < 0 || y >= screenHeight) {
-        return;
-    }
-
-    _color_buffer[y * screenWidth + x] = color;
-}
-
-void Renderer::PlotColorBlend(int x, int y, const glm::ivec4& color) {
-    const int screenWidth = Screen::GetInst().GetWidth();
-    const int screenHeight = Screen::GetInst().GetHeight();
-    
-    if (x < 0 || x >= screenWidth || y < 0 || y >= screenHeight) {
-        return;
-    }
-
-    _color_buffer[y * screenWidth + x] = color;
-}
-
-// =============================================================================
 // BUFFER MANAGEMENT
 // =============================================================================
 
@@ -338,114 +188,6 @@ void Renderer::BeginColBuffFrame() {
 
     // Set primitive topology
     _context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    
-    std::fill(_color_buffer.begin(), _color_buffer.end(), glm::ivec4(_background_col, 1));
-}
-
-std::vector<glm::ivec4>& Renderer::GetColorBuffer() {
-    return _color_buffer;
-}
-
-void Renderer::OverwritePxBuffWithColBuff_Monochrome(std::vector<CHAR_INFO>& pixelBuffer, int width, size_t bufferSize) {
-    if (!_monochromeDitherEnabled) {
-        for (size_t i = 0; i < bufferSize; ++i) {
-            const auto& c = _color_buffer[i];
-            float L = PaletteUtil::sRGB255_Luminance(glm::ivec3(c.r, c.g, c.b));
-            size_t idx = MonochromeLuminanceToIndex(L);
-            pixelBuffer[i] = _monochromeLUT[idx].second;
-        }
-        return;
-    }
-
-    // 4x4 Bayer ordered dithering in LUT-index space.
-    static constexpr uint8_t BAYER4[16] = {
-        0,  8,  2, 10,
-        12, 4, 14, 6,
-        3, 11, 1, 9,
-        15, 7, 13, 5
-    };
-
-    const float Lmin = _monochromeLUT.front().first;
-    const float Lmax = _monochromeLUT.back().first;
-    const float denom = Lmax - Lmin;
-
-    for (size_t i = 0; i < bufferSize; ++i) {
-        const auto& c = _color_buffer[i];
-        float L = PaletteUtil::sRGB255_Luminance(glm::ivec3(c.r, c.g, c.b));
-
-        size_t idx = 0;
-        if (!(denom > 1e-8f)) {
-            idx = 0;
-        } else if (L <= Lmin) {
-            idx = 0;
-        } else if (L >= Lmax) {
-            idx = _monochromeLUTSize - 1;
-        } else {
-            const int x = static_cast<int>(i % static_cast<size_t>(width));
-            const int y = static_cast<int>(i / static_cast<size_t>(width));
-            const float threshold = (static_cast<float>(BAYER4[((y & 3) << 2) | (x & 3)]) + 0.5f) * (1.0f / 16.0f);
-
-            const float t = (L - Lmin) / denom; // in (0,1)
-            const float fIdx = t * static_cast<float>(_monochromeLUTSize - 1);
-            const float baseF = std::floor(fIdx);
-            const float frac = fIdx - baseF;
-            size_t base = static_cast<size_t>(baseF);
-
-            idx = base + ((frac > threshold) ? 1u : 0u);
-            if (idx >= _monochromeLUTSize) idx = _monochromeLUTSize - 1;
-        }
-
-        pixelBuffer[i] = _monochromeLUT[idx].second;
-    }
-}
-
-void Renderer::OverwritePxBuffWithColBuff_MultiColor(std::vector<CHAR_INFO>& pixelBuffer, size_t bufferSize) {
-    const size_t unrollFactor = 4;
-    const size_t unrolledEnd = (bufferSize / unrollFactor) * unrollFactor;
-    auto to16 = [](int v) { return (v * 15 + 127) / 255; };
-
-    size_t i = 0;
-    for (; i < unrolledEnd; i += unrollFactor) {
-        const auto& color0 = _color_buffer[i];
-        const auto& color1 = _color_buffer[i + 1];
-        const auto& color2 = _color_buffer[i + 2];
-        const auto& color3 = _color_buffer[i + 3];
-        const int r0 = to16(color0.r), g0 = to16(color0.g), b0 = to16(color0.b);
-        const int r1 = to16(color1.r), g1 = to16(color1.g), b1 = to16(color1.b);
-        const int r2 = to16(color2.r), g2 = to16(color2.g), b2 = to16(color2.b);
-        const int r3 = to16(color3.r), g3 = to16(color3.g), b3 = to16(color3.b);
-        const int index0 = (r0 * _rgbLUTDepth * _rgbLUTDepth) + (g0 * _rgbLUTDepth) + b0;
-        const int index1 = (r1 * _rgbLUTDepth * _rgbLUTDepth) + (g1 * _rgbLUTDepth) + b1;
-        const int index2 = (r2 * _rgbLUTDepth * _rgbLUTDepth) + (g2 * _rgbLUTDepth) + b2;
-        const int index3 = (r3 * _rgbLUTDepth * _rgbLUTDepth) + (g3 * _rgbLUTDepth) + b3;
-        pixelBuffer[i] = _colorLUT[index0];
-        pixelBuffer[i + 1] = _colorLUT[index1];
-        pixelBuffer[i + 2] = _colorLUT[index2];
-        pixelBuffer[i + 3] = _colorLUT[index3];
-    }
-    for (; i < bufferSize; ++i) {
-        const auto& color = _color_buffer[i];
-        const int r = to16(color.r), g = to16(color.g), b = to16(color.b);
-        const int index = (r * _rgbLUTDepth * _rgbLUTDepth) + (g * _rgbLUTDepth) + b;
-        pixelBuffer[i] = _colorLUT[index];
-    }
-}
-
-void Renderer::OverwritePxBuffWithColBuff() {
-    auto& screen = Screen::GetInst();
-    auto& pixelBuffer = screen.GetPixelBuffer();
-    const size_t bufferSize = _color_buffer.size();
-
-    if (_colorLUTState == ColorLUTState::NotComputed) {
-        PrecomputeColorLUT();
-    }
-
-    if (_colorLUTState == ColorLUTState::Monochrome) {
-        OverwritePxBuffWithColBuff_Monochrome(pixelBuffer, screen.GetWidth(), bufferSize);
-        return;
-    }
-
-    OverwritePxBuffWithColBuff_MultiColor(pixelBuffer, bufferSize);
 }
 
 // =============================================================================
@@ -686,7 +428,12 @@ size_t Renderer::MonochromeLuminanceToIndex(float L) const {
 void Renderer::PrecomputeColorLUT() {
     Palette& palette = Screen::GetInst().GetPalette();
     if (_colorLUTState != ColorLUTState::NotComputed) return;
-    if (_charRamp.empty() || _charRamp.size() != _charCoverage.size()) return;
+    // Ensure we have a valid char ramp so the GPU quantization pass can run (avoid "nothing renders" when JSON missing or empty)
+    if (_charRamp.empty() || _charRamp.size() != _charCoverage.size()) {
+        Logger::Warning("[Renderer] Char ramp empty or size mismatch; using fallback ramp for LUT.");
+        ApplyFallbackRamp(_charRamp, _charCoverage, CHAR_RAMP_DEFAULT);
+        SubsampleRampByIndex(_charRamp, _charCoverage, 10);
+    }
 
     if (Screen::GetInst().IsMonochromePalette()) {
         PrecomputeMonochromeColorLUT(palette);
@@ -753,6 +500,7 @@ void Renderer::PrecomputeMonochromeColorLUT(Palette& palette) {
               [](const std::pair<float, CHAR_INFO>& a, const std::pair<float, CHAR_INFO>& b) {
                   return a.first < b.first;
               });
+    UploadLUTsToGPU();
 }
 
 void Renderer::PrecomputeMultiColorLUT(Palette& palette) {
@@ -816,6 +564,7 @@ void Renderer::PrecomputeMultiColorLUT(Palette& palette) {
             }
         }
     }
+    UploadLUTsToGPU();
 }
 
 CHAR_INFO Renderer::GetCharInfo(const glm::ivec3& rgb) {
@@ -907,6 +656,8 @@ int Renderer::GetMaxAnisotropy() const {
 }
 
 void Renderer::EndColBuffFrame() {
+    if (!_initialized) return;
+
     // Resolve MSAA render target to non-MSAA texture for CPU download
     D3D11_TEXTURE2D_DESC rtDesc;
     _renderTarget->GetDesc(&rtDesc);
@@ -931,15 +682,14 @@ void Renderer::EndColBuffFrame() {
     }
 
     {
-        ASCIIgL::PROFILE_SCOPE("Renderer.DownloadFramebuffer");
-        DownloadFramebuffer();
+        ASCIIgL::PROFILE_SCOPE("Renderer.RunQuantizationPass");
+        RunQuantizationPass();
     }
 
     {
-        ASCIIgL::PROFILE_SCOPE("Renderer.OverwritePxBuffWithColBuff");
-        OverwritePxBuffWithColBuff();
+        ASCIIgL::PROFILE_SCOPE("Renderer.DownloadFramebuffer");
+        DownloadFramebuffer();
     }
-
 }
 
 // =========================================================================

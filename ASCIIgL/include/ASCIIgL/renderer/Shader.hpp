@@ -5,6 +5,7 @@
 #include <vector>
 #include <unordered_map>
 #include <cstdint>
+#include <cstring>
 #include <variant>
 
 #include <glm/glm.hpp>
@@ -113,6 +114,39 @@ private:
 // Map: include name (as used in #include "Name.hlsl") -> full HLSL source.
 // Pass to CreateFromSource when building shaders that use #include.
 using ShaderIncludeMap = std::unordered_map<std::string, std::string>;
+
+// Implements ID3DInclude so HLSL #include "Name.hlsl" resolves from a ShaderIncludeMap.
+// Use with D3DCompile(..., pInclude, ...) when compiling shaders that use #include.
+class ShaderIncludeHandler : public ID3DInclude {
+public:
+    explicit ShaderIncludeHandler(const ShaderIncludeMap* map) : _map(map) {}
+
+    HRESULT STDMETHODCALLTYPE Open(
+        D3D_INCLUDE_TYPE /*IncludeType*/,
+        LPCSTR pFileName,
+        LPCVOID /*pParentData*/,
+        LPCVOID* ppData,
+        UINT* pBytes) override
+    {
+        if (!_map || !ppData || !pBytes) return E_INVALIDARG;
+        auto it = _map->find(pFileName);
+        if (it == _map->end()) {
+            const char* base = std::strrchr(pFileName, '/');
+            if (!base) base = std::strrchr(pFileName, '\\');
+            const char* name = base ? base + 1 : pFileName;
+            it = _map->find(name);
+        }
+        if (it == _map->end()) return E_FAIL;
+        *ppData = it->second.data();
+        *pBytes = static_cast<UINT>(it->second.size());
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE Close(LPCVOID /*pData*/) override { return S_OK; }
+
+private:
+    const ShaderIncludeMap* _map;
+};
 
 // =========================================================================
 // Shader - Represents a single compiled shader (vertex or pixel)

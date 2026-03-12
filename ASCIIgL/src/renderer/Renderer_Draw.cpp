@@ -134,6 +134,9 @@ void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list) {
 void Renderer::FlushDraws() {
     if (!_initialized) return;
 
+    // Ensure we're drawing to the main RT (quantization reads from it after resolve)
+    _context->OMSetRenderTargets(1, _renderTargetView.GetAddressOf(), _depthStencilView.Get());
+
     // 1) Opaque pass: depth write ON, blending OFF
     SetDepthTestEnabled(true);
     SetDepthWriteEnabled(true);

@@ -69,7 +69,7 @@ bool Game::Initialize() {
     LoadTextures();
 
     std::vector<std::pair<float, std::shared_ptr<ASCIIgL::Texture>>> textureWeights = {
-        {1.0f, ASCIIgL::TextureLibrary::GetInst().GetTexture("inventoryTexture")}
+        {0.0f, ASCIIgL::TextureLibrary::GetInst().GetTexture("inventoryTexture")}
     };
 
     std::vector<std::pair<float, std::shared_ptr<ASCIIgL::TextureArray>>> textureArrayWeights = {
@@ -252,7 +252,10 @@ void Game::Render() {
     }
 
     // Execute queued GPU draws in two passes (opaque, then transparent)
-    ASCIIgL::Renderer::GetInst().FlushDraws();
+    {
+        ASCIIgL::PROFILE_SCOPE("Render.FlushDraws");
+        ASCIIgL::Renderer::GetInst().FlushDraws();  
+    }
 
     {
         ASCIIgL::PROFILE_SCOPE("Render.EndGpuFrame");
@@ -288,7 +291,13 @@ void Game::Shutdown() {
 bool Game::LoadTextures() {
     ASCIIgL::Logger::Info("Loading game textures...");
 
-    glm::ivec3 grayHue = glm::ivec3(14, 14, 14);
+    // Alternative monochrome hue directions (console palette indices 0–15 per channel).
+    const glm::ivec3 NeutralGrayHue   = glm::ivec3(14, 14, 14); // balanced gray
+    const glm::ivec3 WarmSepiaHue     = glm::ivec3(15, 12, 8);  // warm brownish
+    const glm::ivec3 CoolBlueHue      = glm::ivec3(10, 10, 15); // bluish cool
+    const glm::ivec3 EmeraldGreenHue  = glm::ivec3(10, 15, 12); // green/cyan tilt
+    const glm::ivec3 ElectricMagentaHue = glm::ivec3(15, 10, 15); // magenta/purple
+
     float darkL  = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(22, 22, 22));
     float lightL = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(210, 210, 210));
 
@@ -297,7 +306,7 @@ bool Game::LoadTextures() {
     monoMap.enabled = true;
     monoMap.darkL = darkL;
     monoMap.lightL = lightL;
-    monoMap.hueDir = grayHue;
+    monoMap.hueDir = NeutralGrayHue;
 
     // Load block textures via TextureLibrary which takes ownership
     auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray("res/textures/terrain2.png", 16, "terrainTextureArray", monoMap);
