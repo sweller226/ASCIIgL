@@ -153,43 +153,6 @@ std::unique_ptr<Shader> Shader::CreateFromBytecode(
 
 #ifdef _WIN32
 
-namespace {
-
-// Implements ID3DInclude so HLSL #include "Name.hlsl" resolves from in-memory map.
-class ShaderIncludeHandler : public ID3DInclude {
-public:
-    explicit ShaderIncludeHandler(const ShaderIncludeMap* map) : _map(map) {}
-
-    HRESULT STDMETHODCALLTYPE Open(
-        D3D_INCLUDE_TYPE /*IncludeType*/,
-        LPCSTR pFileName,
-        LPCVOID /*pParentData*/,
-        LPCVOID* ppData,
-        UINT* pBytes) override
-    {
-        if (!_map || !ppData || !pBytes) return E_INVALIDARG;
-        auto it = _map->find(pFileName);
-        if (it == _map->end()) {
-            // Try basename in case compiler passed a path
-            const char* base = std::strrchr(pFileName, '/');
-            if (!base) base = std::strrchr(pFileName, '\\');
-            const char* name = base ? base + 1 : pFileName;
-            it = _map->find(name);
-        }
-        if (it == _map->end()) return E_FAIL;
-        *ppData = it->second.data();
-        *pBytes = static_cast<UINT>(it->second.size());
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE Close(LPCVOID /*pData*/) override { return S_OK; }
-
-private:
-    const ShaderIncludeMap* _map;
-};
-
-} // namespace
-
 bool Shader::CompileFromSource(const std::string& source, const std::string& entryPoint,
                               const ShaderIncludeMap* pIncludes) {
     const char* target = (_type == ShaderType::Vertex) ? "vs_5_0" : "ps_5_0";

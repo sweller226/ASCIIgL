@@ -130,9 +130,30 @@ private:
     ComPtr<ID3D11RasterizerState> _rasterizerStates[8];
 
     // =========================================================================
-    // Staging Texture (for GPU->CPU framebuffer download)
+    // Staging Texture (for GPU->CPU CHAR_INFO download)
     // =========================================================================
     ComPtr<ID3D11Texture2D> _stagingTexture;
+
+    // =========================================================================
+    // Quantization pass (color RT -> CHAR_INFO RT)
+    // =========================================================================
+    ComPtr<ID3D11Texture2D> _charInfoTexture;       // R16G16_UINT render target
+    ComPtr<ID3D11RenderTargetView> _charInfoRTV;
+    ComPtr<ID3D11ShaderResourceView> _resolvedTextureSRV;  // resolved color as SRV for quantization
+    ComPtr<ID3D11ShaderResourceView> _colorLUTSRV;        // 4096x1 R16G16_UINT (multi)
+    ComPtr<ID3D11ShaderResourceView> _monochromeLUTSRV;   // 1024x1 R16G16_UINT (mono)
+    ComPtr<ID3D11Texture1D> _colorLUTTexture;
+    ComPtr<ID3D11Texture1D> _monochromeLUTTexture;
+    ComPtr<ID3D11Buffer> _lutConstantsCB;          // Lmin, Lmax, isMonochrome (for quantization FS)
+    ComPtr<ID3D11VertexShader> _quantizationVS;
+    ComPtr<ID3D11PixelShader> _quantizationPS;
+    ComPtr<ID3D11InputLayout> _quantizationInputLayout;
+    ComPtr<ID3D11Buffer> _fullscreenQuadVB;       // for quantization fullscreen draw
+    void RunQuantizationPass();
+    void UploadLUTsToGPU();
+    bool EnsureQuantizationResources();
+    bool InitializeCharInfoTarget();
+    bool InitializeQuantizationShaders();
 
     // =========================================================================
     // Currently Bound Shader Program (nullptr = default)
@@ -150,12 +171,8 @@ private:
     glm::ivec3 _background_col = glm::ivec3(0, 0, 0);
 
     // =========================================================================
-    // Buffers and buffer methods
+    // Buffer methods (no CPU color buffer; output is CHAR_INFO via quantization pass)
     // =========================================================================
-    std::vector<glm::ivec4> _color_buffer;
-    void OverwritePxBuffWithColBuff();
-    void OverwritePxBuffWithColBuff_Monochrome(std::vector<CHAR_INFO>& pixelBuffer, int width, size_t bufferSize);
-    void OverwritePxBuffWithColBuff_MultiColor(std::vector<CHAR_INFO>& pixelBuffer, size_t bufferSize);
 
     // =========================================================================
     // Antialiasing
@@ -194,7 +211,6 @@ private:
     // Helper Drawing Functions
     // =========================================================================
     void DrawClippedLinePxBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, WCHAR pixel_type, unsigned short col);
-    void DrawClippedLineColBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, const glm::ivec4& col);
 
     // =========================================================================
     // GPU Initialization Methods
@@ -271,19 +287,10 @@ public:
     // Low-Level Drawing API - Primitives, No pipeline involved
     // =========================================================================
     void DrawLinePxBuff(int x1, int y1, int x2, int y2, WCHAR pixel_type, const unsigned short col);
-    void DrawLineColBuff(int x1, int y1, int x2, int y2, const glm::ivec4& col);
-    void DrawLineColBuff(int x1, int y1, int x2, int y2, const glm::ivec3& col);
 
     void DrawTriangleWireframePxBuff(const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, WCHAR pixel_type, const unsigned short col);
-    void DrawTriangleWireframeColBuff(const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, const glm::ivec4& col);
-    void DrawTriangleWireframeColBuff(const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, const glm::ivec3& col);
 
     void DrawScreenBorderPxBuff(const unsigned short col);
-    void DrawScreenBorderColBuff(const glm::vec3& col);
-
-    void PlotColor(int x, int y, const glm::ivec3& color);
-    void PlotColor(int x, int y, const glm::ivec4& color);
-    void PlotColorBlend(int x, int y, const glm::ivec4& color);
 
     // =========================================================================
     // Utility
@@ -317,11 +324,6 @@ public:
     /// Anisotropic filtering level for texture arrays. Valid: 1 (off), 2, 4, 8, 16. Default 16.
     void SetMaxAnisotropy(int level);
     int GetMaxAnisotropy() const;
-
-    // =========================================================================
-    // Buffer and Diagnostics
-    // =========================================================================
-    std::vector<glm::ivec4>& GetColorBuffer();
 
     // =========================================================================
     // GPU Public API
