@@ -145,6 +145,10 @@ void Game::Run(std::function<bool()> shouldExternalExit) {
 
     int frameCounter = 0;
     while (!shouldExternalExit() && !shouldInternalExit) {
+        ASCIIgL::Screen::GetInst().ProcessMessages();
+        if (ASCIIgL::Screen::GetInst().ShouldExit())
+            break;
+
         ASCIIgL::Profiler::GetInst().BeginFrame();
         ASCIIgL::FPSClock::GetInst().StartFPSClock();
 

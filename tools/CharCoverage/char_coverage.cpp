@@ -19,7 +19,7 @@
 
 #pragma comment(lib, "dwrite.lib")
 
-// Must match Windows Terminal font face (ScreenWinImpl: "Square Modern"), square cell, lineHeight 1
+// Must match Windows Terminal font face (ScreenTerminalImpl: "Square Modern"), square cell, lineHeight 1
 static const wchar_t* DEFAULT_FONT = L"Square Modern";
 static const float DEFAULT_SIZE = 3.0f;
 // Space first with hardcoded coverage 0; must match Renderer char ramp
@@ -53,6 +53,18 @@ static bool coverageEqual(const std::vector<float>& a, const std::vector<float>&
         if (a[i] != b[i]) return false;
     }
     return true;
+}
+
+// Cell size in pixels at given point size and DPI. Square cell (line height 1) so X and Y match.
+// Uses same formula as coverage: fontEmSizeDIP = pointSize * 96/72, cellPixels = round(fontEmSizeDIP * pixelsPerDip).
+static void computeCellSizePixels(float pointSize, float pixelsPerDip, int* outCellPixelsX, int* outCellPixelsY) {
+    float fontEmSizeDIP = pointSize * 96.0f / 72.0f;
+    float cellPx = fontEmSizeDIP * pixelsPerDip;
+    if (cellPx < 1.0f) cellPx = 1.0f;
+    int cell = (int)(cellPx + 0.5f);
+    if (cell < 1) cell = 1;
+    *outCellPixelsX = cell;
+    *outCellPixelsY = cell;
 }
 
 static float computeCoverage(
@@ -207,6 +219,7 @@ static bool computeCoveragesForSize(
 struct Interval {
     float sizeMin = 0.f, sizeMax = 0.f;
     std::vector<float> coverages;
+    int cellPixelsX = 0, cellPixelsY = 0;
 };
 
 int main(int argc, char** argv) {
@@ -367,6 +380,8 @@ int main(int argc, char** argv) {
                     iv.sizeMin = intervalStart;
                     iv.sizeMax = size - SCAN_STEP;
                     iv.coverages = prev;
+                    float mid = (iv.sizeMin + iv.sizeMax) * 0.5f;
+                    computeCellSizePixels(mid, pixelsPerDip, &iv.cellPixelsX, &iv.cellPixelsY);
                     intervals.push_back(iv);
                     intervalStart = size + SCAN_STEP;
                     havePrev = false;
@@ -379,6 +394,8 @@ int main(int argc, char** argv) {
                 iv.sizeMin = intervalStart;
                 iv.sizeMax = size - SCAN_STEP;  // previous size was last of this interval
                 iv.coverages = prev;
+                float mid = (iv.sizeMin + iv.sizeMax) * 0.5f;
+                computeCellSizePixels(mid, pixelsPerDip, &iv.cellPixelsX, &iv.cellPixelsY);
                 intervals.push_back(iv);
                 intervalStart = size;
             }
@@ -390,6 +407,8 @@ int main(int argc, char** argv) {
             iv.sizeMin = intervalStart;
             iv.sizeMax = SCAN_SIZE_MAX;
             iv.coverages = prev;
+            float mid = (iv.sizeMin + iv.sizeMax) * 0.5f;
+            computeCellSizePixels(mid, pixelsPerDip, &iv.cellPixelsX, &iv.cellPixelsY);
             intervals.push_back(iv);
         }
 
@@ -415,7 +434,7 @@ int main(int argc, char** argv) {
             fprintf(out, "],\n  \"intervals\": [\n");
             for (size_t i = 0; i < intervals.size(); ++i) {
                 const Interval& iv = intervals[i];
-                fprintf(out, "    { \"sizeMin\": %.2f, \"sizeMax\": %.2f, \"coverages\": [", iv.sizeMin, iv.sizeMax);
+                fprintf(out, "    { \"sizeMin\": %.2f, \"sizeMax\": %.2f, \"cellPixelsX\": %d, \"cellPixelsY\": %d, \"coverages\": [", iv.sizeMin, iv.sizeMax, iv.cellPixelsX, iv.cellPixelsY);
                 for (size_t j = 0; j < iv.coverages.size(); ++j) {
                     if (j) fprintf(out, ", ");
                     fprintf(out, "%.6f", iv.coverages[j]);
@@ -463,8 +482,11 @@ int main(int argc, char** argv) {
     factory->Release();
 
     // Output
+    int singleCellX = 0, singleCellY = 0;
+    computeCellSizePixels(pointSize, pixelsPerDip, &singleCellX, &singleCellY);
+
     if (emitJson) {
-        fprintf(out, "{\"font\":\"%S\",\"size\":%.2f,\"cleartype\":%s,\"chars\":[", fontName.c_str(), pointSize, useClearType ? "true" : "false");
+        fprintf(out, "{\"font\":\"%S\",\"size\":%.2f,\"cleartype\":%s,\"cellPixelsX\":%d,\"cellPixelsY\":%d,\"chars\":[", fontName.c_str(), pointSize, useClearType ? "true" : "false", singleCellX, singleCellY);
         for (size_t i = 0; i < chars.size(); ++i) {
             if (i) fprintf(out, ",");
             fprintf(out, "%u", (unsigned)(unsigned short)chars[i]);
