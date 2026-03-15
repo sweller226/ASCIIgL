@@ -3,6 +3,7 @@
 #include <algorithm>              // std::clamp
 #include <cstring>                // strlen
 #include <sstream>                // std::ostringstream
+#include <string>                 // std::wstring
 
 #include <d3dcompiler.h>
 #pragma comment(lib, "d3dcompiler.lib")
@@ -10,6 +11,8 @@
 #include <ASCIIgL/renderer/HLSLIncludes.hpp>
 #include <ASCIIgL/renderer/Shader.hpp>
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/util/CoverageJson.hpp>
+#include <ASCIIgL/util/FontAtlasBuilder.hpp>
 
 namespace ASCIIgL {
 
@@ -90,6 +93,23 @@ void Renderer::Initialize(bool antialiasing, int antialiasing_samples, const wch
     if (!InitializeDebugSwapChain()) {
         Logger::Error("[Renderer] Failed to initialize debug swap chain (non-fatal)");
         // Non-fatal - continue without swap chain
+    }
+
+    if (!Screen::GetInst().IsRenderToTerminal()) {
+        if (!InitializeFontAtlas()) {
+            Logger::Error("[Renderer] Failed to initialize font atlas (window mode)");
+            return;
+        }
+
+        if (!InitializeWindowSwapChain()) {
+            Logger::Error("[Renderer] Failed to initialize window swap chain (window mode)");
+            return;
+        }
+
+        if (!InitializeAsciiWindowPass()) {
+            Logger::Error("[Renderer] Failed to initialize ASCII window pass (window mode)");
+            return;
+        }
     }
 
     // Pipeline state (depth + blend) is set in BeginColBuffFrame when RTV is bound.
@@ -468,7 +488,7 @@ bool Renderer::InitializeCharInfoTarget() {
     texDesc.SampleDesc.Count = 1;
     texDesc.SampleDesc.Quality = 0;
     texDesc.Usage = D3D11_USAGE_DEFAULT;
-    texDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+    texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     texDesc.CPUAccessFlags = 0;
 
     HRESULT hr = _device->CreateTexture2D(&texDesc, nullptr, &_charInfoTexture);
@@ -480,6 +500,19 @@ bool Renderer::InitializeCharInfoTarget() {
     hr = _device->CreateRenderTargetView(_charInfoTexture.Get(), nullptr, &_charInfoRTV);
     if (FAILED(hr)) {
         Logger::Error("[Renderer] Failed to create CHAR_INFO RTV");
+        return false;
+    }
+
+    // SRV for ASCII-to-window pass (sample CHAR_INFO as uint2)
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = DXGI_FORMAT_R16G16_UINT;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MostDetailedMip = 0;
+    srvDesc.Texture2D.MipLevels = 1;
+    _charInfoSRV.Reset();
+    hr = _device->CreateShaderResourceView(_charInfoTexture.Get(), &srvDesc, &_charInfoSRV);
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] Failed to create CHAR_INFO SRV");
         return false;
     }
 
@@ -551,9 +584,11 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
         uint idx = (uint)clamp(fIdx, 0.0, 1023.0);
         o.glyph_attr = g_lutTex[idx];
     } else {
-        uint r16 = (uint)(saturate(rgb.r) * 15.0 + 0.5);
-        uint g16 = (uint)(saturate(rgb.g) * 15.0 + 0.5);
-        uint b16 = (uint)(saturate(rgb.b) * 15.0 + 0.5);
+        // LUT is keyed by sRGB-quantized (r/15,g/15,b/15), not linear. Convert scene linear -> sRGB -> 0..15.
+        float3 srgb = linearToSRGB(rgb);
+        uint r16 = (uint)(saturate(srgb.r) * 15.0 + 0.5);
+        uint g16 = (uint)(saturate(srgb.g) * 15.0 + 0.5);
+        uint b16 = (uint)(saturate(srgb.b) * 15.0 + 0.5);
         uint idx = r16 * 256u + g16 * 16u + b16;
         o.glyph_attr = g_lutTex[idx];
     }
@@ -763,6 +798,99 @@ void Renderer::RunQuantizationPass() {
     _context->OMSetRenderTargets(1, _renderTargetView.GetAddressOf(), _depthStencilView.Get());
 }
 
+// Builds the font atlas once using current Screen font size and CoverageJson cell size.
+// If font size can change at runtime, call this again (or expose a "rebuild atlas" path) when it does.
+bool Renderer::InitializeFontAtlas() {
+    float fontSize = Screen::GetInst().GetFontSize();
+    int cellPixelsX = 0, cellPixelsY = 0;
+    if (!CoverageJson::GetCellSizeForFontSize(fontSize, &cellPixelsX, &cellPixelsY)) {
+        Logger::Error("[Renderer] Font atlas: could not get cell size for font size");
+        return false;
+    }
+    // Use the active char ramp already parsed in Initialize (LoadCharCoverageFromJson)
+    if (_charRamp.empty()) {
+        Logger::Error("[Renderer] Font atlas: no char ramp (LoadCharCoverageFromJson did not populate _charRamp)");
+        return false;
+    }
+    std::wstring rampStr(_charRamp.begin(), _charRamp.end());
+    FontAtlasBuildResult result = BuildFontAtlasFromDirectWrite(nullptr, fontSize, rampStr.c_str(), cellPixelsX, cellPixelsY);
+    if (!result.success || result.slices.empty()) {
+        Logger::Error("[Renderer] Font atlas: BuildFontAtlasFromDirectWrite failed");
+        return false;
+    }
+
+    const UINT width = static_cast<UINT>(result.cellPixelsX);
+    const UINT height = static_cast<UINT>(result.cellPixelsY);
+    const UINT arraySize = static_cast<UINT>(result.glyphCount);
+
+    D3D11_TEXTURE2D_DESC texDesc = {};
+    texDesc.Width = width;
+    texDesc.Height = height;
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = arraySize;
+    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.SampleDesc.Quality = 0;
+    texDesc.Usage = D3D11_USAGE_DEFAULT;
+    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    texDesc.CPUAccessFlags = 0;
+
+    _fontAtlasTexture.Reset();
+    HRESULT hr = _device->CreateTexture2D(&texDesc, nullptr, &_fontAtlasTexture);
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] Font atlas: failed to create Texture2DArray");
+        return false;
+    }
+
+    const UINT rowPitch = width * 4;
+    const UINT slicePitch = rowPitch * height;
+    for (UINT i = 0; i < arraySize && i < result.slices.size(); ++i) {
+        const std::vector<std::uint8_t>& slice = result.slices[i];
+        if (slice.size() < slicePitch) continue;
+        D3D11_BOX box = { 0, 0, 0, width, height, 1 };
+        _context->UpdateSubresource(_fontAtlasTexture.Get(), i, &box, slice.data(), rowPitch, slicePitch);
+    }
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+    srvDesc.Texture2DArray.MostDetailedMip = 0;
+    srvDesc.Texture2DArray.MipLevels = 1;
+    srvDesc.Texture2DArray.FirstArraySlice = 0;
+    srvDesc.Texture2DArray.ArraySize = arraySize;
+    _fontAtlasSRV.Reset();
+    hr = _device->CreateShaderResourceView(_fontAtlasTexture.Get(), &srvDesc, &_fontAtlasSRV);
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] Font atlas: failed to create SRV");
+        _fontAtlasTexture.Reset();
+        return false;
+    }
+
+    D3D11_SAMPLER_DESC sampDesc = {};
+    sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+    sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sampDesc.MaxAnisotropy = 1;
+    sampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    sampDesc.MinLOD = 0;
+    sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
+    _fontAtlasSamplerPoint.Reset();
+    hr = _device->CreateSamplerState(&sampDesc, &_fontAtlasSamplerPoint);
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] Font atlas: failed to create point sampler");
+        _fontAtlasSRV.Reset();
+        _fontAtlasTexture.Reset();
+        return false;
+    }
+
+    _fontAtlasCellPixelsX = result.cellPixelsX;
+    _fontAtlasCellPixelsY = result.cellPixelsY;
+    _fontAtlasGlyphCount = static_cast<int>(arraySize);
+    Logger::Debug("[Renderer] Font atlas created: " + std::to_string(width) + "x" + std::to_string(height) + " x " + std::to_string(arraySize) + " slices");
+    return true;
+}
+
 bool Renderer::InitializeDebugSwapChain() {
     // Get console window handle for minimal swap chain
     HWND hwnd = GetConsoleWindow();
@@ -811,6 +939,81 @@ bool Renderer::InitializeDebugSwapChain() {
     }
 
     Logger::Debug("[Renderer] Debug swap chain created successfully");
+    return true;
+}
+
+bool Renderer::InitializeWindowSwapChain() {
+    // Use Screen's window handle (console in terminal mode, app window in window mode).
+    HWND hwnd = Screen::GetInst().GetWindowHandle();
+    if (!hwnd) {
+        Logger::Error("[Renderer] InitializeWindowSwapChain: Screen window handle is null");
+        return false;
+    }
+
+    DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
+    swapChainDesc.BufferCount = 1;
+    // Width/Height 0 -> use current window client size.
+    swapChainDesc.BufferDesc.Width = 0;
+    swapChainDesc.BufferDesc.Height = 0;
+    swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    swapChainDesc.BufferDesc.RefreshRate.Numerator = 60;
+    swapChainDesc.BufferDesc.RefreshRate.Denominator = 1;
+    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swapChainDesc.OutputWindow = hwnd;
+    swapChainDesc.SampleDesc.Count = 1;
+    swapChainDesc.SampleDesc.Quality = 0;
+    swapChainDesc.Windowed = TRUE;
+    swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+    // Get DXGI factory from device
+    ComPtr<IDXGIDevice> dxgiDevice;
+    if (FAILED(_device.As(&dxgiDevice))) {
+        Logger::Error("[Renderer] InitializeWindowSwapChain: failed to get DXGI device");
+        return false;
+    }
+
+    ComPtr<IDXGIAdapter> dxgiAdapter;
+    if (FAILED(dxgiDevice->GetAdapter(&dxgiAdapter))) {
+        Logger::Error("[Renderer] InitializeWindowSwapChain: failed to get DXGI adapter");
+        return false;
+    }
+
+    ComPtr<IDXGIFactory> dxgiFactory;
+    if (FAILED(dxgiAdapter->GetParent(__uuidof(IDXGIFactory), &dxgiFactory))) {
+        Logger::Error("[Renderer] InitializeWindowSwapChain: failed to get DXGI factory");
+        return false;
+    }
+
+    _windowSwapChain.Reset();
+    HRESULT hr = dxgiFactory->CreateSwapChain(_device.Get(), &swapChainDesc, &_windowSwapChain);
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] InitializeWindowSwapChain: failed to create window swap chain");
+        return false;
+    }
+
+    // Create RTV for the window back buffer.
+    ComPtr<ID3D11Texture2D> backBuffer;
+    hr = _windowSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(backBuffer.GetAddressOf()));
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] InitializeWindowSwapChain: failed to get back buffer");
+        _windowSwapChain.Reset();
+        return false;
+    }
+
+    // Create RTV with sRGB format so the GPU applies linear->sRGB on write. Swap chain buffer stays UNORM.
+    D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+    rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+    rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+    rtvDesc.Texture2D.MipSlice = 0;
+    _windowRTV.Reset();
+    hr = _device->CreateRenderTargetView(backBuffer.Get(), &rtvDesc, &_windowRTV);
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] InitializeWindowSwapChain: failed to create back buffer RTV");
+        _windowSwapChain.Reset();
+        return false;
+    }
+
+    Logger::Debug("[Renderer] Window swap chain created successfully");
     return true;
 }
 
@@ -895,8 +1098,23 @@ void Renderer::Shutdown()
     _colorLUTTexture.Reset();
     _resolvedTextureSRV.Reset();
     _charInfoRTV.Reset();
+    _charInfoSRV.Reset();
     _charInfoTexture.Reset();
     _stagingTexture.Reset();
+
+    _fontAtlasSamplerPoint.Reset();
+    _fontAtlasSRV.Reset();
+    _fontAtlasTexture.Reset();
+
+    _asciiWindowPS.Reset();
+    _asciiWindowCB.Reset();
+    _paletteSRVWindow.Reset();
+    _paletteBufferWindow.Reset();
+    _rampLookupSRV.Reset();
+    _rampLookupBuffer.Reset();
+
+    _windowRTV.Reset();
+    _windowSwapChain.Reset();
 
     _samplerLinear.Reset();
     _samplerAnisotropic.Reset();

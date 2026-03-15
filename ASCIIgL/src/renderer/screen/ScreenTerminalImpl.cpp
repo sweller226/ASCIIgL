@@ -1,4 +1,4 @@
-#include <ASCIIgL/renderer/screen/ScreenWinImpl.hpp>
+#include <ASCIIgL/renderer/screen/ScreenTerminalImpl.hpp>
 
 #include <algorithm>
 #include <string>
@@ -23,21 +23,40 @@
 
 namespace ASCIIgL {
 
-// Static member definitions for platform-specific implementations
 #ifdef _WIN32
 
-ScreenWinImpl::ScreenWinImpl(Screen& screenRef) 
+namespace {
+
+BOOL WINAPI ConsoleCtrlHandler(DWORD signal) {
+    switch (signal) {
+    case CTRL_C_EVENT:
+    case CTRL_BREAK_EVENT:
+    case CTRL_CLOSE_EVENT:
+    case CTRL_LOGOFF_EVENT:
+    case CTRL_SHUTDOWN_EVENT:
+        Screen::GetInst().RequestExit();
+        return TRUE;
+    }
+    return FALSE;
+}
+
+} // namespace
+
+// Static member definitions for platform-specific implementations
+
+ScreenTerminalImpl::ScreenTerminalImpl(Screen& screenRef) 
     : screen(screenRef) {
 }
 
-ScreenWinImpl::~ScreenWinImpl() {
+ScreenTerminalImpl::~ScreenTerminalImpl() {
+    SetConsoleCtrlHandler(ConsoleCtrlHandler, FALSE);
     if (_hOutput != nullptr && _hOutput != INVALID_HANDLE_VALUE) {
         CloseHandle(_hOutput);
     }
 }
 
-// ScreenWinImpl method implementations (Windows Terminal only)
-int ScreenWinImpl::Initialize(const unsigned int width, const unsigned int height, const float fontSize, const Palette& palette) {
+// ScreenTerminalImpl method implementations (Windows Terminal only)
+int ScreenTerminalImpl::Initialize(const unsigned int width, const unsigned int height, const float fontSize, const Palette& palette) {
     // First, get current console handle to check maximum window size with proper font
     HANDLE currentHandle = GetStdHandle(STD_OUTPUT_HANDLE);
     if (currentHandle == INVALID_HANDLE_VALUE) {
@@ -134,18 +153,19 @@ int ScreenWinImpl::Initialize(const unsigned int width, const unsigned int heigh
     Logger::Debug(L"Creating pixel buffer.");
 	_pixelBuffer.resize(adjustedWidth * adjustedHeight);
 
+    SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
     return 0;
 }
 
-void ScreenWinImpl::ClearPixelBuffer() {
+void ScreenTerminalImpl::ClearPixelBuffer() {
     std::fill(_pixelBuffer.begin(), _pixelBuffer.end(), CHAR_INFO{L' ', 0x00});
 }
 
-void ScreenWinImpl::OutputBuffer() {
+void ScreenTerminalImpl::OutputBuffer() {
     WriteConsoleOutputW(_hOutput, _pixelBuffer.data(), dwBufferSize, dwBufferCoord, &rcRegion);
 }
 
-void ScreenWinImpl::RenderTabTitle() {
+void ScreenTerminalImpl::RenderTabTitle() {
     char titleBuffer[256];
 
     sprintf_s(
@@ -157,7 +177,7 @@ void ScreenWinImpl::RenderTabTitle() {
     SetConsoleTitleA(titleBuffer);
 }
 
-void ScreenWinImpl::PlotPixel(const glm::vec2& p, const WCHAR character, const unsigned short Colour) {
+void ScreenTerminalImpl::PlotPixel(const glm::vec2& p, const WCHAR character, const unsigned short Colour) {
     int x = static_cast<int>(p.x);  // No doubling for square fonts
     int y = static_cast<int>(p.y);
     if (x >= 0 && x < static_cast<int>(screen._screen_width) && y >= 0 && y < static_cast<int>(screen._screen_height)) {
@@ -167,7 +187,7 @@ void ScreenWinImpl::PlotPixel(const glm::vec2& p, const WCHAR character, const u
     }
 }
 
-void ScreenWinImpl::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol) {
+void ScreenTerminalImpl::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol) {
     int x = static_cast<int>(p.x);  // No doubling for square fonts
     int y = static_cast<int>(p.y);
     if (x >= 0 && x < static_cast<int>(screen._screen_width) && y >= 0 && y < static_cast<int>(screen._screen_height)) {
@@ -176,7 +196,7 @@ void ScreenWinImpl::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol) {
     }
 }
 
-void ScreenWinImpl::PlotPixel(int x, int y, WCHAR character, const unsigned short Colour) {
+void ScreenTerminalImpl::PlotPixel(int x, int y, WCHAR character, const unsigned short Colour) {
     // No doubling for square fonts
     if (x >= 0 && x < static_cast<int>(screen._screen_width) && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot single pixel for square fonts
@@ -185,7 +205,7 @@ void ScreenWinImpl::PlotPixel(int x, int y, WCHAR character, const unsigned shor
     }
 }
 
-void ScreenWinImpl::PlotPixel(int x, int y, CHAR_INFO charCol) {
+void ScreenTerminalImpl::PlotPixel(int x, int y, CHAR_INFO charCol) {
     // No doubling for square fonts
     if (x >= 0 && x < static_cast<int>(screen._screen_width) && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot single pixel for square fonts
@@ -193,18 +213,26 @@ void ScreenWinImpl::PlotPixel(int x, int y, CHAR_INFO charCol) {
     }
 }
 
-void ScreenWinImpl::PlotPixel(int idx, const CHAR_INFO charCol) {
+void ScreenTerminalImpl::PlotPixel(int idx, const CHAR_INFO charCol) {
     // No doubling for square fonts
     if (idx >= 0 && idx < static_cast<int>(screen._screen_width * screen._screen_height)) {
         _pixelBuffer[idx] = charCol;
     }
 }
 
-std::vector<CHAR_INFO>& ScreenWinImpl::GetPixelBuffer() {
+std::vector<CHAR_INFO>& ScreenTerminalImpl::GetPixelBuffer() {
     return _pixelBuffer;
 }
 
-void ScreenWinImpl::SetFontTerminal(HANDLE currentHandle, float fontSize) {
+HWND ScreenTerminalImpl::GetWindowHandle() {
+    return GetConsoleWindow();
+}
+
+void ScreenTerminalImpl::ProcessMessages() {
+    // Terminal mode: exit is driven by console control handler; no window to pump.
+}
+
+void ScreenTerminalImpl::SetFontTerminal(HANDLE currentHandle, float fontSize) {
     Logger::Info(L"Attempting to modify Windows Terminal settings.json file directly.");
     
     std::wstring settingsPath = GetTerminalSettingsPath();
@@ -213,7 +241,7 @@ void ScreenWinImpl::SetFontTerminal(HANDLE currentHandle, float fontSize) {
     }
 }
 
-std::wstring ScreenWinImpl::GetTerminalSettingsPath() {
+std::wstring ScreenTerminalImpl::GetTerminalSettingsPath() {
     // Windows Terminal settings are stored in:
     // %LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
     
@@ -247,7 +275,7 @@ std::wstring ScreenWinImpl::GetTerminalSettingsPath() {
     return L"";
 }
 
-bool ScreenWinImpl::ModifyTerminalFont(const std::wstring& settingsPath, float fontSize) {             
+bool ScreenTerminalImpl::ModifyTerminalFont(const std::wstring& settingsPath, float fontSize) {             
     std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
     try {
         std::string settingsPathStr = converter.to_bytes(settingsPath);
@@ -317,7 +345,7 @@ bool ScreenWinImpl::ModifyTerminalFont(const std::wstring& settingsPath, float f
     }
 }
 
-bool ScreenWinImpl::IsFontInstalled(const std::wstring& fontName) {
+bool ScreenTerminalImpl::IsFontInstalled(const std::wstring& fontName) {
     // Check if font is installed by enumerating fonts
     HDC hdc = GetDC(NULL);
     if (hdc == NULL) return false;
@@ -350,7 +378,7 @@ bool ScreenWinImpl::IsFontInstalled(const std::wstring& fontName) {
     return found;
 }
 
-bool ScreenWinImpl::InstallFontFromFile(const std::wstring& fontPath) {
+bool ScreenTerminalImpl::InstallFontFromFile(const std::wstring& fontPath) {
     // Check if font file exists
     if (!std::filesystem::exists(fontPath)) {
         Logger::Error(L"Font file not found: " + fontPath);
@@ -386,7 +414,7 @@ bool ScreenWinImpl::InstallFontFromFile(const std::wstring& fontPath) {
     return true;
 }
 
-void ScreenWinImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOutput) {
+void ScreenTerminalImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOutput) {
     Logger::Info(L"Attempting to modify Windows Terminal color scheme.");
 
     std::wstring settingsPath = GetTerminalSettingsPath();
@@ -524,7 +552,7 @@ void ScreenWinImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOutput) 
     }
 }
 
-void ScreenWinImpl::EnableVTMode() {
+void ScreenTerminalImpl::EnableVTMode() {
     // Enable Virtual Terminal Processing for ANSI escape codes
     if (_hOutput == INVALID_HANDLE_VALUE) {
         Logger::Error(L"Failed to get standard output handle for VT mode.");

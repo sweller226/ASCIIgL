@@ -14,9 +14,8 @@
 #include <unordered_map>
 #include <Windows.h>
 
-#include <nlohmann/json.hpp>
-
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/util/CoverageJson.hpp>
 #include <ASCIIgL/engine/Collision.hpp>
 
 #include <ASCIIgL/util/MathUtil.hpp>
@@ -139,64 +138,8 @@ void Renderer::DrawScreenBorderPxBuff(const unsigned short col) {
 }
 
 // =============================================================================
-// BUFFER MANAGEMENT
-// =============================================================================
-
-void Renderer::BeginColBuffFrame() {
-    if (!_initialized) {
-        Logger::Error("[Renderer] BeginFrame called before initialization!");
-        return;
-    }
-
-    Logger::Debug("BeginFrame: Clearing render target and setting up pipeline");
-
-    // Clear render target: background is sRGB 0-255; RTV is sRGB so clear expects linear 0-1
-    glm::vec3 linearBg = PaletteUtil::sRGB255ToLinear1(GetBackgroundCol());
-    float clear_color[4] = { linearBg.r, linearBg.g, linearBg.b, 1.0f };
-    _context->ClearRenderTargetView(_renderTargetView.Get(), clear_color);
-
-    // Clear depth stencil
-    _context->ClearDepthStencilView(_depthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);  // Clear to 1.0 (far plane)
-
-    // Bind render targets
-    _context->OMSetRenderTargets(1, _renderTargetView.GetAddressOf(), _depthStencilView.Get());
-
-    // Set viewport
-    D3D11_VIEWPORT viewport = {};
-    viewport.Width = static_cast<float>(Screen::GetInst().GetWidth());
-    viewport.Height = static_cast<float>(Screen::GetInst().GetHeight());
-    viewport.MinDepth = 0.0f;
-    viewport.MaxDepth = 1.0f;
-    _context->RSSetViewports(1, &viewport);
-
-    // Set depth stencil and blend state (on for both 3D and 2D)
-    _context->OMSetDepthStencilState(_depthStencilState.Get(), 0);
-    const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    _context->OMSetBlendState(_blendStateAlpha.Get(), blendFactor, 0xFFFFFFFF);
-
-    // Set rasterizer state based on wireframe, backface culling, and CCW modes
-    bool wireframe = GetWireframe();
-    bool backfaceCulling = GetBackfaceCulling();
-    bool ccw = GetCCW();
-    
-    // Calculate index: wireframe(0/1) + cull(0/2) + ccw(0/4)
-    int stateIndex = (wireframe ? 1 : 0) + (backfaceCulling ? 2 : 0) + (ccw ? 4 : 0);
-    _context->RSSetState(_rasterizerStates[stateIndex].Get());
-
-    // Bind sampler
-    _context->PSSetSamplers(0, 1, _samplerLinear.GetAddressOf());
-
-    // Set primitive topology
-    _context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-}
-
-// =============================================================================
 // CHAR COVERAGE (loaded from JSON to match char_coverage tool)
 // =============================================================================
-
-// Character ramp order must match tools/CharCoverage DEFAULT_CHARS (coverages array index = ramp index).
-static const wchar_t CHAR_RAMP_DEFAULT[] =
-    L" ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890.:,;'\"(!?)+-*/=\"";
 
 static void ApplyFallbackRamp(std::vector<wchar_t>& ramp, std::vector<float>& coverage, const wchar_t* chars) {
     ramp.clear();
@@ -228,88 +171,26 @@ void Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp, int charRampCou
     _colorLUTState = ColorLUTState::NotComputed;
 
     const bool useCustomRamp = (charRamp && *charRamp);
-    const wchar_t* rampToUse = useCustomRamp ? charRamp : CHAR_RAMP_DEFAULT;
+    const wchar_t* rampToUse = useCustomRamp ? charRamp : CoverageJson::GetDefaultCharRamp();
 
     float fontSize = Screen::GetInst().GetFontSize();
 
-    const char* paths[] = {
-        "res/ASCIIgL/coverage_cleartype.json",
-    };
-    std::ifstream file;
-    for (const char* path : paths) {
-        file.open(path);
-        if (file.good()) break;
-        file.close();
-    }
-    if (!file.good()) {
-        Logger::Warning("[Renderer] coverage_cleartype.json not found; using fallback char ramp.");
+    CoverageInterval interval;
+    if (!CoverageJson::GetIntervalForFontSize(fontSize, interval)) {
+        Logger::Warning("[Renderer] coverage_cleartype.json not found or has no intervals; using fallback char ramp.");
         ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
         if (!useCustomRamp && charRampCount > 0)
             SubsampleRampByIndex(_charRamp, _charCoverage, charRampCount);
         return;
     }
 
-    nlohmann::json j;
-    try {
-        j = nlohmann::json::parse(file);
-    } catch (const std::exception& e) {
-        Logger::Warning(std::string("[Renderer] Failed to parse coverage_cleartype.json: ") + e.what());
-        ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
-        if (!useCustomRamp && charRampCount > 0)
-            SubsampleRampByIndex(_charRamp, _charCoverage, charRampCount);
-        return;
-    }
-    file.close();
-
-    if (!j.contains("intervals") || !j["intervals"].is_array() || j["intervals"].empty()) {
-        Logger::Warning("[Renderer] coverage_cleartype.json has no intervals.");
-        ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
-        if (!useCustomRamp && charRampCount > 0)
-            SubsampleRampByIndex(_charRamp, _charCoverage, charRampCount);
-        return;
-    }
-
-    const auto& intervals = j["intervals"];
-    size_t bestIdx = 0;
-    bool found = false;
-    for (size_t i = 0; i < intervals.size(); ++i) {
-        const auto& iv = intervals[i];
-        if (!iv.contains("sizeMin") || !iv.contains("sizeMax") || !iv.contains("coverages")) continue;
-        float smin = iv["sizeMin"].get<float>();
-        float smax = iv["sizeMax"].get<float>();
-        if (fontSize >= smin && fontSize <= smax) {
-            bestIdx = i;
-            found = true;
-            break;
-        }
-    }
-    if (!found && !intervals.empty()) {
-        if (fontSize <= intervals[0]["sizeMin"].get<float>())
-            bestIdx = 0;
-        else
-            bestIdx = intervals.size() - 1;
-    }
-
-    const auto& iv = intervals[bestIdx];
-    const auto& coverages = iv["coverages"];
-    if (!coverages.is_array()) {
-        Logger::Warning("[Renderer] Selected interval has no coverages array.");
-        ApplyFallbackRamp(_charRamp, _charCoverage, rampToUse);
-        if (!useCustomRamp && charRampCount > 0)
-            SubsampleRampByIndex(_charRamp, _charCoverage, charRampCount);
-        return;
-    }
-
-    // Build char -> coverage map from JSON (chars[i] -> coverages[i])
+    // Build char -> coverage map from interval (chars[i] -> coverages[i])
     std::unordered_map<unsigned, float> charToCoverage;
-    const size_t jsonN = coverages.size();
-    const bool hasChars = j.contains("chars") && j["chars"].is_array() && j["chars"].size() >= jsonN;
-    for (size_t i = 0; i < jsonN; ++i) {
-        unsigned cp = hasChars ? j["chars"][i].get<unsigned>() : static_cast<unsigned>(CHAR_RAMP_DEFAULT[i]);
-        charToCoverage[cp] = coverages[i].get<float>();
-    }
+    const size_t jsonN = interval.coverages.size();
+    for (size_t i = 0; i < jsonN && i < interval.chars.size(); ++i)
+        charToCoverage[interval.chars[i]] = interval.coverages[i];
 
-    // Fill ramp and coverage from the requested ramp, looking up coverage from JSON
+    // Fill ramp and coverage from the requested ramp, looking up coverage from interval
     for (const wchar_t* p = rampToUse; *p; ++p) {
         wchar_t ch = *p;
         unsigned cp = static_cast<unsigned>(ch);
@@ -431,7 +312,7 @@ void Renderer::PrecomputeColorLUT() {
     // Ensure we have a valid char ramp so the GPU quantization pass can run (avoid "nothing renders" when JSON missing or empty)
     if (_charRamp.empty() || _charRamp.size() != _charCoverage.size()) {
         Logger::Warning("[Renderer] Char ramp empty or size mismatch; using fallback ramp for LUT.");
-        ApplyFallbackRamp(_charRamp, _charCoverage, CHAR_RAMP_DEFAULT);
+        ApplyFallbackRamp(_charRamp, _charCoverage, CoverageJson::GetDefaultCharRamp());
         SubsampleRampByIndex(_charRamp, _charCoverage, 10);
     }
 
@@ -653,43 +534,6 @@ void Renderer::SetMaxAnisotropy(int level) {
 
 int Renderer::GetMaxAnisotropy() const {
     return _maxAnisotropy;
-}
-
-void Renderer::EndColBuffFrame() {
-    if (!_initialized) return;
-
-    // Resolve MSAA render target to non-MSAA texture for CPU download
-    D3D11_TEXTURE2D_DESC rtDesc;
-    _renderTarget->GetDesc(&rtDesc);
-    
-    if (rtDesc.SampleDesc.Count > 1) {
-        // MSAA is enabled - resolve to non-MSAA texture
-        _context->ResolveSubresource(
-            _resolvedTexture.Get(),     // Destination (non-MSAA)
-            0,                           // Dest subresource
-            _renderTarget.Get(),         // Source (MSAA)
-            0,                           // Source subresource
-            DXGI_FORMAT_R8G8B8A8_UNORM  // Format
-        );
-    } else {
-        // No MSAA - just copy render target to resolved texture
-        _context->CopyResource(_resolvedTexture.Get(), _renderTarget.Get());
-    }
-    
-    // Present for RenderDoc (does nothing if no swap chain)
-    if (_debugSwapChain) {
-        _debugSwapChain->Present(0, 0);
-    }
-
-    {
-        ASCIIgL::PROFILE_SCOPE("Renderer.RunQuantizationPass");
-        RunQuantizationPass();
-    }
-
-    {
-        ASCIIgL::PROFILE_SCOPE("Renderer.DownloadFramebuffer");
-        DownloadFramebuffer();
-    }
 }
 
 // =========================================================================

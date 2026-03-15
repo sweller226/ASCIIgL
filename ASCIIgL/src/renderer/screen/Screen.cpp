@@ -19,13 +19,13 @@
 // ASCIIgL includes
 #include <ASCIIgL/util/Logger.hpp>
 
-#ifdef _WIN32
-    #include <ASCIIgL/renderer/screen/ScreenWinImpl.hpp>
-#endif
+#include <ASCIIgL/renderer/screen/ScreenImpl.hpp>
+#include <ASCIIgL/renderer/screen/ScreenTerminalImpl.hpp>
+#include <ASCIIgL/renderer/screen/ScreenWindowImpl.hpp>
 
 namespace ASCIIgL {
 
-// Custom constructor and destructor for PIMPL pattern - must be defined where ScreenWinImpl is complete
+// Custom constructor and destructor for PIMPL pattern - impl is complete in ScreenTerminalImpl/ScreenWindowImpl headers
 Screen::Screen() : _palette(std::make_unique<Palette>()) {}
 Screen::~Screen() {
     _impl.reset();
@@ -36,7 +36,8 @@ int Screen::Initialize(
     unsigned int height, 
     const std::wstring title, 
     float fontSize, 
-    const Palette& palette
+    const Palette& palette,
+    bool renderToTerminal
 ) {
     if (!_initialized) {
         Logger::Info("Initializing Screen...");
@@ -57,7 +58,8 @@ int Screen::Initialize(
     const float MIN_FONT_SIZE = 2.0f;
     const float MAX_FONT_SIZE = 11.0f;
     _fontSize = std::clamp(fontSize, MIN_FONT_SIZE, MAX_FONT_SIZE);
-    
+    _renderToTerminal = renderToTerminal;
+
     Logger::Debug(L"Setting font size to " + std::to_wstring(_fontSize));
 
     // Clone palette so we preserve type (Palette vs MonochromePalette)
@@ -68,22 +70,20 @@ int Screen::Initialize(
         _palette = palette.clone();
     }
 
-#ifdef _WIN32
-    // Use unified Windows implementation for both CMD and Windows Terminal
-    _impl = std::make_unique<ScreenWinImpl>(*this);
-    
-    // Windows-specific initialization through delegation (use stored clone)
+    // Choose backend based on render target
+    if (_renderToTerminal) {
+        _impl = std::make_unique<ScreenTerminalImpl>(*this);
+        Logger::Debug(L"Using terminal output implementation.");
+    } else {
+        _impl = std::make_unique<ScreenWindowImpl>(*this);
+        Logger::Debug(L"Using window output implementation.");
+    }
+
     int initResult = _impl->Initialize(width, height, _fontSize, *_palette);
     if (initResult) { return initResult; }
 
-#else
-    // Generic initialization for non-Windows platforms
-    Logger::Debug(L"Initializing generic console implementation.");
-    // TODO: Add generic console initialization here when needed
-#endif
-
     Logger::Debug(L"Deleting old buffers and creating new ones.");
-    // Note: Windows pixel buffer is handled in ScreenWinImpl::Initialize
+    // Note: Pixel buffer is created in impl-specific Initialize (ScreenTerminalImpl or ScreenWindowImpl)
 
     Logger::Debug(L"Clearing buffers for first draw.");
     ClearPixelBuffer();
@@ -152,6 +152,15 @@ unsigned int Screen::GetHeight() const {
 
 std::vector<CHAR_INFO>& Screen::GetPixelBuffer() {
     return _impl->GetPixelBuffer();
+}
+
+HWND Screen::GetWindowHandle() const {
+    return _impl ? _impl->GetWindowHandle() : nullptr;
+}
+
+void Screen::ProcessMessages() {
+    if (_impl)
+        _impl->ProcessMessages();
 }
 
 bool Screen::IsInitialized() const {

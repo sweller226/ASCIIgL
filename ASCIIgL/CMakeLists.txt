@@ -84,7 +84,7 @@ target_link_libraries(ASCIIgL PUBLIC glm::glm)
 
 # Platform-specific libraries
 if(WIN32)
-    target_link_libraries(ASCIIgL PUBLIC winmm)
+    target_link_libraries(ASCIIgL PUBLIC winmm dwrite)
 endif()
 
 # ============================================================================

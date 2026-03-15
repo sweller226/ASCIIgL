@@ -1,26 +1,6 @@
-#include <windows.h>
-#include <atomic>
-
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIICraft/game/Game.hpp>
-
-// Global exit flag
-static std::atomic<bool> g_shouldExit = false;
-
-// Windows console control handler
-BOOL WINAPI ConsoleHandler(DWORD signal) {
-    switch (signal) {
-        case CTRL_C_EVENT:
-        case CTRL_BREAK_EVENT:
-        case CTRL_CLOSE_EVENT:
-        case CTRL_LOGOFF_EVENT:
-        case CTRL_SHUTDOWN_EVENT:
-            g_shouldExit = true;
-
-            return TRUE;
-    }
-    return FALSE;
-}
 
 int main() {
     // Initialize logging
@@ -32,14 +12,11 @@ int main() {
 
     ASCIIgL::Logger::Info("ASCIICraft starting...");
 
-    // Register Windows Terminal–compatible control handler
-    SetConsoleCtrlHandler(ConsoleHandler, TRUE);
-
     try {
         Game game;
 
-        // Run until user exits or window closes
-        game.Run([&]() { return g_shouldExit.load(); });
+        // Exit when user closes window or console (handled by ASCIIgL::Screen)
+        game.Run([]() { return ASCIIgL::Screen::GetInst().ShouldExit(); });
 
         game.Shutdown();
     }

@@ -101,6 +101,10 @@ private:
     ComPtr<IDXGISwapChain> _debugSwapChain;
     HWND _debugWindow = nullptr;
 
+    // Window swap chain (windowed mode): presents ASCII output to ScreenWindowImpl HWND
+    ComPtr<IDXGISwapChain> _windowSwapChain;
+    ComPtr<ID3D11RenderTargetView> _windowRTV;
+
     // =========================================================================
     // Per-Mesh GPU Buffer Cache
     // =========================================================================
@@ -139,6 +143,7 @@ private:
     // =========================================================================
     ComPtr<ID3D11Texture2D> _charInfoTexture;       // R16G16_UINT render target
     ComPtr<ID3D11RenderTargetView> _charInfoRTV;
+    ComPtr<ID3D11ShaderResourceView> _charInfoSRV;  // CHAR_INFO as SRV for window pass
     ComPtr<ID3D11ShaderResourceView> _resolvedTextureSRV;  // resolved color as SRV for quantization
     ComPtr<ID3D11ShaderResourceView> _colorLUTSRV;        // 4096x1 R16G16_UINT (multi)
     ComPtr<ID3D11ShaderResourceView> _monochromeLUTSRV;   // 1024x1 R16G16_UINT (mono)
@@ -154,6 +159,28 @@ private:
     bool EnsureQuantizationResources();
     bool InitializeCharInfoTarget();
     bool InitializeQuantizationShaders();
+
+    // =========================================================================
+    // Font atlas (window mode only): Texture2DArray, one slice per glyph, point sampling
+    // =========================================================================
+    ComPtr<ID3D11Texture2D> _fontAtlasTexture;
+    ComPtr<ID3D11ShaderResourceView> _fontAtlasSRV;
+    ComPtr<ID3D11SamplerState> _fontAtlasSamplerPoint;
+    int _fontAtlasCellPixelsX = 0;
+    int _fontAtlasCellPixelsY = 0;
+    int _fontAtlasGlyphCount = 0;
+    bool InitializeFontAtlas();
+
+    // =========================================================================
+    // ASCII-to-window pass (window mode only)
+    // =========================================================================
+    ComPtr<ID3D11PixelShader> _asciiWindowPS;
+    ComPtr<ID3D11Buffer>      _asciiWindowCB;
+    ComPtr<ID3D11Buffer>      _paletteBufferWindow;   // StructuredBuffer<float4> for 16 palette colors
+    ComPtr<ID3D11ShaderResourceView> _paletteSRVWindow;
+    /// Maps Unicode code point (0..255) -> ramp index for font atlas slice lookup (StructuredBuffer<uint>)
+    ComPtr<ID3D11Buffer>      _rampLookupBuffer;
+    ComPtr<ID3D11ShaderResourceView> _rampLookupSRV;
 
     // =========================================================================
     // Currently Bound Shader Program (nullptr = default)
@@ -224,6 +251,8 @@ private:
     bool InitializeBlendStates();
     bool InitializeStagingTexture();
     bool InitializeDebugSwapChain();  // For RenderDoc support
+    bool InitializeWindowSwapChain(); // For windowed ASCII output
+    bool InitializeAsciiWindowPass(); // Compile shaders, create CB and palette SRV for window pass
 
     // =========================================================================
     // Texture Management (Internal)
@@ -240,8 +269,7 @@ private:
     // Frame Management (Internal)
     // =========================================================================
     void DownloadFramebuffer();
-    void BeginColBuffFrame();
-    void EndColBuffFrame();
+    void RunAsciiWindowPass();  // GPU ASCII->window pass (window mode)
 
     // Immediate GPU draw primitive, used internally by the draw-call system.
     void DrawMesh(const Mesh* mesh);
