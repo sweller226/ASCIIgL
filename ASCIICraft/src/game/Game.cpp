@@ -79,7 +79,7 @@ bool Game::Initialize() {
     ASCIIgL::MonochromePalette gamePalette(textureWeights, textureArrayWeights);
 
     ASCIIgL::Logger::Debug("Initializing screen...");
-    if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette) != 0) {
+    if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette, true) != 0) {
         ASCIIgL::Logger::Error("Failed to initialize screen");
         return false;
     }

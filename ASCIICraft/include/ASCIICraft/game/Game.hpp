@@ -100,8 +100,8 @@ private:
     void InitializeBlockStates();
     
     // Constants
-    static inline int SCREEN_WIDTH = 600;
-    static inline int SCREEN_HEIGHT = 300;
+    static inline int SCREEN_WIDTH = 500;
+    static inline int SCREEN_HEIGHT = 250;
     static constexpr float FONT_SIZE = 3.0f;
     static constexpr float TARGET_FPS = 60.0f;
 };

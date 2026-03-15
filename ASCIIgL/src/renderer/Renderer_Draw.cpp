@@ -206,13 +206,13 @@ void Renderer::EndGpuFrame() {
     _renderTarget->GetDesc(&rtDesc);
     
     if (rtDesc.SampleDesc.Count > 1) {
-        // MSAA is enabled - resolve to non-MSAA texture
+        // MSAA is enabled - resolve to non-MSAA texture (format must match source)
         _context->ResolveSubresource(
             _resolvedTexture.Get(),     // Destination (non-MSAA)
             0,                           // Dest subresource
             _renderTarget.Get(),         // Source (MSAA)
             0,                           // Source subresource
-            DXGI_FORMAT_R8G8B8A8_UNORM  // Format
+            rtDesc.Format                // Match render target (R8G8B8A8_UNORM_SRGB)
         );
     } else {
         // No MSAA - just copy render target to resolved texture
@@ -229,6 +229,8 @@ void Renderer::EndGpuFrame() {
     if (Screen::GetInst().IsRenderToTerminal()) {
         DownloadFramebuffer();
     } else {
+        // Ensure quantization has completed before the window pass reads CHAR_INFO (terminal path does this via Flush in DownloadFramebuffer).
+        _context->Flush();
         RunAsciiWindowPass();
     }
 }

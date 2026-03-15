@@ -12,7 +12,10 @@ namespace ASCIIgL {
 
 namespace {
 
-const float PIXELS_PER_DIP = 1.0f; // 96 DPI: 1 DIP = 1 pixel
+// Match CharCoverage (coverage_cleartype.json): 1 pixel per DIP, no supersample.
+// This way the atlas glyphs are drawn exactly like the tool that produces the coverage JSON.
+// See docs/FontAtlas-vs-CoverageJSON.md.
+const float PIXELS_PER_DIP = 1.0f;
 const bool USE_CLEARTYPE = true;   // Match CharCoverage / terminal
 
 // Get font face from system collection (Square Modern or Square).
@@ -144,31 +147,30 @@ bool RasterizeGlyphToCell(
         return false;
     }
 
-    // Center glyph in cell
+    // 1:1 copy from DirectWrite buffer into cell (same as CharCoverage pipeline); center in cell
     int offsetX = (cellW - w) / 2;
     int offsetY = (cellH - h) / 2;
 
-    for (int dy = 0; dy < h; ++dy) {
-        int cellY = offsetY + dy;
+    for (int sy = 0; sy < h; ++sy) {
+        int cellY = offsetY + sy;
         if (cellY < 0 || cellY >= cellH) continue;
-        for (int dx = 0; dx < w; ++dx) {
-            int cellX = offsetX + dx;
+        for (int sx = 0; sx < w; ++sx) {
+            int cellX = offsetX + sx;
             if (cellX < 0 || cellX >= cellW) continue;
 
-            size_t srcIdx = (static_cast<size_t>(dy) * static_cast<size_t>(w) + static_cast<size_t>(dx)) * bytesPerPixel;
-            uint8_t alpha = 0;
-            if (USE_CLEARTYPE) {
-                // Subpixel R,G,B: use average as combined coverage for atlas alpha
-                alpha = static_cast<uint8_t>((static_cast<int>(buffer[srcIdx + 0]) + buffer[srcIdx + 1] + buffer[srcIdx + 2]) / 3);
-            } else {
-                alpha = buffer[srcIdx];
-            }
-
+            size_t srcIdx = (static_cast<size_t>(sy) * static_cast<size_t>(w) + static_cast<size_t>(sx)) * bytesPerPixel;
             size_t dstIdx = (static_cast<size_t>(cellY) * static_cast<size_t>(cellW) + static_cast<size_t>(cellX)) * 4u;
-            outRGBA[dstIdx + 0] = 255;
-            outRGBA[dstIdx + 1] = 255;
-            outRGBA[dstIdx + 2] = 255;
-            outRGBA[dstIdx + 3] = alpha;
+            if (USE_CLEARTYPE) {
+                outRGBA[dstIdx + 0] = buffer[srcIdx + 0];
+                outRGBA[dstIdx + 1] = buffer[srcIdx + 1];
+                outRGBA[dstIdx + 2] = buffer[srcIdx + 2];
+            } else {
+                uint8_t a = buffer[srcIdx];
+                outRGBA[dstIdx + 0] = a;
+                outRGBA[dstIdx + 1] = a;
+                outRGBA[dstIdx + 2] = a;
+            }
+            outRGBA[dstIdx + 3] = 255;
         }
     }
 

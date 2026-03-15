@@ -176,8 +176,11 @@ private:
     // =========================================================================
     ComPtr<ID3D11PixelShader> _asciiWindowPS;
     ComPtr<ID3D11Buffer>      _asciiWindowCB;
-    ComPtr<ID3D11Texture1D>   _paletteTextureWindow;
+    ComPtr<ID3D11Buffer>      _paletteBufferWindow;   // StructuredBuffer<float4> for 16 palette colors
     ComPtr<ID3D11ShaderResourceView> _paletteSRVWindow;
+    /// Maps Unicode code point (0..255) -> ramp index for font atlas slice lookup (StructuredBuffer<uint>)
+    ComPtr<ID3D11Buffer>      _rampLookupBuffer;
+    ComPtr<ID3D11ShaderResourceView> _rampLookupSRV;
 
     // =========================================================================
     // Currently Bound Shader Program (nullptr = default)

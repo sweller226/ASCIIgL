@@ -6,7 +6,8 @@
 namespace ASCIIgL {
 
 /// Result of building a font atlas: one RGBA8 image per glyph (slice).
-/// Each slice is exactly cellPixelsX * cellPixelsY * 4 bytes; R=G=B=255, A=glyph alpha.
+/// ClearType: R,G,B = per-channel coverage (for subpixel rendering); A=255.
+/// Non-ClearType: R=G=B=gray alpha, A=255.
 struct FontAtlasBuildResult {
     bool success = false;
     int cellPixelsX = 0;

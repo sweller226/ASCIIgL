@@ -584,9 +584,11 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
         uint idx = (uint)clamp(fIdx, 0.0, 1023.0);
         o.glyph_attr = g_lutTex[idx];
     } else {
-        uint r16 = (uint)(saturate(rgb.r) * 15.0 + 0.5);
-        uint g16 = (uint)(saturate(rgb.g) * 15.0 + 0.5);
-        uint b16 = (uint)(saturate(rgb.b) * 15.0 + 0.5);
+        // LUT is keyed by sRGB-quantized (r/15,g/15,b/15), not linear. Convert scene linear -> sRGB -> 0..15.
+        float3 srgb = linearToSRGB(rgb);
+        uint r16 = (uint)(saturate(srgb.r) * 15.0 + 0.5);
+        uint g16 = (uint)(saturate(srgb.g) * 15.0 + 0.5);
+        uint b16 = (uint)(saturate(srgb.b) * 15.0 + 0.5);
         uint idx = r16 * 256u + g16 * 16u + b16;
         o.glyph_attr = g_lutTex[idx];
     }
@@ -796,6 +798,8 @@ void Renderer::RunQuantizationPass() {
     _context->OMSetRenderTargets(1, _renderTargetView.GetAddressOf(), _depthStencilView.Get());
 }
 
+// Builds the font atlas once using current Screen font size and CoverageJson cell size.
+// If font size can change at runtime, call this again (or expose a "rebuild atlas" path) when it does.
 bool Renderer::InitializeFontAtlas() {
     float fontSize = Screen::GetInst().GetFontSize();
     int cellPixelsX = 0, cellPixelsY = 0;
@@ -996,8 +1000,13 @@ bool Renderer::InitializeWindowSwapChain() {
         return false;
     }
 
+    // Create RTV with sRGB format so the GPU applies linear->sRGB on write. Swap chain buffer stays UNORM.
+    D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+    rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+    rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+    rtvDesc.Texture2D.MipSlice = 0;
     _windowRTV.Reset();
-    hr = _device->CreateRenderTargetView(backBuffer.Get(), nullptr, &_windowRTV);
+    hr = _device->CreateRenderTargetView(backBuffer.Get(), &rtvDesc, &_windowRTV);
     if (FAILED(hr)) {
         Logger::Error("[Renderer] InitializeWindowSwapChain: failed to create back buffer RTV");
         _windowSwapChain.Reset();
@@ -1100,7 +1109,9 @@ void Renderer::Shutdown()
     _asciiWindowPS.Reset();
     _asciiWindowCB.Reset();
     _paletteSRVWindow.Reset();
-    _paletteTextureWindow.Reset();
+    _paletteBufferWindow.Reset();
+    _rampLookupSRV.Reset();
+    _rampLookupBuffer.Reset();
 
     _windowRTV.Reset();
     _windowSwapChain.Reset();
