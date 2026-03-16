@@ -23,6 +23,13 @@ struct ChunkManagerFogParams {
     glm::vec3 fogColor = glm::vec3(0.f);  // sRGB 0-1, matches palette/gradient convention
 };
 
+/// Water animation parameters used when rendering chunks.
+/// animSpeed is in cycles per second; animPhase is a continuous phase value consumed by the terrain shader.
+struct ChunkManagerWaterParams {
+    float animSpeed = 3.0f;  // cycles per second
+    float animPhase = 1.0f;   // advanced each frame from dt
+};
+
 class ChunkManager {
 public:
     ChunkManager(entt::registry& registry, const unsigned int chunkWorldLimit, const unsigned int renderDistance);
@@ -52,8 +59,6 @@ public:
     unsigned int GetChunkLoadDistance() const { return loadDistance; }
 
     // Fog (used in RenderChunks; start/end are tied to render distance)
-    ChunkManagerFogParams& GetFogParams() { return fogParams_; }
-    const ChunkManagerFogParams& GetFogParams() const { return fogParams_; }
     void SetFogParams(const ChunkManagerFogParams& p) { fogParams_ = p; }
     /// color: sRGB in [0,1] (shader linearizes before blending)
     void SetFogColor(const glm::vec3& color) { fogParams_.fogColor = color; }
@@ -133,5 +138,6 @@ private:
     unsigned int renderDistance;
     unsigned int loadDistance;
 
-    ChunkManagerFogParams fogParams_;
+    ChunkManagerFogParams   fogParams_;
+    ChunkManagerWaterParams waterParams_;
 };

@@ -6,6 +6,7 @@
 
 #include <d3dcompiler.h>
 
+#include <ASCIIgL/renderer/HLSLIncludes.hpp>
 #include <ASCIIgL/renderer/Palette.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 
@@ -14,6 +15,8 @@ namespace ASCIIgL {
 bool Renderer::InitializeAsciiWindowPass() {
     // Simple passthrough VS (we reuse _quantizationVS and _fullscreenQuadVB) and dedicated PS for ASCII->window.
     static const char* ASCII_WINDOW_PS_SRC = R"(
+#include "ColorMonochrome.hlsl"
+
 cbuffer AsciiWindowCB : register(b0)
 {
     uint2 g_cells;        // cellsX, cellsY
@@ -30,13 +33,6 @@ StructuredBuffer<uint> g_rampLookup : register(t3); // Unicode code point (0..25
 
 SamplerState g_samplerPoint  : register(s0);
 SamplerState g_samplerLinear : register(s1);
-
-// Palette is sRGB 0-1; decode to linear for blending.
-float3 sRGBToLinear(float3 c) {
-    float3 lo = c / 12.92;
-    float3 hi = pow(max((c + 0.055) / 1.055, 0.0), 2.4);
-    return lerp(lo, hi, step(0.04045, c));
-}
 
 float4 main(float4 svPos : SV_Position, float2 uv : TEXCOORD0) : SV_Target
 {
@@ -77,6 +73,10 @@ float4 main(float4 svPos : SV_Position, float2 uv : TEXCOORD0) : SV_Target
 )";
 
     // Compile pixel shader (debug + skip opt in _DEBUG for RenderDoc shader debugging)
+    ShaderIncludeMap asciiWindowIncludes;
+    HLSLIncludes::AddToMap(asciiWindowIncludes);
+    ShaderIncludeHandler asciiWindowIncludeHandler(&asciiWindowIncludes);
+
     ComPtr<ID3DBlob> psBlob;
     ComPtr<ID3DBlob> errBlob;
     UINT compileFlags = D3DCOMPILE_ENABLE_STRICTNESS;
@@ -88,7 +88,7 @@ float4 main(float4 svPos : SV_Position, float2 uv : TEXCOORD0) : SV_Target
         std::strlen(ASCII_WINDOW_PS_SRC),
         nullptr,
         nullptr,
-        nullptr,
+        &asciiWindowIncludeHandler,
         "main",
         "ps_5_0",
         compileFlags,

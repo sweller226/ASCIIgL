@@ -61,7 +61,7 @@ Game::~Game() {
     Shutdown();
 }
 
-bool Game::Initialize() {
+bool Game::Initialize(bool renderToTerminal) {
     ASCIIgL::Logger::Info("Initializing ASCIICraft...");
 
     ASCIIgL::Logger::Debug("Preloading textures for palette generation...");
@@ -79,7 +79,7 @@ bool Game::Initialize() {
     ASCIIgL::MonochromePalette gamePalette(textureWeights, textureArrayWeights);
 
     ASCIIgL::Logger::Debug("Initializing screen...");
-    if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette, true) != 0) {
+    if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette, renderToTerminal) != 0) {
         ASCIIgL::Logger::Error("Failed to initialize screen");
         return false;
     }
@@ -100,8 +100,6 @@ bool Game::Initialize() {
 
     ASCIIgL::Logger::Debug("Initializing renderer...");
     renderer.Initialize(true, 4, nullptr, 10);
-
-    ASCIIgL::Renderer::GetInst().SetBlendEnabled(true);
 
     ASCIIgL::Logger::Debug("Initializing block states...");
     InitializeBlockStates();
@@ -133,8 +131,8 @@ bool Game::Initialize() {
     return true;
 }
 
-void Game::Run(std::function<bool()> shouldExternalExit) {
-    if (!Initialize()) {
+void Game::Run(std::function<bool()> shouldExternalExit, bool renderToTerminal) {
+    if (!Initialize(renderToTerminal)) {
         ASCIIgL::Logger::Error("Failed to initialize game");
         return;
     }
@@ -179,10 +177,9 @@ void Game::Run(std::function<bool()> shouldExternalExit) {
 }
 
 void Game::Update() {
-    ASCIIgL::Logger::Debug("Game::Update - state = " +
-        std::to_string(static_cast<int>(gameState)));
-
-    inputSystem.SetInputMode(guiManager.IsBlockingInput() ? input::InputMode::GUI : input::InputMode::Gameplay);
+    const bool guiBlocking = guiManager.IsBlockingInput();
+    const auto mode = guiBlocking ? input::InputMode::GUI : input::InputMode::Gameplay;
+    inputSystem.SetInputMode(mode);
     inputSystem.Update();
 
     for ([[maybe_unused]] const auto& e : eventBus.view<events::ToggleInventoryEvent>()) {
@@ -196,7 +193,6 @@ void Game::Update() {
     switch (gameState) {
         case GameState::Playing: {
 
-            ASCIIgL::Logger::Debug("Update: Retrieving world pointer");
             World* world = GetWorldPtr(registry);
 
             if (!world) {
@@ -206,24 +202,17 @@ void Game::Update() {
 
             guiManager.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running mining system");
             miningSystem.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running placement system");
             placingSystem.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running block update system");
             blockUpdateSystem.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running movement system");
             movementSystem.Update();
-            ASCIIgL::Logger::Debug("Update: Running camera system");
             cameraSystem.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running physics system");
             physicsSystem.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running world update");
             world->Update();
 
             break;
@@ -237,7 +226,6 @@ void Game::Update() {
 }
 
 void Game::Render() {
-    ASCIIgL::Logger::Debug("Game::Render called.");
 
     {
         ASCIIgL::PROFILE_SCOPE("Clear Px Buff/Begin GPU Frame");
@@ -506,8 +494,6 @@ bool Game::LoadResources() {
 }
 
 void Game::RenderPlaying() {
-    ASCIIgL::Logger::Debug("RenderPlaying: binding shader and texture array");
-
     // Keep 2D GUI camera in sync with viewport (GPU pipeline uses Screen dimensions; 2D ortho must match)
     guiManager.SetScreenSize(glm::vec2(
         static_cast<float>(ASCIIgL::Screen::GetInst().GetWidth()),
@@ -628,6 +614,15 @@ void Game::InitializeBlockStates() {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
 
+    bsr.RegisterType("minecraft:water", {});
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:water"), [&](blockstate::BlockState& s) {
+        // Use the first water animation frame as the base layer; shader will animate frames.
+        allFaces(s, L(11, 12));
+        s.isSolid = true;
+        s.isTransparent = true;
+        s.renderMode = blockstate::RenderMode::Translucent;
+    });
+
     // === Ores ===
     bsr.RegisterType("minecraft:coal_ore", {});
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:coal_ore"), [&](blockstate::BlockState& s) {
@@ -671,6 +666,7 @@ void Game::InitializeBlockStates() {
         s.isSolid = true;
         s.isTransparent = false;                  // treat as cutout, not blended
         s.renderMode = blockstate::RenderMode::Cutout;
+        s.cullSameType = false;                   // draw faces between leaves (fuller look)
     });
 
     bsr.RegisterType("minecraft:oak_planks", {});
@@ -696,6 +692,7 @@ void Game::InitializeBlockStates() {
         s.isSolid = true;
         s.isTransparent = false;
         s.renderMode = blockstate::RenderMode::Cutout;
+        s.cullSameType = false;                   // draw faces between leaves (fuller look)
     });
 
     bsr.RegisterType("minecraft:spruce_planks", {});

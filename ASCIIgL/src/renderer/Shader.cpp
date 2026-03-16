@@ -71,12 +71,6 @@ UniformBufferLayout::Builder& UniformBufferLayout::Builder::Add(const std::strin
     // Align current offset
     _currentOffset = (_currentOffset + alignment - 1) & ~(alignment - 1);
     
-    // Special handling for types that can't cross 16-byte boundaries
-    if (type == UniformType::Float3 || type == UniformType::Int3) {
-        // float3 uses 16 bytes in constant buffers
-        size = 16;
-    }
-    
     _uniforms.emplace_back(name, type, _currentOffset);
     _currentOffset += size;
     

@@ -33,6 +33,7 @@ void TerrainGenerator::GenerateChunkInto(ChunkCoord coord, uint32_t* blocks, Ter
     if (!bsr || !blocks) return;
 
     uint32_t airId = bsr->GetDefaultState("minecraft:air");
+    uint32_t waterId = bsr->GetDefaultState("minecraft:water");
     std::fill(blocks, blocks + Chunk::VOLUME, airId);
 
     InitializeNoiseGenerators();
@@ -49,9 +50,11 @@ void TerrainGenerator::GenerateChunkInto(ChunkCoord coord, uint32_t* blocks, Ter
                 const int worldY = chunkBaseY + y;
                 const uint32_t stateId = GetBlockStateAt(worldCoord.x, worldY, worldCoord.z, terrainHeight, params, treePlacementPositions, bsr);
 
+                const int index = x + y * Chunk::SIZE + z * Chunk::SIZE * Chunk::SIZE;
                 if (stateId != airId) {
-                    const int index = x + y * Chunk::SIZE + z * Chunk::SIZE * Chunk::SIZE;
                     blocks[index] = stateId;
+                } else if (worldY <= params.SEA_LEVEL) {
+                    blocks[index] = waterId;
                 }
             }
         }
@@ -135,9 +138,9 @@ uint32_t TerrainGenerator::GetBlockStateAt(int worldX, int worldY, int worldZ, i
     
     // Check for cave carving
     const int depthFromSurface = terrainHeight - worldY;
-    if (ShouldCarveCave(worldX, worldY, worldZ, depthFromSurface, params)) {
-        return airId;
-    }
+    // if (ShouldCarveCave(worldX, worldY, worldZ, depthFromSurface, params)) {
+    //     return airId;
+    // }
     
     // Determine solid block type
     return DetermineBlockState(worldX, worldY, worldZ, depthFromSurface, params, treePlacementPositions, bsrOverride);
@@ -197,6 +200,7 @@ TerrainGenerator::TerrainParams TerrainGenerator::GetTerrainParams() const {
     params.MIN_CAVE_HEIGHT = 2;
     params.CAVE_THRESHOLD = 0.25f;
     params.VERTICAL_STRETCH = 0.2f;
+    params.SEA_LEVEL = 75;  // air at or below this Y becomes water
     return params;
 }
 
@@ -233,6 +237,11 @@ uint32_t TerrainGenerator::DetermineBlockState(int worldX, int worldY, int world
     uint32_t stoneId = bsr->GetDefaultState("minecraft:stone");
 
     if (depthFromSurface == 0) {
+        // Below sea level: top surface should be dirt, not grass.
+        if (worldY < params.SEA_LEVEL) {
+            return dirtId;
+        }
+
         CheckTreePlacement(worldX, worldY, worldZ, params, treePlacementPositions);
 
         // Apply placement-time logic (grass orientation, etc.) with terrain generation context
@@ -251,6 +260,9 @@ void TerrainGenerator::CheckTreePlacement(
     const TerrainParams& params,
     std::vector<glm::ivec3>& treePlacementPositions) const
 {
+    if (worldY < params.SEA_LEVEL)
+        return;
+
     float forestDensity = forestDensityNoise->GetNoise(static_cast<float>(worldX), static_cast<float>(worldZ));
     forestDensity = (forestDensity + 1.0f) * 0.5f;
     

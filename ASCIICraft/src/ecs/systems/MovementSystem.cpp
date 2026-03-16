@@ -26,7 +26,57 @@ MovementSystem::MovementSystem(entt::registry& registry, IInputSource& input, Ev
 {}
 
 void MovementSystem::Update() {
+    ProcessSwitchGameModeEvents();
     ProcessMovementInput();
+}
+
+void MovementSystem::ProcessSwitchGameModeEvents() {
+    // Toggle once per frame if any SwitchGameModeEvent was emitted.
+    const auto& events = m_eventBus.view<events::SwitchGameModeEvent>();
+    if (events.empty()) return;
+
+    entt::entity p_ent = components::GetPlayerEntity(m_registry);
+    if (p_ent == entt::null || !m_registry.valid(p_ent)) {
+        ASCIIgL::Logger::Error("MovementSystem::ProcessSwitchGameModeEvents: Player entity not found or invalid.");
+        return;
+    }
+
+    if (!m_registry.all_of<
+        components::PlayerController,
+        components::FlyingPhysics,
+        components::Gravity,
+        components::Collider,
+        components::PlayerMode
+    >(p_ent)) {
+        ASCIIgL::Logger::Error("MovementSystem::ProcessSwitchGameModeEvents: missing components on player.");
+        return;
+    }
+
+    auto* ctrl     = m_registry.try_get<components::PlayerController>(p_ent);
+    auto* flying   = m_registry.try_get<components::FlyingPhysics>(p_ent);
+    auto* grav     = m_registry.try_get<components::Gravity>(p_ent);
+    auto* col      = m_registry.try_get<components::Collider>(p_ent);
+    auto* pmode    = m_registry.try_get<components::PlayerMode>(p_ent);
+
+    if (!ctrl || !flying || !grav || !col || !pmode) {
+        ASCIIgL::Logger::Error("MovementSystem::ProcessSwitchGameModeEvents: try_get returned NULL for one or more components.");
+        return;
+    }
+
+    // Toggle between Survival and Spectator, mirroring PlayerFactory defaults.
+    if (pmode->gamemode == GameMode::Survival) {
+        pmode->gamemode = GameMode::Spectator;
+        ctrl->movementState = MovementState::Flying;
+        flying->enabled = true;
+        col->disabled = true;
+        grav->enabled = false;
+    } else {
+        pmode->gamemode = GameMode::Survival;
+        ctrl->movementState = MovementState::Walking;
+        flying->enabled = false;
+        col->disabled = false;
+        grav->enabled = true;
+    }
 }
 
 void MovementSystem::ProcessMovementInput() {

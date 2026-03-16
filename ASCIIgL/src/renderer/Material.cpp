@@ -113,7 +113,12 @@ void Material::SetUniformInternal(const std::string& name, const UniformValue& v
 }
 
 bool Material::HasUniform(const std::string& name) const {
-    return _uniformValues.find(name) != _uniformValues.end();
+    // "HasUniform" should mean "is this a valid uniform for this shader program?",
+    // not "have we set a value for it yet?"
+    if (GetUniformDescriptor(name) != nullptr) {
+        return true;
+    }
+    return false;
 }
 
 const UniformDescriptor* Material::GetUniformDescriptor(const std::string& name) const {
@@ -129,10 +134,9 @@ void Material::ApplyUniformOverride(const UniformDescriptor& desc, const Uniform
         return;
     }
 
-    std::visit([this, &desc](auto&& val) {
-        using T = std::decay_t<decltype(val)>;
-        if (desc.offset + sizeof(T) <= _constantBufferData.size()) {
-            std::memcpy(_constantBufferData.data() + desc.offset, &val, sizeof(T));
+    std::visit([this, &desc](const auto& val) {
+        if (desc.offset + desc.size <= _constantBufferData.size()) {
+            std::memcpy(_constantBufferData.data() + desc.offset, &val, desc.size);
         }
     }, value);
 }
@@ -156,8 +160,9 @@ void Material::UpdateConstantBufferData() {
         // Copy value to constant buffer data at the correct offset
         std::visit([this, desc](auto&& val) {
             using T = std::decay_t<decltype(val)>;
-            if (desc->offset + sizeof(T) <= _constantBufferData.size()) {
-                std::memcpy(_constantBufferData.data() + desc->offset, &val, sizeof(T));
+            const std::size_t copySize = std::min<std::size_t>(desc->size, sizeof(T));
+            if (desc->offset + copySize <= _constantBufferData.size()) {
+                std::memcpy(_constantBufferData.data() + desc->offset, &val, copySize);
             }
         }, value);
     }

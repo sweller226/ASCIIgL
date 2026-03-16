@@ -30,6 +30,8 @@ void InputSystem::Update() {
         if (input.IsActionPressed("jump"))    m_eventBus.emit(events::JumpPressedEvent{});
         if (input.IsActionPressed("interact_left"))  m_eventBus.emit(events::PrimaryActionPressedEvent{});
         if (input.IsActionPressed("interact_right")) m_eventBus.emit(events::SecondaryActionPressedEvent{});
+        // Game mode toggle (P) — hard-wired for now, not action-bound.
+        if (input.IsKeyPressed(ASCIIgL::Key::P)) m_eventBus.emit(events::SwitchGameModeEvent{});
     }
 }
 

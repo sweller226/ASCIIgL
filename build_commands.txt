@@ -18,9 +18,15 @@ ASCIICraft
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Debug"
     .\ASCIICraft.exe
 
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Debug"
+    .\ASCIICraft.exe --window
+
     Run Release Command
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
     .\ASCIICraft.exe
+
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
+    .\ASCIICraft.exe --window
 
     Build Release
     ./scripts/build_release.ps1

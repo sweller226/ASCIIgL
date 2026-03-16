@@ -27,14 +27,6 @@ namespace ecs::systems {
                              return a.layer < b.layer;
                          });
 
-        // Diagnostic: when we have 2D items, log first item and camera so we can verify GUI is in view
-        if (!m_drawList2D.empty() && m_active2DCamera) {
-            const auto& first = m_drawList2D.front();
-            ASCIIgL::Logger::Debug("2D draw: count=" + std::to_string(m_drawList2D.size()) +
-                " first pos=(" + std::to_string(first.modelMatrix[3][0]) + "," + std::to_string(first.modelMatrix[3][1]) + ")" +
-                " scale=(" + std::to_string(first.modelMatrix[0][0]) + "," + std::to_string(first.modelMatrix[1][1]) + ")");
-        }
-
         // Batch by mesh pointer to reduce state changes
         BatchAndDraw();
     }

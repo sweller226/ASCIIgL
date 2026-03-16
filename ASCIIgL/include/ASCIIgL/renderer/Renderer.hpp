@@ -361,37 +361,8 @@ public:
     void ReleaseMeshCache(void* cachePtr);
     void InvalidateCachedTexture(const Texture* tex);
     
-    // Bind a custom shader program (nullptr to use default)
-    void BindShaderProgram(ShaderProgram* program);
-    
-    // Bind a material (sets shader + uniforms + textures)
-    void BindMaterial(Material* material);
-    
-    // Unbind custom shader (reverts to default)
-    void UnbindShaderProgram();
-    
     // Get currently bound shader program (nullptr if using default)
     ShaderProgram* GetBoundShaderProgram() const { return _boundShaderProgram; }
-
-    // Helper: Upload material's constant buffer
-    void UploadMaterialConstants(Material* material);
-
-    // Texture Management (Public)
-    void BindTexture(const Texture* tex, int slot = 0, SamplerType type = SamplerType::Default);
-    void BindTextureArray(const TextureArray* texArray, int slot = 0, SamplerType type = SamplerType::Default);
-    
-    // Unbind any texture
-    void UnbindTexture(int slot = 0);
-    void UnbindTextureArray(int slot = 0);
-
-    /// Set depth test on/off. Use false for 2D overlay (GUI) so it is not clipped by 3D depth buffer.
-    void SetDepthTestEnabled(bool enabled);
-
-    /// Set depth write on/off. Use false for transparent/2D so they don't occlude geometry behind.
-    void SetDepthWriteEnabled(bool enabled);
-
-    /// Set alpha blending on/off. Use true for 2D GUI so transparent PNG regions blend correctly.
-    void SetBlendEnabled(bool enabled);
 
     // =========================================================================
     // Draw Call Queue API / GPU Frame
@@ -404,6 +375,39 @@ public:
     void FlushDraws();
     // End the GPU render pass for this frame (resolve + download).
     void EndGpuFrame();
+
+    void ExecuteTransparentDrawList();
+    void ExecuteOpaqueDrawList();
+
+private:
+    // Bind a custom shader program (nullptr to use default)
+    void BindShaderProgram(ShaderProgram* program);
+    
+    // Bind a material (sets shader + uniforms + textures)
+    void BindMaterial(Material* material);
+    
+    // Unbind custom shader (reverts to default)
+    void UnbindShaderProgram();
+
+    // Helper: Upload material's constant buffer
+    void UploadMaterialConstants(Material* material);
+
+    // Texture Management (internal)
+    void BindTexture(const Texture* tex, int slot = 0, SamplerType type = SamplerType::Default);
+    void BindTextureArray(const TextureArray* texArray, int slot = 0, SamplerType type = SamplerType::Default);
+    
+    // Unbind any texture
+    void UnbindTexture(int slot = 0);
+    void UnbindTextureArray(int slot = 0);
+    
+    /// Set depth test on/off. Use false for 2D overlay (GUI) so it is not clipped by 3D depth buffer.
+    void SetDepthTestEnabled(bool enabled);
+    
+    /// Set depth write on/off. Use false for transparent/2D so they don't occlude geometry behind.
+    void SetDepthWriteEnabled(bool enabled);
+    
+    /// Set alpha blending on/off. Use true for 2D GUI so transparent PNG regions blend correctly.
+    void SetBlendEnabled(bool enabled);
 };
 
 } // namespace ASCIIgL
