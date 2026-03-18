@@ -741,7 +741,6 @@ void ChunkManager::RenderChunks() {
             waterParams_.animPhase = waterParams_.animPhase - floor(waterParams_.animPhase);
         }
         if (mat->HasUniform("waterAnimPhase")) {
-            ASCIIgL::Logger::Info("ChunkManager::RenderChunks: Setting waterAnimPhase to " + std::to_string(waterParams_.animPhase));
             mat->SetFloat("waterAnimPhase", waterParams_.animPhase);
         }
     }

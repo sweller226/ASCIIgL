@@ -78,33 +78,16 @@ float4 main(PS_INPUT input) : SV_TARGET
     float2 uv = input.texcoord.xy;
     float layer = input.texcoord.z;
 
-    // Water animation: identify water base layer and switch between 5 atlas frames (no lerp)
-    // Atlas coordinates for water frames: (11,12), (12,12), (13,12), (12,13), (13,13)
-    static const int ATLAS_SIZE = 16;
-    static const int WATER_FRAME_COUNT = 5;
-    static const int WATER_LAYERS[WATER_FRAME_COUNT] = {
-        12 * ATLAS_SIZE + 11,  // (11,12)
-        12 * ATLAS_SIZE + 12,  // (12,12)
-        12 * ATLAS_SIZE + 13,  // (13,12)
-        13 * ATLAS_SIZE + 12,  // (12,13)
-        13 * ATLAS_SIZE + 13   // (13,13)
-    };
-    const int WATER_BASE_LAYER = WATER_LAYERS[0];
+    // For now, no special water animation. We just treat the base water layer
+    // (matching BlockTexLayer::WaterStill on the CPU) as slightly transparent.
+    const int WATER_BASE_LAYER = 10; // BlockTexLayer::WaterStill
 
     float4 texColor;
     if ((int)layer == WATER_BASE_LAYER) {
-        // Compute a single frame index from global phase + per-block offset
-        float localPhase = waterAnimPhase + input.waterPhaseOffset;
-        float framePos   = frac(localPhase) * WATER_FRAME_COUNT; // [0, WATER_FRAME_COUNT)
-        int frameIdx     = (int)framePos % WATER_FRAME_COUNT;
-
-        float3 uvw = float3(uv, (float)WATER_LAYERS[frameIdx]);
-        texColor = blockTextures.Sample(samplerState, uvw);
-
-        // Make water more transparent by reducing alpha.
-        texColor.a = 0.6f;
+        texColor = blockTextures.Sample(samplerState, input.texcoord);
+        // Make water more transparent.
+        texColor.a = 0.7f;
     } else {
-        // Sample the texture array (already linear RGB from sRGB texture format)
         texColor = blockTextures.Sample(samplerState, input.texcoord);
     }
     

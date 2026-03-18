@@ -23,6 +23,30 @@ std::shared_ptr<TextureArray> TextureLibrary::LoadTextureArray(const std::string
     return texArray;
 }
 
+// Load from individual tile image files.
+std::shared_ptr<TextureArray> TextureLibrary::LoadTextureArray(const std::vector<std::string>& tilePaths, const std::string& savedName, const MonochromeMapping& mono)
+{
+    // Already loaded?
+    std::string nameToSave = savedName.empty() ? (tilePaths.empty() ? std::string() : tilePaths.front()) : savedName;
+
+    if (!nameToSave.empty()) {
+        auto it = _textureArrays.find(nameToSave);
+        if (it != _textureArrays.end())
+            return it->second;
+    }
+
+    auto texArray = std::make_shared<TextureArray>(tilePaths, mono);
+    if (!texArray || !texArray->IsValid()) {
+        Logger::Error("[TextureLibrary] Failed to load TextureArray from file list (count=" + std::to_string(tilePaths.size()) + ")");
+        return nullptr;
+    }
+
+    if (!nameToSave.empty()) {
+        _textureArrays[nameToSave] = texArray;
+    }
+    return texArray;
+}
+
 std::shared_ptr<Texture> TextureLibrary::LoadTexture(const std::string& path, const std::string& savedName, const MonochromeMapping& mono)
 {
     // If already loaded under this name, drop the old entry so we can reload.
