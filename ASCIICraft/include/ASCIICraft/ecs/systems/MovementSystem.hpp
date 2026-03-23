@@ -23,6 +23,7 @@ private:
     EventBus& m_eventBus;
 
     void ProcessMovementInput();
+    void ProcessSwitchGameModeEvents();
 };
 
 }

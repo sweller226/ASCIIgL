@@ -14,7 +14,7 @@ namespace blockstate {
 uint16_t BlockStateRegistry::RegisterType(
     const std::string& name,
     std::vector<BlockProperty> properties,
-    bool hasBlockEntity
+    bool isBlockEntity
 ) {
     // Prevent duplicate registration
     if (nameToType.count(name)) {
@@ -28,7 +28,7 @@ uint16_t BlockStateRegistry::RegisterType(
     type.typeId = typeId;
     type.name = name;
     type.properties = std::move(properties);
-    type.hasBlockEntity = hasBlockEntity;
+    type.isBlockEntity = isBlockEntity;
     type.baseStateId = static_cast<uint32_t>(states.size());
 
     // Compute state count = product of all property cardinalities (1 if no properties)

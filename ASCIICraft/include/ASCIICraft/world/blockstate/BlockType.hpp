@@ -19,7 +19,7 @@ struct BlockType {
     uint32_t stateCount = 1;                 // product of all property cardinalities
     uint32_t defaultStateId = 0;             // baseStateId + default property offset
 
-    bool hasBlockEntity = false;             // true for chests, furnaces, signs, etc.
+    bool isBlockEntity = false;             // true for chests, furnaces, signs, etc.
 };
 
 } // namespace blockstate

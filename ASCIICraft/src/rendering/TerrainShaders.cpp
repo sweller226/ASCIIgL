@@ -26,6 +26,7 @@ struct PS_INPUT
     float3 texcoord : TEXCOORD0;  // UV + Layer passed to pixel shader
     float dist : TEXCOORD1;       // Distance from camera
     float light : TEXCOORD2;      // Interpolated light multiplier
+    nointerpolation float  waterPhaseOffset : TEXCOORD3; // Per-block random phase offset for water (no interpolation)
 };
 
 PS_INPUT main(VS_INPUT input)
@@ -35,6 +36,11 @@ PS_INPUT main(VS_INPUT input)
     output.texcoord = input.texcoord;
     output.dist = distance(input.position, cameraPos);
     output.light = input.light;
+
+    // Compute a deterministic per-block phase offset from snapped world XZ position.
+    float2 tileCoord = floor(input.position.xz);
+    float rand = frac(sin(dot(tileCoord, float2(12.9898, 78.233))) * 43758.5453);
+    output.waterPhaseOffset = rand;
     return output;
 }
 )";
@@ -55,6 +61,7 @@ cbuffer ConstantBuffer : register(b0)
     float3 cameraPos;       // Unused in PS but part of CBuffer layout
     float4 fogParams;       // x=start, y=end
     float3 fogColor;        // Color to fade to at distance (matches background)
+    float  waterAnimPhase;  // Continuous time-based phase for water animation
 };
 
 struct PS_INPUT
@@ -63,12 +70,26 @@ struct PS_INPUT
     float3 texcoord : TEXCOORD0;  // UV.xy + Layer.z
     float dist : TEXCOORD1;       // Distance from camera
     float light : TEXCOORD2;      // Per-vertex directional light
+    nointerpolation float waterPhaseOffset : TEXCOORD3; // Per-block phase offset (no interpolation)
 };
 
 float4 main(PS_INPUT input) : SV_TARGET
 {
-    // Sample the texture array (already linear RGB from sRGB texture format)
-    float4 texColor = blockTextures.Sample(samplerState, input.texcoord);
+    float2 uv = input.texcoord.xy;
+    float layer = input.texcoord.z;
+
+    // For now, no special water animation. We just treat the base water layer
+    // (matching BlockTexLayer::WaterStill on the CPU) as slightly transparent.
+    const int WATER_BASE_LAYER = 10; // BlockTexLayer::WaterStill
+
+    float4 texColor;
+    if ((int)layer == WATER_BASE_LAYER) {
+        texColor = blockTextures.Sample(samplerState, input.texcoord);
+        // Make water more transparent.
+        texColor.a = 0.7f;
+    } else {
+        texColor = blockTextures.Sample(samplerState, input.texcoord);
+    }
     
     // Binary alpha test (cutout): discard pixels below threshold (e.g. leaves, grass)
     static const float ALPHA_CUTOFF = 0.5;
@@ -96,6 +117,7 @@ ASCIIgL::UniformBufferLayout GetTerrainPSUniformLayout() {
         .Add("cameraPos", ASCIIgL::UniformType::Float3)
         .Add("fogParams", ASCIIgL::UniformType::Float4)
         .Add("fogColor", ASCIIgL::UniformType::Float3)
+        .Add("waterAnimPhase", ASCIIgL::UniformType::Float)
         .Build();
 }
 

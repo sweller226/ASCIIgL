@@ -55,7 +55,6 @@ World* GetWorldPtr(entt::registry& registry) {
         return nullptr;
     }
 
-    ASCIIgL::Logger::Debug("World successfully retrieved from context.");
     World* world = worldPtr->get();
 
     return world;

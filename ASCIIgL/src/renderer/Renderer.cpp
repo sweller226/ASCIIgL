@@ -567,6 +567,8 @@ void Renderer::BindMaterial(Material* material) {
     if (!_initialized || !material) return;
     
     _boundMaterial = material;
+
+    material->UpdateConstantBufferData();
     
     // Bind shader program
     auto program = material->GetShaderProgram();
@@ -582,16 +584,10 @@ void Renderer::BindMaterial(Material* material) {
             BindTextureArray(slot.textureArray, slot.slot, slot.samplerType);
         }
     }
-    
-    // Upload constant buffer if dirty
-    UploadMaterialConstants(material);
 }
 
 void Renderer::UploadMaterialConstants(Material* material) {
     if (!material || !_initialized) return;
-    
-    // Update material's packed constant buffer data
-    material->UpdateConstantBufferData();
     
     auto program = material->GetShaderProgram();
     if (!program) return;

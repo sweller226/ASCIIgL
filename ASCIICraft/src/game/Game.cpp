@@ -21,6 +21,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/blockstate/BlockTextureLayers.hpp>
 #include <ASCIICraft/ecs/data/ItemIndex.hpp>
 
 #include <ASCIICraft/gui/GuiMeshes.hpp>
@@ -61,7 +62,7 @@ Game::~Game() {
     Shutdown();
 }
 
-bool Game::Initialize() {
+bool Game::Initialize(bool renderToTerminal) {
     ASCIIgL::Logger::Info("Initializing ASCIICraft...");
 
     ASCIIgL::Logger::Debug("Preloading textures for palette generation...");
@@ -79,7 +80,7 @@ bool Game::Initialize() {
     ASCIIgL::MonochromePalette gamePalette(textureWeights, textureArrayWeights);
 
     ASCIIgL::Logger::Debug("Initializing screen...");
-    if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette, true) != 0) {
+    if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette, renderToTerminal) != 0) {
         ASCIIgL::Logger::Error("Failed to initialize screen");
         return false;
     }
@@ -93,15 +94,13 @@ bool Game::Initialize() {
 
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
     renderer.SetMonochromeDitherEnabled(true);
-    renderer.SetBackgroundCol(gamePalette.GetRGB(1));
+    renderer.SetBackgroundCol(glm::ivec3(150, 150, 150));
     renderer.SetWireframe(false);
     renderer.SetBackfaceCulling(true);
     renderer.SetCCW(true);
 
     ASCIIgL::Logger::Debug("Initializing renderer...");
     renderer.Initialize(true, 4, nullptr, 10);
-
-    ASCIIgL::Renderer::GetInst().SetBlendEnabled(true);
 
     ASCIIgL::Logger::Debug("Initializing block states...");
     InitializeBlockStates();
@@ -133,8 +132,8 @@ bool Game::Initialize() {
     return true;
 }
 
-void Game::Run(std::function<bool()> shouldExternalExit) {
-    if (!Initialize()) {
+void Game::Run(std::function<bool()> shouldExternalExit, bool renderToTerminal) {
+    if (!Initialize(renderToTerminal)) {
         ASCIIgL::Logger::Error("Failed to initialize game");
         return;
     }
@@ -179,10 +178,9 @@ void Game::Run(std::function<bool()> shouldExternalExit) {
 }
 
 void Game::Update() {
-    ASCIIgL::Logger::Debug("Game::Update - state = " +
-        std::to_string(static_cast<int>(gameState)));
-
-    inputSystem.SetInputMode(guiManager.IsBlockingInput() ? input::InputMode::GUI : input::InputMode::Gameplay);
+    const bool guiBlocking = guiManager.IsBlockingInput();
+    const auto mode = guiBlocking ? input::InputMode::GUI : input::InputMode::Gameplay;
+    inputSystem.SetInputMode(mode);
     inputSystem.Update();
 
     for ([[maybe_unused]] const auto& e : eventBus.view<events::ToggleInventoryEvent>()) {
@@ -196,7 +194,6 @@ void Game::Update() {
     switch (gameState) {
         case GameState::Playing: {
 
-            ASCIIgL::Logger::Debug("Update: Retrieving world pointer");
             World* world = GetWorldPtr(registry);
 
             if (!world) {
@@ -206,24 +203,17 @@ void Game::Update() {
 
             guiManager.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running mining system");
             miningSystem.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running placement system");
             placingSystem.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running block update system");
             blockUpdateSystem.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running movement system");
             movementSystem.Update();
-            ASCIIgL::Logger::Debug("Update: Running camera system");
             cameraSystem.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running physics system");
             physicsSystem.Update();
 
-            ASCIIgL::Logger::Debug("Update: Running world update");
             world->Update();
 
             break;
@@ -237,7 +227,6 @@ void Game::Update() {
 }
 
 void Game::Render() {
-    ASCIIgL::Logger::Debug("Game::Render called.");
 
     {
         ASCIIgL::PROFILE_SCOPE("Clear Px Buff/Begin GPU Frame");
@@ -311,13 +300,41 @@ bool Game::LoadTextures() {
     monoMap.darkL = darkL;
     monoMap.lightL = lightL;
     monoMap.hueDir = NeutralGrayHue;
+    monoMap.brightness = 1.0f;
+    monoMap.contrast = 1.0f;
 
     // Load block textures via TextureLibrary which takes ownership
-    auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray("res/textures/terrain2.png", 16, "terrainTextureArray", monoMap);
+    std::vector<std::string> blockTexturePaths = {
+        "res/textures/Splotch/assets/minecraft/textures/blocks/stone.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/cobblestone.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/bedrock.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/dirt.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/log_oak.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/log_oak_top.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/leaves_oak.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/planks_oak.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/grass_top.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/grass_side.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/water_still.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/crafting_table_front.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/crafting_table_side.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/crafting_table_top.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/furnace_front_off.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/furnace_front_on.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/furnace_side.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/furnace_top.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/glass.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/bookshelf.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/sand.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/gravel.png",
+        "res/textures/Splotch/assets/minecraft/textures/blocks/brick.png",
+    };
 
+
+    auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(blockTexturePaths, "terrainTextureArray", monoMap);
     if (!blockTextureArray || !blockTextureArray->IsValid()) {
         ASCIIgL::Logger::Error("Failed to load block texture array");
-        return false;
+        return false;   
     }
 
     auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture("res/textures/gui/inventory.png", "inventoryTexture", monoMap);
@@ -506,8 +523,6 @@ bool Game::LoadResources() {
 }
 
 void Game::RenderPlaying() {
-    ASCIIgL::Logger::Debug("RenderPlaying: binding shader and texture array");
-
     // Keep 2D GUI camera in sync with viewport (GPU pipeline uses Screen dimensions; 2D ortho must match)
     guiManager.SetScreenSize(glm::vec2(
         static_cast<float>(ASCIIgL::Screen::GetInst().GetWidth()),
@@ -547,8 +562,8 @@ void Game::InitializeSystems() {
 void Game::InitializeBlockStates() {
     auto& bsr = registry.ctx().emplace<blockstate::BlockStateRegistry>();
 
-    constexpr int A = 16; // Atlas tile count
-    auto L = [](int x, int y) { return ASCIIgL::TextureArray::GetLayerFromAtlasXY(x, y, 16); };
+    // Direct TextureArray layer indices (see BlockTextureLayers.hpp and LoadTextures).
+    using BT = BlockTexLayer;
 
     // Helper: set all 6 faces to the same layer
     auto allFaces = [](blockstate::BlockState& s, int layer) {
@@ -564,28 +579,28 @@ void Game::InitializeBlockStates() {
         s.renderMode = blockstate::RenderMode::Translucent;
     });
 
-    // === Terrain ===
+    // === Terrain (using only file-based texture layers) ===
     bsr.RegisterType("minecraft:bedrock", {});
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:bedrock"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(1, 1));
+        allFaces(s, static_cast<int>(BT::Bedrock));
         s.renderMode = blockstate::RenderMode::Opaque;
     });
 
     bsr.RegisterType("minecraft:stone", {});
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:stone"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(1, 0));
+        allFaces(s, static_cast<int>(BT::Stone));
         s.renderMode = blockstate::RenderMode::Opaque;
     });
 
     bsr.RegisterType("minecraft:cobblestone", {});
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:cobblestone"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(0, 1));
+        allFaces(s, static_cast<int>(BT::Cobblestone));
         s.renderMode = blockstate::RenderMode::Opaque;
     });
 
     bsr.RegisterType("minecraft:dirt", {});
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:dirt"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(2, 0));
+        allFaces(s, static_cast<int>(BT::Dirt));
         s.renderMode = blockstate::RenderMode::Opaque;
     });
 
@@ -595,172 +610,43 @@ void Game::InitializeBlockStates() {
     });
 
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:grass"), [&](blockstate::BlockState& s) {
-        s.faceTextureLayers[0] = L(0, 0); // Top
-        s.faceTextureLayers[1] = L(2, 0); // Bottom (dirt)
-        s.faceTextureLayers[2] = L(3, 0); // North
-        s.faceTextureLayers[3] = L(3, 0); // South
-        s.faceTextureLayers[4] = L(3, 0); // East
-        s.faceTextureLayers[5] = L(3, 0); // West
+        s.faceTextureLayers[0] = static_cast<int>(BT::GrassTop);   // Top
+        s.faceTextureLayers[1] = static_cast<int>(BT::Dirt);       // Bottom
+        s.faceTextureLayers[2] = static_cast<int>(BT::GrassSide);  // North
+        s.faceTextureLayers[3] = static_cast<int>(BT::GrassSide);  // South
+        s.faceTextureLayers[4] = static_cast<int>(BT::GrassSide);  // East
+        s.faceTextureLayers[5] = static_cast<int>(BT::GrassSide);  // West
         s.renderMode = blockstate::RenderMode::Opaque;
     });
 
-    bsr.RegisterType("minecraft:gravel", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:gravel"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(3, 1));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    bsr.RegisterType("minecraft:sand", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:sand"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(2, 1));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    bsr.RegisterType("minecraft:sandstone", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:sandstone"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(2, 2));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    bsr.RegisterType("minecraft:clay", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:clay"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(4, 1));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    // === Ores ===
-    bsr.RegisterType("minecraft:coal_ore", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:coal_ore"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(2, 2));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    bsr.RegisterType("minecraft:iron_ore", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:iron_ore"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(1, 2));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    bsr.RegisterType("minecraft:gold_ore", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:gold_ore"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(0, 2));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    bsr.RegisterType("minecraft:diamond_ore", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:diamond_ore"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(3, 2));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    // === Wood & Plants ===
+    // === Wood & Plants (subset using current texture list) ===
     bsr.RegisterType("minecraft:oak_log", {});
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:oak_log"), [&](blockstate::BlockState& s) {
-        s.faceTextureLayers[0] = L(5, 1); // Top (rings)
-        s.faceTextureLayers[1] = L(5, 1); // Bottom (rings)
-        s.faceTextureLayers[2] = L(4, 1); // Sides (bark)
-        s.faceTextureLayers[3] = L(4, 1);
-        s.faceTextureLayers[4] = L(4, 1);
-        s.faceTextureLayers[5] = L(4, 1);
+        s.faceTextureLayers[0] = static_cast<int>(BT::OakLogTop); // Top
+        s.faceTextureLayers[1] = static_cast<int>(BT::OakLogTop); // Bottom
+        s.faceTextureLayers[2] = static_cast<int>(BT::OakLog);    // Sides (bark)
+        s.faceTextureLayers[3] = static_cast<int>(BT::OakLog);
+        s.faceTextureLayers[4] = static_cast<int>(BT::OakLog);
+        s.faceTextureLayers[5] = static_cast<int>(BT::OakLog);
         s.renderMode = blockstate::RenderMode::Opaque;
     });
 
     bsr.RegisterType("minecraft:oak_leaves", {});
     bsr.SetDerivedData(bsr.GetTypeId("minecraft:oak_leaves"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(4, 3));
+        allFaces(s, static_cast<int>(BT::OakLeaves));
         s.isSolid = true;
         s.isTransparent = false;                  // treat as cutout, not blended
         s.renderMode = blockstate::RenderMode::Cutout;
+        s.cullSameType = false;                   // draw faces between leaves (fuller look)
     });
 
-    bsr.RegisterType("minecraft:oak_planks", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:oak_planks"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(4, 0));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    bsr.RegisterType("minecraft:spruce_log", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:spruce_log"), [&](blockstate::BlockState& s) {
-        s.faceTextureLayers[0] = L(5, 1);
-        s.faceTextureLayers[1] = L(5, 1);
-        s.faceTextureLayers[2] = L(4, 1);
-        s.faceTextureLayers[3] = L(4, 1);
-        s.faceTextureLayers[4] = L(4, 1);
-        s.faceTextureLayers[5] = L(4, 1);
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    bsr.RegisterType("minecraft:spruce_leaves", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:spruce_leaves"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(5, 3));
+    // === Water ===
+    bsr.RegisterType("minecraft:water", {});
+    bsr.SetDerivedData(bsr.GetTypeId("minecraft:water"), [&](blockstate::BlockState& s) {
+        allFaces(s, static_cast<int>(BT::WaterStill));
         s.isSolid = true;
-        s.isTransparent = false;
-        s.renderMode = blockstate::RenderMode::Cutout;
-    });
-
-    bsr.RegisterType("minecraft:spruce_planks", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:spruce_planks"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(5, 0));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    // === Utility Blocks ===
-    bsr.RegisterType("minecraft:crafting_table", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:crafting_table"), [&](blockstate::BlockState& s) {
-        s.faceTextureLayers[0] = L(11, 2); // Top
-        s.faceTextureLayers[1] = L(4, 0);  // Bottom (planks)
-        s.faceTextureLayers[2] = L(11, 3); // North
-        s.faceTextureLayers[3] = L(11, 3); // South
-        s.faceTextureLayers[4] = L(12, 3); // East
-        s.faceTextureLayers[5] = L(12, 3); // West
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    bsr.RegisterType("minecraft:furnace", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:furnace"), [&](blockstate::BlockState& s) {
-        s.faceTextureLayers[0] = L(14, 3); // Top
-        s.faceTextureLayers[1] = L(14, 3); // Bottom
-        s.faceTextureLayers[2] = L(12, 2); // North (front)
-        s.faceTextureLayers[3] = L(13, 2); // South (side)
-        s.faceTextureLayers[4] = L(13, 2); // East (side)
-        s.faceTextureLayers[5] = L(13, 2); // West (side)
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    // === Special Blocks ===
-    bsr.RegisterType("minecraft:tnt", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:tnt"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(8, 0));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    bsr.RegisterType("minecraft:obsidian", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:obsidian"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(5, 2));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    bsr.RegisterType("minecraft:mossy_cobblestone", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:mossy_cobblestone"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(0, 3));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    bsr.RegisterType("minecraft:bookshelf", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:bookshelf"), [&](blockstate::BlockState& s) {
-        s.faceTextureLayers[0] = L(4, 0); // Top (planks)
-        s.faceTextureLayers[1] = L(4, 0); // Bottom (planks)
-        s.faceTextureLayers[2] = L(3, 3); // Sides
-        s.faceTextureLayers[3] = L(3, 3);
-        s.faceTextureLayers[4] = L(3, 3);
-        s.faceTextureLayers[5] = L(3, 3);
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-
-    bsr.RegisterType("minecraft:wool", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:wool"), [&](blockstate::BlockState& s) {
-        allFaces(s, L(0, 4));
-        s.renderMode = blockstate::RenderMode::Opaque;
+        s.isTransparent = true;
+        s.renderMode = blockstate::RenderMode::Translucent;
     });
 
     ASCIIgL::Logger::Info("BlockStateRegistry: " +
@@ -777,74 +663,52 @@ void Game::InitializeItemDefinitions() {
         return IX::GetBlockMeshFromState(bsr.GetState(bsr.GetDefaultState(typeName)));
     };
 
-    // === Terrain === (IDs auto-assigned: 1, 2, 3, ...)
-    itemIndex.RegisterBlockItem(registry, "minecraft:stone",       "Stone",       blockMesh("minecraft:stone"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:cobblestone", "Cobblestone", blockMesh("minecraft:cobblestone"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:dirt",        "Dirt",        blockMesh("minecraft:dirt"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:grass",       "Grass Block", blockMesh("minecraft:grass"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:gravel",      "Gravel",      blockMesh("minecraft:gravel"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:sand",        "Sand",        blockMesh("minecraft:sand"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:sandstone",   "Sandstone",   blockMesh("minecraft:sandstone"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:clay",        "Clay",        blockMesh("minecraft:clay"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:bedrock",     "Bedrock",     blockMesh("minecraft:bedrock"));
+    // // === Terrain (restricted to current texture set) ===
+    // itemIndex.RegisterBlockItem(registry, "minecraft:stone",       "Stone",       blockMesh("minecraft:stone"));
+    // itemIndex.RegisterBlockItem(registry, "minecraft:cobblestone", "Cobblestone", blockMesh("minecraft:cobblestone"));
+    // itemIndex.RegisterBlockItem(registry, "minecraft:dirt",        "Dirt",        blockMesh("minecraft:dirt"));
+    // itemIndex.RegisterBlockItem(registry, "minecraft:grass",       "Grass Block", blockMesh("minecraft:grass"));
+    // itemIndex.RegisterBlockItem(registry, "minecraft:bedrock",     "Bedrock",     blockMesh("minecraft:bedrock"));
 
-    // === Ores ===
-    itemIndex.RegisterBlockItem(registry, "minecraft:coal_ore",    "Coal Ore",    blockMesh("minecraft:coal_ore"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:iron_ore",    "Iron Ore",    blockMesh("minecraft:iron_ore"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:gold_ore",    "Gold Ore",    blockMesh("minecraft:gold_ore"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:diamond_ore", "Diamond Ore", blockMesh("minecraft:diamond_ore"));
+    // // === Wood & Plants (subset)
+    // itemIndex.RegisterBlockItem(registry, "minecraft:oak_log",       "Oak Log",       blockMesh("minecraft:oak_log"));
+    // itemIndex.RegisterBlockItem(registry, "minecraft:oak_leaves",    "Oak Leaves",    blockMesh("minecraft:oak_leaves"));
 
-    // === Wood & Plants ===
-    itemIndex.RegisterBlockItem(registry, "minecraft:oak_log",       "Oak Log",       blockMesh("minecraft:oak_log"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:oak_leaves",    "Oak Leaves",    blockMesh("minecraft:oak_leaves"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:oak_planks",    "Oak Planks",    blockMesh("minecraft:oak_planks"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:spruce_log",    "Spruce Log",    blockMesh("minecraft:spruce_log"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:spruce_leaves", "Spruce Leaves", blockMesh("minecraft:spruce_leaves"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:spruce_planks", "Spruce Planks", blockMesh("minecraft:spruce_planks"));
+    // // (Other ores, planks, utility, and special blocks are temporarily disabled
+    // //  until their textures are added to the texture array.)
 
-    // === Utility Blocks ===
-    itemIndex.RegisterBlockItem(registry, "minecraft:crafting_table", "Crafting Table", blockMesh("minecraft:crafting_table"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:furnace",        "Furnace",        blockMesh("minecraft:furnace"));
+    // // === Resources / Materials ===
+    // itemIndex.RegisterResourceItem(registry, 263, "minecraft:coal",       "Coal",       IX::GetQuadItemMesh(7, 10));
+    // itemIndex.RegisterResourceItem(registry, 264, "minecraft:diamond",    "Diamond",    IX::GetQuadItemMesh(8, 10));
+    // itemIndex.RegisterResourceItem(registry, 265, "minecraft:iron_ingot", "Iron Ingot", IX::GetQuadItemMesh(9, 10));
+    // itemIndex.RegisterResourceItem(registry, 266, "minecraft:gold_ingot", "Gold Ingot", IX::GetQuadItemMesh(10, 10));
+    // itemIndex.RegisterResourceItem(registry, 280, "minecraft:stick",      "Stick",      IX::GetQuadItemMesh(5, 9));
 
-    // === Special Blocks ===
-    itemIndex.RegisterBlockItem(registry, "minecraft:tnt",                "TNT",                blockMesh("minecraft:tnt"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:obsidian",           "Obsidian",           blockMesh("minecraft:obsidian"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:mossy_cobblestone",  "Mossy Cobblestone",  blockMesh("minecraft:mossy_cobblestone"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:bookshelf",          "Bookshelf",          blockMesh("minecraft:bookshelf"));
-    itemIndex.RegisterBlockItem(registry, "minecraft:wool",               "Wool",               blockMesh("minecraft:wool"));
+    // // === Swords ===
+    // itemIndex.RegisterToolItem(registry, 268, "minecraft:wooden_sword",  "Wooden Sword",  IX::GetQuadItemMesh(0, 4), {2.0f, 1, 60},   {4.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 272, "minecraft:stone_sword",   "Stone Sword",   IX::GetQuadItemMesh(1, 4), {4.0f, 2, 132},  {5.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 267, "minecraft:iron_sword",    "Iron Sword",    IX::GetQuadItemMesh(2, 4), {6.0f, 3, 251},  {6.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 276, "minecraft:diamond_sword", "Diamond Sword", IX::GetQuadItemMesh(3, 4), {8.0f, 4, 1562}, {7.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 283, "minecraft:gold_sword",    "Golden Sword",  IX::GetQuadItemMesh(4, 4), {12.0f, 1, 33},  {4.0f, 1.6f});
 
-    // === Resources / Materials ===
-    itemIndex.RegisterResourceItem(registry, 263, "minecraft:coal",       "Coal",       IX::GetQuadItemMesh(7, 10));
-    itemIndex.RegisterResourceItem(registry, 264, "minecraft:diamond",    "Diamond",    IX::GetQuadItemMesh(8, 10));
-    itemIndex.RegisterResourceItem(registry, 265, "minecraft:iron_ingot", "Iron Ingot", IX::GetQuadItemMesh(9, 10));
-    itemIndex.RegisterResourceItem(registry, 266, "minecraft:gold_ingot", "Gold Ingot", IX::GetQuadItemMesh(10, 10));
-    itemIndex.RegisterResourceItem(registry, 280, "minecraft:stick",      "Stick",      IX::GetQuadItemMesh(5, 9));
+    // // === Shovels ===
+    // itemIndex.RegisterToolItem(registry, 269, "minecraft:wooden_shovel",  "Wooden Shovel",  IX::GetQuadItemMesh(0, 5), {2.0f, 1, 60},   {1.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 273, "minecraft:stone_shovel",   "Stone Shovel",   IX::GetQuadItemMesh(1, 5), {4.0f, 2, 132},  {2.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 256, "minecraft:iron_shovel",    "Iron Shovel",    IX::GetQuadItemMesh(2, 5), {6.0f, 3, 251},  {3.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 277, "minecraft:diamond_shovel", "Diamond Shovel", IX::GetQuadItemMesh(3, 5), {8.0f, 4, 1562}, {4.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 284, "minecraft:gold_shovel",    "Golden Shovel",  IX::GetQuadItemMesh(4, 5), {12.0f, 1, 33},  {1.0f, 1.6f});
 
-    // === Swords ===
-    itemIndex.RegisterToolItem(registry, 268, "minecraft:wooden_sword",  "Wooden Sword",  IX::GetQuadItemMesh(0, 4), {2.0f, 1, 60},   {4.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 272, "minecraft:stone_sword",   "Stone Sword",   IX::GetQuadItemMesh(1, 4), {4.0f, 2, 132},  {5.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 267, "minecraft:iron_sword",    "Iron Sword",    IX::GetQuadItemMesh(2, 4), {6.0f, 3, 251},  {6.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 276, "minecraft:diamond_sword", "Diamond Sword", IX::GetQuadItemMesh(3, 4), {8.0f, 4, 1562}, {7.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 283, "minecraft:gold_sword",    "Golden Sword",  IX::GetQuadItemMesh(4, 4), {12.0f, 1, 33},  {4.0f, 1.6f});
+    // // === Pickaxes ===
+    // itemIndex.RegisterToolItem(registry, 270, "minecraft:wooden_pickaxe",  "Wooden Pickaxe",  IX::GetQuadItemMesh(0, 6), {2.0f, 1, 60},   {2.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 274, "minecraft:stone_pickaxe",   "Stone Pickaxe",   IX::GetQuadItemMesh(1, 6), {4.0f, 2, 132},  {3.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 257, "minecraft:iron_pickaxe",    "Iron Pickaxe",    IX::GetQuadItemMesh(2, 6), {6.0f, 3, 251},  {4.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 278, "minecraft:diamond_pickaxe", "Diamond Pickaxe", IX::GetQuadItemMesh(3, 6), {8.0f, 4, 1562}, {5.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 285, "minecraft:gold_pickaxe",    "Golden Pickaxe",  IX::GetQuadItemMesh(4, 6), {12.0f, 1, 33},  {2.0f, 1.6f});
 
-    // === Shovels ===
-    itemIndex.RegisterToolItem(registry, 269, "minecraft:wooden_shovel",  "Wooden Shovel",  IX::GetQuadItemMesh(0, 5), {2.0f, 1, 60},   {1.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 273, "minecraft:stone_shovel",   "Stone Shovel",   IX::GetQuadItemMesh(1, 5), {4.0f, 2, 132},  {2.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 256, "minecraft:iron_shovel",    "Iron Shovel",    IX::GetQuadItemMesh(2, 5), {6.0f, 3, 251},  {3.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 277, "minecraft:diamond_shovel", "Diamond Shovel", IX::GetQuadItemMesh(3, 5), {8.0f, 4, 1562}, {4.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 284, "minecraft:gold_shovel",    "Golden Shovel",  IX::GetQuadItemMesh(4, 5), {12.0f, 1, 33},  {1.0f, 1.6f});
-
-    // === Pickaxes ===
-    itemIndex.RegisterToolItem(registry, 270, "minecraft:wooden_pickaxe",  "Wooden Pickaxe",  IX::GetQuadItemMesh(0, 6), {2.0f, 1, 60},   {2.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 274, "minecraft:stone_pickaxe",   "Stone Pickaxe",   IX::GetQuadItemMesh(1, 6), {4.0f, 2, 132},  {3.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 257, "minecraft:iron_pickaxe",    "Iron Pickaxe",    IX::GetQuadItemMesh(2, 6), {6.0f, 3, 251},  {4.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 278, "minecraft:diamond_pickaxe", "Diamond Pickaxe", IX::GetQuadItemMesh(3, 6), {8.0f, 4, 1562}, {5.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 285, "minecraft:gold_pickaxe",    "Golden Pickaxe",  IX::GetQuadItemMesh(4, 6), {12.0f, 1, 33},  {2.0f, 1.6f});
-
-    // === Axes ===
-    itemIndex.RegisterToolItem(registry, 271, "minecraft:wooden_axe",  "Wooden Axe",  IX::GetQuadItemMesh(0, 7), {2.0f, 1, 60},   {3.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 275, "minecraft:stone_axe",   "Stone Axe",   IX::GetQuadItemMesh(1, 7), {4.0f, 2, 132},  {4.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 258, "minecraft:iron_axe",    "Iron Axe",    IX::GetQuadItemMesh(2, 7), {6.0f, 3, 251},  {5.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 279, "minecraft:diamond_axe", "Diamond Axe", IX::GetQuadItemMesh(3, 7), {8.0f, 4, 1562}, {6.0f, 1.6f});
-    itemIndex.RegisterToolItem(registry, 286, "minecraft:gold_axe",    "Golden Axe",  IX::GetQuadItemMesh(4, 7), {12.0f, 1, 33},  {3.0f, 1.6f});
+    // // === Axes ===
+    // itemIndex.RegisterToolItem(registry, 271, "minecraft:wooden_axe",  "Wooden Axe",  IX::GetQuadItemMesh(0, 7), {2.0f, 1, 60},   {3.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 275, "minecraft:stone_axe",   "Stone Axe",   IX::GetQuadItemMesh(1, 7), {4.0f, 2, 132},  {4.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 258, "minecraft:iron_axe",    "Iron Axe",    IX::GetQuadItemMesh(2, 7), {6.0f, 3, 251},  {5.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 279, "minecraft:diamond_axe", "Diamond Axe", IX::GetQuadItemMesh(3, 7), {8.0f, 4, 1562}, {6.0f, 1.6f});
+    // itemIndex.RegisterToolItem(registry, 286, "minecraft:gold_axe",    "Golden Axe",  IX::GetQuadItemMesh(4, 7), {12.0f, 1, 33},  {3.0f, 1.6f});
 }

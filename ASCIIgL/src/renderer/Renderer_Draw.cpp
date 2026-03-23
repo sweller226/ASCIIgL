@@ -169,9 +169,11 @@ void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list) {
             if (!ov.desc) continue;
             mat->ApplyUniformOverride(*ov.desc, ov.value);
         }
-        UploadMaterialConstants(mat);
 
         DrawMesh(dc.mesh);
+
+        // Upload constant buffer if dirty
+        UploadMaterialConstants(mat);
     }
 }
 
@@ -235,6 +237,15 @@ void Renderer::EndGpuFrame() {
     }
 }
 
+void Renderer::ExecuteTransparentDrawList() {
+    SortTransparentDraws();
+    ExecuteDrawList(_transparentDraws);
+}
+
+void Renderer::ExecuteOpaqueDrawList() {
+    SortOpaqueDraws();
+    ExecuteDrawList(_opaqueDraws);
+}
 
 } // namespace ASCIIgL
 

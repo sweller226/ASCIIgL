@@ -37,6 +37,7 @@ private:
         float CAVE_THRESHOLD;
         float VERTICAL_STRETCH;
         float TREE_CHANCE_ADJUSTMENT;
+        int SEA_LEVEL;  // world Y: air below this becomes water
     };
 
     // Noise generators

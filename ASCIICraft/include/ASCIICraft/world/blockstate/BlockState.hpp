@@ -27,6 +27,9 @@ struct BlockState {
     uint8_t lightEmission = 0;
     uint8_t lightFilter = 15;                // how much light this block absorbs
     RenderMode renderMode = RenderMode::Opaque;
+    /// If true, don't draw a face when the neighbor block is the same type (e.g. dirt, glass).
+    /// If false, always draw faces against same-type neighbors (e.g. leaves).
+    bool cullSameType = true;
 };
 
 } // namespace blockstate

@@ -54,6 +54,14 @@ void ApplyMonochromeMappingRGBA8(uint8_t* rgbaData, int width, int height, const
         glm::vec3 lin = PaletteUtil::sRGB255ToLinear1(rgb);
         float luminance = PaletteUtil::LinearRGB_Luminance(lin);
 
+        // Apply brightness/contrast in normalized luminance space.
+        // Contrast is around 0.5, brightness is multiplicative.
+        float c = mapping.contrast;
+        float b = mapping.brightness;
+        luminance = luminance * b;
+        luminance = (luminance - 0.5f) * c + 0.5f;
+        luminance = std::clamp(luminance, 0.0f, 1.0f);
+
         glm::vec3 monoLin = LinearLuminanceToGradientRGB(luminance, linearStart, linearEnd);
         glm::vec3 monoSRGBf = PaletteUtil::Linear1ToSrgb255(monoLin);
 

@@ -1,4 +1,5 @@
 #include <ASCIICraft/world/ChunkManager.hpp>
+#include <ASCIIgL/engine/FPSClock.hpp>
 #include <ASCIICraft/world/Chunk.hpp>
 #include <ASCIICraft/world/ChunkMeshGen.hpp>
 
@@ -611,12 +612,15 @@ std::vector<ChunkCoord> ChunkManager::GetChunksInRadius(const ChunkCoord& center
 }
 
 bool ChunkManager::IsChunkOutsideWorld(const ChunkCoord& coord) const {
-    // Calculate distance from world origin (0, 0, 0)
+    // Bottom of world: chunks below y=0 are never loaded; treat as outside so bottom chunks can generate without them
+    if (coord.y < 0)
+        return true;
+    // World border: beyond radius in X/Y/Z
     int dx = std::abs(coord.x);
     int dy = std::abs(coord.y);
     int dz = std::abs(coord.z);
     int distanceFromOrigin = std::max({dx, dy, dz});
-    return distanceFromOrigin > maxWorldChunkRadius;
+    return distanceFromOrigin > static_cast<int>(maxWorldChunkRadius);
 }
 
 uint32_t ChunkManager::GetBlockState(const WorldCoord& pos) const {
@@ -727,6 +731,19 @@ void ChunkManager::RenderChunks() {
     mat->SetFloat3("cameraPos", pos);
     mat->SetFloat4("fogParams", glm::vec4(fogParams_.fogStart, fogParams_.fogEnd, 0.0f, 0.0f));
     mat->SetFloat3("fogColor", fogParams_.fogColor);
+
+    // --- Water animation phase (continuous, used by terrain PS) ---
+    {
+        const float dt = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
+        waterParams_.animPhase += dt * waterParams_.animSpeed;
+        // Keep value bounded; shader uses frac(waterAnimPhase) so wrapping is fine.
+        if (waterParams_.animPhase > 1000.0f) {
+            waterParams_.animPhase = waterParams_.animPhase - floor(waterParams_.animPhase);
+        }
+        if (mat->HasUniform("waterAnimPhase")) {
+            mat->SetFloat("waterAnimPhase", waterParams_.animPhase);
+        }
+    }
 
     // --- Prepare renderer draw-calls ---
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();

@@ -134,8 +134,9 @@ ChunkMeshData BuildChunkMeshData(
                     );
                     const auto& neighborState = bsr->GetState(neighborStateId);
                     bool neighborOccludes =
-                        neighborState.isSolid &&
-                        neighborState.renderMode == blockstate::RenderMode::Opaque;
+                        (neighborState.isSolid &&
+                         neighborState.renderMode == blockstate::RenderMode::Opaque) ||
+                        (state.cullSameType && neighborState.typeId == state.typeId);
                     bool shouldRenderFace = !neighborOccludes;
 
                     if (!shouldRenderFace) continue;

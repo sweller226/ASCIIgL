@@ -126,32 +126,26 @@ public:
 
     // Apply a single uniform override directly into this material's packed
     // constant buffer using a known UniformDescriptor (no name lookup).
-    // Does NOT touch _uniformValues or _uniformsDirty; intended for
+    // Does NOT touch _uniformValues; intended for
     // per-draw overrides when you already have a base buffer.
     void ApplyUniformOverride(const UniformDescriptor& desc, const UniformValue& value);
 
-    // =========================================================================
-    // State Management
-    // =========================================================================
-    
-    bool IsDirty() const { return _uniformsDirty; }
-    void ClearDirty() { _uniformsDirty = false; }
-
     // Clone this material (creates a copy with same shader but independent uniforms)
     std::unique_ptr<Material> Clone() const;
+
+    void UpdateConstantBufferData();
 
 private:
     Material();
 
     void SetUniformInternal(const std::string& name, const UniformValue& value);
-    void UpdateConstantBufferData();
 
     std::shared_ptr<ShaderProgram> _program;
     
     // Uniform storage
     std::unordered_map<std::string, UniformValue> _uniformValues;
     std::vector<std::byte> _constantBufferData;  // Packed data for GPU upload
-    bool _uniformsDirty = true;
+    bool _uniformsDirty = true;                  // true when _uniformValues changed and packing is needed
     
     // Texture slots
     std::vector<TextureSlot> _textureSlots;

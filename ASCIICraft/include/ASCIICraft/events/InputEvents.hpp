@@ -22,4 +22,8 @@ struct PrimaryActionPressedEvent {};
 /// Only emitted when not blocking. PlacingSystem consumes for place block.
 struct SecondaryActionPressedEvent {};
 
+/// Emitted when the player presses the key bound to toggling game mode (currently hard-wired to P).
+/// MovementSystem consumes this to toggle between Survival and Spectator.
+struct SwitchGameModeEvent {};
+
 } // namespace events

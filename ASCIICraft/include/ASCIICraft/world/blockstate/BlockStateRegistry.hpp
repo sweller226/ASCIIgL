@@ -29,7 +29,7 @@ public:
     uint16_t RegisterType(
         const std::string& name,
         std::vector<BlockProperty> properties = {},
-        bool hasBlockEntity = false
+        bool isBlockEntity = false
     );
 
     /// Set derived data (textures, solidity, etc.) for all states of a type.
