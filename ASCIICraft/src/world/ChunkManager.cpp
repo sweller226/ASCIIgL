@@ -39,6 +39,7 @@ ChunkManager::ChunkManager(entt::registry& registry, const unsigned int chunkWor
     regionManager = std::make_unique<RegionManager>();
     chunkJobQueue = std::make_unique<ChunkJobQueue>(registry);
     chunkJobQueue->SetTerrainGenerator(&terrainGenerator);
+    chunkJobQueue->SetBlockModelLibrary(&blockModelLibrary_);
     chunkJobQueue->SetMaxDrainPerFrame(static_cast<size_t>(MAX_QUEUES_PER_FRAME));
     chunkJobQueue->SetMaxDrainMeshPerFrame(static_cast<size_t>(MAX_MESH_APPLIES_PER_FRAME));
     chunkJobQueue->SetUnloadSaveCallback([this](Chunk* c, ChunkCoord coord, const MetaBucket* meta, bool closeRegionAfterSave, std::shared_ptr<RegionFile> region) {
@@ -526,7 +527,7 @@ void ChunkManager::RebuildChunkMeshImmediate(Chunk* c) {
         }
     }
 
-    ChunkMeshData data = BuildChunkMeshData(coord, chunkBlocks.data(), ptrs, bsr);
+    ChunkMeshData data = BuildChunkMeshData(coord, chunkBlocks.data(), ptrs, bsr, &blockModelLibrary_);
     c->ApplyMeshData(std::move(data), texArray);
 }
 

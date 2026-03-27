@@ -58,40 +58,6 @@ void Chunk::SetBlockStateByIndex(int i, uint32_t stateId) {
     if (0 <= i && i < VOLUME) { blocks[i] = stateId; }
 }
 
-    // Mesh generation (uses shared BuildChunkMeshData from ChunkMeshGen)
-void Chunk::GenerateMesh(const blockstate::BlockStateRegistry& bsr) {
-    if (!generated) return;
-
-    auto blockTexturesPtr = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
-    if (!blockTexturesPtr || !blockTexturesPtr->IsValid()) {
-        ASCIIgL::Logger::Warning("No texture array available for chunk mesh generation");
-        return;
-    }
-    ASCIIgL::TextureArray* blockTextures = blockTexturesPtr.get();
-
-    // Copy block data for shared mesh builder (chunk + neighbors)
-    std::vector<uint32_t> chunkBlocksCopy(VOLUME);
-    for (int i = 0; i < VOLUME; ++i)
-        chunkBlocksCopy[i] = GetBlockStateByIndex(i);
-
-    std::array<std::vector<uint32_t>, 6> neighborCopies;
-    std::array<const uint32_t*, 6> neighborBlocks{};
-    for (int i = 0; i < 6; ++i) {
-        Chunk* n = GetNeighbor(i);
-        if (n && n->IsGenerated()) {
-            neighborCopies[i].resize(VOLUME);
-            for (int j = 0; j < VOLUME; ++j)
-                neighborCopies[i][j] = n->GetBlockStateByIndex(j);
-            neighborBlocks[i] = neighborCopies[i].data();
-        } else {
-            neighborBlocks[i] = nullptr;
-        }
-    }
-
-    ChunkMeshData meshData = BuildChunkMeshData(coord, chunkBlocksCopy.data(), neighborBlocks, &bsr);
-    ApplyMeshData(std::move(meshData), blockTextures);
-}
-
 void Chunk::ApplyMeshData(ChunkMeshData&& data, ASCIIgL::TextureArray* blockTextures) {
     if (!blockTextures || !blockTextures->IsValid()) return;
 

@@ -1,11 +1,11 @@
 #pragma once
 
 #include <ASCIICraft/world/Coords.hpp>
-#include <ASCIICraft/world/blockstate/BlockFace.hpp>
+#include <ASCIICraft/world/blockstate/FaceDir.hpp>
 
 // Deterministic pseudo-random facing based on world position and seed.
-// Returns one of: BlockFace::North / South / East / West.
-inline BlockFace GetGrassFacingForPosition(int x, int y, int z, uint32_t seed = 0) {
+// Returns one of: FaceDir::North / South / East / West.
+inline FaceDir GetGrassFacingForPosition(int x, int y, int z, uint32_t seed = 0) {
     // Simple 32-bit hash of integer coordinates + seed (handles negatives via wraparound).
     auto hashCoord = [](int v) {
         return static_cast<uint32_t>(v * 73856093);
@@ -17,13 +17,13 @@ inline BlockFace GetGrassFacingForPosition(int x, int y, int z, uint32_t seed = 
     h ^= hashCoord(y); h *= 16777619u;
     h ^= hashCoord(z); h *= 16777619u;
 
-    static constexpr BlockFace FACES[4] = {
-        BlockFace::North, BlockFace::South, BlockFace::East, BlockFace::West
+    static constexpr FaceDir FACES[4] = {
+        FaceDir::North, FaceDir::South, FaceDir::East, FaceDir::West
     };
     return FACES[h & 3u];
 }
 
-inline BlockFace GetGrassFacingForPosition(const WorldCoord& pos, uint32_t seed = 0) {
+inline FaceDir GetGrassFacingForPosition(const WorldCoord& pos, uint32_t seed = 0) {
     return GetGrassFacingForPosition(pos.x, pos.y, pos.z, seed);
 }
 

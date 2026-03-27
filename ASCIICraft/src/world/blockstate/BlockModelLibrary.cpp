@@ -1,6 +1,5 @@
 #include <ASCIICraft/world/blockstate/BlockModelLibrary.hpp>
-
-#include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/blockstate/CubeModelBuilder.hpp>
 
 #include <cstddef>
 #include <mutex>
@@ -80,6 +79,22 @@ void BlockModelLibrary::RegisterModel(uint32_t stateId, std::shared_ptr<const Bl
 
     bucket.push_back(model);
     modelsByState_[stateId] = std::move(model);
+}
+
+void BlockModelLibrary::RegisterModel(uint16_t typeId, std::shared_ptr<const BlockModel> model, const BlockStateRegistry& bsr) {
+    const BlockType& type = bsr.GetType(typeId);
+    const uint32_t base = type.baseStateId;
+    const uint32_t count = type.stateCount;
+
+    // Register the same shared model pointer for every state in this type.
+    for (uint32_t i = 0; i < count; ++i) {
+        RegisterModel(base + i, model);
+    }
+}
+
+void BlockModelLibrary::RegisterCubeModel(uint16_t typeId, const CubeSpec& spec, const BlockStateRegistry& bsr) {
+    auto model = std::make_shared<const BlockModel>(BuildCubeModel(spec));
+    RegisterModel(typeId, std::move(model), bsr);
 }
 
 } // namespace blockstate

@@ -2,6 +2,7 @@
 
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/blockstate/BlockModelLibrary.hpp>
 
 #include <array>
 #include <vector>
@@ -30,5 +31,6 @@ ChunkMeshData BuildChunkMeshData(
     ChunkCoord coord,
     const uint32_t* chunkBlocks,
     const std::array<const uint32_t*, 6>& neighborBlocks,
-    const blockstate::BlockStateRegistry* bsr
+    const blockstate::BlockStateRegistry* bsr,
+    const blockstate::BlockModelLibrary* modelLibrary
 );

@@ -1,25 +1,28 @@
 #include <ASCIICraft/world/ChunkMeshGen.hpp>
-#include <ASCIICraft/world/blockstate/BlockFace.hpp>
 
 #include <array>
 #include <vector>
-#include <algorithm>
-#include <numeric>
+#include <cstdint>
+#include <cstring>
+#include <unordered_set>
+#include <mutex>
 
 #include <glm/glm.hpp>
 
 #include <ASCIIgL/renderer/VertFormat.hpp>
+#include <ASCIIgL/util/Logger.hpp>
+
+#include <ASCIICraft/world/blockstate/BlockState.hpp>
 
 namespace {
 
 static constexpr int SIZE = CHUNK_SIZE;
+static constexpr int FACE_COUNT = 6;
+static std::mutex g_missingModelWarnMutex;
+static std::unordered_set<uint32_t> g_missingModelWarnedStateIds;
 
 static int GetBlockIndex(int x, int y, int z) {
     return x + y * SIZE + z * SIZE * SIZE;
-}
-
-static float TestFaceLightConstant() {
-    return 1.0f;
 }
 
 static bool IsValidBlockCoord(int x, int y, int z) {
@@ -29,11 +32,9 @@ static bool IsValidBlockCoord(int x, int y, int z) {
 static uint32_t GetBlockStateAt(
     int x, int y, int z,
     const uint32_t* chunkBlocks,
-    const std::array<const uint32_t*, 6>& neighborBlocks,
-    int* outNeighborDir, int* outLocalX, int* outLocalY, int* outLocalZ
+    const std::array<const uint32_t*, 6>& neighborBlocks
 ) {
     if (IsValidBlockCoord(x, y, z)) {
-        if (outNeighborDir) *outNeighborDir = -1;
         return chunkBlocks[GetBlockIndex(x, y, z)];
     }
     int neighborChunkDir = -1;
@@ -57,14 +58,175 @@ static uint32_t GetBlockStateAt(
         neighborChunkDir = 2;
         localZ = 0;
     }
-    if (outNeighborDir) *outNeighborDir = neighborChunkDir;
-    if (outLocalX) *outLocalX = localX;
-    if (outLocalY) *outLocalY = localY;
-    if (outLocalZ) *outLocalZ = localZ;
     if (neighborChunkDir >= 0 && neighborBlocks[neighborChunkDir]) {
         return neighborBlocks[neighborChunkDir][GetBlockIndex(localX, localY, localZ)];
     }
     return blockstate::BlockStateRegistry::AIR_STATE_ID;
+}
+
+// Helpers for BlockModelLibrary-based meshing.
+
+static std::array<bool, FACE_COUNT> ComputeVisibleFaces(
+    int x, int y, int z,
+    const blockstate::BlockState& state,
+    const uint32_t* chunkBlocks,
+    const std::array<const uint32_t*, FACE_COUNT>& neighborBlocks,
+    const blockstate::BlockStateRegistry& bsr,
+    const blockstate::BlockModelLibrary* modelLibrary
+) {
+    std::array<bool, FACE_COUNT> visible{};
+    visible.fill(false);
+
+    for (int face = 0; face < FACE_COUNT; ++face) {
+        int neighborX = x, neighborY = y, neighborZ = z;
+        switch (face) {
+            case 0: neighborY++; break;
+            case 1: neighborY--; break;
+            case 2: neighborZ++; break;
+            case 3: neighborZ--; break;
+            case 4: neighborX++; break;
+            case 5: neighborX--; break;
+        }
+
+        uint32_t neighborStateId = GetBlockStateAt(
+            neighborX, neighborY, neighborZ,
+            chunkBlocks, neighborBlocks
+        );
+
+        const auto& neighborState = bsr.GetState(neighborStateId);
+        const blockstate::BlockModel* neighborModel = nullptr;
+        if (modelLibrary) {
+            auto neighborModelPtr = modelLibrary->GetModel(neighborStateId, bsr);
+            neighborModel = neighborModelPtr.get();
+        }
+        const bool neighborIsFullBlock = (neighborModel && neighborModel->fullBlock);
+
+        const bool baseNeighborOccludes =
+            (neighborState.isRenderable && neighborState.renderMode == blockstate::RenderMode::Opaque) ||
+            (state.cullSameType && neighborState.typeId == state.typeId);
+        const bool neighborOccludes = baseNeighborOccludes && neighborIsFullBlock;
+
+        visible[face] = !neighborOccludes;
+    }
+
+    return visible;
+}
+
+static void AppendTranslatedVerts_PosUVLayerLight(
+    std::vector<std::byte>& dst,
+    const std::vector<std::byte>& src,
+    const glm::vec3& worldOffset
+) {
+    using V = ASCIIgL::VertStructs::PosUVLayerLight;
+    if (src.empty()) return;
+    if (src.size() % sizeof(V) != 0) return; // invalid, ignore
+
+    const size_t vertCount = src.size() / sizeof(V);
+    const size_t oldSize = dst.size();
+    dst.resize(oldSize + src.size());
+
+    const auto* srcVerts = reinterpret_cast<const V*>(src.data());
+    auto* dstVerts = reinterpret_cast<V*>(dst.data() + oldSize);
+
+    for (size_t i = 0; i < vertCount; ++i) {
+        V v = srcVerts[i];
+        glm::vec3 p = v.GetXYZ();
+        p += worldOffset;
+        v.SetXYZ(p);
+        dstVerts[i] = v;
+    }
+}
+
+static void AppendIndicesRebased(
+    std::vector<int>& dst,
+    const std::vector<int>& src,
+    int baseVertex
+) {
+    dst.reserve(dst.size() + src.size());
+    for (int idx : src) dst.push_back(baseVertex + idx);
+}
+
+static void AppendBlockFace(
+    std::vector<std::byte>& dstVerts,
+    std::vector<int>& dstIndices,
+    const std::vector<std::byte>& modelVerts,
+    const std::vector<int>& modelIndices,
+    int vertStart,
+    int idxStart,
+    const glm::vec3& worldOffset
+) {
+    using V = ASCIIgL::VertStructs::PosUVLayerLight;
+    constexpr int kVertsPerFace = 4;
+    constexpr int kIndicesPerFace = 6;
+
+    if (modelVerts.size() % sizeof(V) != 0) return;
+    if (vertStart < 0 || idxStart < 0) return;
+
+    const int srcVertCount = static_cast<int>(modelVerts.size() / sizeof(V));
+    const int srcIndexCount = static_cast<int>(modelIndices.size());
+    if (vertStart + kVertsPerFace > srcVertCount) return;
+    if (idxStart + kIndicesPerFace > srcIndexCount) return;
+
+    const int baseVertex = static_cast<int>(dstVerts.size() / sizeof(V));
+
+    // Append vertex slice with world translation.
+    std::vector<std::byte> sliceBytes(sizeof(V) * static_cast<size_t>(kVertsPerFace));
+    std::memcpy(sliceBytes.data(),
+                modelVerts.data() + (static_cast<size_t>(vertStart) * sizeof(V)),
+                sizeof(V) * static_cast<size_t>(kVertsPerFace));
+    AppendTranslatedVerts_PosUVLayerLight(dstVerts, sliceBytes, worldOffset);
+
+    // Append indices rebased to dst, remapping into appended vertex slice.
+    for (int i = 0; i < kIndicesPerFace; ++i) {
+        const int localIdx = modelIndices[idxStart + i] - vertStart;
+        dstIndices.push_back(baseVertex + localIdx);
+    }
+}
+
+static void AppendBlock(
+    std::vector<std::byte>& dstVerts,
+    std::vector<int>& dstIndices,
+    const std::vector<std::byte>& modelVerts,
+    const std::vector<int>& modelIndices,
+    const glm::vec3& worldOffset,
+    const std::array<bool, FACE_COUNT> &visibleFaces
+) {
+    if (modelVerts.empty() || modelIndices.empty()) return;
+
+    for (int face = 0; face < 6; ++face) {
+        if (!visibleFaces[face]) continue;
+
+        constexpr int kVertsPerFace = 4; // current cube mapping at callsite (not in helper)
+        constexpr int kIndicesPerFace = 6;
+        const int faceVertStart = face * kVertsPerFace;
+        const int faceIdxStart = face * kIndicesPerFace;
+
+        AppendBlockFace(
+            dstVerts,
+            dstIndices,
+            modelVerts,
+            modelIndices,
+            faceVertStart,
+            faceIdxStart,
+            worldOffset
+        );
+    }
+}
+
+static void AppendModel(
+    std::vector<std::byte>& dstVerts,
+    std::vector<int>& dstIndices,
+    const std::vector<std::byte>& modelVerts,
+    const std::vector<int>& modelIndices,
+    const glm::vec3& worldOffset
+) {
+    using V = ASCIIgL::VertStructs::PosUVLayerLight;
+    if (modelVerts.empty() || modelIndices.empty()) return;
+    if (modelVerts.size() % sizeof(V) != 0) return;
+
+    const int baseVertex = static_cast<int>(dstVerts.size() / sizeof(V));
+    AppendTranslatedVerts_PosUVLayerLight(dstVerts, modelVerts, worldOffset);
+    AppendIndicesRebased(dstIndices, modelIndices, baseVertex);
 }
 
 } // namespace
@@ -73,160 +235,85 @@ ChunkMeshData BuildChunkMeshData(
     ChunkCoord coord,
     const uint32_t* chunkBlocks,
     const std::array<const uint32_t*, 6>& neighborBlocks,
-    const blockstate::BlockStateRegistry* bsr
+    const blockstate::BlockStateRegistry* bsr,
+    const blockstate::BlockModelLibrary* modelLibrary
 ) {
     ChunkMeshData out;
-    if (!chunkBlocks || !bsr) return out;
-
-    std::vector<std::byte>& verticesOpaque = out.opaqueVertices;
-    std::vector<int>& indicesOpaque = out.opaqueIndices;
-
-    struct TransparentFace {
-        int x, y, z;
-        int faceIndex;
-        int textureLayer;
-        uint8_t blockFacing;
-    };
-    std::vector<TransparentFace> transparentFaces;
-
-    const glm::vec3 faceVerticesIndexed[6][4] = {
-        { glm::vec3(0, 1, 0), glm::vec3(0, 1, 1), glm::vec3(1, 1, 1), glm::vec3(1, 1, 0) },
-        { glm::vec3(0, 0, 1), glm::vec3(0, 0, 0), glm::vec3(1, 0, 0), glm::vec3(1, 0, 1) },
-        { glm::vec3(0, 0, 1), glm::vec3(1, 0, 1), glm::vec3(1, 1, 1), glm::vec3(0, 1, 1) },
-        { glm::vec3(1, 0, 0), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0), glm::vec3(1, 1, 0) },
-        { glm::vec3(1, 0, 1), glm::vec3(1, 0, 0), glm::vec3(1, 1, 0), glm::vec3(1, 1, 1) },
-        { glm::vec3(0, 0, 0), glm::vec3(0, 0, 1), glm::vec3(0, 1, 1), glm::vec3(0, 1, 0) }
-    };
-    const glm::vec2 faceUVsIndexed[4] = {
-        glm::vec2(0, 0), glm::vec2(1, 0), glm::vec2(1, 1), glm::vec2(0, 1)
-    };
-    const int faceIndices[6] = { 0, 1, 2, 0, 2, 3 };
-
-    // Directional light multipliers.
-    const unsigned int stride = static_cast<unsigned int>(ASCIIgL::VertFormats::PosUVLayerLight().GetStride());
+    if (!chunkBlocks || !bsr || !modelLibrary) return out;
 
     for (int x = 0; x < SIZE; ++x) {
         for (int y = 0; y < SIZE; ++y) {
             for (int z = 0; z < SIZE; ++z) {
                 uint32_t stateId = chunkBlocks[GetBlockIndex(x, y, z)];
-                const auto& state = bsr->GetState(stateId);
-                if (!state.isSolid) continue;
+                const BlockState& state = bsr->GetState(stateId);
+                if (!state.isRenderable) continue;
 
                 const bool blockIsTranslucent = (state.renderMode == blockstate::RenderMode::Translucent);
-                BlockFace blockFacing = StringToBlockFace(bsr->GetPropertyValue(stateId, "facing"));
 
-                for (int face = 0; face < 6; ++face) {
-                    int neighborX = x, neighborY = y, neighborZ = z;
-                    switch (face) {
-                        case 0: neighborY++; break;
-                        case 1: neighborY--; break;
-                        case 2: neighborZ++; break;
-                        case 3: neighborZ--; break;
-                        case 4: neighborX++; break;
-                        case 5: neighborX--; break;
+                blockstate::BlockModelLibrary::ModelPtr modelPtr = modelLibrary->GetModel(stateId, *bsr);
+                const blockstate::BlockModel* model = modelPtr.get();
+                if (!model) {
+                    std::lock_guard<std::mutex> lock(g_missingModelWarnMutex);
+                    if (g_missingModelWarnedStateIds.insert(stateId).second) {
+                        ASCIIgL::Logger::Warningf(
+                            "BuildChunkMeshData: missing BlockModel for stateId=%u. Skipping block.",
+                            static_cast<unsigned>(stateId)
+                        );
                     }
+                    continue;
+                }
+                const glm::vec3 worldOffset(
+                    static_cast<float>(coord.x * SIZE + x),
+                    static_cast<float>(coord.y * SIZE + y),
+                    static_cast<float>(coord.z * SIZE + z)
+                );
+                
 
-                    int neighborDir = -1, localX, localY, localZ;
-                    uint32_t neighborStateId = GetBlockStateAt(
-                        neighborX, neighborY, neighborZ,
-                        chunkBlocks, neighborBlocks,
-                        &neighborDir, &localX, &localY, &localZ
+                if (model->fullBlock) {
+                    const std::array<bool, FACE_COUNT> visibleFaces = ComputeVisibleFaces(
+                        x, y, z, state, chunkBlocks, neighborBlocks, *bsr, modelLibrary
                     );
-                    const auto& neighborState = bsr->GetState(neighborStateId);
-                    bool neighborOccludes =
-                        (neighborState.isSolid &&
-                         neighborState.renderMode == blockstate::RenderMode::Opaque) ||
-                        (state.cullSameType && neighborState.typeId == state.typeId);
-                    bool shouldRenderFace = !neighborOccludes;
-
-                    if (!shouldRenderFace) continue;
-
-                    int textureLayer = state.faceTextureLayers[face];
 
                     if (blockIsTranslucent) {
-                        transparentFaces.push_back({
-                            x, y, z,
-                            face,
-                            textureLayer,
-                            static_cast<uint8_t>(blockFacing)
-                        });
+                        AppendBlock(
+                            out.transparentVertices,
+                            out.transparentIndices,
+                            model->transparentVertices,
+                            model->transparentIndices,
+                            worldOffset,
+                            visibleFaces
+                        );
+                        
                     } else {
-                        const int baseVertexIndex = static_cast<int>(verticesOpaque.size()) / static_cast<int>(stride);
-                        const int blockWorldX = coord.x * SIZE + x;
-                        const int blockWorldY = coord.y * SIZE + y;
-                        const int blockWorldZ = coord.z * SIZE + z;
-                        const float light = TestFaceLightConstant();
-                        for (int vertIdx = 0; vertIdx < 4; ++vertIdx) {
-                            glm::vec3 worldCoord = glm::vec3(
-                                blockWorldX,
-                                blockWorldY,
-                                blockWorldZ
-                            ) + faceVerticesIndexed[face][vertIdx];
-                            glm::vec2 faceUV = faceUVsIndexed[vertIdx];
-                            if (face == 0 || face == 1)
-                                faceUV = RotateTopBottomUV(faceUV, blockFacing);
-                            float u = faceUV.x;
-                            float v = 1.0f - faceUV.y;
-                            ASCIIgL::VertStructs::PosUVLayerLight vertex = {};
-                            vertex.SetXYZ(worldCoord);
-                            vertex.SetUV(glm::vec2(u, v));
-                            vertex.SetLayer(static_cast<float>(textureLayer));
-                            vertex.SetLight(light);
-                            const std::byte* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
-                            verticesOpaque.insert(verticesOpaque.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUVLayerLight));
-                        }
-                        for (int i = 0; i < 6; ++i)
-                            indicesOpaque.push_back(baseVertexIndex + faceIndices[i]);
+                        AppendBlock(
+                            out.opaqueVertices,
+                            out.opaqueIndices,
+                            model->opaqueVertices,
+                            model->opaqueIndices,
+                            worldOffset,
+                            visibleFaces
+                        );
+                    }
+                } else {
+                    if (blockIsTranslucent) {
+                        AppendModel(
+                            out.transparentVertices,
+                            out.transparentIndices,
+                            model->transparentVertices,
+                            model->transparentIndices,
+                            worldOffset
+                        );
+                    } else {
+                        AppendModel(
+                            out.opaqueVertices,
+                            out.opaqueIndices,
+                            model->opaqueVertices,
+                            model->opaqueIndices,
+                            worldOffset
+                        );
                     }
                 }
             }
-        }
-    }
-
-    if (!transparentFaces.empty()) {
-        std::vector<size_t> order(transparentFaces.size());
-        std::iota(order.begin(), order.end(), 0);
-        const glm::vec3 D(0.0f, 0.0f, 1.0f);
-        std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
-            const auto& fa = transparentFaces[a];
-            const auto& fb = transparentFaces[b];
-            float da = (coord.x * SIZE + fa.x + 0.5f) * D.x + (coord.y * SIZE + fa.y + 0.5f) * D.y + (coord.z * SIZE + fa.z + 0.5f) * D.z;
-            float db = (coord.x * SIZE + fb.x + 0.5f) * D.x + (coord.y * SIZE + fb.y + 0.5f) * D.y + (coord.z * SIZE + fb.z + 0.5f) * D.z;
-            return da > db;
-        });
-
-        for (size_t idx : order) {
-            const auto& tf = transparentFaces[idx];
-            int face = tf.faceIndex;
-            int textureLayer = tf.textureLayer;
-            BlockFace bf = static_cast<BlockFace>(tf.blockFacing);
-            int baseVertexIndex = static_cast<int>(out.transparentVertices.size()) / static_cast<int>(stride);
-            const int blockWorldX = coord.x * SIZE + tf.x;
-            const int blockWorldY = coord.y * SIZE + tf.y;
-            const int blockWorldZ = coord.z * SIZE + tf.z;
-            const float light = TestFaceLightConstant();
-
-            for (int vertIdx = 0; vertIdx < 4; ++vertIdx) {
-                glm::vec3 worldCoord = glm::vec3(
-                    blockWorldX,
-                    blockWorldY,
-                    blockWorldZ
-                ) + faceVerticesIndexed[face][vertIdx];
-                glm::vec2 faceUV = faceUVsIndexed[vertIdx];
-                if (face == 0 || face == 1)
-                    faceUV = RotateTopBottomUV(faceUV, bf);
-                float u = faceUV.x;
-                float v = 1.0f - faceUV.y;
-                ASCIIgL::VertStructs::PosUVLayerLight vertex = {};
-                vertex.SetXYZ(worldCoord);
-                vertex.SetUV(glm::vec2(u, v));
-                vertex.SetLayer(static_cast<float>(textureLayer));
-                vertex.SetLight(light);
-                const std::byte* vertexBytes = reinterpret_cast<const std::byte*>(&vertex);
-                out.transparentVertices.insert(out.transparentVertices.end(), vertexBytes, vertexBytes + sizeof(ASCIIgL::VertStructs::PosUVLayerLight));
-            }
-            for (int i = 0; i < 6; ++i)
-                out.transparentIndices.push_back(baseVertexIndex + faceIndices[i]);
         }
     }
 

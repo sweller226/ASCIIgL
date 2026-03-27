@@ -7,7 +7,7 @@
 #include <ASCIIgL/renderer/VertFormat.hpp>
 
 #include <ASCIICraft/world/blockstate/BlockState.hpp>
-#include <ASCIICraft/world/blockstate/BlockFace.hpp>
+#include <ASCIICraft/world/blockstate/FaceDir.hpp>
 
 #include <glm/glm.hpp>
 
@@ -165,7 +165,7 @@ std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetBlockMeshFromState(const blockstate
     std::vector<V> vertices;
     std::vector<int> indices;
 
-    auto pushFace = [&](BlockFace face,
+    auto pushFace = [&](FaceDir face,
                         const glm::vec3& v0,
                         const glm::vec3& v1,
                         const glm::vec3& v2,
@@ -206,17 +206,17 @@ std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetBlockMeshFromState(const blockstate
     glm::vec3 p111( 1,  1,  1);
 
     // Top (+Y)
-    pushFace(BlockFace::Top,    p011, p111, p110, p010);
+    pushFace(FaceDir::Top,    p011, p111, p110, p010);
     // Bottom (-Y)
-    pushFace(BlockFace::Bottom, p001, p000, p100, p101);
+    pushFace(FaceDir::Bottom, p001, p000, p100, p101);
     // North (+Z)
-    pushFace(BlockFace::North,  p001, p011, p111, p101);
+    pushFace(FaceDir::North,  p001, p011, p111, p101);
     // South (-Z)
-    pushFace(BlockFace::South,  p100, p110, p010, p000);
+    pushFace(FaceDir::South,  p100, p110, p010, p000);
     // East (+X)
-    pushFace(BlockFace::East,   p101, p111, p110, p100);
+    pushFace(FaceDir::East,   p101, p111, p110, p100);
     // West (-X)
-    pushFace(BlockFace::West,   p000, p010, p011, p001);
+    pushFace(FaceDir::West,   p000, p010, p011, p001);
 
     std::vector<std::byte> byteVertices(
         reinterpret_cast<std::byte*>(vertices.data()),

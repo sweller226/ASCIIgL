@@ -62,11 +62,12 @@ void ChunkJobQueue::EnqueueMeshGen(Chunk* chunk) {
         }
     }
 
-    taskGroup_.run([this, coord, chunkCopy, neighborCopies, bsr]() {
+    blockstate::BlockModelLibrary* modelLib = blockModelLibrary_;
+    taskGroup_.run([this, coord, chunkCopy, neighborCopies, bsr, modelLib]() {
         std::array<const uint32_t*, 6> ptrs{};
         for (int i = 0; i < 6; ++i)
             ptrs[i] = (*neighborCopies)[i].empty() ? nullptr : (*neighborCopies)[i].data();
-        ChunkMeshData data = BuildChunkMeshData(coord, chunkCopy->data(), ptrs, bsr);
+        ChunkMeshData data = BuildChunkMeshData(coord, chunkCopy->data(), ptrs, bsr, modelLib);
         completedMeshQueue_.push(CompletedMeshResult{ coord, std::move(data) });
     });
 }

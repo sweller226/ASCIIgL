@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
-#include <ASCIICraft/world/blockstate/BlockFace.hpp>
+#include <ASCIICraft/world/blockstate/FaceDir.hpp>
 #include <ASCIICraft/world/blockplacement/GrassOrientation.hpp>
 
 /// Context in which a block is being placed, determines placement behavior.
@@ -29,7 +29,7 @@ inline uint32_t GetFinalizedBlockStateForPlacement(
     
     // Grass blocks: apply orientation based on context
     if (type.name == "minecraft:grass") {
-        BlockFace facing;
+        FaceDir facing;
         
         switch (context) {
             case PlacementContext::TerrainGeneration:
@@ -45,7 +45,7 @@ inline uint32_t GetFinalizedBlockStateForPlacement(
                 
             case PlacementContext::StructureGeneration:
                 // Default to north for structures (or could be configurable)
-                facing = BlockFace::North;
+                facing = FaceDir::North;
                 break;
                 
             case PlacementContext::BlockUpdate:
@@ -53,7 +53,7 @@ inline uint32_t GetFinalizedBlockStateForPlacement(
                 return stateId;
         }
         
-        stateId = bsr.WithProperty(stateId, "facing", BlockFaceToString(facing));
+        stateId = bsr.WithProperty(stateId, "facing", FaceDirToString(facing));
     }
     
     // Future: Add other block-specific placement logic here

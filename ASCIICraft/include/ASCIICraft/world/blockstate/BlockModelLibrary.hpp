@@ -6,19 +6,17 @@
 #include <unordered_map>
 #include <vector>
 
+#include <ASCIICraft/world/blockstate/BlockModel.hpp>
+#include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
+
 namespace blockstate {
     struct BlockState;
+    struct CubeSpec;
     class BlockStateRegistry;
 
     // Mesh data already in the engine's expected vertex representation:
     // - vertices are raw bytes for a specific vertex format (PosUVLayerLight in your current pipeline)
     // - indices reference the local vertex array
-    struct BlockModel {
-        std::vector<std::byte> opaqueVertices;
-        std::vector<int> opaqueIndices;
-        std::vector<std::byte> transparentVertices;
-        std::vector<int> transparentIndices;
-    };
 
     // Cache of block-local models keyed by flattened stateId.
     // Chunk mesh generation can translate/append this geometry into chunk buffers.
@@ -32,6 +30,10 @@ namespace blockstate {
 
         // Explicitly register a model for a specific stateId.
         void RegisterModel(uint32_t stateId, std::shared_ptr<const BlockModel> model);
+        // Explicitly register one shared model for every state in a type.
+        void RegisterModel(uint16_t typeId, std::shared_ptr<const BlockModel> model, const BlockStateRegistry& bsr);
+        // Convenience: build a cube model from spec, then register it for all states in a type.
+        void RegisterCubeModel(uint16_t typeId, const CubeSpec& spec, const BlockStateRegistry& bsr);
 
     private:
         // stateId -> shared model pointer (fast path)
