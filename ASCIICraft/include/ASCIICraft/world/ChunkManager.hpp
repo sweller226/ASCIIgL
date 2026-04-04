@@ -10,7 +10,6 @@
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/TerrainGenerator.hpp>
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
-#include <ASCIICraft/world/blockstate/BlockModelLibrary.hpp>
 
 #include <entt/entt.hpp>
 
@@ -58,8 +57,6 @@ public:
     void SetRenderDistance(unsigned int distance);
     unsigned int GetRenderDistance() const { return renderDistance; }
     unsigned int GetChunkLoadDistance() const { return loadDistance; }
-    blockstate::BlockModelLibrary& GetBlockModelLibrary() { return blockModelLibrary_; }
-    const blockstate::BlockModelLibrary& GetBlockModelLibrary() const { return blockModelLibrary_; }
 
     // Fog (used in RenderChunks; start/end are tied to render distance)
     void SetFogParams(const ChunkManagerFogParams& p) { fogParams_ = p; }
@@ -88,7 +85,6 @@ private:
 
     // Terrain generation
     TerrainGenerator terrainGenerator;
-    blockstate::BlockModelLibrary blockModelLibrary_;
 
     // Chunk job queue (terrain + mesh on worker threads)
     std::unique_ptr<ChunkJobQueue> chunkJobQueue;

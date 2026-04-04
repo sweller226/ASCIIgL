@@ -21,7 +21,6 @@
 #include <oneapi/tbb/concurrent_queue.h>
 
 class TerrainGenerator;
-namespace blockstate { class BlockModelLibrary; }
 
 /// Result pushed when a mesh job finishes.
 struct CompletedMeshResult {
@@ -55,8 +54,6 @@ public:
     /// Set the terrain generator used by EnqueueTerrainGen. Must be set before enqueueing terrain jobs.
     void SetTerrainGenerator(TerrainGenerator* gen) { terrainGenerator_ = gen; }
     TerrainGenerator* GetTerrainGenerator() const { return terrainGenerator_; }
-    void SetBlockModelLibrary(blockstate::BlockModelLibrary* lib) { blockModelLibrary_ = lib; }
-    blockstate::BlockModelLibrary* GetBlockModelLibrary() const { return blockModelLibrary_; }
 
     void EnqueueTerrainGen(Chunk* chunk);
     void EnqueueMeshGen(Chunk* chunk);
@@ -83,7 +80,6 @@ public:
 private:
     entt::registry& registry_;
     TerrainGenerator* terrainGenerator_ = nullptr;
-    blockstate::BlockModelLibrary* blockModelLibrary_ = nullptr;
     UnloadSaveCallback unloadSaveCallback_;
 
     oneapi::tbb::task_group taskGroup_;

@@ -43,8 +43,10 @@ public:
     // ========================================================================
 
     const BlockState& GetState(uint32_t stateId) const;
-    const BlockType&  GetType(uint16_t typeId) const;
+    BlockState& GetStateMutable(uint32_t stateId);
 
+    const BlockType&  GetType(uint16_t typeId) const;
+    
     uint16_t GetTypeId(const std::string& name) const;
     uint32_t GetDefaultState(uint16_t typeId) const;
     uint32_t GetDefaultState(const std::string& name) const;

@@ -134,7 +134,7 @@ inline std::vector<std::byte> PackVerts(const std::vector<V>& in) {
 
 BlockModel BuildCubeModel(const CubeSpec& spec) {
     BlockModel out;
-    out.fullBlock = true;
+    out.isFullBlock = true;
 
     std::vector<V> verts;
     std::vector<int> indices;

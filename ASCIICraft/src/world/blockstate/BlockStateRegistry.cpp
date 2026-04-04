@@ -76,6 +76,11 @@ const BlockState& BlockStateRegistry::GetState(uint32_t stateId) const {
     return states[stateId];
 }
 
+BlockState& BlockStateRegistry::GetStateMutable(uint32_t stateId) {
+    assert(stateId < states.size() && "Invalid stateId");
+    return states[stateId];
+}
+
 const BlockType& BlockStateRegistry::GetType(uint16_t typeId) const {
     assert(typeId < types.size() && "Invalid typeId");
     return types[typeId];

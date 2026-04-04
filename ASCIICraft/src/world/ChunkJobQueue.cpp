@@ -1,14 +1,17 @@
 #include <ASCIICraft/world/ChunkJobQueue.hpp>
-#include <ASCIICraft/world/Chunk.hpp>
-#include <ASCIICraft/world/ChunkMeshGen.hpp>
-#include <ASCIICraft/world/TerrainGenerator.hpp>
 
 #include <algorithm>
 #include <array>
 #include <vector>
 #include <cstring>
 
+#include <ASCIICraft/world/Chunk.hpp>
+#include <ASCIICraft/world/ChunkMeshGen.hpp>
+#include <ASCIICraft/world/TerrainGenerator.hpp>
+
 #include <entt/entt.hpp>
+
+#include <ASCIIgL/util/Logger.hpp>
 
 namespace {
 
@@ -62,7 +65,12 @@ void ChunkJobQueue::EnqueueMeshGen(Chunk* chunk) {
         }
     }
 
-    blockstate::BlockModelLibrary* modelLib = blockModelLibrary_;
+    auto* modelLib = registry_.ctx().find<blockstate::BlockModelLibrary>();
+    if (!modelLib) {
+        ASCIIgL::Logger::Warning("EnqueueMeshGen: BlockModelLibrary not found in context.");
+        return;
+    }
+
     taskGroup_.run([this, coord, chunkCopy, neighborCopies, bsr, modelLib]() {
         std::array<const uint32_t*, 6> ptrs{};
         for (int i = 0; i < 6; ++i)

@@ -159,76 +159,78 @@ std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetQuadItemMesh(int layer)
 }
 
 std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetBlockMeshFromState(const blockstate::BlockState& state) {
-    using V = ASCIIgL::VertStructs::PosUVLayerLight;
-    const float fullBright = 1.0f; // Item/block meshes (hand, inventory) use full bright
+    // using V = ASCIIgL::VertStructs::PosUVLayerLight;
+    // const float fullBright = 1.0f; // Item/block meshes (hand, inventory) use full bright
 
-    std::vector<V> vertices;
-    std::vector<int> indices;
+    // std::vector<V> vertices;
+    // std::vector<int> indices;
 
-    auto pushFace = [&](FaceDir face,
-                        const glm::vec3& v0,
-                        const glm::vec3& v1,
-                        const glm::vec3& v2,
-                        const glm::vec3& v3)
-    {
-        int layer = state.faceTextureLayers[static_cast<int>(face)];
-        int startIndex = static_cast<int>(vertices.size());
+    // auto pushFace = [&](FaceDir face,
+    //                     const glm::vec3& v0,
+    //                     const glm::vec3& v1,
+    //                     const glm::vec3& v2,
+    //                     const glm::vec3& v3)
+    // {
+    //     int layer = state.faceTextureLayers[static_cast<int>(face)];
+    //     int startIndex = static_cast<int>(vertices.size());
 
-        auto addVert = [&](const glm::vec3& pos, float u, float v) {
-            V vert;
-            vert.SetXYZ(pos);
-            vert.SetUV(glm::vec2(u, v));
-            vert.SetLayer((float)layer);
-            vert.SetLight(fullBright);
-            vertices.push_back(vert);
-        };
-        addVert(v0, 0.0f, 0.0f);
-        addVert(v1, 0.0f, 1.0f);
-        addVert(v2, 1.0f, 1.0f);
-        addVert(v3, 1.0f, 0.0f);
+    //     auto addVert = [&](const glm::vec3& pos, float u, float v) {
+    //         V vert;
+    //         vert.SetXYZ(pos);
+    //         vert.SetUV(glm::vec2(u, v));
+    //         vert.SetLayer((float)layer);
+    //         vert.SetLight(fullBright);
+    //         vertices.push_back(vert);
+    //     };
+    //     addVert(v0, 0.0f, 0.0f);
+    //     addVert(v1, 0.0f, 1.0f);
+    //     addVert(v2, 1.0f, 1.0f);
+    //     addVert(v3, 1.0f, 0.0f);
 
-        indices.push_back(startIndex + 0);
-        indices.push_back(startIndex + 1);
-        indices.push_back(startIndex + 2);
-        indices.push_back(startIndex + 0);
-        indices.push_back(startIndex + 2);
-        indices.push_back(startIndex + 3);
-    };
+    //     indices.push_back(startIndex + 0);
+    //     indices.push_back(startIndex + 1);
+    //     indices.push_back(startIndex + 2);
+    //     indices.push_back(startIndex + 0);
+    //     indices.push_back(startIndex + 2);
+    //     indices.push_back(startIndex + 3);
+    // };
 
-    // Cube corners
-    glm::vec3 p000(-1, -1, -1);
-    glm::vec3 p001(-1, -1,  1);
-    glm::vec3 p010(-1,  1, -1);
-    glm::vec3 p011(-1,  1,  1);
-    glm::vec3 p100( 1, -1, -1);
-    glm::vec3 p101( 1, -1,  1);
-    glm::vec3 p110( 1,  1, -1);
-    glm::vec3 p111( 1,  1,  1);
+    // // Cube corners
+    // glm::vec3 p000(-1, -1, -1);
+    // glm::vec3 p001(-1, -1,  1);
+    // glm::vec3 p010(-1,  1, -1);
+    // glm::vec3 p011(-1,  1,  1);
+    // glm::vec3 p100( 1, -1, -1);
+    // glm::vec3 p101( 1, -1,  1);
+    // glm::vec3 p110( 1,  1, -1);
+    // glm::vec3 p111( 1,  1,  1);
 
-    // Top (+Y)
-    pushFace(FaceDir::Top,    p011, p111, p110, p010);
-    // Bottom (-Y)
-    pushFace(FaceDir::Bottom, p001, p000, p100, p101);
-    // North (+Z)
-    pushFace(FaceDir::North,  p001, p011, p111, p101);
-    // South (-Z)
-    pushFace(FaceDir::South,  p100, p110, p010, p000);
-    // East (+X)
-    pushFace(FaceDir::East,   p101, p111, p110, p100);
-    // West (-X)
-    pushFace(FaceDir::West,   p000, p010, p011, p001);
+    // // Top (+Y)
+    // pushFace(FaceDir::Top,    p011, p111, p110, p010);
+    // // Bottom (-Y)
+    // pushFace(FaceDir::Bottom, p001, p000, p100, p101);
+    // // North (+Z)
+    // pushFace(FaceDir::North,  p001, p011, p111, p101);
+    // // South (-Z)
+    // pushFace(FaceDir::South,  p100, p110, p010, p000);
+    // // East (+X)
+    // pushFace(FaceDir::East,   p101, p111, p110, p100);
+    // // West (-X)
+    // pushFace(FaceDir::West,   p000, p010, p011, p001);
 
-    std::vector<std::byte> byteVertices(
-        reinterpret_cast<std::byte*>(vertices.data()),
-        reinterpret_cast<std::byte*>(vertices.data()) + vertices.size() * sizeof(V)
-    );
+    // std::vector<std::byte> byteVertices(
+    //     reinterpret_cast<std::byte*>(vertices.data()),
+    //     reinterpret_cast<std::byte*>(vertices.data()) + vertices.size() * sizeof(V)
+    // );
 
-    return std::make_shared<ASCIIgL::Mesh>(
-        std::move(byteVertices),
-        ASCIIgL::VertFormats::PosUVLayerLight(),
-        std::move(indices),
-        ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get()
-    );
+    // return std::make_shared<ASCIIgL::Mesh>(
+    //     std::move(byteVertices),
+    //     ASCIIgL::VertFormats::PosUVLayerLight(),
+    //     std::move(indices),
+    //     ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get()
+    // );
+
+    return nullptr;
 }
 
 std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetQuadItemMesh(int x, int y, int ATLAS_SIZE) {

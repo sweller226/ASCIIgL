@@ -1,5 +1,7 @@
 #include <ASCIICraft/world/blockstate/BlockModelLibrary.hpp>
+
 #include <ASCIICraft/world/blockstate/CubeModelBuilder.hpp>
+#include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
 
 #include <cstddef>
 #include <mutex>
@@ -48,21 +50,19 @@ namespace {
     }
 } // namespace
 
-BlockModelLibrary::ModelPtr BlockModelLibrary::GetModel(uint32_t stateId, const BlockStateRegistry& bsr) {
-    (void)bsr; // Lookup-only; models must be registered explicitly.
-    std::lock_guard<std::mutex> lock(g_modelLibraryMutex);
-
-    // Fast path: already resolved for this exact stateId.
-    if (auto it = modelsByState_.find(stateId); it != modelsByState_.end()) {
-        return it->second;
-    }
-
-    // If it wasn't registered, return nullptr (no auto-build).
-    return nullptr;
+BlockModelLibrary::ModelPtr BlockModelLibrary::GetModel(uint32_t stateId) const {
+    if (stateId >= modelsByState_.size()) return nullptr;
+    return modelsByState_[stateId]; // no lock, no hash lookup
 }
 
-void BlockModelLibrary::RegisterModel(uint32_t stateId, std::shared_ptr<const BlockModel> model) {
+void BlockModelLibrary::RegisterModel(uint32_t stateId, std::shared_ptr<const BlockModel> model, BlockStateRegistry& bsr) {
     std::lock_guard<std::mutex> lock(g_modelLibraryMutex);
+
+    if (stateId >= modelsByState_.size())
+        modelsByState_.resize(stateId + 1);
+
+    bsr.GetStateMutable(stateId).isFullBlock = model ? model->isFullBlock : false;
+
     if (!model) {
         modelsByState_[stateId] = nullptr;
         return;
@@ -81,18 +81,18 @@ void BlockModelLibrary::RegisterModel(uint32_t stateId, std::shared_ptr<const Bl
     modelsByState_[stateId] = std::move(model);
 }
 
-void BlockModelLibrary::RegisterModel(uint16_t typeId, std::shared_ptr<const BlockModel> model, const BlockStateRegistry& bsr) {
+void BlockModelLibrary::RegisterModel(uint16_t typeId, std::shared_ptr<const BlockModel> model, BlockStateRegistry& bsr) {
     const BlockType& type = bsr.GetType(typeId);
     const uint32_t base = type.baseStateId;
     const uint32_t count = type.stateCount;
 
     // Register the same shared model pointer for every state in this type.
     for (uint32_t i = 0; i < count; ++i) {
-        RegisterModel(base + i, model);
+        RegisterModel(base + i, model, bsr);
     }
 }
 
-void BlockModelLibrary::RegisterCubeModel(uint16_t typeId, const CubeSpec& spec, const BlockStateRegistry& bsr) {
+void BlockModelLibrary::RegisterCubeModel(uint16_t typeId, const CubeSpec& spec, BlockStateRegistry& bsr) {
     auto model = std::make_shared<const BlockModel>(BuildCubeModel(spec));
     RegisterModel(typeId, std::move(model), bsr);
 }

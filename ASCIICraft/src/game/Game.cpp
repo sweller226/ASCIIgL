@@ -103,11 +103,11 @@ bool Game::Initialize(bool renderToTerminal) {
     ASCIIgL::Logger::Debug("Initializing renderer...");
     renderer.Initialize(true, 4, nullptr, 10);
 
-    ASCIIgL::Logger::Debug("Initializing world...");
-    InitializeWorld();
-
     ASCIIgL::Logger::Debug("Initializing block states...");
     InitializeBlockStates();
+
+    ASCIIgL::Logger::Debug("Initializing world...");
+    InitializeWorld();
 
     ASCIIgL::Logger::Debug("Initializing player...");
     InitializePlayer();
@@ -562,9 +562,7 @@ void Game::InitializeSystems() {
 
 void Game::InitializeBlockStates() {
     auto& bsr = registry.ctx().emplace<blockstate::BlockStateRegistry>();
-    World& world = *GetWorldPtr(registry);
-    ChunkManager& chunkManager = *world.GetChunkManager();
-    blockstate::BlockModelLibrary& modelLibrary = chunkManager.GetBlockModelLibrary();
+    auto& modelLibrary = registry.ctx().emplace<blockstate::BlockModelLibrary>();
 
     // Direct TextureArray layer indices (see BlockTextureLayers.hpp and LoadTextures).
     using BT = BlockTexLayer;
@@ -631,7 +629,7 @@ void Game::InitializeBlockStates() {
             facing
         );
         auto model = std::make_shared<const blockstate::BlockModel>(BuildCubeModel(spec));
-        modelLibrary.RegisterModel(stateId, std::move(model));
+        modelLibrary.RegisterModel(stateId, std::move(model), bsr);
     }
 
     // === Wood & Plants (subset using current texture list) ===

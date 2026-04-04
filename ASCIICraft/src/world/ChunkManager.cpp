@@ -39,7 +39,6 @@ ChunkManager::ChunkManager(entt::registry& registry, const unsigned int chunkWor
     regionManager = std::make_unique<RegionManager>();
     chunkJobQueue = std::make_unique<ChunkJobQueue>(registry);
     chunkJobQueue->SetTerrainGenerator(&terrainGenerator);
-    chunkJobQueue->SetBlockModelLibrary(&blockModelLibrary_);
     chunkJobQueue->SetMaxDrainPerFrame(static_cast<size_t>(MAX_QUEUES_PER_FRAME));
     chunkJobQueue->SetMaxDrainMeshPerFrame(static_cast<size_t>(MAX_MESH_APPLIES_PER_FRAME));
     chunkJobQueue->SetUnloadSaveCallback([this](Chunk* c, ChunkCoord coord, const MetaBucket* meta, bool closeRegionAfterSave, std::shared_ptr<RegionFile> region) {
@@ -350,6 +349,7 @@ std::vector<Chunk*> ChunkManager::GetVisibleChunks(const glm::vec3& playerPos, c
     
     // Get player's chunk coordinate for distance calculations
     ChunkCoord playerChunk = WorldCoord(playerPos).ToChunkCoord();
+    // ASCIIgL::Logger::Infof("PlayerChunk: (%d, %d, %d)", playerChunk.x, playerChunk.y, playerChunk.z);
     
     // Normalize view direction
     glm::vec3 forward = glm::normalize(viewDir);
@@ -527,7 +527,13 @@ void ChunkManager::RebuildChunkMeshImmediate(Chunk* c) {
         }
     }
 
-    ChunkMeshData data = BuildChunkMeshData(coord, chunkBlocks.data(), ptrs, bsr, &blockModelLibrary_);
+    auto* modelLib = registry.ctx().find<blockstate::BlockModelLibrary>();
+    if (!modelLib) {
+        ASCIIgL::Logger::Warning("RebuildChunkMeshImmediate: BlockModelLibrary not found in context.");
+        return;
+    }
+
+    ChunkMeshData data = BuildChunkMeshData(coord, chunkBlocks.data(), ptrs, bsr, modelLib);
     c->ApplyMeshData(std::move(data), texArray);
 }
 
@@ -715,6 +721,7 @@ void ChunkManager::RenderChunks() {
     }
 
     glm::vec3 camFront = cam->getCamFront();
+
     std::vector<Chunk*> visibleChunks = GetVisibleChunks(pos, camFront);
 
     // --- Material retrieval ---
@@ -750,7 +757,7 @@ void ChunkManager::RenderChunks() {
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
 
     int renderedCount = 0;
-
+    
     // Precompute normalized camera forward for transparent depth sorting
     glm::vec3 camDir = glm::normalize(camFront);
 

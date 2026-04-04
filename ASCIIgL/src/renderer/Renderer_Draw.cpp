@@ -164,16 +164,14 @@ void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list) {
             BindMaterial(mat);
         }
 
-        // Apply per-draw uniform overrides using pre-resolved descriptors.
         for (const auto& ov : dc.overrides) {
             if (!ov.desc) continue;
             mat->ApplyUniformOverride(*ov.desc, ov.value);
         }
 
-        DrawMesh(dc.mesh);
-
-        // Upload constant buffer if dirty
         UploadMaterialConstants(mat);
+
+        DrawMesh(dc.mesh);
     }
 }
 

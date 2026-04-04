@@ -26,18 +26,18 @@ namespace blockstate {
 
         // Returns a registered model if present; otherwise returns nullptr.
         // Models are expected to be registered explicitly via RegisterModel().
-        ModelPtr GetModel(uint32_t stateId, const BlockStateRegistry& bsr);
+        ModelPtr GetModel(uint32_t stateId) const;
 
         // Explicitly register a model for a specific stateId.
-        void RegisterModel(uint32_t stateId, std::shared_ptr<const BlockModel> model);
+        void RegisterModel(uint32_t stateId, std::shared_ptr<const BlockModel> model, BlockStateRegistry& bsr);
         // Explicitly register one shared model for every state in a type.
-        void RegisterModel(uint16_t typeId, std::shared_ptr<const BlockModel> model, const BlockStateRegistry& bsr);
+        void RegisterModel(uint16_t typeId, std::shared_ptr<const BlockModel> model, BlockStateRegistry& bsr);
         // Convenience: build a cube model from spec, then register it for all states in a type.
-        void RegisterCubeModel(uint16_t typeId, const CubeSpec& spec, const BlockStateRegistry& bsr);
+        void RegisterCubeModel(uint16_t typeId, const CubeSpec& spec, BlockStateRegistry& bsr);
 
     private:
         // stateId -> shared model pointer (fast path)
-        std::unordered_map<uint32_t, ModelPtr> modelsByState_;
+        std::vector<ModelPtr> modelsByState_;
         // fingerprint -> bucket of canonical models that share the same fingerprint.
         // We still compare for equality to avoid sharing on hash collisions.
         std::unordered_map<size_t, std::vector<ModelPtr>> modelsByFingerprint_;

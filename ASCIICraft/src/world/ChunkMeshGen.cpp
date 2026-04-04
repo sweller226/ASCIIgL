@@ -71,8 +71,8 @@ static std::array<bool, FACE_COUNT> ComputeVisibleFaces(
     const blockstate::BlockState& state,
     const uint32_t* chunkBlocks,
     const std::array<const uint32_t*, FACE_COUNT>& neighborBlocks,
-    const blockstate::BlockStateRegistry& bsr,
-    const blockstate::BlockModelLibrary* modelLibrary
+    const blockstate::BlockStateRegistry& bsr
+    // modelLibrary parameter removed
 ) {
     std::array<bool, FACE_COUNT> visible{};
     visible.fill(false);
@@ -94,17 +94,11 @@ static std::array<bool, FACE_COUNT> ComputeVisibleFaces(
         );
 
         const auto& neighborState = bsr.GetState(neighborStateId);
-        const blockstate::BlockModel* neighborModel = nullptr;
-        if (modelLibrary) {
-            auto neighborModelPtr = modelLibrary->GetModel(neighborStateId, bsr);
-            neighborModel = neighborModelPtr.get();
-        }
-        const bool neighborIsFullBlock = (neighborModel && neighborModel->fullBlock);
 
         const bool baseNeighborOccludes =
             (neighborState.isRenderable && neighborState.renderMode == blockstate::RenderMode::Opaque) ||
             (state.cullSameType && neighborState.typeId == state.typeId);
-        const bool neighborOccludes = baseNeighborOccludes && neighborIsFullBlock;
+        const bool neighborOccludes = baseNeighborOccludes && neighborState.isFullBlock;
 
         visible[face] = !neighborOccludes;
     }
@@ -168,15 +162,18 @@ static void AppendBlockFace(
     if (idxStart + kIndicesPerFace > srcIndexCount) return;
 
     const int baseVertex = static_cast<int>(dstVerts.size() / sizeof(V));
+    const auto* srcVerts = reinterpret_cast<const V*>(modelVerts.data()) + vertStart;
 
-    // Append vertex slice with world translation.
-    std::vector<std::byte> sliceBytes(sizeof(V) * static_cast<size_t>(kVertsPerFace));
-    std::memcpy(sliceBytes.data(),
-                modelVerts.data() + (static_cast<size_t>(vertStart) * sizeof(V)),
-                sizeof(V) * static_cast<size_t>(kVertsPerFace));
-    AppendTranslatedVerts_PosUVLayerLight(dstVerts, sliceBytes, worldOffset);
+    const size_t oldSize = dstVerts.size();
+    dstVerts.resize(oldSize + sizeof(V) * kVertsPerFace);
+    auto* dstV = reinterpret_cast<V*>(dstVerts.data() + oldSize);
 
-    // Append indices rebased to dst, remapping into appended vertex slice.
+    for (int i = 0; i < kVertsPerFace; ++i) {
+        V v = srcVerts[i];
+        v.SetXYZ(v.GetXYZ() + worldOffset);
+        dstV[i] = v;
+    }
+
     for (int i = 0; i < kIndicesPerFace; ++i) {
         const int localIdx = modelIndices[idxStart + i] - vertStart;
         dstIndices.push_back(baseVertex + localIdx);
@@ -245,12 +242,12 @@ ChunkMeshData BuildChunkMeshData(
         for (int y = 0; y < SIZE; ++y) {
             for (int z = 0; z < SIZE; ++z) {
                 uint32_t stateId = chunkBlocks[GetBlockIndex(x, y, z)];
-                const BlockState& state = bsr->GetState(stateId);
+                const blockstate::BlockState& state = bsr->GetState(stateId);
                 if (!state.isRenderable) continue;
 
                 const bool blockIsTranslucent = (state.renderMode == blockstate::RenderMode::Translucent);
 
-                blockstate::BlockModelLibrary::ModelPtr modelPtr = modelLibrary->GetModel(stateId, *bsr);
+                blockstate::BlockModelLibrary::ModelPtr modelPtr = modelLibrary->GetModel(stateId);
                 const blockstate::BlockModel* model = modelPtr.get();
                 if (!model) {
                     std::lock_guard<std::mutex> lock(g_missingModelWarnMutex);
@@ -269,9 +266,9 @@ ChunkMeshData BuildChunkMeshData(
                 );
                 
 
-                if (model->fullBlock) {
+                if (model->isFullBlock) {
                     const std::array<bool, FACE_COUNT> visibleFaces = ComputeVisibleFaces(
-                        x, y, z, state, chunkBlocks, neighborBlocks, *bsr, modelLibrary
+                        x, y, z, state, chunkBlocks, neighborBlocks, *bsr
                     );
 
                     if (blockIsTranslucent) {
