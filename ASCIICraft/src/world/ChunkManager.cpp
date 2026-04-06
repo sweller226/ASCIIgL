@@ -29,8 +29,8 @@ const ChunkCoord ChunkManager::FACE_NEIGHBOR_OFFSETS[6] = {
     ChunkCoord(-1, 0, 0)   // Face 5: West (X-)
 };
 
-ChunkManager::ChunkManager(entt::registry& registry, const unsigned int chunkWorldLimit, const unsigned int renderDistance)
-    : maxWorldChunkRadius(chunkWorldLimit)
+ChunkManager::ChunkManager(entt::registry& registry, const WorldDimensions& worldDimensions, const unsigned int renderDistance)
+    : _worldDimensions(worldDimensions)
     , renderDistance(renderDistance)
     , loadDistance(renderDistance + 1)
     , registry(registry)
@@ -284,11 +284,18 @@ void ChunkManager::LoadChunksInRadius(const ChunkCoord& playerChunk, unsigned in
     std::vector<ChunkCoord> chunksToLoad;
     {
         ASCIIgL::PROFILE_SCOPE("Chunk.UpdateChunkLoading.ComputeChunksToLoad");
-        chunksToLoad = GetChunksInRadius(playerChunk, loadRadius);
-        chunksToLoad.erase(std::remove_if(chunksToLoad.begin(), chunksToLoad.end(),
-            [this](const ChunkCoord& coord) {
-                return coord.y < 0 || IsChunkOutsideWorld(coord) || IsChunkLoaded(coord);
-            }), chunksToLoad.end());
+        int signedRadius = static_cast<int>(loadRadius);
+        chunksToLoad.reserve(static_cast<size_t>(2 * signedRadius + 1) *
+                            (2 * signedRadius + 1) *
+                            (2 * signedRadius + 1));
+
+        for (int dx = -signedRadius; dx <= signedRadius; ++dx)
+        for (int dy = -signedRadius; dy <= signedRadius; ++dy)
+        for (int dz = -signedRadius; dz <= signedRadius; ++dz) {
+            ChunkCoord coord{ playerChunk.x + dx, playerChunk.y + dy, playerChunk.z + dz };
+            if (!IsChunkOutsideWorld(coord) && !IsChunkLoaded(coord))
+                chunksToLoad.push_back(coord);
+        }
 
         std::sort(chunksToLoad.begin(), chunksToLoad.end(), [&playerChunk](const ChunkCoord& a, const ChunkCoord& b) {
             return ChebyshevDistance(a, playerChunk) < ChebyshevDistance(b, playerChunk);
@@ -601,33 +608,15 @@ void ChunkManager::UpdateChunkNeighbors(const ChunkCoord& coord) {
     }
 }
 
-std::vector<ChunkCoord> ChunkManager::GetChunksInRadius(const ChunkCoord& center, unsigned int radius) const {
-    int signedRadius = static_cast<int>(radius);
-    int side = 2 * signedRadius + 1;
-    std::vector<ChunkCoord> chunks;
-    chunks.reserve(static_cast<size_t>(side) * side * side);
-
-    for (int x = center.x - signedRadius; x <= center.x + signedRadius; ++x) {
-        for (int y = center.y - signedRadius; y <= center.y + signedRadius; ++y) {
-            for (int z = center.z - signedRadius; z <= center.z + signedRadius; ++z) {
-                chunks.push_back(ChunkCoord(x, y, z));
-            }
-        }
-    }
-    
-    return chunks;
-}
-
 bool ChunkManager::IsChunkOutsideWorld(const ChunkCoord& coord) const {
     // Bottom of world: chunks below y=0 are never loaded; treat as outside so bottom chunks can generate without them
-    if (coord.y < 0)
+    if (coord.y < _worldDimensions.Y_MIN_CHUNK_LIMIT || coord.y > _worldDimensions.Y_MAX_CHUNK_LIMIT)
         return true;
     // World border: beyond radius in X/Y/Z
     int dx = std::abs(coord.x);
-    int dy = std::abs(coord.y);
     int dz = std::abs(coord.z);
-    int distanceFromOrigin = std::max({dx, dy, dz});
-    return distanceFromOrigin > static_cast<int>(maxWorldChunkRadius);
+    int distanceFromOrigin = std::max(dx, dz);
+    return distanceFromOrigin > static_cast<int>(_worldDimensions.XZ_CHUNK_LIMIT);
 }
 
 uint32_t ChunkManager::GetBlockState(const WorldCoord& pos) const {

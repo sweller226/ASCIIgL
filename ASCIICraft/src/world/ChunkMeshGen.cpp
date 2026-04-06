@@ -17,7 +17,6 @@
 namespace {
 
 static constexpr int SIZE = CHUNK_SIZE;
-static constexpr int FACE_COUNT = 6;
 static std::mutex g_missingModelWarnMutex;
 static std::unordered_set<uint32_t> g_missingModelWarnedStateIds;
 
@@ -64,20 +63,17 @@ static uint32_t GetBlockStateAt(
     return blockstate::BlockStateRegistry::AIR_STATE_ID;
 }
 
-// Helpers for BlockModelLibrary-based meshing.
-
-static std::array<bool, FACE_COUNT> ComputeVisibleFaces(
+static void ComputeVisibleFacesFullBlock(
     int x, int y, int z,
     const blockstate::BlockState& state,
     const uint32_t* chunkBlocks,
-    const std::array<const uint32_t*, FACE_COUNT>& neighborBlocks,
-    const blockstate::BlockStateRegistry& bsr
-    // modelLibrary parameter removed
+    const std::array<const uint32_t*, 6>& neighborBlocks,
+    const blockstate::BlockStateRegistry& bsr,
+    std::vector<bool>& visibleFaces
 ) {
-    std::array<bool, FACE_COUNT> visible{};
-    visible.fill(false);
+    visibleFaces.resize(6, false);
 
-    for (int face = 0; face < FACE_COUNT; ++face) {
+    for (int face = 0; face < 6; ++face) {
         int neighborX = x, neighborY = y, neighborZ = z;
         switch (face) {
             case 0: neighborY++; break;
@@ -100,10 +96,8 @@ static std::array<bool, FACE_COUNT> ComputeVisibleFaces(
             (state.cullSameType && neighborState.typeId == state.typeId);
         const bool neighborOccludes = baseNeighborOccludes && neighborState.isFullBlock;
 
-        visible[face] = !neighborOccludes;
+        visibleFaces[face] = !neighborOccludes;
     }
-
-    return visible;
 }
 
 static void AppendTranslatedVerts_PosUVLayerLight(
@@ -113,7 +107,7 @@ static void AppendTranslatedVerts_PosUVLayerLight(
 ) {
     using V = ASCIIgL::VertStructs::PosUVLayerLight;
     if (src.empty()) return;
-    if (src.size() % sizeof(V) != 0) return; // invalid, ignore
+    if (src.size() % sizeof(V) != 0) return;
 
     const size_t vertCount = src.size() / sizeof(V);
     const size_t oldSize = dst.size();
@@ -124,9 +118,7 @@ static void AppendTranslatedVerts_PosUVLayerLight(
 
     for (size_t i = 0; i < vertCount; ++i) {
         V v = srcVerts[i];
-        glm::vec3 p = v.GetXYZ();
-        p += worldOffset;
-        v.SetXYZ(p);
+        v.SetXYZ(v.GetXYZ() + worldOffset);
         dstVerts[i] = v;
     }
 }
@@ -140,92 +132,35 @@ static void AppendIndicesRebased(
     for (int idx : src) dst.push_back(baseVertex + idx);
 }
 
-static void AppendBlockFace(
+static void AppendFaces(
     std::vector<std::byte>& dstVerts,
     std::vector<int>& dstIndices,
-    const std::vector<std::byte>& modelVerts,
-    const std::vector<int>& modelIndices,
-    int vertStart,
-    int idxStart,
-    const glm::vec3& worldOffset
-) {
-    using V = ASCIIgL::VertStructs::PosUVLayerLight;
-    constexpr int kVertsPerFace = 4;
-    constexpr int kIndicesPerFace = 6;
-
-    if (modelVerts.size() % sizeof(V) != 0) return;
-    if (vertStart < 0 || idxStart < 0) return;
-
-    const int srcVertCount = static_cast<int>(modelVerts.size() / sizeof(V));
-    const int srcIndexCount = static_cast<int>(modelIndices.size());
-    if (vertStart + kVertsPerFace > srcVertCount) return;
-    if (idxStart + kIndicesPerFace > srcIndexCount) return;
-
-    const int baseVertex = static_cast<int>(dstVerts.size() / sizeof(V));
-    const auto* srcVerts = reinterpret_cast<const V*>(modelVerts.data()) + vertStart;
-
-    const size_t oldSize = dstVerts.size();
-    dstVerts.resize(oldSize + sizeof(V) * kVertsPerFace);
-    auto* dstV = reinterpret_cast<V*>(dstVerts.data() + oldSize);
-
-    for (int i = 0; i < kVertsPerFace; ++i) {
-        V v = srcVerts[i];
-        v.SetXYZ(v.GetXYZ() + worldOffset);
-        dstV[i] = v;
-    }
-
-    for (int i = 0; i < kIndicesPerFace; ++i) {
-        const int localIdx = modelIndices[idxStart + i] - vertStart;
-        dstIndices.push_back(baseVertex + localIdx);
-    }
-}
-
-static void AppendBlock(
-    std::vector<std::byte>& dstVerts,
-    std::vector<int>& dstIndices,
-    const std::vector<std::byte>& modelVerts,
-    const std::vector<int>& modelIndices,
+    const blockstate::RenderLayer& layer,
     const glm::vec3& worldOffset,
-    const std::array<bool, FACE_COUNT> &visibleFaces
-) {
-    if (modelVerts.empty() || modelIndices.empty()) return;
-
-    for (int face = 0; face < 6; ++face) {
-        if (!visibleFaces[face]) continue;
-
-        constexpr int kVertsPerFace = 4; // current cube mapping at callsite (not in helper)
-        constexpr int kIndicesPerFace = 6;
-        const int faceVertStart = face * kVertsPerFace;
-        const int faceIdxStart = face * kIndicesPerFace;
-
-        AppendBlockFace(
-            dstVerts,
-            dstIndices,
-            modelVerts,
-            modelIndices,
-            faceVertStart,
-            faceIdxStart,
-            worldOffset
-        );
-    }
-}
-
-static void AppendModel(
-    std::vector<std::byte>& dstVerts,
-    std::vector<int>& dstIndices,
-    const std::vector<std::byte>& modelVerts,
-    const std::vector<int>& modelIndices,
-    const glm::vec3& worldOffset
+    const std::vector<bool>& visibleFaces
 ) {
     using V = ASCIIgL::VertStructs::PosUVLayerLight;
-    if (modelVerts.empty() || modelIndices.empty()) return;
-    if (modelVerts.size() % sizeof(V) != 0) return;
+    for (size_t i = 0; i < layer.faces.size(); ++i) {
+        if (i < visibleFaces.size() && !visibleFaces[i]) continue;
 
-    const int baseVertex = static_cast<int>(dstVerts.size() / sizeof(V));
-    AppendTranslatedVerts_PosUVLayerLight(dstVerts, modelVerts, worldOffset);
-    AppendIndicesRebased(dstIndices, modelIndices, baseVertex);
+        const blockstate::FaceRange& f = layer.faces[i];
+        const int baseVertex = static_cast<int>(dstVerts.size() / sizeof(V));
+
+        const size_t oldSize = dstVerts.size();
+        dstVerts.resize(oldSize + f.vertByteCount);
+        const auto* src = reinterpret_cast<const V*>(layer.vertices.data() + f.vertByteOffset);
+        auto* dst       = reinterpret_cast<V*>(dstVerts.data() + oldSize);
+        const int vertCount = f.vertByteCount / sizeof(V);
+        for (int j = 0; j < vertCount; ++j) {
+            V v = src[j];
+            v.SetXYZ(v.GetXYZ() + worldOffset);
+            dst[j] = v;
+        }
+
+        for (int j = 0; j < f.idxCount; ++j)
+            dstIndices.push_back(baseVertex + layer.indices[f.idxOffset + j]);
+    }
 }
-
 } // namespace
 
 ChunkMeshData BuildChunkMeshData(
@@ -238,6 +173,7 @@ ChunkMeshData BuildChunkMeshData(
     ChunkMeshData out;
     if (!chunkBlocks || !bsr || !modelLibrary) return out;
 
+    std::vector<bool> visibleFaces;
     for (int x = 0; x < SIZE; ++x) {
         for (int y = 0; y < SIZE; ++y) {
             for (int z = 0; z < SIZE; ++z) {
@@ -247,8 +183,7 @@ ChunkMeshData BuildChunkMeshData(
 
                 const bool blockIsTranslucent = (state.renderMode == blockstate::RenderMode::Translucent);
 
-                blockstate::BlockModelLibrary::ModelPtr modelPtr = modelLibrary->GetModel(stateId);
-                const blockstate::BlockModel* model = modelPtr.get();
+                const blockstate::BlockModel* model = modelLibrary->GetModel(stateId);
                 if (!model) {
                     std::lock_guard<std::mutex> lock(g_missingModelWarnMutex);
                     if (g_missingModelWarnedStateIds.insert(stateId).second) {
@@ -259,57 +194,22 @@ ChunkMeshData BuildChunkMeshData(
                     }
                     continue;
                 }
+
                 const glm::vec3 worldOffset(
                     static_cast<float>(coord.x * SIZE + x),
                     static_cast<float>(coord.y * SIZE + y),
                     static_cast<float>(coord.z * SIZE + z)
                 );
-                
 
+                visibleFaces.clear();
                 if (model->isFullBlock) {
-                    const std::array<bool, FACE_COUNT> visibleFaces = ComputeVisibleFaces(
-                        x, y, z, state, chunkBlocks, neighborBlocks, *bsr
-                    );
-
-                    if (blockIsTranslucent) {
-                        AppendBlock(
-                            out.transparentVertices,
-                            out.transparentIndices,
-                            model->transparentVertices,
-                            model->transparentIndices,
-                            worldOffset,
-                            visibleFaces
-                        );
-                        
-                    } else {
-                        AppendBlock(
-                            out.opaqueVertices,
-                            out.opaqueIndices,
-                            model->opaqueVertices,
-                            model->opaqueIndices,
-                            worldOffset,
-                            visibleFaces
-                        );
-                    }
-                } else {
-                    if (blockIsTranslucent) {
-                        AppendModel(
-                            out.transparentVertices,
-                            out.transparentIndices,
-                            model->transparentVertices,
-                            model->transparentIndices,
-                            worldOffset
-                        );
-                    } else {
-                        AppendModel(
-                            out.opaqueVertices,
-                            out.opaqueIndices,
-                            model->opaqueVertices,
-                            model->opaqueIndices,
-                            worldOffset
-                        );
-                    }
+                    ComputeVisibleFacesFullBlock(x, y, z, state, chunkBlocks, neighborBlocks, *bsr, visibleFaces);
                 }
+
+                auto& dstVerts   = blockIsTranslucent ? out.transparentVertices : out.opaqueVertices;
+                auto& dstIndices = blockIsTranslucent ? out.transparentIndices  : out.opaqueIndices;
+                const blockstate::RenderLayer& layer = blockIsTranslucent ? model->transparent : model->opaque;
+                AppendFaces(dstVerts, dstIndices, layer, worldOffset, visibleFaces);
             }
         }
     }

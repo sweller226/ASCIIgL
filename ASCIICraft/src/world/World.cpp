@@ -21,7 +21,7 @@ World::World(entt::registry& registry, const WorldCoord spawnPoint, const unsign
     , registry(registry) {
     ASCIIgL::Logger::Info("World created");
 
-    chunkManager = std::make_unique<ChunkManager>(registry, WORLD_LIMIT, renderDistance);
+    chunkManager = std::make_unique<ChunkManager>(registry, worldDimensions, renderDistance);
 }
 
 World::~World() {

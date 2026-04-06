@@ -4,6 +4,7 @@
 #include <ASCIICraft/world/TerrainGenerator.hpp>
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/ChunkManager.hpp>
+#include <ASCIICraft/world/WorldDimensions.hpp>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -40,7 +41,7 @@ private:
     WorldCoord spawnPoint;
     std::unique_ptr<ChunkManager> chunkManager;
 
-    const unsigned int WORLD_LIMIT = 2048;
+    const WorldDimensions worldDimensions = WorldDimensions(1024, 0, 1024);
 };
 
 World* GetWorldPtr(entt::registry& registry);

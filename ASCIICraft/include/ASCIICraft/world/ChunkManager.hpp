@@ -10,6 +10,7 @@
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/TerrainGenerator.hpp>
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/WorldDimensions.hpp>
 
 #include <entt/entt.hpp>
 
@@ -32,7 +33,7 @@ struct ChunkManagerWaterParams {
 
 class ChunkManager {
 public:
-    ChunkManager(entt::registry& registry, const unsigned int chunkWorldLimit, const unsigned int renderDistance);
+    ChunkManager(entt::registry& registry, const WorldDimensions& worldDimensions, const unsigned int renderDistance);
     ~ChunkManager() = default; // default is fine; list elements are destroyed automatically
 
     void Update();
@@ -45,10 +46,6 @@ public:
 
     // Save handling
     void SaveAll();
-
-    // World limits
-    unsigned int GetMaxWorldChunkRadius() const { return maxWorldChunkRadius; }
-    void SetMaxWorldChunkRadius(unsigned int radius) { maxWorldChunkRadius = radius; }
     
     // Rendering support
     void RenderChunks();
@@ -97,7 +94,6 @@ private:
     void UpdateChunkNeighbors(const ChunkCoord& coord);
     /// True iff every in-world neighbor is loaded and has terrain (IsGenerated). Edge chunks do not mesh until neighbors past them are loaded.
     bool AllNeighborsGenerated(const ChunkCoord& coord) const;
-    std::vector<ChunkCoord> GetChunksInRadius(const ChunkCoord& center, unsigned int radius) const;
     bool IsChunkOutsideWorld(const ChunkCoord& coord) const;
 
     // chunk rendering support
@@ -134,7 +130,7 @@ private:
     static constexpr unsigned int UNLOAD_RADIUS_PADDING = 0; // extra chunks beyond load radius before unloading
 
     // World settings
-    unsigned int maxWorldChunkRadius;
+    const WorldDimensions& _worldDimensions;
     unsigned int renderDistance;
     unsigned int loadDistance;
 

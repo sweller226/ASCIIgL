@@ -26,7 +26,7 @@ namespace blockstate {
 
         // Returns a registered model if present; otherwise returns nullptr.
         // Models are expected to be registered explicitly via RegisterModel().
-        ModelPtr GetModel(uint32_t stateId) const;
+        const BlockModel* GetModel(uint32_t stateId) const;
 
         // Explicitly register a model for a specific stateId.
         void RegisterModel(uint32_t stateId, std::shared_ptr<const BlockModel> model, BlockStateRegistry& bsr);

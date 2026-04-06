@@ -136,21 +136,28 @@ BlockModel BuildCubeModel(const CubeSpec& spec) {
     BlockModel out;
     out.isFullBlock = true;
 
-    std::vector<V> verts;
-    std::vector<int> indices;
-    verts.reserve(static_cast<size_t>(kFaceCount) * 4);
-    indices.reserve(static_cast<size_t>(kFaceCount) * 6);
+    RenderLayer& layer = spec.transparent ? out.transparent : out.opaque;
+    layer.faces.reserve(kFaceCount);
 
     for (int face = 0; face < kFaceCount; ++face) {
-        AppendFace(spec, face, verts, indices);
-    }
+        std::vector<V> verts;
+        std::vector<int> indices;
+        verts.reserve(4);
+        indices.reserve(6);
 
-    if (spec.transparent) {
-        out.transparentVertices = PackVerts(verts);
-        out.transparentIndices = std::move(indices);
-    } else {
-        out.opaqueVertices = PackVerts(verts);
-        out.opaqueIndices = std::move(indices);
+        AppendFace(spec, face, verts, indices);
+
+        FaceRange f;
+        f.vertByteOffset = static_cast<int>(layer.vertices.size());
+        f.idxOffset      = static_cast<int>(layer.indices.size());
+
+        std::vector<std::byte> packed = PackVerts(verts);
+        f.vertByteCount = static_cast<int>(packed.size());
+        f.idxCount      = static_cast<int>(indices.size());
+
+        layer.vertices.insert(layer.vertices.end(), packed.begin(), packed.end());
+        layer.indices.insert(layer.indices.end(), indices.begin(), indices.end());
+        layer.faces.push_back(f);
     }
 
     return out;
