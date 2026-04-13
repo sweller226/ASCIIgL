@@ -19,10 +19,14 @@
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/Velocity.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/ecs/components/PlayerMode.hpp>
 #include <ASCIICraft/world/ChunkManager.hpp>
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
+#include <ASCIICraft/ecs/components/PhysicsBody.hpp>
+#include <ASCIIgL/util/Logger.hpp>
 #include <glm/gtc/constants.hpp>
 #include <cmath>
+#include <algorithm>
 
 namespace ai {
 
@@ -95,7 +99,13 @@ static void followPath(
     // the final destination — this gives natural diagonal movement instead of
     // following the cardinal-direction A* grid.  Fall back to waypoint-by-
     // waypoint following only when the path has Y changes (steps/drops).
+    //
+    // wasBeelining is kept outside the block so the dist<0.5 handler below can
+    // use it: in beeline mode we skip ALL remaining waypoints on arrival rather
+    // than one-at-a-time (which would redirect the mob toward points it already
+    // sailed past, causing the rapid spin-around at the end of a wander path).
     glm::vec3 target;
+    bool wasBeelining = false;
     {
         bool flatPath = true;
         int baseY = path.points[path.currentIndex].y;
@@ -106,7 +116,8 @@ static void followPath(
             }
         }
 
-        if (flatPath && path.remaining() > 1) {
+        wasBeelining = flatPath && path.remaining() > 1;
+        if (wasBeelining) {
             // Beeline to final destination
             auto& last = path.points.back();
             target = glm::vec3(last.x + 0.5f, static_cast<float>(last.y), last.z + 0.5f);
@@ -121,17 +132,23 @@ static void followPath(
 
     float dist = glm::length(diff);
     if (dist < 0.5f) {
-        // Reached current target — if beelining we're done, otherwise advance
-        path.advance();
-        while (!path.isFinished()) {
-            // Skip any waypoints we've already passed
-            glm::vec3 wp = path.getCurrentPos();
-            glm::vec3 d = wp - t->position;
-            d.y = 0.0f;
-            if (glm::length(d) < 0.5f) {
-                path.advance();
-            } else {
-                break;
+        if (wasBeelining) {
+            // Arrived at beeline destination — mark entire path done.
+            // Do NOT advance one step at a time: intermediate waypoints were
+            // deliberately skipped and redirecting toward them causes spinning.
+            while (!path.isFinished()) path.advance();
+        } else {
+            path.advance();
+            while (!path.isFinished()) {
+                // Skip any waypoints we've already passed
+                glm::vec3 wp = path.getCurrentPos();
+                glm::vec3 d = wp - t->position;
+                d.y = 0.0f;
+                if (glm::length(d) < 0.5f) {
+                    path.advance();
+                } else {
+                    break;
+                }
             }
         }
         if (path.isFinished()) {
@@ -158,7 +175,8 @@ static void followPath(
             mobAI->hasLookTarget = true;
         }
 
-        // Rotate the entity to face movement direction
+        // While actively moving, face movement direction immediately.
+        // Wander startup smoothing is handled in WanderGoal::updateTask.
         float yaw = std::atan2(-dir.x, -dir.z);
         t->setRotation(glm::angleAxis(yaw, glm::vec3(0, 1, 0)));
     }
@@ -274,9 +292,10 @@ void PanicGoal::resetTask() {
         vel->linear.x = 0.0f;
         vel->linear.z = 0.0f;
     }
-    // Clear hurt state after fleeing
-    auto* hurt = m_registry.try_get<ecs::components::HurtState>(m_entity);
-    if (hurt) hurt->wasHurt = false;
+    // Do NOT clear wasHurt here. updateHurtTimers() owns the wasHurt flag and
+    // clears it after the full 5-second hurt window (which also drives the blink
+    // visual). Clearing it in resetTask() cut the blink short whenever the flee
+    // path finished before the 5 s timer expired.
 }
 
 // =====================================================================
@@ -285,22 +304,37 @@ void PanicGoal::resetTask() {
 LookIdleGoal::LookIdleGoal(entt::registry& reg, entt::entity entity)
     : m_registry(reg), m_entity(entity), m_rng(std::random_device{}())
 {
-    setMutexBits(MUTEX_MOVE_LOOK);
+    // MC EntityAILookIdle uses only MUTEX_LOOK (2), not MUTEX_MOVE_LOOK (3).
+    // Using MUTEX_MOVE_LOOK incorrectly blocks WanderGoal while the mob idles.
+    setMutexBits(MUTEX_LOOK);
 }
 
 bool LookIdleGoal::shouldExecute() {
+    // Only idle-look when basically stationary; otherwise it fights movement
+    // facing updates and causes visible heading jitter while walking.
+    auto* vel = m_registry.try_get<ecs::components::Velocity>(m_entity);
+    if (vel) {
+        float speedSq = vel->linear.x * vel->linear.x + vel->linear.z * vel->linear.z;
+        if (speedSq > 0.01f * 0.01f) return false;
+    }
+
     std::uniform_int_distribution<int> dist(0, 49); // ~2% chance per check
     return dist(m_rng) == 0;
 }
 
 bool LookIdleGoal::continueExecuting() {
+    auto* vel = m_registry.try_get<ecs::components::Velocity>(m_entity);
+    if (vel) {
+        float speedSq = vel->linear.x * vel->linear.x + vel->linear.z * vel->linear.z;
+        if (speedSq > 0.02f * 0.02f) return false;
+    }
     return m_lookTimer > 0.0f;
 }
 
 void LookIdleGoal::startExecuting() {
-    // Pick random yaw and duration
+    // Pick random yaw and duration (3-5 second pause, slow deliberate look)
     std::uniform_real_distribution<float> yawDist(0.0f, glm::two_pi<float>());
-    std::uniform_real_distribution<float> timeDist(0.67f, 1.33f); // 20-40 ticks @ 30hz
+    std::uniform_real_distribution<float> timeDist(3.0f, 5.0f);
     m_targetYaw = yawDist(m_rng);
     m_lookTimer = timeDist(m_rng);
 }
@@ -311,9 +345,9 @@ void LookIdleGoal::updateTask(float dt) {
     auto* t = m_registry.try_get<ecs::components::Transform>(m_entity);
     if (!t) return;
 
-    // Smoothly rotate toward target yaw
+    // Smoothly rotate toward target yaw (~1.5 rad/s — takes ~1-2s to reach new direction)
     glm::quat target = glm::angleAxis(m_targetYaw, glm::vec3(0, 1, 0));
-    t->setRotation(glm::slerp(t->rotation, target, dt * 3.0f));
+    t->setRotation(glm::slerp(t->rotation, target, dt * 1.5f));
 }
 
 // =====================================================================
@@ -412,12 +446,27 @@ void MeleeAttackGoal::updateTask(float dt) {
         if (targetHealth) {
             targetHealth->hp -= static_cast<int>(m_attackDamage);
 
-            // Mark target as hurt (for panic behavior)
+            // Mark target as hurt (for panic behavior / retaliation)
             auto* targetHurt = m_registry.try_get<ecs::components::HurtState>(target);
             if (targetHurt) {
                 targetHurt->wasHurt = true;
                 targetHurt->hurtTimer = 0.0f;
                 targetHurt->attacker = m_entity;
+            }
+
+            // Knockback: push target away from attacker horizontally
+            auto* targetVel = m_registry.try_get<ecs::components::Velocity>(target);
+            auto* myPos     = m_registry.try_get<ecs::components::Transform>(m_entity);
+            auto* targetPos = m_registry.try_get<ecs::components::Transform>(target);
+            if (targetVel && myPos && targetPos) {
+                glm::vec3 kbDir = targetPos->position - myPos->position;
+                kbDir.y = 0.0f;
+                float len = glm::length(kbDir);
+                if (len > 0.001f) kbDir /= len;
+                constexpr float KNOCKBACK_SPEED = 5.0f;
+                targetVel->linear.x += kbDir.x * KNOCKBACK_SPEED;
+                targetVel->linear.z += kbDir.z * KNOCKBACK_SPEED;
+                targetVel->linear.y  = 3.0f;
             }
         }
     }
@@ -600,12 +649,16 @@ bool FindTargetGoal::shouldExecute() {
     auto* myT = m_registry.try_get<ecs::components::Transform>(m_entity);
     if (!myT) return false;
 
-    // Find nearest player within range
+    // Find nearest non-spectator player within range
     float bestDistSq = m_range * m_range;
     entt::entity bestTarget = entt::null;
 
     auto view = m_registry.view<ecs::components::PlayerTag, ecs::components::Transform>();
     for (auto [e, pt] : view.each()) {
+        // Spectator players are invisible and untargetable
+        auto* mode = m_registry.try_get<ecs::components::PlayerMode>(e);
+        if (mode && mode->gamemode == GameMode::Spectator) continue;
+
         glm::vec3 diff = pt.position - myT->position;
         float distSq = glm::dot(diff, diff);
         if (distSq < bestDistSq) {
@@ -645,6 +698,235 @@ void FindTargetGoal::startExecuting() {}
 void FindTargetGoal::resetTask() {
     auto* atk = m_registry.try_get<ecs::components::AttackTarget>(m_entity);
     if (atk) atk->target = entt::null;
+}
+
+// =====================================================================
+// CreeperSwellGoal
+// =====================================================================
+CreeperSwellGoal::CreeperSwellGoal(entt::registry& reg, entt::entity entity,
+                                   const ChunkManager* cm,
+                                   const blockstate::BlockStateRegistry& bsr,
+                                   float chaseSpeed,
+                                   float fuseRange,
+                                   float fuseTime,
+                                   float blastRadius,
+                                   int   blastDamage)
+    : m_registry(reg), m_entity(entity)
+    , m_cm(cm), m_bsr(bsr)
+    , m_chaseSpeed(chaseSpeed)
+    , m_fuseRange(fuseRange)
+    , m_fuseTime(fuseTime)
+    , m_blastRadius(blastRadius)
+    , m_blastDamage(blastDamage)
+{
+    setMutexBits(MUTEX_MOVE_LOOK);
+}
+
+entt::entity CreeperSwellGoal::findTarget() const {
+    auto* atk = m_registry.try_get<ecs::components::AttackTarget>(m_entity);
+    if (!atk || atk->target == entt::null) return entt::null;
+    if (!m_registry.valid(atk->target))   return entt::null;
+    return atk->target;
+}
+
+bool CreeperSwellGoal::shouldExecute() {
+    return findTarget() != entt::null;
+}
+
+bool CreeperSwellGoal::continueExecuting() {
+    auto* death = m_registry.try_get<ecs::components::DeathState>(m_entity);
+    if (death && death->isDead) return false;
+    return findTarget() != entt::null;
+}
+
+void CreeperSwellGoal::startExecuting() {
+    m_repathTimer = 0.0f;
+    // Preserve any partial swell from a previous run
+}
+
+void CreeperSwellGoal::updateTask(float dt) {
+    entt::entity target = findTarget();
+    if (target == entt::null) return;
+
+    auto* myT     = m_registry.try_get<ecs::components::Transform>(m_entity);
+    auto* targetT = m_registry.try_get<ecs::components::Transform>(target);
+    auto* swell   = m_registry.try_get<ecs::components::CreeperSwell>(m_entity);
+    if (!myT || !targetT) return;
+
+    glm::vec3 diff   = targetT->position - myT->position;
+    diff.y           = 0.0f;
+    float dist       = glm::length(diff);
+
+    // Always face target
+    if (dist > 0.01f) {
+        float yaw = std::atan2(-diff.x / dist, -diff.z / dist);
+        myT->setRotation(glm::angleAxis(yaw, glm::vec3(0, 1, 0)));
+    }
+
+    // Approach if not close enough to start fusing
+    m_repathTimer -= dt;
+    if (m_repathTimer <= 0.0f) {
+        m_repathTimer = 0.4f;
+        glm::ivec3 start(
+            static_cast<int>(std::floor(myT->position.x)),
+            static_cast<int>(std::floor(myT->position.y)),
+            static_cast<int>(std::floor(myT->position.z)));
+        glm::ivec3 goal(
+            static_cast<int>(std::floor(targetT->position.x)),
+            static_cast<int>(std::floor(targetT->position.y)),
+            static_cast<int>(std::floor(targetT->position.z)));
+        m_path = Pathfinder::findPath(m_cm, m_bsr, start, goal, 0.6f, 1.8f, 32.0f);
+    }
+    followPath(m_registry, m_entity, m_path, m_chaseSpeed, dt);
+
+    // Swell logic
+    if (swell) {
+        if (dist <= m_fuseRange) {
+            // In range: charge up
+            swell->swellProgress += dt / m_fuseTime;
+            swell->isSwelling = true;
+            if (swell->swellProgress >= 1.0f) {
+                swell->swellProgress = 1.0f;
+                explode();
+            }
+        } else {
+            // Out of range: decay
+            swell->swellProgress -= dt / m_fuseTime;
+            swell->isSwelling = false;
+            if (swell->swellProgress < 0.0f) swell->swellProgress = 0.0f;
+        }
+    }
+}
+
+void CreeperSwellGoal::resetTask() {
+    m_path = Path{};
+    auto* vel = m_registry.try_get<ecs::components::Velocity>(m_entity);
+    if (vel) { vel->linear.x = 0.0f; vel->linear.z = 0.0f; }
+    // Do NOT reset swell progress here: once fusing starts it should
+    // persist even if the goal briefly switches away.
+}
+
+void CreeperSwellGoal::explode() {
+    auto* myT = m_registry.try_get<ecs::components::Transform>(m_entity);
+    if (!myT) return;
+
+    const glm::vec3 center = myT->position + glm::vec3(0, 0.9f, 0); // eye level center
+    const float radiusSq   = m_blastRadius * m_blastRadius;
+
+    // Damage all entities within blast radius, scaled by proximity
+    m_registry.view<ecs::components::Transform, ecs::components::Health>()
+        .each([&](entt::entity e,
+                  ecs::components::Transform& t,
+                  ecs::components::Health&    h)
+    {
+        if (!m_registry.valid(e)) return;
+        glm::vec3 d = t.position + glm::vec3(0, 0.9f, 0) - center;
+        float distSq = glm::dot(d, d);
+        if (distSq > radiusSq) return;
+
+        float dist   = std::sqrt(distSq);
+        float factor = 1.0f - (dist / m_blastRadius); // 1.0 at center, 0 at edge
+        int dmg = static_cast<int>(m_blastDamage * factor);
+        if (dmg <= 0) return;
+
+        h.hp -= dmg;
+
+        // Knockback away from explosion center
+        auto* vel = m_registry.try_get<ecs::components::Velocity>(e);
+        if (vel && dist > 0.01f) {
+            glm::vec3 kbDir = d / dist;
+            float kbMag = factor * 8.0f;
+            vel->linear += kbDir * kbMag;
+        }
+
+        // Mark hurt state if present
+        auto* hurt = m_registry.try_get<ecs::components::HurtState>(e);
+        if (hurt) {
+            hurt->wasHurt   = true;
+            hurt->hurtTimer = 0.0f;
+            hurt->attacker  = m_entity;
+        }
+    });
+
+    // Block destruction in blast radius (set to air = stateId 0)
+    if (m_cm) {
+        const int r = static_cast<int>(std::ceil(m_blastRadius));
+        const int cx = static_cast<int>(std::floor(center.x));
+        const int cy = static_cast<int>(std::floor(center.y));
+        const int cz = static_cast<int>(std::floor(center.z));
+        for (int dx = -r; dx <= r; ++dx)
+        for (int dy = -r; dy <= r; ++dy)
+        for (int dz = -r; dz <= r; ++dz)
+        {
+            if (dx*dx + dy*dy + dz*dz > r*r) continue;
+            const_cast<ChunkManager*>(m_cm)->SetBlockState(
+                cx + dx, cy + dy, cz + dz, 0u);
+        }
+    }
+
+    // Kill the creeper
+    auto* health = m_registry.try_get<ecs::components::Health>(m_entity);
+    if (health) health->hp = 0;
+
+    ASCIIgL::Logger::Debug("Creeper exploded!");
+}
+
+// =====================================================================
+// SkeletonAimGoal — look at target, stub for future arrow firing
+// =====================================================================
+SkeletonAimGoal::SkeletonAimGoal(entt::registry& reg, entt::entity entity)
+    : m_registry(reg), m_entity(entity)
+{
+    setMutexBits(MUTEX_LOOK);
+}
+
+entt::entity SkeletonAimGoal::findTarget() const {
+    auto* atk = m_registry.try_get<ecs::components::AttackTarget>(m_entity);
+    if (!atk || atk->target == entt::null) return entt::null;
+    if (!m_registry.valid(atk->target))   return entt::null;
+    return atk->target;
+}
+
+bool SkeletonAimGoal::shouldExecute() {
+    return findTarget() != entt::null;
+}
+
+bool SkeletonAimGoal::continueExecuting() {
+    return findTarget() != entt::null;
+}
+
+void SkeletonAimGoal::startExecuting() {
+    m_shootCooldown = 2.0f; // Initial delay before first shot
+}
+
+void SkeletonAimGoal::updateTask(float dt) {
+    entt::entity target = findTarget();
+    if (target == entt::null) return;
+
+    auto* myT     = m_registry.try_get<ecs::components::Transform>(m_entity);
+    auto* targetT = m_registry.try_get<ecs::components::Transform>(target);
+    if (!myT || !targetT) return;
+
+    // Track target with smooth look
+    glm::vec3 diff = targetT->position - myT->position;
+    diff.y = 0.0f;
+    float dist = glm::length(diff);
+    if (dist > 0.01f) {
+        float yaw = std::atan2(-diff.x, -diff.z);
+        glm::quat targetRot = glm::angleAxis(yaw, glm::vec3(0, 1, 0));
+        myT->setRotation(glm::slerp(myT->rotation, targetRot, dt * 5.0f));
+    }
+
+    // Shoot cooldown countdown (arrow entity not yet implemented)
+    m_shootCooldown -= dt;
+    if (m_shootCooldown <= 0.0f) {
+        // TODO: spawn arrow entity toward target
+        m_shootCooldown = 2.0f; // 2-second fire rate (placeholder)
+    }
+}
+
+void SkeletonAimGoal::resetTask() {
+    m_shootCooldown = 0.0f;
 }
 
 } // namespace ai

@@ -1,31 +1,251 @@
-[2026-02-04 15:53:19] [INFO] ASCIICraft starting...
-[2026-02-04 15:53:19] [INFO] Initializing ASCIICraft...
-[2026-02-04 15:53:19] [INFO] Initializing Screen...
-[2026-02-04 15:53:19] [INFO] Attempting to modify Windows Terminal settings.json file directly.
-[2026-02-04 15:53:19] [INFO] Found Windows Terminal settings at: C:\Users\Skwig\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
-[2026-02-04 15:53:19] [INFO] Successfully modified Windows Terminal settings.json
-[2026-02-04 15:53:19] [INFO] Max console window size: 65x10
-[2026-02-04 15:53:19] [INFO] Requested height 350 exceeds maximum, adjusting to 10
-[2026-02-04 15:53:19] [INFO] Requested screen width 550 exceeds maximum, adjusting to 65
-[2026-02-04 15:53:19] [INFO] Screen dimensions automatically adjusted to 65x10
-[2026-02-04 15:53:19] [INFO] Attempting to modify Windows Terminal settings.json file directly.
-[2026-02-04 15:53:19] [INFO] Found Windows Terminal settings at: C:\Users\Skwig\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
-[2026-02-04 15:53:19] [INFO] Successfully modified Windows Terminal settings.json
-[2026-02-04 15:53:19] [INFO] Attempting to modify Windows Terminal color scheme.
-[2026-02-04 15:53:19] [INFO] Found Windows Terminal settings at: C:\Users\Skwig\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
-[2026-02-04 15:53:19] [INFO] Successfully modified Windows Terminal color scheme with 16 colors.
-[2026-02-04 15:53:19] [INFO] Enabled Virtual Terminal Processing mode.
-[2026-02-04 15:53:19] [INFO] Initializing Renderer...
-[2026-02-04 15:53:19] [INFO] Initializing RendererGPU...
-[2026-02-04 15:53:19] [INFO] [RendererGPU] Initializing DirectX 11...
-[2026-02-04 15:53:19] [INFO] [RendererGPU] Device created with feature level: 11.1
-[2026-02-04 15:53:19] [INFO] [RendererGPU] Render target initialized: 65x10 with 4x MSAA
-[2026-02-04 15:53:19] [INFO] World created
-[2026-02-04 15:53:19] [INFO] Loading game resources...
-[2026-02-04 15:53:19] [INFO] TEXTURE_ARRAY: Loading from atlas: res/textures/terrain.png
-[2026-02-04 15:53:19] [INFO] TEXTURE_ARRAY: Successfully loaded 256 layers
-[2026-02-04 15:53:19] [INFO] Resources loaded successfully
-[2026-02-04 15:53:19] [INFO] ASCIICraft initialized successfully!
-[2026-02-04 15:53:19] [INFO] Starting game loop...
-[2026-02-04 15:53:21] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
-[2026-02-04 15:53:21] [INFO] [RendererGPU] Successfully created Texture2DArray
+[2026-04-11 20:37:54] [INFO] ASCIICraft starting...
+[2026-04-11 20:37:54] [INFO] Initializing ASCIICraft...
+[2026-04-11 20:37:54] [INFO] Initializing Screen...
+[2026-04-11 20:37:54] [INFO] Attempting to modify Windows Terminal settings.json file directly.
+[2026-04-11 20:37:54] [INFO] Found Windows Terminal settings at: C:\Users\odr\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+[2026-04-11 20:37:54] [INFO] Successfully modified Windows Terminal settings.json
+[2026-04-11 20:37:54] [INFO] Max console window size: 80x30
+[2026-04-11 20:37:54] [INFO] Requested height 350 exceeds maximum, adjusting to 30
+[2026-04-11 20:37:54] [INFO] Requested screen width 550 exceeds maximum, adjusting to 80
+[2026-04-11 20:37:54] [INFO] Screen dimensions automatically adjusted to 80x30
+[2026-04-11 20:37:54] [INFO] Attempting to modify Windows Terminal settings.json file directly.
+[2026-04-11 20:37:54] [INFO] Found Windows Terminal settings at: C:\Users\odr\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+[2026-04-11 20:37:54] [INFO] Successfully modified Windows Terminal settings.json
+[2026-04-11 20:37:54] [INFO] Attempting to modify Windows Terminal color scheme.
+[2026-04-11 20:37:54] [INFO] Found Windows Terminal settings at: C:\Users\odr\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+[2026-04-11 20:37:54] [INFO] Successfully modified Windows Terminal color scheme with 16 colors.
+[2026-04-11 20:37:54] [INFO] Enabled Virtual Terminal Processing mode.
+[2026-04-11 20:37:54] [INFO] Initializing Renderer...
+[2026-04-11 20:37:54] [INFO] [Renderer] Initializing DirectX 11...
+[2026-04-11 20:37:54] [INFO] [Renderer] Device created with feature level: 11.1
+[2026-04-11 20:37:54] [INFO] [Renderer] Render target initialized: 80x30 with 4x MSAA
+[2026-04-11 20:37:54] [INFO] [Renderer] Initializing depth stencil...
+[2026-04-11 20:37:54] [INFO] [Renderer] Initializing blend states...
+[2026-04-11 20:37:54] [INFO] BlockStateRegistry: 27 types, 30 states registered.
+[2026-04-11 20:37:54] [INFO] World created
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/mobs/pig.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/mobs/pig.png'
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/mobs/chicken.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/mobs/chicken.png'
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/mobs/cow.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/mobs/cow.png'
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/mobs/creeper.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/mobs/creeper.png'
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/mobs/sheep.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/mobs/sheep.png'
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/mobs/skeleton.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/mobs/skeleton.png'
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/mobs/spider.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/mobs/spider.png'
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/mobs/zombie.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/mobs/zombie.png'
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/mobs/ocelot.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/mobs/ocelot.png'
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/mobs/siamese.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/mobs/siamese.png'
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/mobs/black.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/mobs/black.png'
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/mobs/sheep_fur.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/mobs/sheep_fur.png'
+[2026-04-11 20:37:54] [INFO] MobFactory: init complete — 11 mob types loaded
+[2026-04-11 20:37:54] [INFO] Mob showcase platform built at Y=150
+[2026-04-11 20:37:54] [INFO] Staircase built behind mob spawn, 8 steps up to Y=158
+[2026-04-11 20:37:54] [INFO] Spawned mob type 1
+[2026-04-11 20:37:54] [INFO] Spawned mob type 2
+[2026-04-11 20:37:54] [INFO] Spawned mob type 3
+[2026-04-11 20:37:54] [INFO] Spawned mob type 4
+[2026-04-11 20:37:54] [INFO] Spawned mob type 5
+[2026-04-11 20:37:54] [INFO] Spawned mob type 6
+[2026-04-11 20:37:54] [INFO] Spawned mob type 7
+[2026-04-11 20:37:54] [INFO] Spawned mob type 8
+[2026-04-11 20:37:54] [INFO] Spawned mob type 9
+[2026-04-11 20:37:54] [INFO] Spawned mob type 10
+[2026-04-11 20:37:54] [INFO] Spawned mob type 11
+[2026-04-11 20:37:54] [INFO] Loading game resources...
+[2026-04-11 20:37:54] [INFO] TEXTURE_ARRAY: Loading from atlas: res/textures/terrain.png
+[2026-04-11 20:37:54] [INFO] TEXTURE_ARRAY: Successfully loaded 256 layers
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/gui/inventory.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/gui/inventory.png'
+[2026-04-11 20:37:54] [INFO] TEXTURE: Attempting to load texture: res/textures/mobs/sheep_fur.png
+[2026-04-11 20:37:54] [INFO] TEXTURE: Successfully loaded 'res/textures/mobs/sheep_fur.png'
+[2026-04-11 20:37:54] [INFO] Resources loaded successfully
+[2026-04-11 20:37:54] [INFO] ASCIICraft initialized successfully!
+[2026-04-11 20:37:54] [INFO] Starting game loop...
+[2026-04-11 20:37:58] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:58] [INFO] [Renderer] Successfully created Texture2DArray
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:37:59] [WARNING] Hit max regenerations per frame (200), deferring rest to next frame
+[2026-04-11 20:38:00] [INFO] FPS: 98.397536
+[2026-04-11 20:38:00] [INFO] 
+==================== PROFILER REPORT ====================
+Frames Averaged: 60 (max: 60)
+Average Frame Time: 94.53 ms
+-------------------------------------------------------------
+Section                                   Avg (ms)  Min (ms)  Max (ms)   % Frame   Calls
+-------------------------------------------------------------
+Update                                       80.33      0.82   4374.64    84.98%      60
+Update.ChunkManagement                       79.94      0.67   4374.50    84.56%      60
+RenderGame                                    2.89      1.41     18.67     3.06%      60
+Render.EndGpuFrame                            1.75      0.67     14.61     1.85%      60
+Render.RenderPlaying                          0.39      0.20      0.87     0.41%      60
+RenderWorld                                   0.38      0.18      0.85     0.40%      60
+Render.PixelBufferOutput                      0.10      0.08      0.13     0.10%      60
+Clear Px Buff/Begin GPU Frame                 0.01      0.01      0.02     0.01%      60
+Render.PixelBufferDraws                       0.00      0.00      0.00     0.00%      60
+=============================================================
+
+[2026-04-11 20:38:01] [INFO] FPS: 147.637238
+[2026-04-11 20:38:01] [INFO] 
+==================== PROFILER REPORT ====================
+Frames Averaged: 60 (max: 60)
+Average Frame Time: 21.22 ms
+-------------------------------------------------------------
+Section                                   Avg (ms)  Min (ms)  Max (ms)   % Frame   Calls
+-------------------------------------------------------------
+RenderGame                                    2.21      1.90      3.48    10.43%      60
+Render.EndGpuFrame                            1.34      1.12      2.55     6.32%      60
+Update                                        1.23      0.59      2.29     5.78%      60
+Update.ChunkManagement                        0.90      0.49      1.49     4.24%      60
+Render.RenderPlaying                          0.26      0.18      0.50     1.23%      60
+RenderWorld                                   0.25      0.17      0.49     1.18%      60
+Render.PixelBufferOutput                      0.09      0.07      0.17     0.45%      60
+Clear Px Buff/Begin GPU Frame                 0.01      0.01      0.02     0.05%      60
+Render.PixelBufferDraws                       0.00      0.00      0.00     0.00%      60
+=============================================================
+
+[2026-04-11 20:38:02] [INFO] FPS: 181.264370
+[2026-04-11 20:38:02] [INFO] 
+==================== PROFILER REPORT ====================
+Frames Averaged: 60 (max: 60)
+Average Frame Time: 21.46 ms
+-------------------------------------------------------------
+Section                                   Avg (ms)  Min (ms)  Max (ms)   % Frame   Calls
+-------------------------------------------------------------
+RenderGame                                    2.08      1.80      2.64     9.67%      60
+Render.EndGpuFrame                            1.25      1.05      1.70     5.80%      60
+Update                                        0.95      0.61      1.64     4.42%      60
+Update.ChunkManagement                        0.73      0.38      1.27     3.38%      60
+Render.RenderPlaying                          0.24      0.17      0.37     1.10%      60
+RenderWorld                                   0.23      0.16      0.36     1.06%      60
+Render.PixelBufferOutput                      0.09      0.07      0.13     0.42%      60
+Clear Px Buff/Begin GPU Frame                 0.01      0.01      0.01     0.04%      60
+Render.PixelBufferDraws                       0.00      0.00      0.00     0.00%      60
+=============================================================
+
+[2026-04-11 20:38:04] [INFO] FPS: 224.501083
+[2026-04-11 20:38:04] [INFO] 
+==================== PROFILER REPORT ====================
+Frames Averaged: 60 (max: 60)
+Average Frame Time: 21.21 ms
+-------------------------------------------------------------
+Section                                   Avg (ms)  Min (ms)  Max (ms)   % Frame   Calls
+-------------------------------------------------------------
+RenderGame                                    2.14      1.90      2.80    10.08%      60
+Render.EndGpuFrame                            1.26      1.04      1.94     5.94%      60
+Update                                        1.10      0.66      1.67     5.17%      60
+Update.ChunkManagement                        0.84      0.48      1.45     3.95%      60
+Render.RenderPlaying                          0.26      0.21      0.42     1.20%      60
+RenderWorld                                   0.24      0.20      0.40     1.15%      60
+Render.PixelBufferOutput                      0.10      0.09      0.14     0.48%      60
+Clear Px Buff/Begin GPU Frame                 0.01      0.01      0.02     0.05%      60
+Render.PixelBufferDraws                       0.00      0.00      0.00     0.01%      60
+=============================================================
+
+[2026-04-11 20:38:05] [INFO] FPS: 269.840200
+[2026-04-11 20:38:05] [INFO] 
+==================== PROFILER REPORT ====================
+Frames Averaged: 60 (max: 60)
+Average Frame Time: 21.85 ms
+-------------------------------------------------------------
+Section                                   Avg (ms)  Min (ms)  Max (ms)   % Frame   Calls
+-------------------------------------------------------------
+RenderGame                                    2.20      1.89      2.85    10.05%      60
+Update                                        1.44      0.84      2.78     6.60%      60
+Render.EndGpuFrame                            1.27      1.07      1.72     5.80%      60
+Update.ChunkManagement                        1.09      0.65      1.54     4.99%      60
+Render.RenderPlaying                          0.29      0.19      0.43     1.35%      60
+RenderWorld                                   0.28      0.18      0.41     1.29%      60
+Render.PixelBufferOutput                      0.10      0.08      0.13     0.46%      60
+Clear Px Buff/Begin GPU Frame                 0.01      0.01      0.03     0.06%      60
+Render.PixelBufferDraws                       0.00      0.00      0.00     0.00%      60
+=============================================================
+
+[2026-04-11 20:38:06] [INFO] FPS: 298.562009
+[2026-04-11 20:38:06] [INFO] 
+==================== PROFILER REPORT ====================
+Frames Averaged: 60 (max: 60)
+Average Frame Time: 23.09 ms
+-------------------------------------------------------------
+Section                                   Avg (ms)  Min (ms)  Max (ms)   % Frame   Calls
+-------------------------------------------------------------
+RenderGame                                    2.19      1.87      3.73     9.48%      60
+Render.EndGpuFrame                            1.28      1.10      2.67     5.53%      60
+Update                                        1.22      0.62      2.58     5.27%      60
+Update.ChunkManagement                        0.94      0.46      1.52     4.08%      60
+Render.RenderPlaying                          0.26      0.18      0.47     1.12%      60
+RenderWorld                                   0.25      0.18      0.45     1.07%      60
+Render.PixelBufferOutput                      0.10      0.07      0.16     0.42%      60
+Clear Px Buff/Begin GPU Frame                 0.01      0.01      0.02     0.05%      60
+Render.PixelBufferDraws                       0.00      0.00      0.00     0.00%      60
+=============================================================
+
+[2026-04-11 20:38:08] [INFO] FPS: 299.428058
+[2026-04-11 20:38:08] [INFO] 
+==================== PROFILER REPORT ====================
+Frames Averaged: 60 (max: 60)
+Average Frame Time: 22.71 ms
+-------------------------------------------------------------
+Section                                   Avg (ms)  Min (ms)  Max (ms)   % Frame   Calls
+-------------------------------------------------------------
+RenderGame                                    2.19      1.86      3.55     9.66%      60
+Render.EndGpuFrame                            1.33      1.08      2.63     5.84%      60
+Update                                        1.19      0.71      1.99     5.24%      60
+Update.ChunkManagement                        0.93      0.60      1.58     4.11%      60
+Render.RenderPlaying                          0.25      0.18      0.41     1.12%      60
+RenderWorld                                   0.24      0.17      0.39     1.07%      60
+Render.PixelBufferOutput                      0.10      0.08      0.13     0.44%      60
+Clear Px Buff/Begin GPU Frame                 0.01      0.01      0.02     0.05%      60
+Render.PixelBufferDraws                       0.00      0.00      0.00     0.00%      60
+=============================================================
+

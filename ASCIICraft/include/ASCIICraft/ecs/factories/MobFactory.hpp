@@ -33,12 +33,17 @@ public:
 
     // Access loaded textures (for creating per-type materials externally)
     const std::unordered_map<uint32_t, std::shared_ptr<ASCIIgL::Texture>>& getTextures() const { return m_textures; }
+    const std::shared_ptr<ASCIIgL::Texture>& getSheepFurTexture() const { return m_sheepFurTexture; }
 
 private:
     entt::registry& m_registry;
     std::vector<entt::entity> m_active;
     std::unordered_map<uint32_t, std::shared_ptr<ASCIIgL::Texture>> m_textures;
     std::unordered_map<uint32_t, std::shared_ptr<ASCIIgL::Mesh>> m_meshes;
+
+    // Sheep fur mesh — rendered as overlay on top of base sheep mesh
+    std::shared_ptr<ASCIIgL::Texture> m_sheepFurTexture;
+    std::shared_ptr<ASCIIgL::Mesh> m_sheepFurMesh;
 };
 
 } // namespace ecs::factories

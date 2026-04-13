@@ -18,6 +18,7 @@
 #include <ASCIICraft/ecs/components/Head.hpp>
 #include <ASCIICraft/ecs/components/MobComponents.hpp>
 #include <ASCIICraft/ecs/components/PhysicsBody.hpp>
+#include <ASCIICraft/ecs/components/Velocity.hpp>
 #include <ASCIICraft/events/InputEvents.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
 #include <ASCIIgL/util/Logger.hpp>
@@ -104,9 +105,27 @@ void PlayerCombatSystem::TryAttack() {
     if (health) {
         health->hp -= static_cast<int>(ATTACK_DAMAGE);
         ASCIIgL::Logger::Info("Player attacked mob (type "
-            + std::to_string(m_registry.get<components::MobTag>(bestTarget).typeId)
+            + std::to_string(static_cast<uint32_t>(m_registry.get<components::MobTag>(bestTarget).typeId))
             + ") for " + std::to_string(static_cast<int>(ATTACK_DAMAGE))
             + " damage. HP remaining: " + std::to_string(health->hp));
+    }
+
+    // Knockback: push the mob away from the player horizontally
+    {
+        auto* mobVel = m_registry.try_get<components::Velocity>(bestTarget);
+        auto* mobT   = m_registry.try_get<components::Transform>(bestTarget);
+        if (mobVel && mobT) {
+            glm::vec3 kbDir = mobT->position - position;
+            kbDir.y = 0.0f;
+            float len = glm::length(kbDir);
+            if (len > 0.001f) kbDir /= len;
+            else kbDir = -lookDir; // fallback if standing on top
+            kbDir.y = 0.0f;
+            constexpr float KNOCKBACK_SPEED = 8.0f;
+            mobVel->linear.x += kbDir.x * KNOCKBACK_SPEED;
+            mobVel->linear.z += kbDir.z * KNOCKBACK_SPEED;
+            mobVel->linear.y  = 4.0f; // small upward pop
+        }
     }
 
     // Mark mob as hurt (triggers PanicGoal on passive mobs)

@@ -23,7 +23,7 @@ void AITaskScheduler::addGoal(int priority, std::unique_ptr<AIGoal> goal) {
     m_entries.push_back(std::move(entry));
 }
 
-void AITaskScheduler::update(float /* dt */) {
+void AITaskScheduler::update(float dt) {
     ++m_tickCount;
 
     // Full evaluation every 3 ticks (MC-style throttle).
@@ -64,7 +64,7 @@ void AITaskScheduler::update(float /* dt */) {
     // Update all running tasks
     for (auto& entry : m_entries) {
         if (entry.running) {
-            entry.goal->updateTask(1.0f / 30.0f); // fixed dt matching physics
+            entry.goal->updateTask(dt);
         }
     }
 }

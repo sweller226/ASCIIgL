@@ -13,6 +13,7 @@
 //   AttackTarget — Current entity to chase/attack (set by FindTargetGoal)
 //   MobAI        — AI brain: owns the two AITaskSchedulers (behavior + target)
 //   DeathState   — Death animation timer and despawn delay
+//   CreeperSwell — Tracks swell charge / explosion state for Creeper
 // =========================================================================
 
 #include <cstdint>
@@ -24,11 +25,25 @@ namespace ai { class AITaskScheduler; }
 
 namespace ecs::components {
 
+// Strongly-typed mob IDs — replaces raw uint32_t magic numbers.
+// Values must stay in sync with MobFactory::init() registrations.
+enum class MobType : uint32_t {
+    Pig      = 1,
+    Chicken  = 2,
+    Cow      = 3,
+    Creeper  = 4,
+    Sheep    = 5,
+    Skeleton = 6,
+    Spider   = 7,
+    Zombie   = 8,
+    Ocelot   = 9,
+    Siamese  = 10,
+    BlackCat = 11,
+};
+
 // Tag component to mark an entity as a mob and store its type id.
-// Type IDs: 1=Pig, 2=Chicken, 3=Cow, 4=Creeper, 5=Sheep,
-//           6=Skeleton, 7=Spider, 8=Zombie, 9=Ocelot, 10=Siamese, 11=Black Cat
 struct MobTag {
-    uint32_t typeId = 0;
+    MobType typeId = MobType::Pig;
 };
 
 // Basic health component
@@ -63,7 +78,6 @@ struct MobAI {
     std::unique_ptr<ai::AITaskScheduler> tasks;       // behavior scheduler
     std::unique_ptr<ai::AITaskScheduler> targetTasks;  // target selection scheduler
     MobCategory category = MobCategory::Passive;
-    float moveSpeed = 0.25f;    // base movement speed (blocks/sec, no MC multiplier)
 
     // Movement state set by AI goals
     glm::vec3 moveTarget{0.0f};
@@ -82,6 +96,19 @@ struct DeathState {
     bool isDead = false;
     float deathTimer = 0.0f;       // time since death (for animation/fade)
     float despawnDelay = 1.5f;     // seconds before entity removal
+};
+
+// Creeper swell state — managed by CreeperSwellGoal.
+// swellProgress [0,1]: 0=idle, 1=fully charged, triggers explosion.
+struct CreeperSwell {
+    float swellProgress = 0.0f; // 0 = idle, 1 = explode
+    bool  isSwelling    = false;
+};
+
+// Fall damage tracking.
+struct FallState {
+    float maxY  = 0.0f;   // highest Y reached since leaving ground
+    bool  inAir = false;
 };
 
 } // namespace ecs::components

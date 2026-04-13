@@ -2,12 +2,14 @@
 #include <ASCIICraft/ecs/components/MobComponents.hpp>
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/Renderable.hpp>
+#include <ASCIICraft/ecs/components/PhysicsBody.hpp>
 #include <ASCIICraft/ecs/components/Velocity.hpp>
 #include <ASCIICraft/ecs/components/PhysicsBody.hpp>
 #include <ASCIIgL/engine/Mesh.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 #include <ASCIIgL/util/Logger.hpp>
+#include <glm/gtc/constants.hpp>
 #include <memory>
 #include <algorithm>
 #include <cmath>
@@ -60,10 +62,17 @@ struct MobMeshBuilder {
                 float rpX, float rpY, float rpZ,
                 float rotXRad = 0.0f,
                 float rotYRad = 0.0f,
-                float rotZRad = 0.0f)
+                float rotZRad = 0.0f,
+                float inflate = 0.0f)
     {
+        lx -= inflate;
+        ly -= inflate;
+        lz -= inflate;
+        float x2 = lx + w + inflate * 2.0f;
+        float y2 = ly + h + inflate * 2.0f;
+        float z2 = lz + d + inflate * 2.0f;
+
         // 1. Eight corners in MC local space
-        float x2 = lx + w, y2 = ly + h, z2 = lz + d;
         glm::vec3 c[8] = {
             {lx, ly, lz}, {x2, ly, lz}, {x2, y2, lz}, {lx, y2, lz},
             {lx, ly, z2}, {x2, ly, z2}, {x2, y2, z2}, {lx, y2, z2},
@@ -347,7 +356,8 @@ void MobFactory::init() {
     // =================================================================
     //  6 — SKELETON  (ModelSkeleton extends ModelZombie/ModelBiped)
     //      Texture: 64 x 32   (thin 2-wide limbs)
-    //      Arms baked at rotX = -PI/2 (zombie forward pose)
+    //      Arms baked at rotX = -PI/10 (~18 degrees forward — natural idle
+    //      held-bow pose, NOT the zombie outstretched -PI/2 forward pose).
     // =================================================================
     registerMob(6, "res/textures/mobs/skeleton.png", 64, 32,
         [&](MobMeshBuilder& b)
@@ -356,14 +366,16 @@ void MobFactory::init() {
         b.addBox( 0,  0,  -4.f,-8.f,-4.f, 8,8,8,   0.f, 0.f, 0.f);
         // Body: tex(16,16), box(-4,0,-2, 8,12,4), RP(0,0,0)
         b.addBox(16, 16,  -4.f, 0.f,-2.f, 8,12,4,  0.f, 0.f, 0.f);
-        // Right arm: tex(40,16), box(-1,-2,-1, 2,12,2), RP(-5,2,0), rotX=-PI/2
-        b.addBox(40, 16,  -1.f,-2.f,-1.f, 2,12,2, -5.f, 2.f, 0.f, -PI/2);
-        // Left arm: tex(40,16), box(-1,-2,-1, 2,12,2), RP(5,2,0), rotX=-PI/2
-        b.addBox(40, 16,  -1.f,-2.f,-1.f, 2,12,2,  5.f, 2.f, 0.f, -PI/2);
+        // Right arm: tex(40,16), box(-1,-2,-1, 2,12,2), RP(-5,2,0), rotX=-PI/10
+        b.addBox(40, 16,  -1.f,-2.f,-1.f, 2,12,2, -5.f, 2.f, 0.f, -PI/10.f);
+        // Left arm: tex(40,16), box(-1,-2,-1, 2,12,2), RP(5,2,0), rotX=-PI/10
+        b.addBox(40, 16,  -1.f,-2.f,-1.f, 2,12,2,  5.f, 2.f, 0.f, -PI/10.f);
         // Right leg: tex(0,16), box(-1,0,-1, 2,12,2), RP(-2,12,0)
         b.addBox( 0, 16,  -1.f, 0.f,-1.f, 2,12,2, -2.f,12.f, 0.f);
         // Left leg: tex(0,16), box(-1,0,-1, 2,12,2), RP(2,12,0)
         b.addBox( 0, 16,  -1.f, 0.f,-1.f, 2,12,2,  2.f,12.f, 0.f);
+        // Bow is rendered as a separate HeldItemRenderable with its own
+        // bow.png texture — see MobFactory::init() bow mesh section below.
     });
 
     // =================================================================
@@ -453,6 +465,28 @@ void MobFactory::init() {
     registerMob(10, "res/textures/mobs/siamese.png",  64, 32, buildOcelotBoxes);
     registerMob(11, "res/textures/mobs/black.png",    64, 32, buildOcelotBoxes);
 
+    // =================================================================
+    //  SHEEP FUR  (wool overlay for typeId=5)
+    //  Texture: 64 x 32  (sheep_fur.png — wool texture)
+    //  Mesh: Identical geometry to sheep body, rendered on top with fur material
+    // =================================================================
+    try {
+        m_sheepFurTexture = std::make_shared<ASCIIgL::Texture>("res/textures/mobs/sheep_fur.png");
+        MobMeshBuilder furB(64.f, 32.f);
+        // Exact MCP 908 ModelSheep1 layout: same pose as the base sheep model,
+        // with the wool layer inflated around the same rotation points.
+        furB.addBox( 0,  0,  -3.f,-4.f,-4.f, 6,6,6,   0.f, 6.f,-8.f, 0.f, 0.f, 0.f, 0.6f);
+        furB.addBox(28,  8,  -4.f,-10.f,-7.f, 8,16,6,  0.f, 5.f, 2.f, PI/2, 0.f, 0.f, 1.75f);
+        furB.addBox( 0, 16,  -2.f, 0.f,-2.f, 4,6,4,  -3.f,12.f, 7.f, 0.f, 0.f, 0.f, 0.5f);
+        furB.addBox( 0, 16,  -2.f, 0.f,-2.f, 4,6,4,   3.f,12.f, 7.f, 0.f, 0.f, 0.f, 0.5f);
+        furB.addBox( 0, 16,  -2.f, 0.f,-2.f, 4,6,4,  -3.f,12.f,-5.f, 0.f, 0.f, 0.f, 0.5f);
+        furB.addBox( 0, 16,  -2.f, 0.f,-2.f, 4,6,4,   3.f,12.f,-5.f, 0.f, 0.f, 0.f, 0.5f);
+        m_sheepFurMesh = furB.finalize(m_sheepFurTexture.get());
+        ASCIIgL::Logger::Debug("MobFactory: sheep fur mesh OK");
+    } catch (const std::exception& e) {
+        ASCIIgL::Logger::Warning(std::string("MobFactory: sheep fur loading failed — ") + e.what());
+    }
+
     ASCIIgL::Logger::Info("MobFactory: init complete — "
         + std::to_string(m_meshes.size()) + " mob types loaded");
 }
@@ -463,7 +497,8 @@ void MobFactory::init() {
 // ===========================================================================
 entt::entity MobFactory::spawnMob(uint32_t typeId, const glm::ivec3& pos) {
     auto e = m_registry.create();
-    m_registry.emplace<ecs::components::MobTag>(e, typeId);
+    m_registry.emplace<ecs::components::MobTag>(e,
+        static_cast<ecs::components::MobType>(typeId));
 
     auto& t = m_registry.emplace<ecs::components::Transform>(e);
     t.setPosition(glm::vec3(
@@ -515,10 +550,23 @@ entt::entity MobFactory::spawnMob(uint32_t typeId, const glm::ivec3& pos) {
     auto& body = m_registry.emplace<ecs::components::PhysicsBody>(e);
     body.SetMass(1.0f);
 
-    m_registry.emplace<ecs::components::StepPhysics>(e);
+    auto& stepPhys = m_registry.emplace<ecs::components::StepPhysics>(e);
+    stepPhys.stepHeight = 1.1f; // Must clear a full 1-block step (AABB halfExtents.y + margin)
     m_registry.emplace<ecs::components::Gravity>(e);
     m_registry.emplace<ecs::components::GroundPhysics>(e);
-    m_registry.emplace<ecs::components::FlyingPhysics>(e);
+    m_registry.emplace<ecs::components::FallState>(e);
+    // Creeper-specific swell tracker
+    if (typeId == 4) m_registry.emplace<ecs::components::CreeperSwell>(e);
+    // Sheep fur overlay
+    if (typeId == 5 && m_sheepFurMesh) {
+        auto& fur = m_registry.emplace<ecs::components::FurRenderable>(e);
+        fur.mesh = m_sheepFurMesh;
+        fur.materialName = "sheepFurMaterial";
+        fur.visible = true;
+        fur.layer = 2;  // render after base mesh
+        fur.positionOffset = glm::vec3(0.f, 0.32f, 0.f);
+    }
+    // TODO: Skeleton bow rendering (needs held-item placement fix)
 
     // Per-type collider sizing (half-extents derived from vanilla MC)
     glm::vec3 half(0.45f, 0.45f, 0.45f);

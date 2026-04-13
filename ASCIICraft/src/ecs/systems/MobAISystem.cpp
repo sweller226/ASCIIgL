@@ -21,6 +21,7 @@
 #include <ASCIICraft/ecs/components/Renderable.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
 #include <ASCIICraft/ecs/components/PhysicsBody.hpp>
+#include <ASCIICraft/ecs/factories/MobFactory.hpp>
 #include <ASCIICraft/ai/AIGoal.hpp>
 #include <ASCIICraft/ai/AIBehaviors.hpp>
 #include <ASCIICraft/ai/Pathfinding.hpp>
@@ -32,8 +33,10 @@
 
 namespace ecs::systems {
 
-MobAISystem::MobAISystem(entt::registry& registry)
-    : m_registry(registry) {}
+MobAISystem::MobAISystem(entt::registry& registry,
+                         ecs::factories::MobFactory* mobFactory)
+    : m_registry(registry)
+    , m_mobFactory(mobFactory) {}
 
 const ChunkManager* MobAISystem::getChunkManager() const {
     World* w = GetWorldPtr(const_cast<entt::registry&>(m_registry));
@@ -64,11 +67,8 @@ void MobAISystem::initializeMob(entt::entity e) {
     (void)m_registry.get_or_emplace<components::Health>(e);
 
     // Determine category and register goals based on mob type
-    uint32_t typeId = mob->typeId;
-
-    // Type mapping from MobFactory:
-    // 1=Pig, 2=Chicken, 3=Cow, 4=Creeper, 5=Sheep,
-    // 6=Skeleton, 7=Spider, 8=Zombie, 9=Ocelot, 10=Siamese, 11=Black Cat
+    using MobType = components::MobType;
+    MobType typeId = mob->typeId;
 
     switch (typeId) {
         // =============================================================
@@ -81,78 +81,75 @@ void MobAISystem::initializeMob(entt::entity e) {
         //   Passive ~0.8-1.0 bps wander, ~1.5-2.0 bps panic
         // =============================================================
 
-        case 1: // Pig
+        case MobType::Pig:
             ai.category = components::MobCategory::Passive;
-            ai.moveSpeed = 1.0f;
             ai.tasks->addGoal(1, std::make_unique<::ai::PanicGoal>(m_registry, e, cm, bsr, 1.8f));
             ai.tasks->addGoal(6, std::make_unique<::ai::WanderGoal>(m_registry, e, cm, bsr, 1.0f));
             ai.tasks->addGoal(8, std::make_unique<::ai::LookIdleGoal>(m_registry, e));
             break;
 
-        case 2: // Chicken
+        case MobType::Chicken:
             ai.category = components::MobCategory::Passive;
-            ai.moveSpeed = 1.0f;
             ai.tasks->addGoal(1, std::make_unique<::ai::PanicGoal>(m_registry, e, cm, bsr, 2.0f));
             ai.tasks->addGoal(6, std::make_unique<::ai::WanderGoal>(m_registry, e, cm, bsr, 0.9f));
             ai.tasks->addGoal(8, std::make_unique<::ai::LookIdleGoal>(m_registry, e));
             break;
 
-        case 3: // Cow
+        case MobType::Cow:
             ai.category = components::MobCategory::Passive;
-            ai.moveSpeed = 0.8f;
             ai.tasks->addGoal(1, std::make_unique<::ai::PanicGoal>(m_registry, e, cm, bsr, 1.5f));
             ai.tasks->addGoal(6, std::make_unique<::ai::WanderGoal>(m_registry, e, cm, bsr, 0.8f));
             ai.tasks->addGoal(8, std::make_unique<::ai::LookIdleGoal>(m_registry, e));
             break;
 
-        case 5: // Sheep
+        case MobType::Sheep:
             ai.category = components::MobCategory::Passive;
-            ai.moveSpeed = 0.9f;
             ai.tasks->addGoal(1, std::make_unique<::ai::PanicGoal>(m_registry, e, cm, bsr, 1.6f));
             ai.tasks->addGoal(6, std::make_unique<::ai::WanderGoal>(m_registry, e, cm, bsr, 0.9f));
             ai.tasks->addGoal(8, std::make_unique<::ai::LookIdleGoal>(m_registry, e));
             break;
 
-        case 9:  // Ocelot
-        case 10: // Siamese
-        case 11: // Black Cat
+        case MobType::Ocelot:
+        case MobType::Siamese:
+        case MobType::BlackCat:
             ai.category = components::MobCategory::Passive;
-            ai.moveSpeed = 1.2f;
             ai.tasks->addGoal(1, std::make_unique<::ai::PanicGoal>(m_registry, e, cm, bsr, 2.2f));
             ai.tasks->addGoal(6, std::make_unique<::ai::WanderGoal>(m_registry, e, cm, bsr, 1.0f));
             ai.tasks->addGoal(8, std::make_unique<::ai::LookIdleGoal>(m_registry, e));
             break;
 
-        case 4: // Creeper
+        case MobType::Creeper:
+            // CreeperSwellGoal handles approach + charge + explosion.
+            // WanderGoal fills idle time when no target.
             ai.category = components::MobCategory::Monster;
-            ai.moveSpeed = 1.0f;
-            ai.tasks->addGoal(4, std::make_unique<::ai::MeleeAttackGoal>(m_registry, e, cm, bsr, 1.4f, 0.0f)); // Creeper doesn't melee, but chases
+            ai.tasks->addGoal(3, std::make_unique<::ai::CreeperSwellGoal>(m_registry, e, cm, bsr, 1.4f));
             ai.tasks->addGoal(5, std::make_unique<::ai::WanderGoal>(m_registry, e, cm, bsr, 1.0f));
             ai.tasks->addGoal(6, std::make_unique<::ai::LookIdleGoal>(m_registry, e));
             ai.targetTasks->addGoal(1, std::make_unique<::ai::FindTargetGoal>(m_registry, e, 16.0f));
             break;
 
-        case 6: // Skeleton — keeps distance, strafes, doesn't hard-chase
+        case MobType::Skeleton:
+            // KeepDistanceGoal handles the movement; SkeletonAimGoal handles
+            // facing + (future) arrow firing.  Both use different mutex bits so
+            // they run concurrently.
             ai.category = components::MobCategory::Monster;
-            ai.moveSpeed = 1.0f;
             ai.tasks->addGoal(3, std::make_unique<::ai::KeepDistanceGoal>(m_registry, e, cm, bsr, 1.2f, 8.0f, 14.0f));
+            ai.tasks->addGoal(4, std::make_unique<::ai::SkeletonAimGoal>(m_registry, e));
             ai.tasks->addGoal(5, std::make_unique<::ai::WanderGoal>(m_registry, e, cm, bsr, 1.0f));
             ai.tasks->addGoal(6, std::make_unique<::ai::LookIdleGoal>(m_registry, e));
             ai.targetTasks->addGoal(1, std::make_unique<::ai::FindTargetGoal>(m_registry, e, 16.0f));
             break;
 
-        case 7: // Spider
+        case MobType::Spider:
             ai.category = components::MobCategory::Monster;
-            ai.moveSpeed = 1.3f;
             ai.tasks->addGoal(4, std::make_unique<::ai::MeleeAttackGoal>(m_registry, e, cm, bsr, 1.7f, 2.0f));
             ai.tasks->addGoal(5, std::make_unique<::ai::WanderGoal>(m_registry, e, cm, bsr, 1.3f));
             ai.tasks->addGoal(6, std::make_unique<::ai::LookIdleGoal>(m_registry, e));
             ai.targetTasks->addGoal(1, std::make_unique<::ai::FindTargetGoal>(m_registry, e, 16.0f));
             break;
 
-        case 8: // Zombie
+        case MobType::Zombie:
             ai.category = components::MobCategory::Monster;
-            ai.moveSpeed = 1.0f;
             ai.tasks->addGoal(2, std::make_unique<::ai::MeleeAttackGoal>(m_registry, e, cm, bsr, 1.4f, 3.0f));
             ai.tasks->addGoal(7, std::make_unique<::ai::WanderGoal>(m_registry, e, cm, bsr, 1.0f));
             ai.tasks->addGoal(8, std::make_unique<::ai::LookIdleGoal>(m_registry, e));
@@ -160,15 +157,14 @@ void MobAISystem::initializeMob(entt::entity e) {
             break;
 
         default:
-            // basic passive behavior
             ai.category = components::MobCategory::Passive;
-            ai.moveSpeed = 0.25f;
             ai.tasks->addGoal(6, std::make_unique<::ai::WanderGoal>(m_registry, e, cm, bsr, 1.0f));
             ai.tasks->addGoal(8, std::make_unique<::ai::LookIdleGoal>(m_registry, e));
             break;
     }
 
-    ASCIIgL::Logger::Debug("Initialized AI for mob type " + std::to_string(typeId));
+    ASCIIgL::Logger::Debug("Initialized AI for mob type "
+        + std::to_string(static_cast<uint32_t>(typeId)));
 }
 
 void MobAISystem::initializeMobs() {
@@ -187,6 +183,9 @@ void MobAISystem::initializeMobs() {
 void MobAISystem::update(float dt) {
     // 1. Update hurt timers
     updateHurtTimers(dt);
+
+    // 1b. Fall damage
+    updateFallDamage(dt);
 
     // 2. Run AI schedulers for all mobs
     auto view = m_registry.view<components::MobTag, components::MobAI>();
@@ -254,6 +253,19 @@ void MobAISystem::despawnOutOfRange() {
 
     for (auto e : toDestroy) {
         ASCIIgL::Logger::Debug("Mob despawned (out of render distance)");
+        destroyMob(e);
+    }
+}
+
+// =====================================================================
+// destroyMob — routes entity destruction through MobFactory when
+// available so m_active stays consistent with the registry.
+// =====================================================================
+void MobAISystem::destroyMob(entt::entity e) {
+    if (!m_registry.valid(e)) return;
+    if (m_mobFactory) {
+        m_mobFactory->despawnMob(e); // removes from m_active and destroys
+    } else {
         m_registry.destroy(e);
     }
 }
@@ -289,8 +301,12 @@ void MobAISystem::pushMobsApart() {
         mobs.push_back({e, t.position, radius});
     }
 
-    // O(n^2) push — fine for small mob counts
-    constexpr float PUSH_STRENGTH = 0.05f; // nudge strength per frame
+    // O(n^2) push — fine for small mob counts.
+    // Push is applied as a velocity impulse so the existing physics collision
+    // resolution prevents mobs from being shoved into solid blocks.
+    // PUSH_STRENGTH is in blocks/sec per block of overlap — tuned to give
+    // similar separation feel to the old position-offset approach.
+    constexpr float PUSH_STRENGTH = 3.0f;
     for (size_t i = 0; i < mobs.size(); ++i) {
         for (size_t j = i + 1; j < mobs.size(); ++j) {
             glm::vec3 diff = mobs[i].pos - mobs[j].pos;
@@ -299,26 +315,26 @@ void MobAISystem::pushMobsApart() {
             float dist = glm::length(diff);
             float minDist = mobs[i].radius + mobs[j].radius;
 
-            if (dist < minDist && dist > 0.001f) {
-                // Push apart proportional to overlap
-                glm::vec3 pushDir = diff / dist;
-                float overlap = minDist - dist;
-                float pushAmount = overlap * PUSH_STRENGTH;
+            glm::vec3 pushDir;
+            float pushSpeed;
 
-                // Apply push via direct position offset (MC-style)
-                auto* ti = m_registry.try_get<components::Transform>(mobs[i].entity);
-                auto* tj = m_registry.try_get<components::Transform>(mobs[j].entity);
-                if (ti) ti->setPosition(ti->position + pushDir * pushAmount);
-                if (tj) tj->setPosition(tj->position - pushDir * pushAmount);
+            if (dist > 0.001f && dist < minDist) {
+                pushDir   = diff / dist;
+                pushSpeed = (minDist - dist) * PUSH_STRENGTH;
             } else if (dist <= 0.001f) {
-                // Exactly overlapping — push in random-ish direction based on entity ids
+                // Exactly overlapping — deterministic direction from entity IDs
                 float angle = static_cast<float>(static_cast<uint32_t>(mobs[i].entity)) * 0.7f;
-                glm::vec3 pushDir(std::cos(angle), 0.0f, std::sin(angle));
-                auto* ti = m_registry.try_get<components::Transform>(mobs[i].entity);
-                auto* tj = m_registry.try_get<components::Transform>(mobs[j].entity);
-                if (ti) ti->setPosition(ti->position + pushDir * PUSH_STRENGTH);
-                if (tj) tj->setPosition(tj->position - pushDir * PUSH_STRENGTH);
+                pushDir   = glm::vec3(std::cos(angle), 0.0f, std::sin(angle));
+                pushSpeed = PUSH_STRENGTH;
+            } else {
+                continue;
             }
+
+            // Apply impulse to velocity — physics will clip against walls next tick
+            auto* vi = m_registry.try_get<components::Velocity>(mobs[i].entity);
+            auto* vj = m_registry.try_get<components::Velocity>(mobs[j].entity);
+            if (vi) { vi->linear.x += pushDir.x * pushSpeed; vi->linear.z += pushDir.z * pushSpeed; }
+            if (vj) { vj->linear.x -= pushDir.x * pushSpeed; vj->linear.z -= pushDir.z * pushSpeed; }
         }
     }
 }
@@ -395,15 +411,19 @@ void MobAISystem::updateDeathAndDespawn(float dt) {
 
             death.deathTimer += dt;
 
-            // Visual feedback: tilt the mob over as it dies
+            // Visual feedback: tilt the mob over as it dies.
+            // Compose the tilt with the mob's current Y-facing so it falls
+            // in the direction it was looking rather than snapping to +Z.
             if (death.deathTimer < death.despawnDelay) {
                 auto* t = m_registry.try_get<components::Transform>(e);
                 if (t) {
                     float progress = death.deathTimer / death.despawnDelay;
                     float tiltAngle = progress * 1.5708f; // 90 degrees
-                    // Rotate around Z axis to "fall over"
-                    glm::quat deathRot = glm::angleAxis(tiltAngle, glm::vec3(0, 0, 1));
-                    t->setRotation(deathRot);
+                    glm::quat tilt        = glm::angleAxis(tiltAngle, glm::vec3(0, 0, 1));
+                    // Preserve Y-axis yaw: extract it from current rotation
+                    glm::vec3 euler       = glm::eulerAngles(t->rotation);
+                    glm::quat facingYaw   = glm::angleAxis(euler.y, glm::vec3(0, 1, 0));
+                    t->setRotation(facingYaw * tilt);
                 }
             }
 
@@ -414,7 +434,58 @@ void MobAISystem::updateDeathAndDespawn(float dt) {
         }
 
         for (auto e : toDestroy) {
-            m_registry.destroy(e);
+            destroyMob(e);
+        }
+    }
+}
+
+// =====================================================================
+// Fall damage — Minecraft formula: damage = max(0, fallDist - 3) HP
+// where fallDist is the distance fallen since the mob last left solid
+// ground.  FallState tracks the highest Y reached while in the air.
+// =====================================================================
+void MobAISystem::updateFallDamage(float /*dt*/) {
+    auto view = m_registry.view<
+        components::MobTag,
+        components::Transform,
+        components::GroundPhysics,
+        components::Health,
+        components::FallState
+    >();
+
+    for (auto [e, mob, t, gp, health, fall] : view.each()) {
+        auto* death = m_registry.try_get<components::DeathState>(e);
+        if (death && death->isDead) continue;
+
+        if (!gp.onGround) {
+            // In the air: track the highest Y reached during this flight
+            if (!fall.inAir) {
+                fall.inAir = true;
+                fall.maxY  = t.position.y;
+            } else {
+                fall.maxY = std::max(fall.maxY, t.position.y);
+            }
+        } else {
+            if (fall.inAir) {
+                // Just landed: compute fall distance
+                float fallDist = fall.maxY - t.position.y;
+                if (fallDist > 3.0f) {
+                    int dmg = static_cast<int>(fallDist - 3.0f);
+                    health.hp -= dmg;
+                    // Mark hurt so blinking triggers
+                    auto* hurt = m_registry.try_get<components::HurtState>(e);
+                    if (hurt && !hurt->wasHurt) {
+                        hurt->wasHurt   = true;
+                        hurt->hurtTimer = 0.0f;
+                        hurt->attacker  = entt::null;
+                    }
+                    ASCIIgL::Logger::Debug("Mob took " + std::to_string(dmg)
+                        + " fall damage (dist=" + std::to_string(fallDist) + ")");
+                }
+            }
+            // Reset fall tracker
+            fall.inAir = false;
+            fall.maxY  = t.position.y;
         }
     }
 }

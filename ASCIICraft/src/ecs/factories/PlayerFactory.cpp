@@ -1,4 +1,5 @@
 #include <ASCIICraft/ecs/factories/PlayerFactory.hpp>
+#include <ASCIICraft/ecs/components/MobComponents.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
 
@@ -28,6 +29,13 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     auto& head    = registry.emplace<components::Head>(p_ent);
     auto& reach   = registry.emplace<components::Reach>(p_ent);
     auto& input   = registry.emplace<components::PlayerInput>(p_ent);
+
+    // Player takes damage from mob attacks — needs Health and HurtState.
+    // Default 20 HP matches vanilla MC survival mode.
+    auto& health  = registry.emplace<components::Health>(p_ent);
+    health.hp     = 20;
+    health.maxHp  = 20;
+    registry.emplace<components::HurtState>(p_ent);
 
     // --- Transform ---
     t.setPosition(position);

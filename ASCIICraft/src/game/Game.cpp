@@ -52,7 +52,7 @@ Game::Game()
     , miningSystem(registry, eventBus)
     , playerFactory(registry)
     , mobFactory(registry)
-    , mobAISystem(registry)
+    , mobAISystem(registry, &mobFactory)
     , playerCombatSystem(registry, eventBus)
     , shouldInternalExit(false)
 {
@@ -507,6 +507,20 @@ bool Game::LoadResources() {
         ASCIIgL::Logger::Debug("Registered material: " + matName);
     }
 
+    // Sheep fur material (wool overlay on sheep)
+    try {
+        auto furTexture = mobFactory.getSheepFurTexture();
+        if (!furTexture) {
+            throw std::runtime_error("sheep fur texture not loaded");
+        }
+        auto sheepFurMat = std::shared_ptr<ASCIIgL::Material>(mobMaterial->Clone());
+        sheepFurMat->SetTexture(0, furTexture.get());
+        ASCIIgL::MaterialLibrary::GetInst().Register("sheepFurMaterial", std::move(sheepFurMat));
+        ASCIIgL::Logger::Debug("Registered material: sheepFurMaterial");
+    } catch (const std::exception& e) {
+        ASCIIgL::Logger::Warning(std::string("Failed to load sheep fur material: ") + e.what());
+    }
+
     // OOP GUI: create play + inventory screens after textures/materials exist (CreateQuadMesh needs terrainTextureArray)
     entt::entity player = ecs::components::GetPlayerEntity(registry);
     if (player != entt::null) {
@@ -566,6 +580,24 @@ void Game::InitializeWorld() {
         }
     }
     ASCIIgL::Logger::Info("Mob showcase platform built at Y=" + std::to_string(platformY));
+
+    // Staircase: 8 steps rising 1 block each, starting 8 blocks behind mob spawn (+Z)
+    // Full width of mob row so any mob can reach it. Used to test terrain-scaling jump.
+    for (int step = 1; step <= 8; ++step) {
+        int sz = bz + 7 + step; // bz+8 through bz+15
+        for (int sx = bx; sx <= bx + 33; ++sx) {
+            for (int sy = platformY + 1; sy <= platformY + step; ++sy) {
+                cm->SetBlockState(sx, sy, sz, stoneStateId);
+            }
+        }
+    }
+    // Flat landing on top of the staircase
+    for (int sx = bx; sx <= bx + 33; ++sx) {
+        for (int sz = bz + 16; sz <= bz + 24; ++sz) {
+            cm->SetBlockState(sx, platformY + 8, sz, stoneStateId);
+        }
+    }
+    ASCIIgL::Logger::Info("Staircase built behind mob spawn, 8 steps up to Y=" + std::to_string(platformY + 8));
 
     // Spawn each mob type on top of the platform, spaced 3 blocks apart
     int spawnY = platformY + 1;

@@ -1,4 +1,4 @@
-#include <ASCIICraft/ecs/systems/RenderSystem.hpp>
+﻿#include <ASCIICraft/ecs/systems/RenderSystem.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
@@ -40,7 +40,7 @@ namespace ecs::systems {
     }
 
     void RenderSystem::CollectVisible() {
-        // View for entities that have both Transform and Renderable
+        // --- Primary renderables ---
         auto view = m_registry.view<components::Transform, components::Renderable>();
 
         for (auto [ent, t, r] : view.each()) {
@@ -58,7 +58,7 @@ namespace ecs::systems {
             item.mesh = r.mesh;
             item.material = nullptr;
             item.materialName = r.materialName;  // Use component's material (empty = default)
-            item.modelMatrix = t.getModel();
+            item.modelMatrix = t.getRenderModel();
             item.layer = r.layer;
             item.disableBackfaceCulling = r.disableBackfaceCulling;
 
@@ -67,6 +67,56 @@ namespace ecs::systems {
             } else if (r.renderType == components::RenderType::ELEM_2D) {
                 m_drawList2D.push_back(std::move(item));
             }
+        }
+
+        // --- Held-item renderables (e.g. skeleton bow) ---
+        // modelMatrix = entityModel * translate(positionOffset)  so the item
+        // orbits the entity's hand as the mob rotates.
+        auto heldView = m_registry.view<
+            components::Transform,
+            components::HeldItemRenderable>();
+        for (auto [ent, t, held] : heldView.each()) {
+            if (!held.visible || !held.mesh) continue;
+
+            glm::mat4 localOffset = glm::translate(
+                glm::mat4(1.f), held.positionOffset);
+            glm::mat4 rx = glm::rotate(glm::mat4(1.f), held.rotation.x, glm::vec3(1.f, 0.f, 0.f));
+            glm::mat4 ry = glm::rotate(glm::mat4(1.f), held.rotation.y, glm::vec3(0.f, 1.f, 0.f));
+            glm::mat4 rz = glm::rotate(glm::mat4(1.f), held.rotation.z, glm::vec3(0.f, 0.f, 1.f));
+            glm::mat4 localScale = glm::scale(
+                glm::mat4(1.f), glm::vec3(held.scale));
+
+            DrawItem item;
+            item.entity   = ent;
+            item.mesh     = held.mesh;
+            item.materialName = held.materialName;
+            item.modelMatrix  = t.getRenderModel() * localOffset * rx * ry * rz * localScale;
+            item.layer        = held.layer;
+            item.disableBackfaceCulling = held.disableBackfaceCulling;
+            m_drawList3D.push_back(std::move(item));
+        }
+
+        // --- Fur/wool overlay renderables (e.g. sheep wool) ---
+        auto furView = m_registry.view<
+            components::Transform,
+            components::FurRenderable>();
+        for (auto [ent, t, fur] : furView.each()) {
+            auto& t_ref = furView.get<components::Transform>(ent);
+            auto& fur_ref = furView.get<components::FurRenderable>(ent);
+            
+            if (!fur_ref.visible || !fur_ref.mesh) continue;
+
+            glm::mat4 furOffset = glm::translate(
+                glm::mat4(1.f), fur_ref.positionOffset);
+            
+            DrawItem item;
+            item.entity   = ent;
+            item.mesh     = fur_ref.mesh;
+            item.materialName = fur_ref.materialName;
+            item.modelMatrix  = t_ref.getRenderModel() * furOffset;
+            item.layer        = fur_ref.layer;
+            item.disableBackfaceCulling = fur_ref.disableBackfaceCulling;
+            m_drawList3D.push_back(std::move(item));
         }
     }
 
@@ -80,7 +130,7 @@ namespace ecs::systems {
         item.mesh = std::move(mesh);
         item.material = std::move(material);
         item.materialName = materialName;
-        // Widget layout gives top-left; quad is ±1 (extent 2), so scale by half-size then translate by center
+        // Widget layout gives top-left; quad is Â±1 (extent 2), so scale by half-size then translate by center
         // Use z=0 for 2D GUI (layer is only used for draw order, not depth)
         const float cx = position.x + size.x * 0.5f;
         const float cy = position.y + size.y * 0.5f;

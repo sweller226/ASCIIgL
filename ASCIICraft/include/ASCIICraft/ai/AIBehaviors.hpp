@@ -215,4 +215,71 @@ private:
     float m_range;
 };
 
+// =====================================================================
+// CreeperSwellGoal — Charge up and explode when close to target.
+// Swell fills over 1.5 s when within m_fuseRange; cancels if target moves
+// away.  At full charge the goal calls explode() which deals area damage,
+// destroys nearby blocks, and kills the creeper.
+// Mutex: MOVE_LOOK (3) — replaces MeleeAttackGoal for Creeper.
+// MC equivalent: EntityAICreeperSwell
+// =====================================================================
+class CreeperSwellGoal : public AIGoal {
+public:
+    CreeperSwellGoal(entt::registry& reg, entt::entity entity,
+                     const ChunkManager* cm,
+                     const blockstate::BlockStateRegistry& bsr,
+                     float chaseSpeed  = 1.4f,
+                     float fuseRange   = 3.0f,
+                     float fuseTime    = 1.5f,
+                     float blastRadius = 3.5f,
+                     int   blastDamage = 49);  // ~49 HP = half-heart at point-blank
+
+    bool shouldExecute() override;
+    bool continueExecuting() override;
+    void startExecuting() override;
+    void updateTask(float dt) override;
+    void resetTask() override;
+
+private:
+    entt::registry& m_registry;
+    entt::entity    m_entity;
+    const ChunkManager* m_cm;
+    const blockstate::BlockStateRegistry& m_bsr;
+    float m_chaseSpeed;
+    float m_fuseRange;
+    float m_fuseTime;
+    float m_blastRadius;
+    int   m_blastDamage;
+    float m_swellTimer = 0.0f;
+    Path  m_path;
+    float m_repathTimer = 0.0f;
+
+    void explode();
+    entt::entity findTarget() const;
+};
+
+// =====================================================================
+// SkeletonAimGoal — Look at target and hold bow.  Stub: no projectile
+// fired until arrow entities are implemented.  Runs alongside
+// KeepDistanceGoal which handles the movement.
+// Mutex: LOOK (2)
+// =====================================================================
+class SkeletonAimGoal : public AIGoal {
+public:
+    SkeletonAimGoal(entt::registry& reg, entt::entity entity);
+
+    bool shouldExecute() override;
+    bool continueExecuting() override;
+    void startExecuting() override;
+    void updateTask(float dt) override;
+    void resetTask() override;
+
+private:
+    entt::registry& m_registry;
+    entt::entity    m_entity;
+    float m_shootCooldown = 0.0f;
+
+    entt::entity findTarget() const;
+};
+
 } // namespace ai

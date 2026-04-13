@@ -67,9 +67,24 @@ float4 main(PS_INPUT input) : SV_TARGET
     static const float ALPHA_CUTOFF = 0.5;
     clip(texColor.a - ALPHA_CUTOFF);
 
-    // Mob textures are monochromatic, so output the sampled color directly
-    // (no gradient remap needed — the texture already carries the final shade).
-    return texColor;
+    // === Monochromatic gradient mapping (same as terrain) ===
+    // Compute luminance using standard coefficients (Rec. 709)
+    float luminance = dot(texColor.rgb, float3(0.2126, 0.7152, 0.0722));
+    
+    // Extract hue direction from the bright end of the gradient
+    float3 hue = normalize(gradientEnd.rgb + 0.0001); // Avoid div by zero
+    
+    // Compute brightness range from gradient endpoints
+    float minBrightness = length(gradientStart.rgb);
+    float maxBrightness = length(gradientEnd.rgb);
+    
+    // Map luminance to brightness along the hue direction
+    float brightness = lerp(minBrightness, maxBrightness, luminance);
+    
+    // Reconstruct color = hue direction * brightness
+    float3 mappedColor = hue * brightness;
+    
+    return float4(mappedColor, texColor.a);
 }
 )";
 }

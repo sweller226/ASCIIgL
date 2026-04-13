@@ -15,6 +15,13 @@ namespace ecs::components {
 struct Transform {
     glm::vec3 position{0.0f, 0.0f, 0.0f};
     glm::vec3 previousPosition{0.0f, 0.0f, 0.0f};
+    // Interpolated position for rendering (set each frame by PhysicsSystem)
+    glm::vec3 renderPosition{0.0f, 0.0f, 0.0f};
+    // Smooth Y for step-climbing: lags behind position.y and decays toward it
+    // over ~5 physics ticks (~167 ms) to give a vanilla-style step-up animation.
+    // Only written by PhysicsSystem::Step(); not affected by setPosition().
+    float renderY{0.0f};
+    bool renderYInitialized{false};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     glm::vec3 scale{1.0f, 1.0f, 1.0f};
 
@@ -22,7 +29,7 @@ struct Transform {
     mutable glm::mat4 modelCache{1.0f};
     mutable bool dirty{true};
 
-    // Compute or return cached model matrix
+    // Compute or return cached model matrix (uses physics position — for logic, not rendering)
     glm::mat4 getModel() const {
         if (dirty) {
             glm::mat4 t = glm::translate(glm::mat4(1.0f), position);
@@ -34,8 +41,18 @@ struct Transform {
         return modelCache;
     }
 
+    // Build model matrix from interpolated renderPosition (use this in RenderSystem)
+    glm::mat4 getRenderModel() const {
+        glm::mat4 t = glm::translate(glm::mat4(1.0f), renderPosition);
+        glm::mat4 r = glm::mat4_cast(rotation);
+        glm::mat4 s = glm::scale(glm::mat4(1.0f), scale);
+        return t * r * s;
+    }
+
     // Helpers that mark the transform dirty
-    void setPosition(const glm::vec3& p) { position = p; dirty = true; }
+    // setPosition keeps renderPosition in sync so entities not managed by PhysicsSystem
+    // (e.g. static objects, GUI) always display at their actual position.
+    void setPosition(const glm::vec3& p) { position = p; renderPosition = p; dirty = true; }
     void setRotation(const glm::quat& q) { rotation = q; dirty = true; }
     void setScale(const glm::vec3& s) { scale = s; dirty = true; }
 

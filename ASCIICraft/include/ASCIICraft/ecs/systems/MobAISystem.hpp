@@ -17,6 +17,7 @@
 #include <entt/entt.hpp>
 
 class ChunkManager;
+namespace ecs::factories { class MobFactory; }
 
 namespace ecs::systems {
 
@@ -25,7 +26,10 @@ namespace ecs::systems {
 // =====================================================================
 class MobAISystem {
 public:
-    explicit MobAISystem(entt::registry& registry);
+    // m_mobFactory is used to route despawns through MobFactory so m_active
+    // stays consistent. Pass nullptr only in unit-test contexts.
+    explicit MobAISystem(entt::registry& registry,
+                         ecs::factories::MobFactory* mobFactory = nullptr);
 
     // Initialize AI brains for all existing mobs (call after spawning)
     void initializeMobs();
@@ -39,14 +43,19 @@ public:
 
 private:
     entt::registry& m_registry;
+    ecs::factories::MobFactory* m_mobFactory;
 
     // Helpers
     const ChunkManager* getChunkManager() const;
 
     void updateDeathAndDespawn(float dt);
+    void updateFallDamage(float dt);
     void updateHurtTimers(float dt);
     void despawnOutOfRange();
     void pushMobsApart();
+    // Safely destroy a mob entity — routes through MobFactory when available
+    // so m_active stays consistent.
+    void destroyMob(entt::entity e);
 };
 
 } // namespace ecs::systems

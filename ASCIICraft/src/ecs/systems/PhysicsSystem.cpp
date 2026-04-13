@@ -44,11 +44,26 @@ void PhysicsSystem::Update() {
     // Interpolate between previous and current position for smooth rendering
     float alpha = m_accumulator / FixedDt;
     
+    // Interpolate renderPosition for every entity so RenderSystem can draw them smoothly.
+    auto allTransforms = m_registry.view<components::Transform>();
+    for (auto [ent, t] : allTransforms.each()) {
+        t.renderPosition = glm::mix(t.previousPosition, t.position, alpha);
+    }
+
+    // Override Y with the smooth step-tracking value for step-climbing entities.
+    // This replaces the one-tick (~33 ms) mix with a multi-tick (~167 ms) decay,
+    // giving a vanilla-style gradual climb instead of a visible snap.
+    auto stepRenderView = m_registry.view<components::Transform, components::StepPhysics>();
+    for (auto [ent, t, sp] : stepRenderView.each()) {
+        if (t.renderYInitialized) {
+            t.renderPosition.y = t.renderY;
+        }
+    }
+
     // Update camera with interpolated position
     auto camView = m_registry.view<components::PlayerCamera, components::Transform>();
     for (auto [ent, cam, t] : camView.each()) {
-        glm::vec3 renderPos = glm::mix(t.previousPosition, t.position, alpha);
-        cam.camera.setCamPos(renderPos + glm::vec3(0.0f, cam.PLAYER_EYE_HEIGHT, 0.0f));
+        cam.camera.setCamPos(t.renderPosition + glm::vec3(0.0f, cam.PLAYER_EYE_HEIGHT, 0.0f));
     }
 }
 
@@ -59,6 +74,21 @@ void PhysicsSystem::Step(float fixedDt) {
     }
 
     IntegrateEntities(fixedDt);
+
+    // Per-physics-tick smooth-Y tracking for step-climbing entities.
+    // Lerp renderY toward position.y at 40 % per tick so a full 1-block
+    // step-up fades in over ~5 ticks (~167 ms) instead of snapping.
+    // Teleports (|dy| > 5) snap immediately to avoid a long catch-up.
+    auto stepView = m_registry.view<components::Transform, components::StepPhysics>();
+    for (auto [ent, t, sp] : stepView.each()) {
+        float dy = t.position.y - t.renderY;
+        if (!t.renderYInitialized || std::abs(dy) > 5.0f) {
+            t.renderY = t.position.y;
+            t.renderYInitialized = true;
+        } else {
+            t.renderY += dy * 0.4f;
+        }
+    }
 }
 
 void PhysicsSystem::IntegrateEntities(float dt) {

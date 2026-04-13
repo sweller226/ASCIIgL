@@ -74,17 +74,17 @@ bool Pathfinder::canStandAt(
     int x, int y, int z,
     int widthBlocks, int heightBlocks)
 {
-    // Check ground below
+    // Check ground below — EVERY column under the entity footprint must have
+    // solid support, not just one.  Without this, paths let wider entities
+    // walk half off ledge edges.
     int halfW = widthBlocks / 2;
-    bool hasGround = false;
     for (int dx = -halfW; dx <= halfW; ++dx) {
         for (int dz = -halfW; dz <= halfW; ++dz) {
-            if (isSolid(cm, bsr, x + dx, y - 1, z + dz)) {
-                hasGround = true;
+            if (!isSolid(cm, bsr, x + dx, y - 1, z + dz)) {
+                return false;
             }
         }
     }
-    if (!hasGround) return false;
 
     // Check body space is clear
     for (int dy = 0; dy < heightBlocks; ++dy) {
