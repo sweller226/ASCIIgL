@@ -1,5 +1,4 @@
 #include <ASCIICraft/world/Chunk.hpp>
-#include <ASCIICraft/world/ChunkMeshGen.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -11,7 +10,7 @@
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/TextureLibrary.hpp>
 
-
+#include <ASCIICraft/world/ChunkUtil.hpp>
 
 // Chunk constructor
 Chunk::Chunk(const ChunkCoord& coord) 
@@ -34,14 +33,14 @@ Chunk::Chunk(const ChunkCoord& coord)
 
 // Block access methods
 uint32_t Chunk::GetBlockState(int x, int y, int z) const {
-    assert(IsValidBlockCoord(x, y, z) && "Block coordinates out of range");
-    return blocks[GetBlockIndex(x, y, z)];
+    assert(chunkutil::IsValidBlockCoord(x, y, z) && "Block coordinates out of range");
+    return blocks[chunkutil::GetBlockIndex(x, y, z)];
 }
 
 void Chunk::SetBlockState(int x, int y, int z, uint32_t stateId) {
-    assert(IsValidBlockCoord(x, y, z) && "Block coordinates out of range");
+    assert(chunkutil::IsValidBlockCoord(x, y, z) && "Block coordinates out of range");
     
-    int index = GetBlockIndex(x, y, z);
+    int index = chunkutil::GetBlockIndex(x, y, z);
     if (blocks[index] != stateId) {
         blocks[index] = stateId;
         InvalidateMesh();
@@ -100,27 +99,14 @@ Chunk* Chunk::GetNeighbor(int direction) const {
     return neighbors[direction];
 }
 
-// Utility methods
-bool Chunk::IsValidBlockCoord(int x, int y, int z) const {
-    return x >= 0 && x < SIZE && 
-           y >= 0 && y < SIZE && 
-           z >= 0 && z < SIZE;
-}
-
 WorldCoord Chunk::ChunkToWorldCoord(int x, int y, int z) const {
-    assert(IsValidBlockCoord(x, y, z) && "Block coordinates out of range");
+    assert(chunkutil::IsValidBlockCoord(x, y, z) && "Block coordinates out of range");
     
     return WorldCoord(
-        coord.x * SIZE + x,
-        coord.y * SIZE + y,
-        coord.z * SIZE + z
+        coord.x * sizes::CHUNK_SIZE + x,
+        coord.y * sizes::CHUNK_SIZE + y,
+        coord.z * sizes::CHUNK_SIZE + z
     );
-}
-
-// Helper methods
-int Chunk::GetBlockIndex(int x, int y, int z) const {
-    // 3D array indexing: index = x + y*SIZE + z*SIZE*SIZE
-    return x + y * SIZE + z * SIZE * SIZE;
 }
 
 // Rendering is now handled by ChunkManager via Renderer draw-call queue.

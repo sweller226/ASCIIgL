@@ -17,6 +17,15 @@ endif()
 # ---------------------------------------------------------------------------
 add_subdirectory(vendor)
 
+# nlohmann/json (header-only, shipped in sibling ASCIIgL project vendor/)
+set(ASCIIgL_NLOHMANN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgL/vendor")
+if(NOT TARGET nlohmann_json)
+    add_library(nlohmann_json INTERFACE)
+    target_include_directories(nlohmann_json INTERFACE
+        "${ASCIIgL_NLOHMANN_DIR}"
+    )
+endif()
+
 # ---------------------------------------------------------------------------
 # oneTBB (job queue for chunk generation / meshing)
 # ---------------------------------------------------------------------------
@@ -115,6 +124,10 @@ endif()
 
 if(TARGET FastNoiseLite)
     target_link_libraries(ASCIICraft PRIVATE FastNoiseLite)
+endif()
+
+if(TARGET nlohmann_json)
+    target_link_libraries(ASCIICraft PRIVATE nlohmann_json)
 endif()
 
 # Platform-specific: prevent Windows min/max macros from breaking std::min/std::max

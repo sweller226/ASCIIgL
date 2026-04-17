@@ -15,6 +15,7 @@
 #include <ASCIICraft/world/Chunk.hpp>
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/CrossChunkEdit.hpp>
+#include <ASCIICraft/world/Sizes.hpp>
 
 #pragma pack(push, 1)
 
@@ -140,8 +141,8 @@ private:
 
     uint32_t indexOffset(const glm::ivec3& lc) const {
         return static_cast<uint32_t>(lc.x
-             + lc.y * REGION_SIZE
-             + lc.z * REGION_SIZE * REGION_SIZE);
+             + lc.y * sizes::REGION_SIZE
+             + lc.z * sizes::REGION_SIZE * sizes::REGION_SIZE);
     }
 
     bool openForRead();

@@ -21,8 +21,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
-#include <ASCIICraft/world/blockstate/BlockTextureLayers.hpp>
-#include <ASCIICraft/world/blockstate/CubeModelBuilder.hpp>
+#include <ASCIICraft/world/BlockTextureCatalog.hpp>
+#include <ASCIICraft/world/blockmodels/CubeModelBuilder.hpp>
+#include <ASCIICraft/world/blockmodels/WaterModelBuilder.hpp>
 #include <ASCIICraft/ecs/data/ItemIndex.hpp>
 
 #include <ASCIICraft/gui/GuiMeshes.hpp>
@@ -304,33 +305,8 @@ bool Game::LoadTextures() {
     monoMap.brightness = 1.0f;
     monoMap.contrast = 1.0f;
 
-    // Load block textures via TextureLibrary which takes ownership
-    std::vector<std::string> blockTexturePaths = {
-        "res/textures/Splotch/assets/minecraft/textures/blocks/stone.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/cobblestone.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/bedrock.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/dirt.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/log_oak.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/log_oak_top.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/leaves_oak.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/planks_oak.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/grass_top.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/grass_side.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/water_still.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/crafting_table_front.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/crafting_table_side.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/crafting_table_top.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/furnace_front_off.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/furnace_front_on.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/furnace_side.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/furnace_top.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/glass.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/bookshelf.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/sand.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/gravel.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/brick.png",
-    };
-
+    // Load block textures from central catalog order.
+    std::vector<std::string> blockTexturePaths = blocktextures::BuildBlockTexturePaths();
 
     auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(blockTexturePaths, "terrainTextureArray", monoMap);
     if (!blockTextureArray || !blockTextureArray->IsValid()) {
@@ -562,12 +538,13 @@ void Game::InitializeSystems() {
 
 void Game::InitializeBlockStates() {
     auto& bsr = registry.ctx().emplace<blockstate::BlockStateRegistry>();
-    auto& modelLibrary = registry.ctx().emplace<blockstate::BlockModelLibrary>();
+    auto& modelLibrary = registry.ctx().emplace<blockmodels::BlockModelLibrary>();
 
-    // Direct TextureArray layer indices (see BlockTextureLayers.hpp and LoadTextures).
-    using BT = BlockTexLayer;
-    using blockstate::CubeSpec;
-    using blockstate::BuildCubeModel;
+    auto layer = [](const char* textureId) -> int {
+        return blocktextures::GetLayerForTextureId(textureId);
+    };
+    using blockmodels::CubeSpec;
+    using blockmodels::BuildCubeModel;
 
     // ======================== REGISTRATION ORDER ========================
     // Air MUST be first (typeId=0, stateId=0)
@@ -586,28 +563,28 @@ void Game::InitializeBlockStates() {
     bsr.SetDerivedData(bedrockType, [&](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
-    modelLibrary.RegisterCubeModel(bedrockType, blockstate::CubeFullAllFaces(static_cast<int>(BT::Bedrock), false), bsr);
+    modelLibrary.RegisterCubeModel(bedrockType, blockmodels::CubeFullAllFaces(layer("minecraft:blocks/bedrock"), false), bsr);
 
     bsr.RegisterType("minecraft:stone", {});
     const uint16_t stoneType = bsr.GetTypeId("minecraft:stone");
     bsr.SetDerivedData(stoneType, [&](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
-    modelLibrary.RegisterCubeModel(stoneType, blockstate::CubeFullAllFaces(static_cast<int>(BT::Stone), false), bsr);
+    modelLibrary.RegisterCubeModel(stoneType, blockmodels::CubeFullAllFaces(layer("minecraft:blocks/stone"), false), bsr);
 
     bsr.RegisterType("minecraft:cobblestone", {});
     const uint16_t cobbleType = bsr.GetTypeId("minecraft:cobblestone");
     bsr.SetDerivedData(cobbleType, [&](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
-    modelLibrary.RegisterCubeModel(cobbleType, blockstate::CubeFullAllFaces(static_cast<int>(BT::Cobblestone), false), bsr);
+    modelLibrary.RegisterCubeModel(cobbleType, blockmodels::CubeFullAllFaces(layer("minecraft:blocks/cobblestone"), false), bsr);
 
     bsr.RegisterType("minecraft:dirt", {});
     const uint16_t dirtType = bsr.GetTypeId("minecraft:dirt");
     bsr.SetDerivedData(dirtType, [&](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
-    modelLibrary.RegisterCubeModel(dirtType, blockstate::CubeFullAllFaces(static_cast<int>(BT::Dirt), false), bsr);
+    modelLibrary.RegisterCubeModel(dirtType, blockmodels::CubeFullAllFaces(layer("minecraft:blocks/dirt"), false), bsr);
 
     bsr.RegisterType("minecraft:grass", {
         // BlockStateRegistry properties are string-based; use FaceDir in code and convert at placement time.
@@ -621,10 +598,10 @@ void Game::InitializeBlockStates() {
     for (uint32_t i = 0; i < type.stateCount; ++i) {
         const uint32_t stateId = type.baseStateId + i;
         const FaceDir facing = StringToFaceDir(bsr.GetPropertyValue(stateId, "facing"));
-        CubeSpec spec = blockstate::CubeFullTopBottomSides(
-            static_cast<int>(BT::GrassTop),
-            static_cast<int>(BT::Dirt),
-            static_cast<int>(BT::GrassSide),
+        CubeSpec spec = blockmodels::CubeFullTopBottomSides(
+            layer("minecraft:blocks/grass_top"),
+            layer("minecraft:blocks/dirt"),
+            layer("minecraft:blocks/grass_side"),
             false,
             facing
         );
@@ -640,10 +617,10 @@ void Game::InitializeBlockStates() {
     });
     modelLibrary.RegisterCubeModel(
         oakLogType,
-        blockstate::CubeFullTopBottomSides(
-            static_cast<int>(BT::OakLogTop),
-            static_cast<int>(BT::OakLogTop),
-            static_cast<int>(BT::OakLog),
+        blockmodels::CubeFullTopBottomSides(
+            layer("minecraft:blocks/log_oak_top"),
+            layer("minecraft:blocks/log_oak_top"),
+            layer("minecraft:blocks/log_oak"),
             false
         ),
         bsr
@@ -657,17 +634,28 @@ void Game::InitializeBlockStates() {
         s.renderMode = blockstate::RenderMode::Cutout;
         s.cullSameType = false;                   // draw faces between leaves (fuller look)
     });
-    modelLibrary.RegisterCubeModel(leavesType, blockstate::CubeFullAllFaces(static_cast<int>(BT::OakLeaves), false), bsr);
+    modelLibrary.RegisterCubeModel(leavesType, blockmodels::CubeFullAllFaces(layer("minecraft:blocks/leaves_oak"), false), bsr);
 
     // === Water ===
-    bsr.RegisterType("minecraft:water", {});
+    bsr.RegisterType("minecraft:water", {
+        blockstate::BlockProperty{ "top", {"false", "true"}, 1 }
+    });
     const uint16_t waterType = bsr.GetTypeId("minecraft:water");
     bsr.SetDerivedData(waterType, [&](blockstate::BlockState& s) {
+        const bool top = (bsr.GetPropertyValue(s.stateId, "top") == "true");
         s.isRenderable = true;
         s.isTransparent = true;
         s.renderMode = blockstate::RenderMode::Translucent;
+        s.isFullBlock = !top;
     });
-    modelLibrary.RegisterCubeModel(waterType, blockstate::CubeFullAllFaces(static_cast<int>(BT::WaterStill), true), bsr);
+    const auto& waterTypeDef = bsr.GetType(waterType);
+    for (uint32_t i = 0; i < waterTypeDef.stateCount; ++i) {
+        const uint32_t stateId = waterTypeDef.baseStateId + i;
+        const bool top = (bsr.GetPropertyValue(stateId, "top") == "true");
+        const blockmodels::WaterSpec waterSpec{ top };
+        auto model = std::make_shared<const blockstate::BlockModel>(blockmodels::BuildWaterModel(waterSpec));
+        modelLibrary.RegisterModel(stateId, std::move(model), bsr);
+    }
 
     ASCIIgL::Logger::Info("BlockStateRegistry: " +
         std::to_string(bsr.GetTotalTypeCount()) + " types, " +

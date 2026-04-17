@@ -11,6 +11,7 @@
 
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
 #include <ASCIICraft/world/Coords.hpp>
+#include <ASCIICraft/world/Sizes.hpp>
 #include <ASCIICraft/world/ChunkMeshGen.hpp>
 
 namespace ASCIIgL { class TextureArray; }
@@ -18,8 +19,7 @@ namespace ASCIIgL { class TextureArray; }
 // Chunk class - contains 16x16x16 blocks stored as blockstate IDs
 class Chunk {
 public:
-    static constexpr int SIZE = 16;
-    static constexpr int VOLUME = SIZE * SIZE * SIZE;
+    static constexpr int VOLUME = sizes::CHUNK_SIZE * sizes::CHUNK_SIZE * sizes::CHUNK_SIZE;
     
     Chunk(const ChunkCoord& coord);
     ~Chunk() = default;
@@ -70,7 +70,6 @@ public:
     Chunk* GetNeighbor(int direction) const;
     
     // Utility
-    bool IsValidBlockCoord(int x, int y, int z) const;
     WorldCoord ChunkToWorldCoord(int x, int y, int z) const;
     
 private:
@@ -89,7 +88,4 @@ private:
     
     // Neighbor chunks (6 directions: +X, -X, +Y, -Y, +Z, -Z)
     Chunk* neighbors[6];
-    
-    // Helper methods
-    int GetBlockIndex(int x, int y, int z) const;
 };

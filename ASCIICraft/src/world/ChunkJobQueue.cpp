@@ -65,7 +65,7 @@ void ChunkJobQueue::EnqueueMeshGen(Chunk* chunk) {
         }
     }
 
-    auto* modelLib = registry_.ctx().find<blockstate::BlockModelLibrary>();
+    auto* modelLib = registry_.ctx().find<blockmodels::BlockModelLibrary>();
     if (!modelLib) {
         ASCIIgL::Logger::Warning("EnqueueMeshGen: BlockModelLibrary not found in context.");
         return;

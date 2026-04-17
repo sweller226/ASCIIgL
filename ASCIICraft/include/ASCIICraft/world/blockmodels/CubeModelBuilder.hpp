@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ASCIICraft/world/blockstate/FaceDir.hpp>
-#include <ASCIICraft/world/blockstate/BlockModel.hpp>
+#include <ASCIICraft/world/blockmodels/BlockModel.hpp>
 
 // Helper functions for building cube-like block models.
 // Keep this layer independent of BlockState so multiple states can share the same model.
@@ -10,7 +10,7 @@
 
 #include <glm/vec3.hpp>
 
-namespace blockstate {
+namespace blockmodels {
 
 static constexpr int FACE_DIR_COUNT = 6;
 
@@ -47,7 +47,7 @@ struct CubeSpec {
     }
 };
 
-BlockModel BuildCubeModel(const CubeSpec& spec);
+blockstate::BlockModel BuildCubeModel(const CubeSpec& spec);
 
 // -------------------------------------------------------------------------
 // Default-friendly factories (return a configured spec)

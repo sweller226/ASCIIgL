@@ -79,8 +79,9 @@ float4 main(PS_INPUT input) : SV_TARGET
     float layer = input.texcoord.z;
 
     // For now, no special water animation. We just treat the base water layer
-    // (matching BlockTexLayer::WaterStill on the CPU) as slightly transparent.
-    const int WATER_BASE_LAYER = 10; // BlockTexLayer::WaterStill
+    // (matching the block texture catalog index for minecraft:blocks/water_still)
+    // as slightly transparent.
+    const int WATER_BASE_LAYER = 10;
 
     float4 texColor;
     if ((int)layer == WATER_BASE_LAYER) {

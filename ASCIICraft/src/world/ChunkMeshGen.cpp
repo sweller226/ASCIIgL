@@ -13,92 +13,14 @@
 #include <ASCIIgL/util/Logger.hpp>
 
 #include <ASCIICraft/world/blockstate/BlockState.hpp>
+#include <ASCIICraft/world/Chunk.hpp>
+#include <ASCIICraft/world/FaceCulling.hpp>
+#include <ASCIICraft/world/ChunkUtil.hpp>
 
 namespace {
 
-static constexpr int SIZE = CHUNK_SIZE;
 static std::mutex g_missingModelWarnMutex;
 static std::unordered_set<uint32_t> g_missingModelWarnedStateIds;
-
-static int GetBlockIndex(int x, int y, int z) {
-    return x + y * SIZE + z * SIZE * SIZE;
-}
-
-static bool IsValidBlockCoord(int x, int y, int z) {
-    return x >= 0 && x < SIZE && y >= 0 && y < SIZE && z >= 0 && z < SIZE;
-}
-
-static uint32_t GetBlockStateAt(
-    int x, int y, int z,
-    const uint32_t* chunkBlocks,
-    const std::array<const uint32_t*, 6>& neighborBlocks
-) {
-    if (IsValidBlockCoord(x, y, z)) {
-        return chunkBlocks[GetBlockIndex(x, y, z)];
-    }
-    int neighborChunkDir = -1;
-    int localX = x, localY = y, localZ = z;
-    if (x < 0) {
-        neighborChunkDir = 5;
-        localX = SIZE - 1;
-    } else if (x >= SIZE) {
-        neighborChunkDir = 4;
-        localX = 0;
-    } else if (y < 0) {
-        neighborChunkDir = 1;
-        localY = SIZE - 1;
-    } else if (y >= SIZE) {
-        neighborChunkDir = 0;
-        localY = 0;
-    } else if (z < 0) {
-        neighborChunkDir = 3;
-        localZ = SIZE - 1;
-    } else if (z >= SIZE) {
-        neighborChunkDir = 2;
-        localZ = 0;
-    }
-    if (neighborChunkDir >= 0 && neighborBlocks[neighborChunkDir]) {
-        return neighborBlocks[neighborChunkDir][GetBlockIndex(localX, localY, localZ)];
-    }
-    return blockstate::BlockStateRegistry::AIR_STATE_ID;
-}
-
-static void ComputeVisibleFacesFullBlock(
-    int x, int y, int z,
-    const blockstate::BlockState& state,
-    const uint32_t* chunkBlocks,
-    const std::array<const uint32_t*, 6>& neighborBlocks,
-    const blockstate::BlockStateRegistry& bsr,
-    std::vector<bool>& visibleFaces
-) {
-    visibleFaces.resize(6, false);
-
-    for (int face = 0; face < 6; ++face) {
-        int neighborX = x, neighborY = y, neighborZ = z;
-        switch (face) {
-            case 0: neighborY++; break;
-            case 1: neighborY--; break;
-            case 2: neighborZ++; break;
-            case 3: neighborZ--; break;
-            case 4: neighborX++; break;
-            case 5: neighborX--; break;
-        }
-
-        uint32_t neighborStateId = GetBlockStateAt(
-            neighborX, neighborY, neighborZ,
-            chunkBlocks, neighborBlocks
-        );
-
-        const auto& neighborState = bsr.GetState(neighborStateId);
-
-        const bool baseNeighborOccludes =
-            (neighborState.isRenderable && neighborState.renderMode == blockstate::RenderMode::Opaque) ||
-            (state.cullSameType && neighborState.typeId == state.typeId);
-        const bool neighborOccludes = baseNeighborOccludes && neighborState.isFullBlock;
-
-        visibleFaces[face] = !neighborOccludes;
-    }
-}
 
 static void AppendTranslatedVerts_PosUVLayerLight(
     std::vector<std::byte>& dst,
@@ -161,6 +83,7 @@ static void AppendFaces(
             dstIndices.push_back(baseVertex + layer.indices[f.idxOffset + j]);
     }
 }
+
 } // namespace
 
 ChunkMeshData BuildChunkMeshData(
@@ -168,16 +91,16 @@ ChunkMeshData BuildChunkMeshData(
     const uint32_t* chunkBlocks,
     const std::array<const uint32_t*, 6>& neighborBlocks,
     const blockstate::BlockStateRegistry* bsr,
-    const blockstate::BlockModelLibrary* modelLibrary
+    const blockmodels::BlockModelLibrary* modelLibrary
 ) {
     ChunkMeshData out;
     if (!chunkBlocks || !bsr || !modelLibrary) return out;
 
     std::vector<bool> visibleFaces;
-    for (int x = 0; x < SIZE; ++x) {
-        for (int y = 0; y < SIZE; ++y) {
-            for (int z = 0; z < SIZE; ++z) {
-                uint32_t stateId = chunkBlocks[GetBlockIndex(x, y, z)];
+    for (int x = 0; x < sizes::CHUNK_SIZE; ++x) {
+        for (int y = 0; y < sizes::CHUNK_SIZE; ++y) {
+            for (int z = 0; z < sizes::CHUNK_SIZE; ++z) {
+                uint32_t stateId = chunkBlocks[chunkutil::GetBlockIndex(x, y, z)];
                 const blockstate::BlockState& state = bsr->GetState(stateId);
                 if (!state.isRenderable) continue;
 
@@ -196,14 +119,14 @@ ChunkMeshData BuildChunkMeshData(
                 }
 
                 const glm::vec3 worldOffset(
-                    static_cast<float>(coord.x * SIZE + x),
-                    static_cast<float>(coord.y * SIZE + y),
-                    static_cast<float>(coord.z * SIZE + z)
+                    static_cast<float>(coord.x * sizes::CHUNK_SIZE + x),
+                    static_cast<float>(coord.y * sizes::CHUNK_SIZE + y),
+                    static_cast<float>(coord.z * sizes::CHUNK_SIZE + z)
                 );
 
                 visibleFaces.clear();
-                if (model->isFullBlock) {
-                    ComputeVisibleFacesFullBlock(x, y, z, state, chunkBlocks, neighborBlocks, *bsr, visibleFaces);
+                if (model->computeVisibleFaces) {
+                    model->computeVisibleFaces(x, y, z, state, chunkBlocks, neighborBlocks, *bsr, visibleFaces);
                 }
 
                 auto& dstVerts   = blockIsTranslucent ? out.transparentVertices : out.opaqueVertices;

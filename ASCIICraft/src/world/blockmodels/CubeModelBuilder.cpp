@@ -1,20 +1,19 @@
-#include <ASCIICraft/world/blockstate/CubeModelBuilder.hpp>
+#include <ASCIICraft/world/blockmodels/CubeModelBuilder.hpp>
+#include <ASCIICraft/world/blockmodels/ModelBuilderUtil.hpp>
 
-#include <ASCIIgL/renderer/VertFormat.hpp>
-
-#include <array>
-#include <cstddef>
 #include <vector>
 
 #include <glm/vec2.hpp>
 
-namespace blockstate {
+#include <ASCIICraft/world/FaceCulling.hpp>
+
+namespace blockmodels {
 
 namespace {
 
-using V = ASCIIgL::VertStructs::PosUVLayerLight;
+using modelbuilderutil::V;
 
-static constexpr int kFaceCount = 6;
+static constexpr int kFaceCount = modelbuilderutil::FACE_COUNT;
 
 inline glm::vec2 RotateTopBottomUVLocal(glm::vec2 uv, FaceDir facing) {
     float u = uv.x, v = uv.y;
@@ -65,44 +64,25 @@ inline int SourceFaceForWorldFace(int worldFace, FaceDir facing) {
     }
 }
 
-static const glm::vec2 kFaceUVs[4] = {
-    glm::vec2(0, 0), glm::vec2(1, 0), glm::vec2(1, 1), glm::vec2(0, 1)
-};
-
-static const int kFaceIndices[6] = { 0, 1, 2, 0, 2, 3 };
-
 inline void AppendFace(
     const CubeSpec& spec,
     int worldFaceIndex,
     std::vector<V>& verts,
     std::vector<int>& indices
 ) {
-    // Local-space unit cube corners for each face (same winding/order as ChunkMeshGen).
-    static const glm::vec3 unitFaceVerts[kFaceCount][4] = {
-        // Top (+Y)
-        { glm::vec3(0, 1, 0), glm::vec3(0, 1, 1), glm::vec3(1, 1, 1), glm::vec3(1, 1, 0) },
-        // Bottom (-Y)
-        { glm::vec3(0, 0, 1), glm::vec3(0, 0, 0), glm::vec3(1, 0, 0), glm::vec3(1, 0, 1) },
-        // North (+Z)
-        { glm::vec3(0, 0, 1), glm::vec3(1, 0, 1), glm::vec3(1, 1, 1), glm::vec3(0, 1, 1) },
-        // South (-Z)
-        { glm::vec3(1, 0, 0), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0), glm::vec3(1, 1, 0) },
-        // East (+X)
-        { glm::vec3(1, 0, 1), glm::vec3(1, 0, 0), glm::vec3(1, 1, 0), glm::vec3(1, 1, 1) },
-        // West (-X)
-        { glm::vec3(0, 0, 0), glm::vec3(0, 0, 1), glm::vec3(0, 1, 1), glm::vec3(0, 1, 0) },
-    };
-
     const int sourceFaceIndex = SourceFaceForWorldFace(worldFaceIndex, spec.facing);
     const int layer = spec.faceLayers[sourceFaceIndex];
     const float light = 1.0f;
 
     const int startIndex = static_cast<int>(verts.size());
+    const auto& unitFaceVerts = modelbuilderutil::GetUnitFaceVerts(worldFaceIndex);
+    const auto& faceUVs = modelbuilderutil::GetFaceUVs();
+    const auto& faceIndices = modelbuilderutil::GetFaceIndices();
 
-    for (int vi = 0; vi < 4; ++vi) {
-        const glm::vec3 pos = unitFaceVerts[worldFaceIndex][vi];
+    for (int vi = 0; vi < modelbuilderutil::VERTS_PER_FACE; ++vi) {
+        const glm::vec3 pos = unitFaceVerts[vi];
 
-        glm::vec2 uv = kFaceUVs[vi];
+        glm::vec2 uv = faceUVs[vi];
         if (worldFaceIndex == static_cast<int>(FaceDir::Top) || worldFaceIndex == static_cast<int>(FaceDir::Bottom)) {
             uv = RotateTopBottomUVLocal(uv, spec.facing);
         }
@@ -119,24 +99,19 @@ inline void AppendFace(
         verts.push_back(vert);
     }
 
-    for (int i = 0; i < 6; ++i) {
-        indices.push_back(startIndex + kFaceIndices[i]);
+    for (int i = 0; i < modelbuilderutil::INDICES_PER_FACE; ++i) {
+        indices.push_back(startIndex + faceIndices[i]);
     }
-}
-
-inline std::vector<std::byte> PackVerts(const std::vector<V>& in) {
-    const auto* begin = reinterpret_cast<const std::byte*>(in.data());
-    const auto* end = begin + (in.size() * sizeof(V));
-    return std::vector<std::byte>(begin, end);
 }
 
 } // namespace
 
-BlockModel BuildCubeModel(const CubeSpec& spec) {
-    BlockModel out;
+blockstate::BlockModel BuildCubeModel(const CubeSpec& spec) {
+    blockstate::BlockModel out;
     out.isFullBlock = true;
+    out.computeVisibleFaces = faceculling::ComputeVisibleFacesFullBlock;
 
-    RenderLayer& layer = spec.transparent ? out.transparent : out.opaque;
+    blockstate::RenderLayer& layer = spec.transparent ? out.transparent : out.opaque;
     layer.faces.reserve(kFaceCount);
 
     for (int face = 0; face < kFaceCount; ++face) {
@@ -147,11 +122,11 @@ BlockModel BuildCubeModel(const CubeSpec& spec) {
 
         AppendFace(spec, face, verts, indices);
 
-        FaceRange f;
+        blockstate::FaceRange f;
         f.vertByteOffset = static_cast<int>(layer.vertices.size());
         f.idxOffset      = static_cast<int>(layer.indices.size());
 
-        std::vector<std::byte> packed = PackVerts(verts);
+        std::vector<std::byte> packed = modelbuilderutil::PackVerts(verts);
         f.vertByteCount = static_cast<int>(packed.size());
         f.idxCount      = static_cast<int>(indices.size());
 
@@ -163,5 +138,5 @@ BlockModel BuildCubeModel(const CubeSpec& spec) {
     return out;
 }
 
-} // namespace blockstate
+} // namespace blockmodels
 

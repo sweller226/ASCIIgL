@@ -8,7 +8,9 @@
 #include <FastNoiseLite/FastNoiseLite.h>
 
 #include <ASCIIgL/util/Logger.hpp>
+
 #include <ASCIICraft/world/blockplacement/BlockPlacement.hpp>
+#include <ASCIICraft/world/Sizes.hpp>
 
 TerrainGenerator::TerrainGenerator(entt::registry &registry)
     : m_registry(registry) {
@@ -33,28 +35,30 @@ void TerrainGenerator::GenerateChunkInto(ChunkCoord coord, uint32_t* blocks, Ter
     if (!bsr || !blocks) return;
 
     uint32_t airId = bsr->GetDefaultState("minecraft:air");
-    uint32_t waterId = bsr->GetDefaultState("minecraft:water");
+    const uint32_t waterDefaultId = bsr->GetDefaultState("minecraft:water");
+    const uint32_t waterTopId = bsr->WithProperty(waterDefaultId, "top", "true");
+    const uint32_t waterFullId = bsr->WithProperty(waterDefaultId, "top", "false");
     std::fill(blocks, blocks + Chunk::VOLUME, airId);
 
     InitializeNoiseGenerators();
     const TerrainParams params = GetTerrainParams();
-    const int chunkBaseY = coord.y * Chunk::SIZE;
+    const int chunkBaseY = coord.y * sizes::CHUNK_SIZE;
 
     std::vector<glm::ivec3> treePlacementPositions;
-    for (int x = 0; x < Chunk::SIZE; ++x) {
-        for (int z = 0; z < Chunk::SIZE; ++z) {
+    for (int x = 0; x < sizes::CHUNK_SIZE; ++x) {
+        for (int z = 0; z < sizes::CHUNK_SIZE; ++z) {
             const glm::ivec3 worldCoord = LocalToWorldCoord(coord, x, z);
             const int terrainHeight = CalculateTerrainHeight(worldCoord.x, worldCoord.z, params);
 
-            for (int y = 0; y < Chunk::SIZE; ++y) {
+            for (int y = 0; y < sizes::CHUNK_SIZE; ++y) {
                 const int worldY = chunkBaseY + y;
                 const uint32_t stateId = GetBlockStateAt(worldCoord.x, worldY, worldCoord.z, terrainHeight, params, treePlacementPositions, bsr);
 
-                const int index = x + y * Chunk::SIZE + z * Chunk::SIZE * Chunk::SIZE;
+                const int index = x + y * sizes::CHUNK_SIZE + z * sizes::CHUNK_SIZE * sizes::CHUNK_SIZE;
                 if (stateId != airId) {
                     blocks[index] = stateId;
                 } else if (worldY <= params.SEA_LEVEL) {
-                    blocks[index] = waterId;
+                    blocks[index] = (worldY == params.SEA_LEVEL) ? waterTopId : waterFullId;
                 }
             }
         }
@@ -112,9 +116,9 @@ void TerrainGenerator::GenerateTreeInto(int worldX, int worldY, int worldZ,
 
 glm::ivec3 TerrainGenerator::LocalToWorldCoord(const ChunkCoord& coord, int localX, int localZ) const {
     return glm::ivec3(
-        coord.x * Chunk::SIZE + localX,
+        coord.x * sizes::CHUNK_SIZE + localX,
         0, // Y will be calculated per-block
-        coord.z * Chunk::SIZE + localZ
+        coord.z * sizes::CHUNK_SIZE + localZ
     );
 }
 
@@ -208,7 +212,7 @@ int TerrainGenerator::CalculateTerrainHeight(int worldX, int worldZ, const Terra
     float noiseValue = terrainNoise->GetNoise((float)worldX, (float)worldZ);
     float terrainHeightChunks = params.BASE_HEIGHT + (noiseValue * params.AMPLITUDE);
     terrainHeightChunks = std::max((float)params.MIN_TERRAIN_HEIGHT, std::min((float)params.MAX_TERRAIN_HEIGHT, terrainHeightChunks));
-    return (int)(terrainHeightChunks * Chunk::SIZE);
+    return (int)(terrainHeightChunks * sizes::CHUNK_SIZE);
 }
 
 bool TerrainGenerator::ShouldCarveCave(int worldX, int worldY, int worldZ, int depthFromSurface, const TerrainParams& params) const {

@@ -2,7 +2,11 @@
 
 #include <cstddef>
 #include <vector>
+#include <functional>
 
+#include <ASCIICraft/world/blockstate/BlockState.hpp>
+#include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
+                    
 namespace blockstate {
 
     struct FaceRange {
@@ -22,6 +26,14 @@ namespace blockstate {
         bool isFullBlock = false;
         RenderLayer opaque;
         RenderLayer transparent;
-    };
 
+        std::function<void(
+            int, int, int,
+            const blockstate::BlockState&,
+            const uint32_t*,
+            const std::array<const uint32_t*, 6>&,
+            const blockstate::BlockStateRegistry&,
+            std::vector<bool>&
+        )> computeVisibleFaces;
+    };
 }

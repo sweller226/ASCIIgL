@@ -10,7 +10,7 @@
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/TerrainGenerator.hpp>
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
-#include <ASCIICraft/world/WorldDimensions.hpp>
+#include <ASCIICraft/world/Sizes.hpp>
 
 #include <entt/entt.hpp>
 
@@ -33,7 +33,7 @@ struct ChunkManagerWaterParams {
 
 class ChunkManager {
 public:
-    ChunkManager(entt::registry& registry, const WorldDimensions& worldDimensions, const unsigned int renderDistance);
+    ChunkManager(entt::registry& registry, const sizes::WorldDimensions& worldDimensions, const unsigned int renderDistance);
     ~ChunkManager() = default; // default is fine; list elements are destroyed automatically
 
     void Update();
@@ -130,7 +130,7 @@ private:
     static constexpr unsigned int UNLOAD_RADIUS_PADDING = 0; // extra chunks beyond load radius before unloading
 
     // World settings
-    const WorldDimensions& _worldDimensions;
+    const sizes::WorldDimensions& _worldDimensions;
     unsigned int renderDistance;
     unsigned int loadDistance;
 

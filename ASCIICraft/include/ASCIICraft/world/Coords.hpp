@@ -6,10 +6,9 @@
 
 #include <ASCIIgL/util/MathUtil.hpp>
 
-#include <glm/glm.hpp>
+#include <ASCIICraft/world/Sizes.hpp>
 
-constexpr int CHUNK_SIZE = 16;
-constexpr int REGION_SIZE = 32;
+#include <glm/glm.hpp>
 
 struct RegionCoord {
     int32_t x, y, z;
@@ -73,17 +72,17 @@ struct ChunkCoord {
 
     RegionCoord ToRegionCoord() const {
         return RegionCoord(
-            ASCIIgL::MathUtil::FloorDivNegInf(x, REGION_SIZE),
-            ASCIIgL::MathUtil::FloorDivNegInf(y, REGION_SIZE),
-            ASCIIgL::MathUtil::FloorDivNegInf(z, REGION_SIZE)
+            ASCIIgL::MathUtil::FloorDivNegInf(x, sizes::REGION_SIZE),
+            ASCIIgL::MathUtil::FloorDivNegInf(y, sizes::REGION_SIZE),
+            ASCIIgL::MathUtil::FloorDivNegInf(z, sizes::REGION_SIZE)
         );
     }
 
     glm::ivec3 ToLocalRegion(const RegionCoord& r) const {
         return glm::ivec3(
-            x - (r.x * REGION_SIZE),
-            y - (r.y * REGION_SIZE),
-            z - (r.z * REGION_SIZE)
+            x - (r.x * sizes::REGION_SIZE),
+            y - (r.y * sizes::REGION_SIZE),
+            z - (r.z * sizes::REGION_SIZE)
         );
     }
 };
@@ -128,17 +127,17 @@ struct WorldCoord {
     
     ChunkCoord ToChunkCoord() const {
         return ChunkCoord(
-            x >= 0 ? x / CHUNK_SIZE : (x - CHUNK_SIZE + 1) / CHUNK_SIZE,
-            y >= 0 ? y / CHUNK_SIZE : (y - CHUNK_SIZE + 1) / CHUNK_SIZE,
-            z >= 0 ? z / CHUNK_SIZE : (z - CHUNK_SIZE + 1) / CHUNK_SIZE
+            x >= 0 ? x / sizes::CHUNK_SIZE : (x - sizes::CHUNK_SIZE + 1) / sizes::CHUNK_SIZE,
+            y >= 0 ? y / sizes::CHUNK_SIZE : (y - sizes::CHUNK_SIZE + 1) / sizes::CHUNK_SIZE,
+            z >= 0 ? z / sizes::CHUNK_SIZE : (z - sizes::CHUNK_SIZE + 1) / sizes::CHUNK_SIZE
         );
     }
 
     glm::ivec3 ToLocalChunkPos() const {
         return glm::ivec3(
-            ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE,
-            ((y % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE,
-            ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE
+            ((x % sizes::CHUNK_SIZE) + sizes::CHUNK_SIZE) % sizes::CHUNK_SIZE,
+            ((y % sizes::CHUNK_SIZE) + sizes::CHUNK_SIZE) % sizes::CHUNK_SIZE,
+            ((z % sizes::CHUNK_SIZE) + sizes::CHUNK_SIZE) % sizes::CHUNK_SIZE
         );
     }
 };

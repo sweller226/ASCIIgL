@@ -62,8 +62,8 @@ static void safeWrite(std::fstream& f, const char* buffer, std::streamsize count
 }
 
 RegionFile::RegionFile(const RegionCoord& coord) : _coord(coord) {
-    chunkIndexes.resize(static_cast<size_t>(REGION_SIZE) * REGION_SIZE * REGION_SIZE);
-    metaIndexes.resize(static_cast<size_t>(REGION_SIZE) * REGION_SIZE * REGION_SIZE);
+    chunkIndexes.resize(static_cast<size_t>(sizes::REGION_SIZE) * sizes::REGION_SIZE * sizes::REGION_SIZE);
+    metaIndexes.resize(static_cast<size_t>(sizes::REGION_SIZE) * sizes::REGION_SIZE * sizes::REGION_SIZE);
 
     const std::filesystem::path regionDir = "regions";
     if (!std::filesystem::exists(regionDir)) {
@@ -99,7 +99,7 @@ bool RegionFile::EnsureOpen() {
             ASCIIgL::Logger::Errorf("RegionFile::EnsureOpen failed to create: %s", _path.c_str());
             return false;
         }
-        const size_t entryCount = static_cast<size_t>(REGION_SIZE) * REGION_SIZE * REGION_SIZE;
+        const size_t entryCount = static_cast<size_t>(sizes::REGION_SIZE) * sizes::REGION_SIZE * sizes::REGION_SIZE;
         const uint32_t headerSize = static_cast<uint32_t>(sizeof(RegionHeader));
         const uint32_t chunkIndexTableSize = static_cast<uint32_t>(entryCount * sizeof(ChunkIndexEntry));
         const uint32_t metaIndexTableSize = static_cast<uint32_t>(entryCount * sizeof(MetaBucketIndexEntry));
@@ -128,7 +128,7 @@ void RegionFile::readHeaderAndIndex() {
     _file.seekg(0, std::ios::beg);
     if (!_file.good()) throw std::runtime_error("Region _file not readable: " + _path);
 
-    const size_t entryCount = static_cast<size_t>(REGION_SIZE) * REGION_SIZE * REGION_SIZE;
+    const size_t entryCount = static_cast<size_t>(sizes::REGION_SIZE) * sizes::REGION_SIZE * sizes::REGION_SIZE;
 
     // Read header
     _file.read(reinterpret_cast<char*>(&header), static_cast<std::streamsize>(sizeof(header)));
@@ -193,7 +193,7 @@ void RegionFile::writeHeaderAndIndex() {
     if (!_file.good()) throw std::runtime_error("Region _file not writable: " + _path);
 
     // Ensure header.chunkStart/metaStart are set consistently before writing.
-    const size_t entryCount = static_cast<size_t>(REGION_SIZE) * REGION_SIZE * REGION_SIZE;
+    const size_t entryCount = static_cast<size_t>(sizes::REGION_SIZE) * sizes::REGION_SIZE * sizes::REGION_SIZE;
     const uint32_t headerSize = static_cast<uint32_t>(sizeof(RegionHeader));
     const uint32_t chunkIndexTableSize = static_cast<uint32_t>(entryCount * sizeof(ChunkIndexEntry));
     const uint32_t metaIndexTableSize  = static_cast<uint32_t>(entryCount * sizeof(MetaBucketIndexEntry));
@@ -388,7 +388,7 @@ bool RegionFile::LoadChunk(Chunk* out) {
     glm::ivec3 lp = out->GetCoord().ToLocalRegion(rp);
 
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
-        lp.x >= REGION_SIZE || lp.y >= REGION_SIZE || lp.z >= REGION_SIZE) {
+        lp.x >= sizes::REGION_SIZE || lp.y >= sizes::REGION_SIZE || lp.z >= sizes::REGION_SIZE) {
         ASCIIgL::Logger::Warning("LoadChunk: local coords out of bounds");
         return false;
     }
@@ -447,7 +447,7 @@ void RegionFile::appendChunkBlobAndUpdateIndex(const Chunk* data) {
     RegionCoord rp = data->GetCoord().ToRegionCoord();
     glm::ivec3 lp = data->GetCoord().ToLocalRegion(rp);
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
-        lp.x >= REGION_SIZE || lp.y >= REGION_SIZE || lp.z >= REGION_SIZE) {
+        lp.x >= sizes::REGION_SIZE || lp.y >= sizes::REGION_SIZE || lp.z >= sizes::REGION_SIZE) {
         ASCIIgL::Logger::Error("appendChunkBlobAndUpdateIndex: local coords out of bounds");
         throw std::out_of_range("Local chunk coords out of region bounds");
     }
@@ -508,7 +508,7 @@ bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out) {
     glm::ivec3 lp = pos.ToLocalRegion(rp);
 
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
-        lp.x >= REGION_SIZE || lp.y >= REGION_SIZE || lp.z >= REGION_SIZE) {
+        lp.x >= sizes::REGION_SIZE || lp.y >= sizes::REGION_SIZE || lp.z >= sizes::REGION_SIZE) {
         ASCIIgL::Logger::Warning("LoadMetaData: local coords out of bounds");
         return false;
     }
@@ -567,7 +567,7 @@ void RegionFile::appendMetaBlobAndUpdateIndex(const ChunkCoord& pos, const MetaB
     RegionCoord rp = pos.ToRegionCoord();
     glm::ivec3 lp = pos.ToLocalRegion(rp);
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
-        lp.x >= REGION_SIZE || lp.y >= REGION_SIZE || lp.z >= REGION_SIZE) {
+        lp.x >= sizes::REGION_SIZE || lp.y >= sizes::REGION_SIZE || lp.z >= sizes::REGION_SIZE) {
         ASCIIgL::Logger::Error("appendMetaBlobAndUpdateIndex: local coords out of bounds");
         throw std::out_of_range("Local chunk coords out of region bounds");
     }
@@ -579,7 +579,7 @@ void RegionFile::appendMetaBlobAndUpdateIndex(const ChunkCoord& pos, const MetaB
     auto& entry = metaIndexes[off];
     std::vector<uint8_t> raw = buildMetaBlob(data);
     if (header.metaStart == 0) {
-        const size_t entryCount = static_cast<size_t>(REGION_SIZE) * REGION_SIZE * REGION_SIZE;
+        const size_t entryCount = static_cast<size_t>(sizes::REGION_SIZE) * sizes::REGION_SIZE * sizes::REGION_SIZE;
         const uint32_t headerSize = static_cast<uint32_t>(sizeof(RegionHeader));
         const uint32_t chunkIndexTableSize = static_cast<uint32_t>(entryCount * sizeof(ChunkIndexEntry));
         const uint32_t metaIndexTableSize  = static_cast<uint32_t>(entryCount * sizeof(MetaBucketIndexEntry));

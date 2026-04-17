@@ -1,13 +1,13 @@
-#include <ASCIICraft/world/blockstate/BlockModelLibrary.hpp>
+#include <ASCIICraft/world/blockmodels/BlockModelLibrary.hpp>
 
-#include <ASCIICraft/world/blockstate/CubeModelBuilder.hpp>
+#include <ASCIICraft/world/blockmodels/CubeModelBuilder.hpp>
 #include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
 
 #include <cstddef>
 #include <mutex>
 #include <utility>
 
-namespace blockstate {
+namespace blockmodels {
 
 namespace {
     static std::mutex g_modelLibraryMutex;
@@ -30,37 +30,37 @@ namespace {
         return h;
     }
 
-    inline std::size_t HashLayer(const RenderLayer& layer) {
+    inline std::size_t HashLayer(const blockstate::RenderLayer& layer) {
         std::size_t h = 0;
         HashCombine(h, HashBytes(layer.vertices));
         HashCombine(h, HashInts(layer.indices));
         return h;
     }
 
-    inline std::size_t FingerprintModel(const BlockModel& m) {
+    inline std::size_t FingerprintModel(const blockstate::BlockModel& m) {
         std::size_t h = 0;
         HashCombine(h, HashLayer(m.opaque));
         HashCombine(h, HashLayer(m.transparent));
         return h;
     }
 
-    inline bool LayerEqual(const RenderLayer& a, const RenderLayer& b) {
+    inline bool LayerEqual(const blockstate::RenderLayer& a, const blockstate::RenderLayer& b) {
         return a.vertices == b.vertices && a.indices == b.indices;
     }
 
-    inline bool ModelsEqual(const BlockModel& a, const BlockModel& b) {
+    inline bool ModelsEqual(const blockstate::BlockModel& a, const blockstate::BlockModel& b) {
         return LayerEqual(a.opaque, b.opaque) &&
                LayerEqual(a.transparent, b.transparent);
     }
 } // namespace
 
 // threadsafe for reading
-const BlockModel* BlockModelLibrary::GetModel(uint32_t stateId) const {
+const blockstate::BlockModel* BlockModelLibrary::GetModel(uint32_t stateId) const {
     if (stateId >= modelsByState_.size()) return nullptr;
     return modelsByState_[stateId].get();
 }
 
-void BlockModelLibrary::RegisterModel(uint32_t stateId, std::shared_ptr<const BlockModel> model, BlockStateRegistry& bsr) {
+void BlockModelLibrary::RegisterModel(uint32_t stateId, std::shared_ptr<const blockstate::BlockModel> model, blockstate::BlockStateRegistry& bsr) {
     std::lock_guard<std::mutex> lock(g_modelLibraryMutex);
 
     if (stateId >= modelsByState_.size())
@@ -86,8 +86,8 @@ void BlockModelLibrary::RegisterModel(uint32_t stateId, std::shared_ptr<const Bl
     modelsByState_[stateId] = std::move(model);
 }
 
-void BlockModelLibrary::RegisterModel(uint16_t typeId, std::shared_ptr<const BlockModel> model, BlockStateRegistry& bsr) {
-    const BlockType& type = bsr.GetType(typeId);
+void BlockModelLibrary::RegisterModel(uint16_t typeId, std::shared_ptr<const blockstate::BlockModel> model, blockstate::BlockStateRegistry& bsr) {
+    const blockstate::BlockType& type = bsr.GetType(typeId);
     const uint32_t base = type.baseStateId;
     const uint32_t count = type.stateCount;
 
@@ -97,10 +97,10 @@ void BlockModelLibrary::RegisterModel(uint16_t typeId, std::shared_ptr<const Blo
     }
 }
 
-void BlockModelLibrary::RegisterCubeModel(uint16_t typeId, const CubeSpec& spec, BlockStateRegistry& bsr) {
-    auto model = std::make_shared<const BlockModel>(BuildCubeModel(spec));
+void BlockModelLibrary::RegisterCubeModel(uint16_t typeId, const CubeSpec& spec, blockstate::BlockStateRegistry& bsr) {
+    auto model = std::make_shared<const blockstate::BlockModel>(BuildCubeModel(spec));
     RegisterModel(typeId, std::move(model), bsr);
 }
 
-} // namespace blockstate
+} // namespace blockmodels
 

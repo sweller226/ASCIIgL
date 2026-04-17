@@ -19,6 +19,8 @@
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 
+#include <ASCIICraft/world/Sizes.hpp>
+
 // Static member definition - ordered to match face indices in Chunk::GenerateMesh()
 const ChunkCoord ChunkManager::FACE_NEIGHBOR_OFFSETS[6] = {
     ChunkCoord(0, 1, 0),   // Face 0: Top (Y+)
@@ -29,7 +31,7 @@ const ChunkCoord ChunkManager::FACE_NEIGHBOR_OFFSETS[6] = {
     ChunkCoord(-1, 0, 0)   // Face 5: West (X-)
 };
 
-ChunkManager::ChunkManager(entt::registry& registry, const WorldDimensions& worldDimensions, const unsigned int renderDistance)
+ChunkManager::ChunkManager(entt::registry& registry, const sizes::WorldDimensions& worldDimensions, const unsigned int renderDistance)
     : _worldDimensions(worldDimensions)
     , renderDistance(renderDistance)
     , loadDistance(renderDistance + 1)
@@ -59,7 +61,7 @@ void ChunkManager::SetRenderDistance(unsigned int distance) {
 
 void ChunkManager::UpdateFogFromRenderDistance() {
     // Max visible distance: furthest rendered geometry can be ~(renderDistance+1) chunks away.
-    const float maxVisibleDist = static_cast<float>((renderDistance) * Chunk::SIZE);
+    const float maxVisibleDist = static_cast<float>((renderDistance) * sizes::CHUNK_SIZE);
     const float startFactor = 0.8f;
     const float endFactor = 1.0f;
     fogParams_.fogStart = maxVisibleDist * startFactor;
@@ -373,7 +375,7 @@ std::vector<Chunk*> ChunkManager::GetVisibleChunks(const glm::vec3& playerPos, c
     const float fovCosine = cos(fovHalfAngle);
     
     // Chunk bounding sphere radius (distance from center to corner)
-    const float chunkRadius = Chunk::SIZE * 0.866025f; // sqrt(3)/2 * SIZE
+    const float chunkRadius = sizes::CHUNK_SIZE * 0.866025f; // sqrt(3)/2 * SIZE
     
     for (const auto& pair : loadedChunks) {
         const ChunkCoord& coord = pair.first;
@@ -393,9 +395,9 @@ std::vector<Chunk*> ChunkManager::GetVisibleChunks(const glm::vec3& playerPos, c
         
         // Calculate chunk center in world coordinates
         glm::vec3 chunkCenter = glm::vec3(
-            coord.x * Chunk::SIZE + Chunk::SIZE * 0.5f,
-            coord.y * Chunk::SIZE + Chunk::SIZE * 0.5f,
-            coord.z * Chunk::SIZE + Chunk::SIZE * 0.5f
+            coord.x * sizes::CHUNK_SIZE + sizes::CHUNK_SIZE * 0.5f,
+            coord.y * sizes::CHUNK_SIZE + sizes::CHUNK_SIZE * 0.5f,
+            coord.z * sizes::CHUNK_SIZE + sizes::CHUNK_SIZE * 0.5f
         );
         
         // Vector from player to chunk center
@@ -534,7 +536,7 @@ void ChunkManager::RebuildChunkMeshImmediate(Chunk* c) {
         }
     }
 
-    auto* modelLib = registry.ctx().find<blockstate::BlockModelLibrary>();
+    auto* modelLib = registry.ctx().find<blockmodels::BlockModelLibrary>();
     if (!modelLib) {
         ASCIIgL::Logger::Warning("RebuildChunkMeshImmediate: BlockModelLibrary not found in context.");
         return;
@@ -770,9 +772,9 @@ void ChunkManager::RenderChunks() {
         // Transparent part: single mesh per chunk, sorted at chunk level by view depth
         if (chunk->HasTransparentMesh() && chunk->GetTransparentMesh()) {
             glm::vec3 chunkCenter(
-                chunk->GetCoord().x * Chunk::SIZE + Chunk::SIZE * 0.5f,
-                chunk->GetCoord().y * Chunk::SIZE + Chunk::SIZE * 0.5f,
-                chunk->GetCoord().z * Chunk::SIZE + Chunk::SIZE * 0.5f
+                chunk->GetCoord().x * sizes::CHUNK_SIZE + sizes::CHUNK_SIZE * 0.5f,
+                chunk->GetCoord().y * sizes::CHUNK_SIZE + sizes::CHUNK_SIZE * 0.5f,
+                chunk->GetCoord().z * sizes::CHUNK_SIZE + sizes::CHUNK_SIZE * 0.5f
             );
             glm::vec3 toChunk = chunkCenter - pos;
             float depth = glm::dot(toChunk, camDir); // positive = in front of camera
@@ -857,18 +859,18 @@ void ChunkManager::BlockUpdateNeighboursDirty(const ChunkCoord& chunkCoord, cons
     // X-axis neighbors
     if (localPos.x == 0)
         mark(chunkCoord + ChunkCoord(-1, 0, 0));
-    if (localPos.x == CHUNK_SIZE - 1)
+    if (localPos.x == sizes::CHUNK_SIZE - 1)
         mark(chunkCoord + ChunkCoord(1, 0, 0));
 
     // Y-axis neighbors
     if (localPos.y == 0)
         mark(chunkCoord + ChunkCoord(0, -1, 0));
-    if (localPos.y == CHUNK_SIZE - 1)
+    if (localPos.y == sizes::CHUNK_SIZE - 1)
         mark(chunkCoord + ChunkCoord(0, 1, 0));
 
     // Z-axis neighbors
     if (localPos.z == 0)
         mark(chunkCoord + ChunkCoord(0, 0, -1));
-    if (localPos.z == CHUNK_SIZE - 1)
+    if (localPos.z == sizes::CHUNK_SIZE - 1)
         mark(chunkCoord + ChunkCoord(0, 0, 1));
 }
