@@ -35,11 +35,10 @@ From broad sampling across many block model and blockstate files:
   - per-face `rotation`
   - per-face `cullface`
   - element-level `rotation` (`origin`, `axis`, `angle`, optional `rescale`)
-  - optional `ambientocclusion` overrides
-  - optional `tintindex`
+  - `ambientocclusion` / `tintindex` may appear in assets but are not parsed (not used by the baker)
 - Variant JSON entries commonly use `x/y` transforms and `uvlock`.
 - 1.8.9 blockstates are predominantly explicit `variants` mappings.
-- Variant arrays for randomized selections appear in blockstates (weight support should be part of the design, with default weight handling).
+- Variant arrays for randomized selections appear in blockstates (M4 keeps all entries and selects deterministically with equal probability).
 - Item rendering depends on `models/item` and `display` transforms (separate from world block meshing, but part of the full asset pipeline).
 
 General engine rules:
@@ -150,9 +149,9 @@ Goal: convert `ResolvedBlockModelDefinition` into runtime `blockstate::BlockMode
   - texture lookup callback/lambda (`resourceId -> texture layer index`)
 - Output:
   - fully populated `blockstate::BlockModel` (`opaque`/`transparent` layers + face ranges)
-- Rule: M3 ignores `tintindex` and `ambientocclusion` for rendering behavior (keep parsed/stored only).
+- Rule: `tintindex` and `ambientocclusion` are not loaded from JSON into the block model pipeline.
 
-Status: implemented via `BlockModelBaker` contract (`BakeResolvedModel(...)`) with variant transform inputs, texture-layer resolver callback, and `computeVisibleFaces = nullptr` policy for JSON models.
+Status: implemented via `BlockModelBaker` contract (`BakeResolvedModel(...)`) with variant transform inputs, texture layers from `blocktextures::GetLayerForTextureId`, and `computeVisibleFaces = nullptr` policy for JSON models.
 
 ### M3B - Element to Face Expansion (Done)
 - For each resolved element:
@@ -203,13 +202,17 @@ Status: completed and validated using a temporary runtime shakedown helper, then
 ### M3F - Exit Criteria (Done)
 - Can bake resolved models into valid `blockstate::BlockModel` with stable buffer sizes.
 - Variant transforms (`x`, `y`, `uvlock`) visibly affect geometry/UVs in debug output.
-- `tintindex` and `ambientocclusion` are intentionally ignored for render output in this milestone.
+- `tintindex` and `ambientocclusion` are not part of the parsed/resolved model data.
 - No crashes on representative assets (fence, torch, flower, simple cube model).
 Status: validated via temporary one-off runtime validator, passed, then removed.
 
 Deliverable: baker produces runtime `BlockModel` buffers from resolved JSON models for representative blocks.
 
 ## M4 - Variant Compiler -> State IDs
+
+**Full specification:** [docs/M4_VARIANT_COMPILER.md](docs/M4_VARIANT_COMPILER.md) (phases, APIs, file layout, verification, risks).
+
+Summary:
 
 - Variant-key helpers (for matching blockstate `variants` keys):
   - parse variant key (`a=b,c=d`) into property map
@@ -224,10 +227,9 @@ Deliverable: baker produces runtime `BlockModel` buffers from resolved JSON mode
   - try exact canonical key
   - optional fallback to empty key `""` (for simple blocks with default variant)
   - emit warn-once for unresolved state->variant mapping with block id + key
-- Support variant arrays/weights as first-class behavior:
-  - deterministic mode (for reproducibility/debug)
-  - weighted selection mode (for visual parity with vanilla behavior)
-  - default weight of `1` when omitted
+- Support variant arrays as first-class behavior:
+  - deterministic selection by world position/state hash (stable visuals)
+  - equal-probability choice across array entries (no numeric weight parsing)
 
 Deliverable: automatic per-state model registration from JSON.
 

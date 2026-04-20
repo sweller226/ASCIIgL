@@ -7,8 +7,8 @@
 #include <ASCIICraft/events/InputEvents.hpp>
 #include <ASCIICraft/events/PlaceBlockEvent.hpp>
 #include <ASCIICraft/world/World.hpp>
-#include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
-#include <ASCIICraft/world/blockplacement/BlockPlacement.hpp>
+#include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/block/placement/BlockPlacement.hpp>
 
 namespace ecs::systems {
 
@@ -40,10 +40,10 @@ void PlacingSystem::PlayerPlace() {
             auto* bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
             if (!bsr) break;
 
-            // Get the base state (e.g. default grass block)
-            uint32_t baseStateId = bsr->GetDefaultState(bsr->GetTypeId("minecraft:bedrock"));
+            // Secondary action (e.g. R / interact_right): place dandelion (default state for that type).
+            uint32_t baseStateId = bsr->GetDefaultState(bsr->GetTypeId("minecraft:dandelion"));
             
-            // Apply placement-time logic (grass orientation, etc.) with player placement context
+            // Hook for placement-time adjustments (player placement context)
             uint32_t finalizedStateId = GetFinalizedBlockStateForPlacement(
                 *bsr, baseStateId, rayCast.second, PlacementContext::PlayerPlacement
             );

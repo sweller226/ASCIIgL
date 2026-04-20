@@ -11,7 +11,7 @@
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
 
-#include <ASCIICraft/world/ChunkRegion.hpp>
+#include <ASCIICraft/world/chunk/ChunkRegion.hpp>
 #include <ASCIICraft/util/Util.hpp>
 
 #include <entt/entt.hpp>

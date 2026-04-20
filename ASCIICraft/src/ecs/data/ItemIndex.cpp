@@ -6,8 +6,8 @@
 #include <ASCIIgL/engine/Mesh.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 
-#include <ASCIICraft/world/blockstate/BlockState.hpp>
-#include <ASCIICraft/world/blockstate/FaceDir.hpp>
+#include <ASCIICraft/world/block/state/BlockState.hpp>
+#include <ASCIICraft/world/block/state/FaceDir.hpp>
 
 #include <glm/glm.hpp>
 

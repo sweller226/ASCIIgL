@@ -6,7 +6,7 @@
 
 // world and chunk
 #include <ASCIICraft/world/World.hpp>
-#include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 
 namespace ecs::systems {
 

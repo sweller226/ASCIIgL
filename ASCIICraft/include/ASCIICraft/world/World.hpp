@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ASCIICraft/world/Chunk.hpp>
-#include <ASCIICraft/world/TerrainGenerator.hpp>
+#include <ASCIICraft/world/chunk/Chunk.hpp>
+#include <ASCIICraft/world/terrain/TerrainGenerator.hpp>
 #include <ASCIICraft/world/Coords.hpp>
-#include <ASCIICraft/world/ChunkManager.hpp>
+#include <ASCIICraft/world/chunk/ChunkManager.hpp>
 #include <ASCIICraft/world/Sizes.hpp>
 
 #include <unordered_map>

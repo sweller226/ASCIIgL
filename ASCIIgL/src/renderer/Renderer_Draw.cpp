@@ -153,9 +153,18 @@ void Renderer::SortTransparentDraws() {
 
 void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list) {
     Material* lastMat = nullptr;
+    bool currentCull = GetBackfaceCulling();
 
     for (const auto& dc : list) {
         if (!dc.mesh || !dc.material) continue;
+
+        if (dc.backfaceCulling != currentCull) {
+            currentCull = dc.backfaceCulling;
+            const bool wireframe = GetWireframe();
+            const bool ccw = GetCCW();
+            const int stateIndex = (wireframe ? 1 : 0) + (currentCull ? 2 : 0) + (ccw ? 4 : 0);
+            _context->RSSetState(_rasterizerStates[stateIndex].Get());
+        }
 
         Material* mat = dc.material;
 

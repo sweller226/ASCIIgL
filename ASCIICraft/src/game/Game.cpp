@@ -20,10 +20,13 @@
 #include <glm/vec2.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
-#include <ASCIICraft/world/BlockTextureCatalog.hpp>
-#include <ASCIICraft/world/blockmodels/CubeModelBuilder.hpp>
-#include <ASCIICraft/world/blockmodels/WaterModelBuilder.hpp>
+#include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/block/state/JsonBlockModelRegistration.hpp>
+#include <ASCIICraft/world/block/models/JsonModelLoader.hpp>
+#include <ASCIICraft/world/block/state/JsonBlockStateLoader.hpp>
+#include <ASCIICraft/world/block/state/VariantKey.hpp>
+#include <ASCIICraft/world/block/textures/BlockTextureCatalog.hpp>
+#include <ASCIICraft/world/block/models/WaterModelBuilder.hpp>
 #include <ASCIICraft/ecs/data/ItemIndex.hpp>
 
 #include <ASCIICraft/gui/GuiMeshes.hpp>
@@ -286,7 +289,7 @@ void Game::Shutdown() {
 bool Game::LoadTextures() {
     ASCIIgL::Logger::Info("Loading game textures...");
 
-    // Alternative monochrome hue directions (console palette indices 0–15 per channel).
+    // Alternative monochrome hue directions (console palette indices 0â€“15 per channel).
     const glm::ivec3 NeutralGrayHue   = glm::ivec3(14, 14, 14); // balanced gray
     const glm::ivec3 WarmSepiaHue     = glm::ivec3(15, 12, 8);  // warm brownish
     const glm::ivec3 CoolBlueHue      = glm::ivec3(10, 10, 15); // bluish cool
@@ -540,14 +543,10 @@ void Game::InitializeBlockStates() {
     auto& bsr = registry.ctx().emplace<blockstate::BlockStateRegistry>();
     auto& modelLibrary = registry.ctx().emplace<blockmodels::BlockModelLibrary>();
 
-    auto layer = [](const char* textureId) -> int {
-        return blocktextures::GetLayerForTextureId(textureId);
-    };
-    using blockmodels::CubeSpec;
-    using blockmodels::BuildCubeModel;
-
-    // ======================== REGISTRATION ORDER ========================
-    // Air MUST be first (typeId=0, stateId=0)
+    // ======================== Block model registration ========================
+    // 1) Air first (typeId=0, stateId=0). 2) Shared JSON loaders for one assets root.
+    // 3) Types + derived render data. 4) Models via JsonBlockModelRegistration (1.8.9 assets),
+    //    except air (no mesh) and water (no blockstate in pack — procedural mesh).
     bsr.RegisterType("minecraft:air", {});
     const uint16_t airType = bsr.GetTypeId("minecraft:air");
     bsr.SetDerivedData(airType, [](blockstate::BlockState& s) {
@@ -557,74 +556,100 @@ void Game::InitializeBlockStates() {
     });
     modelLibrary.RegisterModel(airType, nullptr, bsr);
 
-    // === Terrain (using only file-based texture layers) ===
+    static constexpr const char* kVanillaBlockAssetRoot = "res/textures/1.8.9";
+    blockstate::JsonBlockStateLoader blockstateLoader(kVanillaBlockAssetRoot);
+    blockmodels::JsonModelLoader jsonModelLoader(kVanillaBlockAssetRoot);
+
+    const auto registerJsonBackedOrLog = [&](const char* typeName) {
+        if (!blockstate::RegisterJsonBackedBlockType(
+                typeName,
+                bsr,
+                modelLibrary,
+                blockstateLoader,
+                jsonModelLoader
+            )) {
+            ASCIIgL::Logger::Error(
+                std::string("Game::InitializeBlockStates: JSON model registration failed for ") + typeName
+            );
+        }
+    };
+
+    // === Terrain & plants (vanilla blockstate + block models under res/textures/1.8.9) ===
     bsr.RegisterType("minecraft:bedrock", {});
     const uint16_t bedrockType = bsr.GetTypeId("minecraft:bedrock");
     bsr.SetDerivedData(bedrockType, [&](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
-    modelLibrary.RegisterCubeModel(bedrockType, blockmodels::CubeFullAllFaces(layer("minecraft:blocks/bedrock"), false), bsr);
+    registerJsonBackedOrLog("minecraft:bedrock");
 
     bsr.RegisterType("minecraft:stone", {});
     const uint16_t stoneType = bsr.GetTypeId("minecraft:stone");
     bsr.SetDerivedData(stoneType, [&](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
-    modelLibrary.RegisterCubeModel(stoneType, blockmodels::CubeFullAllFaces(layer("minecraft:blocks/stone"), false), bsr);
+    registerJsonBackedOrLog("minecraft:stone");
+
+    bsr.RegisterType("minecraft:dandelion", {});
+    const uint16_t dandelionType = bsr.GetTypeId("minecraft:dandelion");
+    bsr.SetDerivedData(dandelionType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:dandelion");
+
+    // Oak fence geometry in 1.8.9 uses blockstate id `minecraft:fence` (see assets/.../blockstates/fence.json).
+    bsr.RegisterType("minecraft:fence", {
+        blockstate::BlockProperty{ "east", { "false", "true" }},
+        blockstate::BlockProperty{ "north", { "false", "true" }},
+        blockstate::BlockProperty{ "south", { "false", "true" }},
+        blockstate::BlockProperty{ "west", { "false", "true" }},
+    });
+    const uint16_t fenceType = bsr.GetTypeId("minecraft:fence");
+    bsr.SetDerivedData(fenceType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:fence");
 
     bsr.RegisterType("minecraft:cobblestone", {});
     const uint16_t cobbleType = bsr.GetTypeId("minecraft:cobblestone");
     bsr.SetDerivedData(cobbleType, [&](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
-    modelLibrary.RegisterCubeModel(cobbleType, blockmodels::CubeFullAllFaces(layer("minecraft:blocks/cobblestone"), false), bsr);
+    registerJsonBackedOrLog("minecraft:cobblestone");
 
     bsr.RegisterType("minecraft:dirt", {});
     const uint16_t dirtType = bsr.GetTypeId("minecraft:dirt");
     bsr.SetDerivedData(dirtType, [&](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
-    modelLibrary.RegisterCubeModel(dirtType, blockmodels::CubeFullAllFaces(layer("minecraft:blocks/dirt"), false), bsr);
+    registerJsonBackedOrLog("minecraft:dirt");
 
+    // Matches assets/minecraft/blockstates/grass.json (snowy + rotated grass_normal variants).
     bsr.RegisterType("minecraft:grass", {
-        // BlockStateRegistry properties are string-based; use FaceDir in code and convert at placement time.
-        blockstate::BlockProperty{ "facing", {"north", "south", "east", "west"}, 0 }
+        blockstate::BlockProperty{ "snowy", {"false", "true"}, 0 }
     });
     const uint16_t grassType = bsr.GetTypeId("minecraft:grass");
     bsr.SetDerivedData(grassType, [&](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
-    const auto& type = bsr.GetType(grassType);
-    for (uint32_t i = 0; i < type.stateCount; ++i) {
-        const uint32_t stateId = type.baseStateId + i;
-        const FaceDir facing = StringToFaceDir(bsr.GetPropertyValue(stateId, "facing"));
-        CubeSpec spec = blockmodels::CubeFullTopBottomSides(
-            layer("minecraft:blocks/grass_top"),
-            layer("minecraft:blocks/dirt"),
-            layer("minecraft:blocks/grass_side"),
-            false,
-            facing
-        );
-        auto model = std::make_shared<const blockstate::BlockModel>(BuildCubeModel(spec));
-        modelLibrary.RegisterModel(stateId, std::move(model), bsr);
-    }
+    registerJsonBackedOrLog("minecraft:grass");
 
-    // === Wood & Plants (subset using current texture list) ===
-    bsr.RegisterType("minecraft:oak_log", {});
+    // Matches assets/minecraft/blockstates/oak_log.json
+    bsr.RegisterType("minecraft:oak_log", {
+        blockstate::BlockProperty{ "axis", {"y", "z", "x", "none"}, 0 }
+    });
     const uint16_t oakLogType = bsr.GetTypeId("minecraft:oak_log");
     bsr.SetDerivedData(oakLogType, [&](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
-    modelLibrary.RegisterCubeModel(
-        oakLogType,
-        blockmodels::CubeFullTopBottomSides(
-            layer("minecraft:blocks/log_oak_top"),
-            layer("minecraft:blocks/log_oak_top"),
-            layer("minecraft:blocks/log_oak"),
-            false
-        ),
-        bsr
-    );
+    registerJsonBackedOrLog("minecraft:oak_log");
 
     bsr.RegisterType("minecraft:oak_leaves", {});
     const uint16_t leavesType = bsr.GetTypeId("minecraft:oak_leaves");
@@ -634,7 +659,7 @@ void Game::InitializeBlockStates() {
         s.renderMode = blockstate::RenderMode::Cutout;
         s.cullSameType = false;                   // draw faces between leaves (fuller look)
     });
-    modelLibrary.RegisterCubeModel(leavesType, blockmodels::CubeFullAllFaces(layer("minecraft:blocks/leaves_oak"), false), bsr);
+    registerJsonBackedOrLog("minecraft:oak_leaves");
 
     // === Water ===
     bsr.RegisterType("minecraft:water", {
@@ -655,6 +680,10 @@ void Game::InitializeBlockStates() {
         const blockmodels::WaterSpec waterSpec{ top };
         auto model = std::make_shared<const blockstate::BlockModel>(blockmodels::BuildWaterModel(waterSpec));
         modelLibrary.RegisterModel(stateId, std::move(model), bsr);
+    }
+
+    for (uint16_t tid = 0; tid < bsr.GetTotalTypeCount(); ++tid) {
+        blockstate::AssertUniqueVariantKeysPerType(bsr, tid, "Game::InitializeBlockStates");
     }
 
     ASCIIgL::Logger::Info("BlockStateRegistry: " +
