@@ -325,7 +325,6 @@ jsonutil::LoadResult<blockstate::BlockModel> BakeResolvedModel(
 
             const int vertByteOffset = static_cast<int>(layer.vertices.size());
             const int idxOffset = static_cast<int>(layer.indices.size());
-            const int baseVertex = vertByteOffset / static_cast<int>(sizeof(V));
 
             std::vector<V> packedVerts;
             packedVerts.reserve(modelbuilderutil::VERTS_PER_FACE);
@@ -349,7 +348,8 @@ jsonutil::LoadResult<blockstate::BlockModel> BakeResolvedModel(
             std::vector<std::byte> vertBytes = modelbuilderutil::PackVerts(packedVerts);
             layer.vertices.insert(layer.vertices.end(), vertBytes.begin(), vertBytes.end());
             for (int i = 0; i < modelbuilderutil::INDICES_PER_FACE; ++i) {
-                layer.indices.push_back(baseVertex + faceIndices[i]);
+                // Keep indices face-local (0..3). Append paths rebase with per-face destination base vertex.
+                layer.indices.push_back(faceIndices[i]);
             }
 
             blockstate::FaceRange faceRange{};

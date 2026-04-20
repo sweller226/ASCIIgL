@@ -75,17 +75,8 @@ static void AppendFaces(
             static_cast<size_t>(f.vertByteCount)
         );
 
-        // Index convention differs by builder:
-        // - BlockModelBaker (JSON): indices are absolute within \c layer.vertices (each face references its window).
-        // - CubeModelBuilder / WaterModelBuilder: indices are 0..3 per face (repeated for every face).
-        const int srcFaceVertBase = f.vertByteOffset / static_cast<int>(sizeof(V));
         for (int j = 0; j < f.idxCount; ++j) {
-            const int srcIdx = layer.indices[f.idxOffset + j];
-            int localInFace = srcIdx;
-            if (srcIdx >= srcFaceVertBase) {
-                localInFace = srcIdx - srcFaceVertBase;
-            }
-            dstIndices.push_back(baseVertex + localInFace);
+            dstIndices.push_back(baseVertex + layer.indices[f.idxOffset + j]);
         }
     }
 }
