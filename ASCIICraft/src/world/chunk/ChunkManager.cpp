@@ -462,8 +462,6 @@ void ChunkManager::BatchInvalidateChunkFaceNeighborMeshes(const ChunkCoord& coor
             chunk->InvalidateMesh();
         }
     }
-    
-    ASCIIgL::Logger::Debug("Batch invalidated " + std::to_string(chunksToInvalidate.size()) + " chunk meshes");
 }
 
 void ChunkManager::ApplyDrainedTerrainResults() {
@@ -747,8 +745,6 @@ void ChunkManager::RenderChunks() {
     // --- Prepare renderer draw-calls ---
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
 
-    int renderedCount = 0;
-    
     // Precompute normalized camera forward for transparent depth sorting
     glm::vec3 camDir = glm::normalize(camFront);
 
@@ -767,7 +763,6 @@ void ChunkManager::RenderChunks() {
             dc.sortKey     = 0.0f;        // not used for opaque
 
             renderer.SubmitDraw(dc);
-            renderedCount++;
         }
 
         // Opaque no-cull part: drawn in opaque pass with backface culling disabled.
@@ -781,7 +776,6 @@ void ChunkManager::RenderChunks() {
             dc.sortKey     = 0.0f;         // not used for opaque
 
             renderer.SubmitDraw(dc);
-            renderedCount++;
         }
 
         // Transparent part: single mesh per chunk, sorted at chunk level by view depth
@@ -803,7 +797,6 @@ void ChunkManager::RenderChunks() {
             dc.sortKey     = depth;       // back-to-front sorting using view depth
 
             renderer.SubmitDraw(dc);
-            renderedCount++;
         }
     }
 

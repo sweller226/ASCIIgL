@@ -33,8 +33,6 @@ int main(int argc, char* argv[]) {
 
         // Exit when user closes window or console (handled by ASCIIgL::Screen)
         game.Run([]() { return ASCIIgL::Screen::GetInst().ShouldExit(); }, renderToTerminal);
-
-        game.Shutdown();
     }
     catch (const std::exception& e) {
         ASCIIgL::Logger::Error("Game crashed with exception: " + std::string(e.what()));

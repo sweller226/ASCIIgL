@@ -1,5 +1,6 @@
 #include <ASCIICraft/world/block/models/BlockModelResolver.hpp>
 
+#include <cmath>
 #include <unordered_set>
 #include <vector>
 
@@ -16,6 +17,42 @@ namespace {
 
     std::string StripHashKey(const std::string& s) {
         return s.size() > 1 ? s.substr(1) : std::string();
+    }
+
+    bool NearlyEq(const float a, const float b, const float eps = 0.0001f) {
+        return std::abs(a - b) <= eps;
+    }
+
+    bool IsAxisAlignedFullCubeElement(const BlockModelElementDef& e) {
+        return NearlyEq(e.from[0], 0.0f) && NearlyEq(e.from[1], 0.0f) && NearlyEq(e.from[2], 0.0f) &&
+               NearlyEq(e.to[0], 16.0f) && NearlyEq(e.to[1], 16.0f) && NearlyEq(e.to[2], 16.0f);
+    }
+
+    bool HasAllSixFaces(const BlockModelElementDef& e) {
+        return e.faces.find("up") != e.faces.end() &&
+               e.faces.find("down") != e.faces.end() &&
+               e.faces.find("north") != e.faces.end() &&
+               e.faces.find("south") != e.faces.end() &&
+               e.faces.find("east") != e.faces.end() &&
+               e.faces.find("west") != e.faces.end();
+    }
+
+    bool IsGeometryFullBlock(const std::vector<BlockModelElementDef>* elementsSource) {
+        if (elementsSource == nullptr || elementsSource->empty()) {
+            return false;
+        }
+        // Some vanilla models (e.g. grass) add an overlay element on top of a full cube.
+        // For neighbor occlusion, treat them as full-block if any element is a full
+        // axis-aligned cube with all six faces and no element rotation.
+        for (const BlockModelElementDef& e : *elementsSource) {
+            if (e.rotation.has_value()) {
+                continue;
+            }
+            if (IsAxisAlignedFullCubeElement(e) && HasAllSixFaces(e)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     jsonutil::LoadResult<std::string> ResolveTextureValue(
@@ -149,7 +186,7 @@ jsonutil::LoadResult<ResolvedBlockModelDefinition> ResolveBlockModel(JsonModelLo
     }
 
     ResolvedBlockModelDefinition out;
-    out.isFullBlock = hasCubeAllInParentChain || hasCubeColumnInParentChain;
+    out.isFullBlock = hasCubeAllInParentChain || hasCubeColumnInParentChain || IsGeometryFullBlock(elementsSource);
     out.opaqueNoCull = hasCrossParentInChain;
 
     // Validate merged texture map can fully resolve # chains.

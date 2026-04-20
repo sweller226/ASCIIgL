@@ -10,6 +10,7 @@
 
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
+#include <glm/geometric.hpp>
 
 namespace blockmodels {
 
@@ -108,6 +109,71 @@ namespace {
             out = RotateAxis(out, c, 'y', static_cast<float>(variantY));
         }
         return out;
+    }
+
+    /// Outward unit normal for a full cube face in model space (matches \ref BuildElementFaceVertsModelSpace).
+    glm::vec3 OutwardNormalForFaceIndex(int faceIndex) {
+        switch (faceIndex) {
+            case static_cast<int>(FaceDir::Top): return glm::vec3(0.0f, 1.0f, 0.0f);
+            case static_cast<int>(FaceDir::Bottom): return glm::vec3(0.0f, -1.0f, 0.0f);
+            case static_cast<int>(FaceDir::North): return glm::vec3(0.0f, 0.0f, 1.0f);
+            case static_cast<int>(FaceDir::South): return glm::vec3(0.0f, 0.0f, -1.0f);
+            case static_cast<int>(FaceDir::East): return glm::vec3(1.0f, 0.0f, 0.0f);
+            case static_cast<int>(FaceDir::West): return glm::vec3(-1.0f, 0.0f, 0.0f);
+            default: return glm::vec3(0.0f, 1.0f, 0.0f);
+        }
+    }
+
+    /// Same X-then-Y rotations as \ref ApplyVariantRotationsBlockSpace, but for direction vectors (no translation).
+    glm::vec3 ApplyVariantRotationToNormal(glm::vec3 n, int variantX, int variantY) {
+        const glm::vec3 origin(0.0f);
+        if (variantX != 0) {
+            n = RotateAxis(n, origin, 'x', static_cast<float>(variantX));
+        }
+        if (variantY != 0) {
+            n = RotateAxis(n, origin, 'y', static_cast<float>(variantY));
+        }
+        return n;
+    }
+
+    /// Element JSON \c rotation affects vertices via \ref ApplyElementRotationModelSpace; outward normals transform
+    /// by the same axis/angle (pivot does not matter for directions). The optional rescale path skews positions only —
+    /// we do not apply that to normals (neighbor culling stays axis-aligned dominant for typical 22.5°/45° models).
+    glm::vec3 ApplyElementRotationToNormal(glm::vec3 n, const ResolvedBlockModelElement& elem) {
+        if (!elem.rotation.has_value()) {
+            return n;
+        }
+        const glm::vec3 origin(0.0f);
+        const auto& r = elem.rotation.value();
+        return RotateAxis(n, origin, r.axis, r.angle);
+    }
+
+    /// After variant rotation, which world-aligned block face (+Y top, +Z north, …) does this normal correspond to?
+    int FaceIndexFromOutwardNormal(const glm::vec3& n) {
+        const glm::vec3 a = glm::normalize(n);
+        const float ax = std::abs(a.x);
+        const float ay = std::abs(a.y);
+        const float az = std::abs(a.z);
+        if (ax >= ay && ax >= az) {
+            return a.x > 0.0f ? static_cast<int>(FaceDir::East) : static_cast<int>(FaceDir::West);
+        }
+        if (ay >= ax && ay >= az) {
+            return a.y > 0.0f ? static_cast<int>(FaceDir::Top) : static_cast<int>(FaceDir::Bottom);
+        }
+        return a.z > 0.0f ? static_cast<int>(FaceDir::North) : static_cast<int>(FaceDir::South);
+    }
+
+    /// Maps JSON face name to neighbor-culling slot after element rotation then blockstate \c x / \c y variant rotation.
+    int RemapCardinalFaceForBake(
+        int modelFaceIndex,
+        const ResolvedBlockModelElement& elem,
+        int variantX,
+        int variantY
+    ) {
+        glm::vec3 n = OutwardNormalForFaceIndex(modelFaceIndex);
+        n = ApplyElementRotationToNormal(n, elem);
+        n = ApplyVariantRotationToNormal(n, variantX, variantY);
+        return FaceIndexFromOutwardNormal(n);
     }
 
     std::array<glm::vec2, modelbuilderutil::VERTS_PER_FACE> BuildDefaultFaceUVs(
@@ -291,7 +357,9 @@ jsonutil::LoadResult<blockstate::BlockModel> BakeResolvedModel(
             faceRange.vertByteCount = static_cast<int>(vertBytes.size());
             faceRange.idxOffset = idxOffset;
             faceRange.idxCount = modelbuilderutil::INDICES_PER_FACE;
-            faceRange.cardinalFace = static_cast<uint8_t>(faceIndex);
+            faceRange.cardinalFace = static_cast<uint8_t>(
+                RemapCardinalFaceForBake(faceIndex, elem, variantX, variantY)
+            );
             layer.faces.push_back(faceRange);
         }
     }

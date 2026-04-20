@@ -104,10 +104,8 @@ const blockstate::BlockModel* BlockModelLibrary::GetModelForBlock(
     const std::vector<ModelPtr>& set = stateModelSets_[stateId];
     if (set.empty()) return nullptr;
     if (set.size() == 1) return set.front().get();
-
-    const uint32_t h = MixCoordHash(stateId, worldX, worldY, worldZ);
-    const size_t pick = static_cast<size_t>(h % static_cast<uint32_t>(set.size()));
-    return set[pick].get();
+    const size_t idx = static_cast<size_t>(MixCoordHash(stateId, worldX, worldY, worldZ) % static_cast<uint32_t>(set.size()));
+    return set[idx].get();
 }
 
 void BlockModelLibrary::RegisterModel(uint32_t stateId, ModelPtr model, blockstate::BlockStateRegistry& bsr) {

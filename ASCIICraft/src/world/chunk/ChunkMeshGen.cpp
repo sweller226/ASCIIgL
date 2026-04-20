@@ -17,42 +17,12 @@
 #include <ASCIICraft/world/block/FaceCulling.hpp>
 #include <ASCIICraft/world/chunk/ChunkUtil.hpp>
 
+#include <algorithm>
+
 namespace {
 
 static std::mutex g_missingModelWarnMutex;
 static std::unordered_set<uint32_t> g_missingModelWarnedStateIds;
-
-static void AppendTranslatedVerts_PosUVLayerLight(
-    std::vector<std::byte>& dst,
-    const std::vector<std::byte>& src,
-    const glm::vec3& worldOffset
-) {
-    using V = ASCIIgL::VertStructs::PosUVLayerLight;
-    if (src.empty()) return;
-    if (src.size() % sizeof(V) != 0) return;
-
-    const size_t vertCount = src.size() / sizeof(V);
-    const size_t oldSize = dst.size();
-    dst.resize(oldSize + src.size());
-
-    const auto* srcVerts = reinterpret_cast<const V*>(src.data());
-    auto* dstVerts = reinterpret_cast<V*>(dst.data() + oldSize);
-
-    for (size_t i = 0; i < vertCount; ++i) {
-        V v = srcVerts[i];
-        v.SetXYZ(v.GetXYZ() + worldOffset);
-        dstVerts[i] = v;
-    }
-}
-
-static void AppendIndicesRebased(
-    std::vector<int>& dst,
-    const std::vector<int>& src,
-    int baseVertex
-) {
-    dst.reserve(dst.size() + src.size());
-    for (int idx : src) dst.push_back(baseVertex + idx);
-}
 
 static void AppendFaces(
     std::vector<std::byte>& dstVerts,
@@ -63,6 +33,8 @@ static void AppendFaces(
 ) {
     using V = ASCIIgL::VertStructs::PosUVLayerLight;
     constexpr unsigned kFaceUnset = 255;
+    // Scratch typed storage: keeps vertex math aligned/typed while public buffers remain byte-packed.
+    std::vector<V> scratchVerts;
     for (size_t i = 0; i < layer.faces.size(); ++i) {
         const blockstate::FaceRange& f = layer.faces[i];
         // Neighbor culling masks by world direction (six faces). JSON models emit quads in arbitrary order,
@@ -77,19 +49,44 @@ static void AppendFaces(
 
         const int baseVertex = static_cast<int>(dstVerts.size() / sizeof(V));
 
+        if (f.vertByteCount <= 0 || (f.vertByteCount % static_cast<int>(sizeof(V)) != 0)) {
+            continue;
+        }
         const size_t oldSize = dstVerts.size();
-        dstVerts.resize(oldSize + f.vertByteCount);
-        const auto* src = reinterpret_cast<const V*>(layer.vertices.data() + f.vertByteOffset);
-        auto* dst       = reinterpret_cast<V*>(dstVerts.data() + oldSize);
         const int vertCount = f.vertByteCount / sizeof(V);
-        for (int j = 0; j < vertCount; ++j) {
-            V v = src[j];
-            v.SetXYZ(v.GetXYZ() + worldOffset);
-            dst[j] = v;
+        if (vertCount <= 0) {
+            continue;
         }
 
-        for (int j = 0; j < f.idxCount; ++j)
-            dstIndices.push_back(baseVertex + layer.indices[f.idxOffset + j]);
+        scratchVerts.resize(static_cast<size_t>(vertCount));
+        std::memcpy(
+            scratchVerts.data(),
+            layer.vertices.data() + static_cast<size_t>(f.vertByteOffset),
+            static_cast<size_t>(f.vertByteCount)
+        );
+        for (V& v : scratchVerts) {
+            v.SetXYZ(v.GetXYZ() + worldOffset);
+        }
+
+        dstVerts.resize(oldSize + static_cast<size_t>(f.vertByteCount));
+        std::memcpy(
+            dstVerts.data() + oldSize,
+            scratchVerts.data(),
+            static_cast<size_t>(f.vertByteCount)
+        );
+
+        // Index convention differs by builder:
+        // - BlockModelBaker (JSON): indices are absolute within \c layer.vertices (each face references its window).
+        // - CubeModelBuilder / WaterModelBuilder: indices are 0..3 per face (repeated for every face).
+        const int srcFaceVertBase = f.vertByteOffset / static_cast<int>(sizeof(V));
+        for (int j = 0; j < f.idxCount; ++j) {
+            const int srcIdx = layer.indices[f.idxOffset + j];
+            int localInFace = srcIdx;
+            if (srcIdx >= srcFaceVertBase) {
+                localInFace = srcIdx - srcFaceVertBase;
+            }
+            dstIndices.push_back(baseVertex + localInFace);
+        }
     }
 }
 

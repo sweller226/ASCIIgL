@@ -1,5 +1,9 @@
 #include <ASCIICraft/rendering/TerrainShaders.hpp>
 
+#include <string>
+
+#include <ASCIICraft/world/block/textures/BlockTextureCatalog.hpp>
+
 namespace TerrainShaders {
 
 const char* GetTerrainVSSource() {
@@ -47,7 +51,10 @@ PS_INPUT main(VS_INPUT input)
 }
 
 const char* GetTerrainPSSource() {
-    return R"(
+    static const std::string source = []() {
+        int waterLayer = blocktextures::GetLayerForTextureId("minecraft:blocks/water_still");
+        
+        return std::string(R"(
 #include "ColorMonochrome.hlsl"
 
 Texture2DArray blockTextures : register(t0);
@@ -78,10 +85,8 @@ float4 main(PS_INPUT input) : SV_TARGET
     float2 uv = input.texcoord.xy;
     float layer = input.texcoord.z;
 
-    // For now, no special water animation. We just treat the base water layer
-    // (matching the block texture catalog index for minecraft:blocks/water_still)
-    // as slightly transparent.
-    const int WATER_BASE_LAYER = 10;
+    // Water layer resolved from the runtime texture catalog.
+    const int WATER_BASE_LAYER = )") + std::to_string(waterLayer) + R"(;
 
     float4 texColor;
     if ((int)layer == WATER_BASE_LAYER) {
@@ -108,6 +113,8 @@ float4 main(PS_INPUT input) : SV_TARGET
     return float4(finalColorLinear, texColor.a);
 }
 )";
+    }();
+    return source.c_str();
 }
 
 ASCIIgL::UniformBufferLayout GetTerrainPSUniformLayout() {

@@ -173,7 +173,6 @@ void Game::Run(std::function<bool()> shouldExternalExit, bool renderToTerminal) 
         frameCounter++;
 
         if (frameCounter % 60 == 0) {
-            ASCIIgL::Logger::Debug("Frame milestone reached: 60 frames processed.");
             ASCIIgL::Logger::Info("FPS: " + std::to_string(ASCIIgL::FPSClock::GetInst().GetFPS()));
             ASCIIgL::Profiler::GetInst().LogReport();
             ASCIIgL::Profiler::GetInst().Reset();
@@ -272,6 +271,11 @@ void Game::Render() {
 }
 
 void Game::Shutdown() {
+    if (shutdownInvoked_) {
+        return;
+    }
+    shutdownInvoked_ = true;
+
     ASCIIgL::Logger::Info("Shutting down ASCIICraft...");
 
     // Clear libraries if we want to release all resources on shutdown

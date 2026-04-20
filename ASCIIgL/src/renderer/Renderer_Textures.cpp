@@ -68,10 +68,6 @@ Renderer::GPUMeshCache* Renderer::GetOrCreateMeshCache(const Mesh* mesh) {
     // Store cache in mesh
     mesh->gpuBufferCache = cache;
     
-    Logger::Debug("[Renderer] Created GPU buffer cache for mesh: " + 
-                  std::to_string(cache->vertexCount) + " vertices, " + 
-                  std::to_string(cache->indexCount) + " indices");
-    
     return cache;
 }
 

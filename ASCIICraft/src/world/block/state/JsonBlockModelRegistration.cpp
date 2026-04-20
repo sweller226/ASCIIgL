@@ -15,7 +15,6 @@
 namespace blockstate {
 
 namespace {
-
     const std::vector<VariantModelRef>* LookupVariantModelRefs(
         const BlockstateDefinition& def,
         const std::string& exactKey,

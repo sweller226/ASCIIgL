@@ -41,7 +41,7 @@ void PlacingSystem::PlayerPlace() {
             if (!bsr) break;
 
             // Secondary action (e.g. R / interact_right): place dandelion (default state for that type).
-            uint32_t baseStateId = bsr->GetDefaultState(bsr->GetTypeId("minecraft:dandelion"));
+            uint32_t baseStateId = bsr->GetDefaultState(bsr->GetTypeId("minecraft:bedrock"));
             
             // Hook for placement-time adjustments (player placement context)
             uint32_t finalizedStateId = GetFinalizedBlockStateForPlacement(

@@ -452,7 +452,6 @@ void RegionFile::appendChunkBlobAndUpdateIndex(const Chunk* data) {
         throw std::out_of_range("Local chunk coords out of region bounds");
     }
     uint32_t off = indexOffset(lp);
-    ASCIIgL::Logger::Debugf("SaveChunk: indexOffset = %u", off);
     if (off >= chunkIndexes.size()) {
         ASCIIgL::Logger::Error("appendChunkBlobAndUpdateIndex: index out of range");
         throw std::out_of_range("Local chunk coords out of region bounds");
