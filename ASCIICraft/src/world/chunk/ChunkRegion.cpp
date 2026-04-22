@@ -384,6 +384,12 @@ std::vector<uint8_t> RegionFile::buildChunkBlob(const Chunk* data) {
 }
 
 bool RegionFile::LoadChunk(Chunk* out) {
+    std::lock_guard<std::mutex> g(_mutex);
+    if (!EnsureOpen()) {
+        ASCIIgL::Logger::Error("LoadChunk: EnsureOpen failed");
+        return false;
+    }
+
     RegionCoord rp = out->GetCoord().ToRegionCoord();
     glm::ivec3 lp = out->GetCoord().ToLocalRegion(rp);
 
@@ -403,12 +409,6 @@ bool RegionFile::LoadChunk(Chunk* out) {
     if (!(entry.flags & 0x1) || entry.length == 0) return false;
     if (entry.length > MAX_CHUNK_BLOB_SIZE) {
         ASCIIgL::Logger::Errorf("LoadChunk: chunk length %u exceeds MAX_CHUNK_BLOB_SIZE %u", entry.length, MAX_CHUNK_BLOB_SIZE);
-        return false;
-    }
-
-    std::lock_guard<std::mutex> g(_mutex);
-    if (!EnsureOpen()) {
-        ASCIIgL::Logger::Error("LoadChunk: EnsureOpen failed");
         return false;
     }
 
@@ -503,6 +503,12 @@ bool RegionFile::SaveChunk(const Chunk* data) {
 
 
 bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out) {
+    std::lock_guard<std::mutex> g(_mutex);
+    if (!EnsureOpen()) {
+        ASCIIgL::Logger::Error("LoadMetaData: EnsureOpen failed");
+        return false;
+    }
+
     RegionCoord rp = pos.ToRegionCoord();
     glm::ivec3 lp = pos.ToLocalRegion(rp);
 
@@ -523,12 +529,6 @@ bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out) {
     if (entry.length > MAX_META_BLOB_SIZE) {
         ASCIIgL::Logger::Errorf("LoadMetaData: metadata length %u exceeds MAX_META_BLOB_SIZE %u",
                                 entry.length, MAX_META_BLOB_SIZE);
-        return false;
-    }
-
-    std::lock_guard<std::mutex> g(_mutex);
-    if (!EnsureOpen()) {
-        ASCIIgL::Logger::Error("LoadMetaData: EnsureOpen failed");
         return false;
     }
 

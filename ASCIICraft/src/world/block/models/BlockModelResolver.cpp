@@ -135,7 +135,6 @@ jsonutil::LoadResult<ResolvedBlockModelDefinition> ResolveBlockModel(JsonModelLo
     bool hasCubeAllInParentChain = false;
     bool hasCubeColumnInParentChain = false;
     bool hasCrossParentInChain = false;
-    bool hasTorchParentInChain = false;
 
     for (int depth = 0; depth < kMaxParentDepth; ++depth) {
         const std::string key = current.ToString();
@@ -147,9 +146,6 @@ jsonutil::LoadResult<ResolvedBlockModelDefinition> ResolveBlockModel(JsonModelLo
         }
         if (current.path == "block/cross") {
             hasCrossParentInChain = true;
-        }
-        if (current.path == "block/torch" || current.path == "block/torch_wall") {
-            hasTorchParentInChain = true;
         }
         if (parentVisited.count(key)) {
             return jsonutil::Fail<ResolvedBlockModelDefinition>("parent chain cycle at '" + key + "'");
@@ -192,7 +188,7 @@ jsonutil::LoadResult<ResolvedBlockModelDefinition> ResolveBlockModel(JsonModelLo
     ResolvedBlockModelDefinition out;
     out.isFullBlock = hasCubeAllInParentChain || hasCubeColumnInParentChain || IsGeometryFullBlock(elementsSource);
     // Cross and torch-like quads should render in the opaque-no-cull bucket.
-    out.opaqueNoCull = hasCrossParentInChain || hasTorchParentInChain;
+    out.opaqueNoCull = hasCrossParentInChain;
 
     // Validate merged texture map can fully resolve # chains.
     for (const auto& kv : mergedTextures) {
