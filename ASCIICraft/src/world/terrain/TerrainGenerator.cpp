@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <unordered_set>
 
@@ -12,8 +13,28 @@
 #include <ASCIICraft/world/block/placement/BlockPlacement.hpp>
 #include <ASCIICraft/world/Sizes.hpp>
 
-TerrainGenerator::TerrainGenerator(entt::registry &registry)
-    : m_registry(registry) {
+namespace {
+
+/// Deterministic per-layer seed from one master world seed (\p salt distinguishes noise streams).
+inline int DerivedNoiseSeed(uint64_t worldSeed, uint64_t salt) {
+    uint64_t x = worldSeed + 0x9e3779b97f4a7c15ULL + (salt << 6) + (salt >> 2);
+    x ^= x >> 33;
+    x *= 0xff51afd7ed558ccdULL;
+    x ^= x >> 33;
+    return static_cast<int>(x & 0x7fffffff);
+}
+
+constexpr uint64_t kSaltTerrain = 1;
+constexpr uint64_t kSaltCave1 = 2;
+constexpr uint64_t kSaltCave2 = 3;
+constexpr uint64_t kSaltForestDensity = 4;
+constexpr uint64_t kSaltTree = 5;
+
+} // namespace
+
+TerrainGenerator::TerrainGenerator(entt::registry &registry, uint64_t worldSeed)
+    : m_registry(registry)
+    , m_worldSeed(worldSeed) {
     terrainNoise = std::make_unique<FastNoiseLite>();
     caveNoise1 = std::make_unique<FastNoiseLite>();
     caveNoise2 = std::make_unique<FastNoiseLite>();
@@ -159,7 +180,7 @@ void TerrainGenerator::InitializeNoiseGenerators() {
     terrainNoise->SetFractalOctaves(3);
     terrainNoise->SetFractalLacunarity(2.0f);
     terrainNoise->SetFractalGain(0.5f);
-    terrainNoise->SetSeed(12345);
+    terrainNoise->SetSeed(DerivedNoiseSeed(m_worldSeed, kSaltTerrain));
     
     // First cave noise layer - main worm paths (Perlin Worm method)
     caveNoise1->SetNoiseType(FastNoiseLite::NoiseType_Perlin);
@@ -168,7 +189,7 @@ void TerrainGenerator::InitializeNoiseGenerators() {
     caveNoise1->SetFrequency(0.008f);
     caveNoise1->SetFractalLacunarity(2.0f);
     caveNoise1->SetFractalGain(0.5f);
-    caveNoise1->SetSeed(54321);
+    caveNoise1->SetSeed(DerivedNoiseSeed(m_worldSeed, kSaltCave1));
 
     // Second cave noise layer - adds variety and connections
     caveNoise2->SetNoiseType(FastNoiseLite::NoiseType_Perlin);
@@ -177,20 +198,20 @@ void TerrainGenerator::InitializeNoiseGenerators() {
     caveNoise2->SetFrequency(0.010f);
     caveNoise2->SetFractalLacunarity(2.0f);
     caveNoise2->SetFractalGain(0.5f);
-    caveNoise2->SetSeed(98765);
+    caveNoise2->SetSeed(DerivedNoiseSeed(m_worldSeed, kSaltCave2));
 
     // Forest density noise
     forestDensityNoise->SetNoiseType(FastNoiseLite::NoiseType_Perlin);
     forestDensityNoise->SetFrequency(0.01f);
     forestDensityNoise->SetFractalType(FastNoiseLite::FractalType_FBm);
     forestDensityNoise->SetFractalOctaves(4);
-    forestDensityNoise->SetSeed(11111);
+    forestDensityNoise->SetSeed(DerivedNoiseSeed(m_worldSeed, kSaltForestDensity));
 
     // Tree patch noise
     treeNoise->SetNoiseType(FastNoiseLite::NoiseType_Perlin);
     treeNoise->SetFrequency(0.25f);
     treeNoise->SetFractalType(FastNoiseLite::FractalType_None);
-    treeNoise->SetSeed(99999);
+    treeNoise->SetSeed(DerivedNoiseSeed(m_worldSeed, kSaltTree));
     });
 }
 

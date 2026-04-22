@@ -54,11 +54,10 @@ void MovementSystem::ProcessSwitchGameModeEvents() {
 
     auto* ctrl     = m_registry.try_get<components::PlayerController>(p_ent);
     auto* flying   = m_registry.try_get<components::FlyingPhysics>(p_ent);
-    auto* grav     = m_registry.try_get<components::Gravity>(p_ent);
     auto* col      = m_registry.try_get<components::Collider>(p_ent);
     auto* pmode    = m_registry.try_get<components::PlayerMode>(p_ent);
 
-    if (!ctrl || !flying || !grav || !col || !pmode) {
+    if (!ctrl || !flying || !col || !pmode) {
         ASCIIgL::Logger::Error("MovementSystem::ProcessSwitchGameModeEvents: try_get returned NULL for one or more components.");
         return;
     }
@@ -69,13 +68,11 @@ void MovementSystem::ProcessSwitchGameModeEvents() {
         ctrl->movementState = MovementState::Flying;
         flying->enabled = true;
         col->disabled = true;
-        grav->enabled = false;
     } else {
         pmode->gamemode = GameMode::Survival;
         ctrl->movementState = MovementState::Walking;
         flying->enabled = false;
         col->disabled = false;
-        grav->enabled = true;
     }
 }
 

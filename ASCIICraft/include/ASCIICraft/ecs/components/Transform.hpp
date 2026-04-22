@@ -14,6 +14,8 @@ namespace ecs::components {
 
 struct Transform {
     glm::vec3 position{0.0f, 0.0f, 0.0f};
+    /// Used with \ref previousPosition by PhysicsSystem for fixed-step interpolation (visual only).
+    glm::vec3 renderPosition{0.0f, 0.0f, 0.0f};
     glm::vec3 previousPosition{0.0f, 0.0f, 0.0f};
     glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
     glm::vec3 scale{1.0f, 1.0f, 1.0f};
@@ -34,13 +36,29 @@ struct Transform {
         return modelCache;
     }
 
+    /// Model matrix using \ref renderPosition (smooth display position after physics interpolation).
+    glm::mat4 getRenderModel() const {
+        glm::mat4 tr = glm::translate(glm::mat4(1.0f), renderPosition);
+        glm::mat4 r = glm::mat4_cast(rotation);
+        glm::mat4 s = glm::scale(glm::mat4(1.0f), scale);
+        return tr * r * s;
+    }
+
     // Helpers that mark the transform dirty
-    void setPosition(const glm::vec3& p) { position = p; dirty = true; }
+    void setPosition(const glm::vec3& p) {
+        position = p;
+        renderPosition = p;
+        dirty = true;
+    }
     void setRotation(const glm::quat& q) { rotation = q; dirty = true; }
     void setScale(const glm::vec3& s) { scale = s; dirty = true; }
 
     // Convenience mutators for incremental updates
-    void translate(const glm::vec3& delta) { position += delta; dirty = true; }
+    void translate(const glm::vec3& delta) {
+        position += delta;
+        renderPosition += delta;
+        dirty = true;
+    }
     void rotate(const glm::quat& delta) { rotation = delta * rotation; dirty = true; }
     void rescale(const glm::vec3& factor) { scale *= factor; dirty = true; }
 };

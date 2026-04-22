@@ -67,13 +67,11 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
             ctrl.movementState = MovementState::Walking;
             flying.enabled = false;
             col.disabled = false;
-            grav.enabled = true;
             break;
         case GameMode::Spectator:
             ctrl.movementState = MovementState::Flying;
             flying.enabled = true;
             col.disabled = true;
-            grav.enabled = false;
             break;
     }
 }

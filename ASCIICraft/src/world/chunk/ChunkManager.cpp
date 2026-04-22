@@ -31,12 +31,17 @@ const ChunkCoord ChunkManager::FACE_NEIGHBOR_OFFSETS[6] = {
     ChunkCoord(-1, 0, 0)   // Face 5: West (X-)
 };
 
-ChunkManager::ChunkManager(entt::registry& registry, const sizes::WorldDimensions& worldDimensions, const unsigned int renderDistance)
+ChunkManager::ChunkManager(
+    entt::registry& registry,
+    const sizes::WorldDimensions& worldDimensions,
+    const unsigned int renderDistance,
+    const uint64_t worldSeed
+)
     : _worldDimensions(worldDimensions)
     , renderDistance(renderDistance)
     , loadDistance(renderDistance + 1)
     , registry(registry)
-    , terrainGenerator(registry) {
+    , terrainGenerator(registry, worldSeed) {
     ASCIIgL::Logger::Debug("Chunk manager initialized");
     regionManager = std::make_unique<RegionManager>();
     chunkJobQueue = std::make_unique<ChunkJobQueue>(registry);

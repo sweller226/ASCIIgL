@@ -33,7 +33,7 @@ entt::entity ItemFactory::createDroppedItem(
 
     // Position and movement
     auto& transform = registry.emplace<Transform>(entity);
-    transform.position = position;
+    transform.setPosition(position);
 
     auto& vel = registry.emplace<Velocity>(entity);
     vel.linear = velocity;

@@ -11,6 +11,8 @@
 
 #include <entt/entt.hpp>
 
+#include <cstdint>
+
 #include <ASCIICraft/world/chunk/Chunk.hpp>
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/terrain/TerrainResult.hpp>
@@ -19,7 +21,7 @@ class FastNoiseLite;
 
 class TerrainGenerator {
 public:
-    TerrainGenerator(entt::registry &registry);
+    TerrainGenerator(entt::registry &registry, uint64_t worldSeed);
     ~TerrainGenerator();
     
     /// Thread-safe: generate terrain into \p blocks (chunk's block buffer, size Chunk::VOLUME) and
@@ -29,6 +31,7 @@ public:
 private:
     entt::registry &m_registry;
     blockstate::BlockStateRegistry* m_bsr;
+    uint64_t m_worldSeed;
 
     struct TerrainParams {
         int BASE_HEIGHT, MIN_TERRAIN_HEIGHT, MAX_TERRAIN_HEIGHT, DIRT_DEPTH;

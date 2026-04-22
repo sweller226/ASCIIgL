@@ -45,10 +45,9 @@ private:
     
     /// Attempt to step up obstacles (e.g., stairs, slabs)
     /// @return true if step-up succeeded, false otherwise
-    bool TryStepUp(components::Transform &t, 
-                   const components::Collider &col,
-                   const components::Velocity &vel, 
-                   float stepHeight, 
+    bool TryStepUp(const components::Collider &col,
+                   const components::Velocity &vel,
+                   float stepHeight,
                    float dt,
                    glm::vec3 &currentPos);
     

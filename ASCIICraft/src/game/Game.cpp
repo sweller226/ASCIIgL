@@ -521,7 +521,11 @@ void Game::RenderPlaying() {
 }
 
 void Game::InitializeWorld() {
-    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, WorldCoord(0, 120, 0), 10));
+    WorldParams worldParams{};
+    worldParams.spawnPoint = WorldCoord(0, 120, 0);
+    worldParams.renderDistance = 10;
+    worldParams.worldSeed = 12345ULL;
+    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, worldParams));
     ASCIIgL::Logger::Debug("World created and stored in registry context.");
 }
 
@@ -578,20 +582,17 @@ void Game::InitializeBlockStates() {
         }
     };
 
-    // === Terrain & plants (vanilla blockstate + block models under res/textures/1.8.9) ===
-    bsr.RegisterType("minecraft:bedrock", {});
-    const uint16_t bedrockType = bsr.GetTypeId("minecraft:bedrock");
-    bsr.SetDerivedData(bedrockType, [&](blockstate::BlockState& s) {
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-    registerJsonBackedOrLog("minecraft:bedrock");
+    const auto registerOpaqueJsonBacked = [&](const char* typeName) {
+        bsr.RegisterType(typeName, {});
+        const uint16_t tid = bsr.GetTypeId(typeName);
+        bsr.SetDerivedData(tid, [](blockstate::BlockState& s) { s.renderMode = blockstate::RenderMode::Opaque; });
+        registerJsonBackedOrLog(typeName);
+    };
 
-    bsr.RegisterType("minecraft:stone", {});
-    const uint16_t stoneType = bsr.GetTypeId("minecraft:stone");
-    bsr.SetDerivedData(stoneType, [&](blockstate::BlockState& s) {
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-    registerJsonBackedOrLog("minecraft:stone");
+    // === Terrain & plants (vanilla blockstate + block models under res/textures/1.8.9) ===
+    registerOpaqueJsonBacked("minecraft:bedrock");
+
+    registerOpaqueJsonBacked("minecraft:stone");
 
     bsr.RegisterType("minecraft:dandelion", {});
     const uint16_t dandelionType = bsr.GetTypeId("minecraft:dandelion");
@@ -621,19 +622,31 @@ void Game::InitializeBlockStates() {
     });
     registerJsonBackedOrLog("minecraft:fence");
 
-    bsr.RegisterType("minecraft:cobblestone", {});
-    const uint16_t cobbleType = bsr.GetTypeId("minecraft:cobblestone");
-    bsr.SetDerivedData(cobbleType, [&](blockstate::BlockState& s) {
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-    registerJsonBackedOrLog("minecraft:cobblestone");
+    registerOpaqueJsonBacked("minecraft:cobblestone");
 
-    bsr.RegisterType("minecraft:dirt", {});
-    const uint16_t dirtType = bsr.GetTypeId("minecraft:dirt");
-    bsr.SetDerivedData(dirtType, [&](blockstate::BlockState& s) {
+    // 1.8.9 cobblestone stairs are represented by block id `stone_stairs`.
+    bsr.RegisterType("minecraft:stone_stairs", {
+        blockstate::BlockProperty{ "facing", { "east", "west", "south", "north" } },
+        blockstate::BlockProperty{ "half", { "bottom", "top" } },
+        blockstate::BlockProperty{ "shape", { "straight", "outer_right", "outer_left", "inner_right", "inner_left" } },
+    });
+    const uint16_t stoneStairsType = bsr.GetTypeId("minecraft:stone_stairs");
+    bsr.SetDerivedData(stoneStairsType, [](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
-    registerJsonBackedOrLog("minecraft:dirt");
+    registerJsonBackedOrLog("minecraft:stone_stairs");
+
+    bsr.RegisterType("minecraft:cobblestone_slab", {
+        blockstate::BlockProperty{ "half", { "bottom", "top" } },
+    });
+    const uint16_t cobblestoneSlabType = bsr.GetTypeId("minecraft:cobblestone_slab");
+    bsr.SetDerivedData(cobblestoneSlabType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+        s.isFullBlock = false;
+    });
+    registerJsonBackedOrLog("minecraft:cobblestone_slab");
+
+    registerOpaqueJsonBacked("minecraft:dirt");
 
     // Matches assets/minecraft/blockstates/grass.json (snowy + rotated grass_normal variants).
     bsr.RegisterType("minecraft:grass", {
@@ -655,6 +668,19 @@ void Game::InitializeBlockStates() {
     });
     registerJsonBackedOrLog("minecraft:oak_log");
 
+    // Matches assets/minecraft/blockstates/oak_planks.json
+    registerOpaqueJsonBacked("minecraft:oak_planks");
+
+    bsr.RegisterType("minecraft:oak_slab", {
+        blockstate::BlockProperty{ "half", { "bottom", "top" } },
+    });
+    const uint16_t oakSlabType = bsr.GetTypeId("minecraft:oak_slab");
+    bsr.SetDerivedData(oakSlabType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+        s.isFullBlock = false;
+    });
+    registerJsonBackedOrLog("minecraft:oak_slab");
+
     bsr.RegisterType("minecraft:oak_leaves", {});
     const uint16_t leavesType = bsr.GetTypeId("minecraft:oak_leaves");
     bsr.SetDerivedData(leavesType, [&](blockstate::BlockState& s) {
@@ -665,17 +691,59 @@ void Game::InitializeBlockStates() {
     });
     registerJsonBackedOrLog("minecraft:oak_leaves");
 
+    // === Utility / decor blocks present in current texture array ===
+    registerOpaqueJsonBacked("minecraft:crafting_table");
+    registerOpaqueJsonBacked("minecraft:bookshelf");
+    registerOpaqueJsonBacked("minecraft:brick_block");
+
+    bsr.RegisterType("minecraft:furnace", {
+        blockstate::BlockProperty{ "facing", { "north", "south", "west", "east" } },
+    });
+    const uint16_t furnaceType = bsr.GetTypeId("minecraft:furnace");
+    bsr.SetDerivedData(furnaceType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
+    registerJsonBackedOrLog("minecraft:furnace");
+
+    bsr.RegisterType("minecraft:lit_furnace", {
+        blockstate::BlockProperty{ "facing", { "north", "south", "west", "east" } },
+    });
+    const uint16_t litFurnaceType = bsr.GetTypeId("minecraft:lit_furnace");
+    bsr.SetDerivedData(litFurnaceType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
+    registerJsonBackedOrLog("minecraft:lit_furnace");
+
+    bsr.RegisterType("minecraft:glass", {});
+    const uint16_t glassType = bsr.GetTypeId("minecraft:glass");
+    bsr.SetDerivedData(glassType, [&](blockstate::BlockState& s) {
+        s.isTransparent = true;
+        s.renderMode = blockstate::RenderMode::Cutout;
+    });
+    registerJsonBackedOrLog("minecraft:glass");
+
+    bsr.RegisterType("minecraft:torch", {
+        blockstate::BlockProperty{ "facing", { "up", "east", "south", "west", "north" } },
+    });
+    const uint16_t torchType = bsr.GetTypeId("minecraft:torch");
+    bsr.SetDerivedData(torchType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:torch");
+
     // === Water ===
     bsr.RegisterType("minecraft:water", {
         blockstate::BlockProperty{ "top", {"false", "true"}, 1 }
     });
     const uint16_t waterType = bsr.GetTypeId("minecraft:water");
     bsr.SetDerivedData(waterType, [&](blockstate::BlockState& s) {
-        const bool top = (bsr.GetPropertyValue(s.stateId, "top") == "true");
         s.isRenderable = true;
         s.isTransparent = true;
         s.renderMode = blockstate::RenderMode::Translucent;
-        s.isFullBlock = !top;
+        s.isFullBlock = !(bsr.GetPropertyValue(s.stateId, "top") == "true");
     });
     const auto& waterTypeDef = bsr.GetType(waterType);
     for (uint32_t i = 0; i < waterTypeDef.stateCount; ++i) {

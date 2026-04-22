@@ -12,8 +12,58 @@
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 #include <ASCIICraft/ecs/factories/PlayerFactory.hpp>
+#include <ASCIICraft/util/Util.hpp>
 
 namespace ecs::systems {
+
+namespace {
+
+/// True if this voxel should participate in AABB collision (full-block models only).
+bool VoxelSolidForPhysics(const blockstate::BlockStateRegistry *bsr, uint32_t stateId) {
+    using blockstate::BlockStateRegistry;
+    if (stateId == BlockStateRegistry::AIR_STATE_ID) {
+        return false;
+    }
+    if (bsr && bsr->IsValidState(stateId)) {
+        return bsr->GetState(stateId).isFullBlock;
+    }
+    // Registry missing or invalid id: behave like legacy “any non-air is solid”.
+    return true;
+}
+
+/// True if the entity AABB at \p center (with \p halfExtents) overlaps any solid world voxel.
+/// Central place to extend for non-cube block hitboxes later.
+bool OverlapsVoxel(
+    const World *world,
+    const blockstate::BlockStateRegistry *bsr,
+    const glm::vec3 &halfExtents,
+    bool colliderDisabled,
+    const glm::vec3 &center
+) {
+    if (colliderDisabled || !world) {
+        return false;
+    }
+
+    const glm::vec3 min = center - halfExtents;
+    const glm::vec3 max = center + halfExtents;
+
+    const glm::ivec3 imin = glm::floor(min);
+    const glm::ivec3 imax = glm::floor(max);
+
+    for (int x = imin.x; x <= imax.x; ++x) {
+        for (int y = imin.y; y <= imax.y; ++y) {
+            for (int z = imin.z; z <= imax.z; ++z) {
+                const uint32_t sid = world->GetChunkManager()->GetBlockState({x, y, z});
+                if (VoxelSolidForPhysics(bsr, sid)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+} // namespace
 
 PhysicsSystem::PhysicsSystem(entt::registry &registry)
   : m_registry(registry)
@@ -40,15 +90,18 @@ void PhysicsSystem::Update() {
         Step(FixedDt);
         m_accumulator -= FixedDt;
     }
-    
-    // Interpolate between previous and current position for smooth rendering
-    float alpha = m_accumulator / FixedDt;
-    
-    // Update camera with interpolated position
+
+    // Interpolate between previous and current position for smooth rendering (visual only)
+    const float alpha = m_accumulator / FixedDt;
+    auto interpView = m_registry.view<components::Transform>();
+    for (auto [ent, t] : interpView.each()) {
+        t.renderPosition = glm::mix(t.previousPosition, t.position, alpha);
+    }
+
+    // Camera follows interpolated body position
     auto camView = m_registry.view<components::PlayerCamera, components::Transform>();
     for (auto [ent, cam, t] : camView.each()) {
-        glm::vec3 renderPos = glm::mix(t.previousPosition, t.position, alpha);
-        cam.camera.setCamPos(renderPos + glm::vec3(0.0f, cam.PLAYER_EYE_HEIGHT, 0.0f));
+        cam.camera.setCamPos(t.renderPosition + glm::vec3(0.0f, cam.PLAYER_EYE_HEIGHT, 0.0f));
     }
 }
 
@@ -112,28 +165,13 @@ void PhysicsSystem::ResolveAABBAgainstWorld(
         return;
     }
 
+    const auto *bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
+
     glm::vec3 pos = t.position + col.localOffset;
     glm::vec3 half = col.halfExtents;
 
-    // Lambda for collision
     auto overlapsVoxel = [&](const glm::vec3 &center) -> bool {
-        if (col.disabled) {
-            return false;
-        }
-
-        const glm::vec3 min = center - half;
-        const glm::vec3 max = center + half;
-
-        const glm::ivec3 imin = glm::floor(min);
-        const glm::ivec3 imax = glm::floor(max);
-
-        for (int x = imin.x; x <= imax.x; ++x)
-            for (int y = imin.y; y <= imax.y; ++y)
-                for (int z = imin.z; z <= imax.z; ++z)
-                    if (world->GetChunkManager()->GetBlockState({x, y, z}) != blockstate::BlockStateRegistry::AIR_STATE_ID)
-                        return true;
-
-        return false;
+        return OverlapsVoxel(world, bsr, half, col.disabled, center);
     };
 
     // ===== VERTICAL =====
@@ -165,11 +203,18 @@ void PhysicsSystem::ResolveAABBAgainstWorld(
             pos.x = targetPos.x;
             pos.z = targetPos.z;
         } else {
-            // Only try step-up if on ground or moving downward (not jumping upward)
-            bool canStepUp = stepPhysics && stepPhysics->stepHeight > 0.0001f &&
-                             groundPhysics && (groundPhysics->onGround || vel.linear.y <= 0.0f);
+            // Step-up is allowed when grounded, and also when moving downward *only if* we're still
+            // supported/near-ground. This prevents step-up from "bridging" gaps when walking
+            // between blocks with air below.
+            constexpr float groundCheckDistance = 0.05f;
+            const bool supported = overlapsVoxel(glm::vec3(pos.x, pos.y - groundCheckDistance, pos.z));
+
+            const bool canStepUp =
+                stepPhysics && stepPhysics->stepHeight > 0.0001f &&
+                groundPhysics &&
+                (groundPhysics->onGround || (vel.linear.y <= 0.0f && supported));
             if (canStepUp) {
-                if (!TryStepUp(t, col, vel, stepPhysics->stepHeight, dt, pos)) {
+                if (!TryStepUp(col, vel, stepPhysics->stepHeight, dt, pos)) {
                     SlideHorizontal(pos, vel, dt, overlapsVoxel);
                 }
             } else {
@@ -194,10 +239,10 @@ void PhysicsSystem::UpdateGroundState(
     const std::function<bool(const glm::vec3&)> &overlapsVoxel,
     components::GroundPhysics *groundPhysics) {
     
-    // Check if on ground with slightly expanded downward check
+    // Probe slightly below feet (collider bottom at pos.y - halfExtents.y)
     constexpr float groundCheckDistance = 0.05f;
-    glm::vec3 groundCheckPos = pos;
-    groundCheckPos.y -= groundCheckDistance;
+    const float feetY = pos.y - halfExtents.y;
+    glm::vec3 groundCheckPos(pos.x, feetY + halfExtents.y - groundCheckDistance, pos.z);
     
     groundPhysics->onGround = overlapsVoxel(groundCheckPos);
     if (vel.linear.y > 0) { groundPhysics->onGround = false; }
@@ -221,7 +266,6 @@ void PhysicsSystem::UpdateGroundState(
 }
 
 bool PhysicsSystem::TryStepUp(
-    components::Transform &t,
     const components::Collider &col,
     const components::Velocity &vel,
     float stepHeight,
@@ -230,28 +274,16 @@ bool PhysicsSystem::TryStepUp(
     
     const World* world = GetWorldPtr(m_registry);
     if (!world) return false;
+
+    const auto *bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
     
     const glm::vec3 half = col.halfExtents;
 
     // Compute horizontal displacement
     const glm::vec3 horizontalDisplacement(vel.linear.x * dt, 0.0f, vel.linear.z * dt);
-    
+
     auto overlaps = [&](const glm::vec3 &center) -> bool {
-        const glm::vec3 min = center - half;
-        const glm::vec3 max = center + half;
-        const glm::ivec3 imin = glm::floor(min);
-        const glm::ivec3 imax = glm::floor(max);
-        
-        for (int x = imin.x; x <= imax.x; ++x) {
-            for (int y = imin.y; y <= imax.y; ++y) {
-                for (int z = imin.z; z <= imax.z; ++z) {
-                    if (world->GetChunkManager()->GetBlockState({x, y, z}) != blockstate::BlockStateRegistry::AIR_STATE_ID) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
+        return OverlapsVoxel(world, bsr, half, col.disabled, center);
     };
 
     // Try stepping up at different heights

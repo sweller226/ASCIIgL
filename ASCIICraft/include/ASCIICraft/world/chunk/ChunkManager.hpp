@@ -16,6 +16,8 @@
 
 #include <glm/glm.hpp>
 
+#include <cstdint>
+
 /// Fog parameters used when rendering chunks. fogStart/fogEnd are derived from render distance.
 /// fogColor is sRGB in [0,1]; the terrain shader linearizes it before blending in linear space.
 struct ChunkManagerFogParams {
@@ -33,7 +35,12 @@ struct ChunkManagerWaterParams {
 
 class ChunkManager {
 public:
-    ChunkManager(entt::registry& registry, const sizes::WorldDimensions& worldDimensions, const unsigned int renderDistance);
+    ChunkManager(
+        entt::registry& registry,
+        const sizes::WorldDimensions& worldDimensions,
+        unsigned int renderDistance,
+        uint64_t worldSeed
+    );
     ~ChunkManager() = default; // default is fine; list elements are destroyed automatically
 
     void Update();

@@ -225,12 +225,18 @@ namespace {
 
     std::array<glm::vec2, modelbuilderutil::VERTS_PER_FACE> RotateFaceUVs(
         const std::array<glm::vec2, modelbuilderutil::VERTS_PER_FACE>& in,
+        int faceIndex,
         int rotationDegrees
     ) {
         std::array<glm::vec2, modelbuilderutil::VERTS_PER_FACE> out = in;
         int steps = (rotationDegrees / 90) & 3;
         while (steps-- > 0) {
-            out = { out[3], out[0], out[1], out[2] }; // 90Â° clockwise
+            if (faceIndex == static_cast<int>(FaceDir::Bottom)) {
+                // Vanilla parity: "down" face rotation is counterclockwise.
+                out = { out[1], out[2], out[3], out[0] };
+            } else {
+                out = { out[3], out[0], out[1], out[2] }; // 90° clockwise
+            }
         }
         return out;
     }
@@ -276,7 +282,7 @@ namespace {
         if (transformedFace == static_cast<int>(FaceDir::East) || transformedFace == static_cast<int>(FaceDir::West)) {
             correction = (correction + (360 - variantX) % 360) % 360;
         }
-        return RotateFaceUVs(in, correction);
+        return RotateFaceUVs(in, faceIndex, correction);
     }
 
 } // namespace
@@ -320,7 +326,7 @@ jsonutil::LoadResult<blockstate::BlockModel> BakeResolvedModel(
             const float texLayer = static_cast<float>(layerIdx);
             auto vertsPosModel = BuildElementFaceVertsModelSpace(faceIndex, elem);
             auto faceUVs = BuildFaceUVs(faceIndex, elem, face);
-            faceUVs = RotateFaceUVs(faceUVs, face.rotation);
+            faceUVs = RotateFaceUVs(faceUVs, faceIndex, face.rotation);
             faceUVs = ApplyUvlock(faceUVs, faceIndex, variantX, variantY, variantUvlock);
 
             const int vertByteOffset = static_cast<int>(layer.vertices.size());
