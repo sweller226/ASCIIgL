@@ -99,7 +99,7 @@ bool Game::Initialize(bool renderToTerminal) {
 
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
     renderer.SetMonochromeDitherEnabled(true);
-    renderer.SetBackgroundCol(glm::ivec3(150, 150, 150));
+    renderer.SetBackgroundCol(glm::ivec3(210, 210, 210));
     renderer.SetWireframe(false);
     renderer.SetBackfaceCulling(true);
     renderer.SetCCW(true);
