@@ -124,8 +124,8 @@ void PlacingSystem::PlayerPlace() {
             }
             
             // Hook for placement-time adjustments (player placement context)
-            uint32_t finalizedStateId = GetFinalizedBlockStateForPlacement(
-                *bsr, baseStateId, rayCast.second, PlacementContext::PlayerPlacement
+            uint32_t finalizedStateId = blockplacement::FinalizePlacedState(
+                *bsr, *world->GetChunkManager(), baseStateId, rayCast.second, blockplacement::PlacementContext::PlayerPlacement
             );
 
             PlaceBlockEvent placeEvent;

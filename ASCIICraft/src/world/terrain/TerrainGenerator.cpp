@@ -270,8 +270,8 @@ uint32_t TerrainGenerator::DetermineBlockState(int worldX, int worldY, int world
         CheckTreePlacement(worldX, worldY, worldZ, params, treePlacementPositions);
 
         // Hook for placement-time adjustments (terrain generation context)
-        return GetFinalizedBlockStateForPlacement(
-            *bsr, grassId, worldX, worldY, worldZ, PlacementContext::TerrainGeneration
+        return blockplacement::FinalizePlacedStateBasic(
+            *bsr, grassId, worldX, worldY, worldZ, blockplacement::PlacementContext::TerrainGeneration
         );
     } else if (depthFromSurface < params.DIRT_DEPTH) {
         return dirtId;

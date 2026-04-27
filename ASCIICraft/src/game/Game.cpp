@@ -321,7 +321,7 @@ bool Game::LoadTextures() {
         return false;   
     }
 
-    auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture("res/textures/gui/inventory.png", "inventoryTexture", monoMap);
+    auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture("res/textures/gui/container/inventory.png", "inventoryTexture", monoMap);
     if (!inventoryTexture) {
         ASCIIgL::Logger::Error("Failed to load inventory texture");
         return false;
@@ -564,7 +564,7 @@ void Game::InitializeBlockStates() {
     });
     modelLibrary.RegisterModel(airType, nullptr, bsr);
 
-    static constexpr const char* kVanillaBlockAssetRoot = "res/textures/1.8.9";
+    static constexpr const char* kVanillaBlockAssetRoot = "res";
     blockstate::JsonBlockStateLoader blockstateLoader(kVanillaBlockAssetRoot);
     blockmodels::JsonModelLoader jsonModelLoader(kVanillaBlockAssetRoot);
 
@@ -589,7 +589,7 @@ void Game::InitializeBlockStates() {
         registerJsonBackedOrLog(typeName);
     };
 
-    // === Terrain & plants (vanilla blockstate + block models under res/textures/1.8.9) ===
+    // === Terrain & plants (vanilla blockstate + block models under res/blockstates and res/models) ===
     registerOpaqueJsonBacked("minecraft:bedrock");
 
     registerOpaqueJsonBacked("minecraft:stone");
@@ -604,6 +604,39 @@ void Game::InitializeBlockStates() {
         s.cullSameType = false;
     });
     registerJsonBackedOrLog("minecraft:dandelion");
+
+    bsr.RegisterType("minecraft:poppy", {});
+    const uint16_t poppyType = bsr.GetTypeId("minecraft:poppy");
+    bsr.SetDerivedData(poppyType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:poppy");
+
+    bsr.RegisterType("minecraft:tall_grass", {});
+    const uint16_t tallGrassType = bsr.GetTypeId("minecraft:tall_grass");
+    bsr.SetDerivedData(tallGrassType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:tall_grass");
+
+    bsr.RegisterType("minecraft:fern", {});
+    const uint16_t fernType = bsr.GetTypeId("minecraft:fern");
+    bsr.SetDerivedData(fernType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:fern");
 
     // Oak fence geometry in 1.8.9 uses blockstate id `minecraft:fence` (see assets/.../blockstates/fence.json).
     bsr.RegisterType("minecraft:fence", {
@@ -698,21 +731,13 @@ void Game::InitializeBlockStates() {
 
     bsr.RegisterType("minecraft:furnace", {
         blockstate::BlockProperty{ "facing", { "north", "south", "west", "east" } },
+        blockstate::BlockProperty{ "lit", { "false", "true" }, 0 },
     });
     const uint16_t furnaceType = bsr.GetTypeId("minecraft:furnace");
     bsr.SetDerivedData(furnaceType, [](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
     registerJsonBackedOrLog("minecraft:furnace");
-
-    bsr.RegisterType("minecraft:lit_furnace", {
-        blockstate::BlockProperty{ "facing", { "north", "south", "west", "east" } },
-    });
-    const uint16_t litFurnaceType = bsr.GetTypeId("minecraft:lit_furnace");
-    bsr.SetDerivedData(litFurnaceType, [](blockstate::BlockState& s) {
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
-    registerJsonBackedOrLog("minecraft:lit_furnace");
 
     bsr.RegisterType("minecraft:glass", {});
     const uint16_t glassType = bsr.GetTypeId("minecraft:glass");

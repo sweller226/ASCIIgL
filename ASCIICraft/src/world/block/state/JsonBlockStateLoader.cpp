@@ -78,7 +78,7 @@ std::string JsonBlockStateLoader::FormatBlockstatePath(const std::string& blocks
     std::string rlError;
     const auto rl = blockmodels::ResourceLocation::Parse(blockstateResourceId, &rlError);
     if (!rl.has_value()) {
-        return assetsRootPath_ + "/assets/<invalid-blockstate-id>/" + blockstateResourceId;
+        return assetsRootPath_ + "/blockstates/<invalid-blockstate-id>/" + blockstateResourceId;
     }
     return ResolveBlockstatePath(rl.value());
 }
@@ -120,7 +120,7 @@ std::string JsonBlockStateLoader::CanonicalResourceKey(const blockmodels::Resour
 }
 
 std::string JsonBlockStateLoader::ResolveBlockstatePath(const blockmodels::ResourceLocation& rl) const {
-    return assetsRootPath_ + "/assets/" + rl.ns + "/blockstates/" + rl.path + ".json";
+    return assetsRootPath_ + "/blockstates/" + rl.path + ".json";
 }
 
 jsonutil::LoadResult<BlockstateDefinition> JsonBlockStateLoader::ParseBlockstateJsonText(const std::string& jsonText, const std::string& debugName) const {

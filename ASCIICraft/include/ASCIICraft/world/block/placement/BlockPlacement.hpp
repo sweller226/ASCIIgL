@@ -4,6 +4,10 @@
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 
+class ChunkManager;
+
+namespace blockplacement {
+
 /// Context in which a block is being placed, determines placement behavior.
 enum class PlacementContext {
     TerrainGeneration,    // World generation (deterministic, position-based)
@@ -12,31 +16,42 @@ enum class PlacementContext {
     BlockUpdate           // Block update/neighbor change (neighbor-based)
 };
 
-/// Applies placement-time logic to a block state (e.g. directional blocks).
-/// Call this before placing a block in the world, whether from terrain generation or player placement.
-/// Returns the finalized stateId ready to be placed.
-inline uint32_t GetFinalizedBlockStateForPlacement(
+/// Applies placement-time logic that depends on neighbor state.
+uint32_t FinalizePlacedState(
+    const blockstate::BlockStateRegistry& bsr,
+    const ChunkManager& chunkManager,
+    uint32_t stateId,
+    const WorldCoord& position,
+    PlacementContext context = PlacementContext::TerrainGeneration,
+    const bool keepStateId = false
+);
+
+/// Overload for individual coordinates.
+uint32_t FinalizePlacedState(
+    const blockstate::BlockStateRegistry& bsr,
+    const ChunkManager& chunkManager,
+    uint32_t stateId,
+    int x, int y, int z,
+    PlacementContext context = PlacementContext::TerrainGeneration,
+    const bool keepStateId = false
+);
+
+/// Applies placement-time logic that does not require neighbor queries.
+uint32_t FinalizePlacedStateBasic(
     const blockstate::BlockStateRegistry& bsr,
     uint32_t stateId,
     const WorldCoord& position,
-    PlacementContext context = PlacementContext::TerrainGeneration
-) {
-    (void)bsr;
-    (void)position;
-    (void)context;
+    PlacementContext context = PlacementContext::TerrainGeneration,
+    const bool keepStateId = false
+);
 
-    // Future: Add block-specific placement logic here
-    // e.g., logs orient based on adjacent logs, torches face walls, etc.
-
-    return stateId;
-}
-
-/// Overload for individual coordinates
-inline uint32_t GetFinalizedBlockStateForPlacement(
+/// Overload for individual coordinates.
+uint32_t FinalizePlacedStateBasic(
     const blockstate::BlockStateRegistry& bsr,
     uint32_t stateId,
     int x, int y, int z,
-    PlacementContext context = PlacementContext::TerrainGeneration
-) {
-    return GetFinalizedBlockStateForPlacement(bsr, stateId, WorldCoord(x, y, z), context);
+    PlacementContext context = PlacementContext::TerrainGeneration,
+    const bool keepStateId = false
+);
+
 }

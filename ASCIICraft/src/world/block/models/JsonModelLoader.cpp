@@ -92,7 +92,7 @@ std::string JsonModelLoader::CanonicalResourceKey(const ResourceLocation& rl) {
 }
 
 std::string JsonModelLoader::ResolveBlockModelPath(const ResourceLocation& rl) const {
-    return assetsRootPath_ + "/assets/" + rl.ns + "/models/" + rl.path + ".json";
+    return assetsRootPath_ + "/models/" + rl.path + ".json";
 }
 
 jsonutil::LoadResult<BlockModelDefinition> JsonModelLoader::ParseBlockModelJsonText(const std::string& jsonText, const std::string& debugName) const {
