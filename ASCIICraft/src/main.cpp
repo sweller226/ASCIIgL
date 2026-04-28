@@ -4,6 +4,51 @@
 
 #include <string>
 
+#include <windows.h>
+
+namespace {
+    Game* g_activeGame = nullptr;
+
+    BOOL WINAPI ConsoleCloseHandler(DWORD ctrlType) {
+        switch (ctrlType) {
+            case CTRL_C_EVENT:
+            case CTRL_BREAK_EVENT:
+            case CTRL_CLOSE_EVENT:
+            case CTRL_SHUTDOWN_EVENT:
+            case CTRL_LOGOFF_EVENT:
+                if (g_activeGame) {
+                    g_activeGame->Shutdown();
+                }
+                return TRUE;
+            default:
+                return FALSE;
+        }
+    }
+
+    class ConsoleHandlerScope {
+    public:
+        explicit ConsoleHandlerScope(Game* game)
+            : game_(game)
+            , handlerInstalled_(SetConsoleCtrlHandler(ConsoleCloseHandler, TRUE) == TRUE) {
+            g_activeGame = game_;
+        }
+
+        ~ConsoleHandlerScope() {
+            g_activeGame = nullptr;
+            if (handlerInstalled_) {
+                SetConsoleCtrlHandler(ConsoleCloseHandler, FALSE);
+            }
+        }
+
+        ConsoleHandlerScope(const ConsoleHandlerScope&) = delete;
+        ConsoleHandlerScope& operator=(const ConsoleHandlerScope&) = delete;
+
+    private:
+        Game* game_;
+        bool handlerInstalled_;
+    };
+}
+
 static bool ParseRenderToTerminal(int argc, char* argv[]) {
     bool renderToTerminal = true; // default: terminal mode
     for (int i = 1; i < argc; ++i) {
@@ -30,11 +75,10 @@ int main(int argc, char* argv[]) {
 
     try {
         Game game;
+        ConsoleHandlerScope closeHandler(&game);
 
         // Exit when user closes window or console (handled by ASCIIgL::Screen)
         game.Run([]() { return ASCIIgL::Screen::GetInst().ShouldExit(); }, renderToTerminal);
-
-        game.Shutdown();
     }
     catch (const std::exception& e) {
         ASCIIgL::Logger::Error("Game crashed with exception: " + std::string(e.what()));

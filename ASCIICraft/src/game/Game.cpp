@@ -20,8 +20,13 @@
 #include <glm/vec2.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <ASCIICraft/world/blockstate/BlockStateRegistry.hpp>
-#include <ASCIICraft/world/blockstate/BlockTextureLayers.hpp>
+#include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/block/state/JsonBlockModelRegistration.hpp>
+#include <ASCIICraft/world/block/models/JsonModelLoader.hpp>
+#include <ASCIICraft/world/block/state/JsonBlockStateLoader.hpp>
+#include <ASCIICraft/world/block/state/VariantKey.hpp>
+#include <ASCIICraft/world/block/textures/BlockTextureCatalog.hpp>
+#include <ASCIICraft/world/block/models/WaterModelBuilder.hpp>
 #include <ASCIICraft/ecs/data/ItemIndex.hpp>
 
 #include <ASCIICraft/gui/GuiMeshes.hpp>
@@ -94,7 +99,7 @@ bool Game::Initialize(bool renderToTerminal) {
 
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
     renderer.SetMonochromeDitherEnabled(true);
-    renderer.SetBackgroundCol(glm::ivec3(150, 150, 150));
+    renderer.SetBackgroundCol(glm::ivec3(210, 210, 210));
     renderer.SetWireframe(false);
     renderer.SetBackfaceCulling(true);
     renderer.SetCCW(true);
@@ -168,7 +173,6 @@ void Game::Run(std::function<bool()> shouldExternalExit, bool renderToTerminal) 
         frameCounter++;
 
         if (frameCounter % 60 == 0) {
-            ASCIIgL::Logger::Debug("Frame milestone reached: 60 frames processed.");
             ASCIIgL::Logger::Info("FPS: " + std::to_string(ASCIIgL::FPSClock::GetInst().GetFPS()));
             ASCIIgL::Profiler::GetInst().LogReport();
             ASCIIgL::Profiler::GetInst().Reset();
@@ -267,6 +271,11 @@ void Game::Render() {
 }
 
 void Game::Shutdown() {
+    if (shutdownInvoked_) {
+        return;
+    }
+    shutdownInvoked_ = true;
+
     ASCIIgL::Logger::Info("Shutting down ASCIICraft...");
 
     // Clear libraries if we want to release all resources on shutdown
@@ -284,7 +293,7 @@ void Game::Shutdown() {
 bool Game::LoadTextures() {
     ASCIIgL::Logger::Info("Loading game textures...");
 
-    // Alternative monochrome hue directions (console palette indices 0–15 per channel).
+    // Alternative monochrome hue directions (console palette indices 0â€“15 per channel).
     const glm::ivec3 NeutralGrayHue   = glm::ivec3(14, 14, 14); // balanced gray
     const glm::ivec3 WarmSepiaHue     = glm::ivec3(15, 12, 8);  // warm brownish
     const glm::ivec3 CoolBlueHue      = glm::ivec3(10, 10, 15); // bluish cool
@@ -303,33 +312,8 @@ bool Game::LoadTextures() {
     monoMap.brightness = 1.0f;
     monoMap.contrast = 1.0f;
 
-    // Load block textures via TextureLibrary which takes ownership
-    std::vector<std::string> blockTexturePaths = {
-        "res/textures/Splotch/assets/minecraft/textures/blocks/stone.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/cobblestone.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/bedrock.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/dirt.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/log_oak.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/log_oak_top.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/leaves_oak.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/planks_oak.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/grass_top.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/grass_side.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/water_still.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/crafting_table_front.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/crafting_table_side.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/crafting_table_top.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/furnace_front_off.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/furnace_front_on.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/furnace_side.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/furnace_top.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/glass.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/bookshelf.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/sand.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/gravel.png",
-        "res/textures/Splotch/assets/minecraft/textures/blocks/brick.png",
-    };
-
+    // Load block textures from central catalog order.
+    std::vector<std::string> blockTexturePaths = blocktextures::BuildBlockTexturePaths();
 
     auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(blockTexturePaths, "terrainTextureArray", monoMap);
     if (!blockTextureArray || !blockTextureArray->IsValid()) {
@@ -337,7 +321,7 @@ bool Game::LoadTextures() {
         return false;   
     }
 
-    auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture("res/textures/gui/inventory.png", "inventoryTexture", monoMap);
+    auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture("res/textures/gui/container/inventory.png", "inventoryTexture", monoMap);
     if (!inventoryTexture) {
         ASCIIgL::Logger::Error("Failed to load inventory texture");
         return false;
@@ -537,7 +521,11 @@ void Game::RenderPlaying() {
 }
 
 void Game::InitializeWorld() {
-    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, WorldCoord(0, 120, 0), 10));
+    WorldParams worldParams{};
+    worldParams.spawnPoint = WorldCoord(0, 120, 0);
+    worldParams.renderDistance = 10;
+    worldParams.worldSeed = 12345ULL;
+    registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, worldParams));
     ASCIIgL::Logger::Debug("World created and stored in registry context.");
 }
 
@@ -561,93 +549,239 @@ void Game::InitializeSystems() {
 
 void Game::InitializeBlockStates() {
     auto& bsr = registry.ctx().emplace<blockstate::BlockStateRegistry>();
+    auto& modelLibrary = registry.ctx().emplace<blockmodels::BlockModelLibrary>();
 
-    // Direct TextureArray layer indices (see BlockTextureLayers.hpp and LoadTextures).
-    using BT = BlockTexLayer;
-
-    // Helper: set all 6 faces to the same layer
-    auto allFaces = [](blockstate::BlockState& s, int layer) {
-        for (int i = 0; i < BLOCK_FACE_COUNT; ++i) s.faceTextureLayers[i] = layer;
-    };
-
-    // ======================== REGISTRATION ORDER ========================
-    // Air MUST be first (typeId=0, stateId=0)
+    // ======================== Block model registration ========================
+    // 1) Air first (typeId=0, stateId=0). 2) Shared JSON loaders for one assets root.
+    // 3) Types + derived render data. 4) Models via JsonBlockModelRegistration (1.8.9 assets),
+    //    except air (no mesh) and water (no blockstate in pack — procedural mesh).
     bsr.RegisterType("minecraft:air", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:air"), [](blockstate::BlockState& s) {
-        s.isSolid = false;
+    const uint16_t airType = bsr.GetTypeId("minecraft:air");
+    bsr.SetDerivedData(airType, [](blockstate::BlockState& s) {
+        s.isRenderable = false;
         s.isTransparent = true;
         s.renderMode = blockstate::RenderMode::Translucent;
     });
+    modelLibrary.RegisterModel(airType, nullptr, bsr);
 
-    // === Terrain (using only file-based texture layers) ===
-    bsr.RegisterType("minecraft:bedrock", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:bedrock"), [&](blockstate::BlockState& s) {
-        allFaces(s, static_cast<int>(BT::Bedrock));
+    static constexpr const char* kVanillaBlockAssetRoot = "res";
+    blockstate::JsonBlockStateLoader blockstateLoader(kVanillaBlockAssetRoot);
+    blockmodels::JsonModelLoader jsonModelLoader(kVanillaBlockAssetRoot);
+
+    const auto registerJsonBackedOrLog = [&](const char* typeName) {
+        if (!blockstate::RegisterJsonBackedBlockType(
+                typeName,
+                bsr,
+                modelLibrary,
+                blockstateLoader,
+                jsonModelLoader
+            )) {
+            ASCIIgL::Logger::Error(
+                std::string("Game::InitializeBlockStates: JSON model registration failed for ") + typeName
+            );
+        }
+    };
+
+    const auto registerOpaqueJsonBacked = [&](const char* typeName) {
+        bsr.RegisterType(typeName, {});
+        const uint16_t tid = bsr.GetTypeId(typeName);
+        bsr.SetDerivedData(tid, [](blockstate::BlockState& s) { s.renderMode = blockstate::RenderMode::Opaque; });
+        registerJsonBackedOrLog(typeName);
+    };
+
+    // === Terrain & plants (vanilla blockstate + block models under res/blockstates and res/models) ===
+    registerOpaqueJsonBacked("minecraft:bedrock");
+
+    registerOpaqueJsonBacked("minecraft:stone");
+
+    bsr.RegisterType("minecraft:dandelion", {});
+    const uint16_t dandelionType = bsr.GetTypeId("minecraft:dandelion");
+    bsr.SetDerivedData(dandelionType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:dandelion");
+
+    bsr.RegisterType("minecraft:poppy", {});
+    const uint16_t poppyType = bsr.GetTypeId("minecraft:poppy");
+    bsr.SetDerivedData(poppyType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:poppy");
+
+    bsr.RegisterType("minecraft:tall_grass", {});
+    const uint16_t tallGrassType = bsr.GetTypeId("minecraft:tall_grass");
+    bsr.SetDerivedData(tallGrassType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:tall_grass");
+
+    bsr.RegisterType("minecraft:fern", {});
+    const uint16_t fernType = bsr.GetTypeId("minecraft:fern");
+    bsr.SetDerivedData(fernType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:fern");
+
+    // Oak fence geometry in 1.8.9 uses blockstate id `minecraft:fence` (see assets/.../blockstates/fence.json).
+    bsr.RegisterType("minecraft:fence", {
+        blockstate::BlockProperty{ "east", { "false", "true" }},
+        blockstate::BlockProperty{ "north", { "false", "true" }},
+        blockstate::BlockProperty{ "south", { "false", "true" }},
+        blockstate::BlockProperty{ "west", { "false", "true" }},
+    });
+    const uint16_t fenceType = bsr.GetTypeId("minecraft:fence");
+    bsr.SetDerivedData(fenceType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:fence");
+
+    registerOpaqueJsonBacked("minecraft:cobblestone");
+
+    // 1.8.9 cobblestone stairs are represented by block id `stone_stairs`.
+    bsr.RegisterType("minecraft:stone_stairs", {
+        blockstate::BlockProperty{ "facing", { "east", "west", "south", "north" } },
+        blockstate::BlockProperty{ "half", { "bottom", "top" } },
+        blockstate::BlockProperty{ "shape", { "straight", "outer_right", "outer_left", "inner_right", "inner_left" } },
+    });
+    const uint16_t stoneStairsType = bsr.GetTypeId("minecraft:stone_stairs");
+    bsr.SetDerivedData(stoneStairsType, [](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
+    registerJsonBackedOrLog("minecraft:stone_stairs");
 
-    bsr.RegisterType("minecraft:stone", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:stone"), [&](blockstate::BlockState& s) {
-        allFaces(s, static_cast<int>(BT::Stone));
-        s.renderMode = blockstate::RenderMode::Opaque;
+    bsr.RegisterType("minecraft:cobblestone_slab", {
+        blockstate::BlockProperty{ "half", { "bottom", "top" } },
     });
-
-    bsr.RegisterType("minecraft:cobblestone", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:cobblestone"), [&](blockstate::BlockState& s) {
-        allFaces(s, static_cast<int>(BT::Cobblestone));
+    const uint16_t cobblestoneSlabType = bsr.GetTypeId("minecraft:cobblestone_slab");
+    bsr.SetDerivedData(cobblestoneSlabType, [](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
+        s.isFullBlock = false;
     });
+    registerJsonBackedOrLog("minecraft:cobblestone_slab");
 
-    bsr.RegisterType("minecraft:dirt", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:dirt"), [&](blockstate::BlockState& s) {
-        allFaces(s, static_cast<int>(BT::Dirt));
-        s.renderMode = blockstate::RenderMode::Opaque;
-    });
+    registerOpaqueJsonBacked("minecraft:dirt");
 
+    // Matches assets/minecraft/blockstates/grass.json (snowy + rotated grass_normal variants).
     bsr.RegisterType("minecraft:grass", {
-        // BlockStateRegistry properties are string-based; use BlockFace in code and convert at placement time.
-        blockstate::BlockProperty{ "facing", {"north", "south", "east", "west"}, 0 }
+        blockstate::BlockProperty{ "snowy", {"false", "true"}, 0 }
     });
-
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:grass"), [&](blockstate::BlockState& s) {
-        s.faceTextureLayers[0] = static_cast<int>(BT::GrassTop);   // Top
-        s.faceTextureLayers[1] = static_cast<int>(BT::Dirt);       // Bottom
-        s.faceTextureLayers[2] = static_cast<int>(BT::GrassSide);  // North
-        s.faceTextureLayers[3] = static_cast<int>(BT::GrassSide);  // South
-        s.faceTextureLayers[4] = static_cast<int>(BT::GrassSide);  // East
-        s.faceTextureLayers[5] = static_cast<int>(BT::GrassSide);  // West
+    const uint16_t grassType = bsr.GetTypeId("minecraft:grass");
+    bsr.SetDerivedData(grassType, [&](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
+    registerJsonBackedOrLog("minecraft:grass");
 
-    // === Wood & Plants (subset using current texture list) ===
-    bsr.RegisterType("minecraft:oak_log", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:oak_log"), [&](blockstate::BlockState& s) {
-        s.faceTextureLayers[0] = static_cast<int>(BT::OakLogTop); // Top
-        s.faceTextureLayers[1] = static_cast<int>(BT::OakLogTop); // Bottom
-        s.faceTextureLayers[2] = static_cast<int>(BT::OakLog);    // Sides (bark)
-        s.faceTextureLayers[3] = static_cast<int>(BT::OakLog);
-        s.faceTextureLayers[4] = static_cast<int>(BT::OakLog);
-        s.faceTextureLayers[5] = static_cast<int>(BT::OakLog);
+    // Matches assets/minecraft/blockstates/oak_log.json
+    bsr.RegisterType("minecraft:oak_log", {
+        blockstate::BlockProperty{ "axis", {"y", "z", "x", "none"}, 0 }
+    });
+    const uint16_t oakLogType = bsr.GetTypeId("minecraft:oak_log");
+    bsr.SetDerivedData(oakLogType, [&](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
+    registerJsonBackedOrLog("minecraft:oak_log");
+
+    // Matches assets/minecraft/blockstates/oak_planks.json
+    registerOpaqueJsonBacked("minecraft:oak_planks");
+
+    bsr.RegisterType("minecraft:oak_slab", {
+        blockstate::BlockProperty{ "half", { "bottom", "top" } },
+    });
+    const uint16_t oakSlabType = bsr.GetTypeId("minecraft:oak_slab");
+    bsr.SetDerivedData(oakSlabType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+        s.isFullBlock = false;
+    });
+    registerJsonBackedOrLog("minecraft:oak_slab");
 
     bsr.RegisterType("minecraft:oak_leaves", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:oak_leaves"), [&](blockstate::BlockState& s) {
-        allFaces(s, static_cast<int>(BT::OakLeaves));
-        s.isSolid = true;
+    const uint16_t leavesType = bsr.GetTypeId("minecraft:oak_leaves");
+    bsr.SetDerivedData(leavesType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
         s.isTransparent = false;                  // treat as cutout, not blended
         s.renderMode = blockstate::RenderMode::Cutout;
         s.cullSameType = false;                   // draw faces between leaves (fuller look)
     });
+    registerJsonBackedOrLog("minecraft:oak_leaves");
+
+    // === Utility / decor blocks present in current texture array ===
+    registerOpaqueJsonBacked("minecraft:crafting_table");
+    registerOpaqueJsonBacked("minecraft:bookshelf");
+    registerOpaqueJsonBacked("minecraft:brick_block");
+
+    bsr.RegisterType("minecraft:furnace", {
+        blockstate::BlockProperty{ "facing", { "north", "south", "west", "east" } },
+        blockstate::BlockProperty{ "lit", { "false", "true" }, 0 },
+    });
+    const uint16_t furnaceType = bsr.GetTypeId("minecraft:furnace");
+    bsr.SetDerivedData(furnaceType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
+    registerJsonBackedOrLog("minecraft:furnace");
+
+    bsr.RegisterType("minecraft:glass", {});
+    const uint16_t glassType = bsr.GetTypeId("minecraft:glass");
+    bsr.SetDerivedData(glassType, [&](blockstate::BlockState& s) {
+        s.isTransparent = true;
+        s.renderMode = blockstate::RenderMode::Cutout;
+    });
+    registerJsonBackedOrLog("minecraft:glass");
+
+    bsr.RegisterType("minecraft:torch", {
+        blockstate::BlockProperty{ "facing", { "up", "east", "south", "west", "north" } },
+    });
+    const uint16_t torchType = bsr.GetTypeId("minecraft:torch");
+    bsr.SetDerivedData(torchType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:torch");
 
     // === Water ===
-    bsr.RegisterType("minecraft:water", {});
-    bsr.SetDerivedData(bsr.GetTypeId("minecraft:water"), [&](blockstate::BlockState& s) {
-        allFaces(s, static_cast<int>(BT::WaterStill));
-        s.isSolid = true;
+    bsr.RegisterType("minecraft:water", {
+        blockstate::BlockProperty{ "top", {"false", "true"}, 1 }
+    });
+    const uint16_t waterType = bsr.GetTypeId("minecraft:water");
+    bsr.SetDerivedData(waterType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
         s.isTransparent = true;
         s.renderMode = blockstate::RenderMode::Translucent;
+        s.isFullBlock = !(bsr.GetPropertyValue(s.stateId, "top") == "true");
     });
+    const auto& waterTypeDef = bsr.GetType(waterType);
+    for (uint32_t i = 0; i < waterTypeDef.stateCount; ++i) {
+        const uint32_t stateId = waterTypeDef.baseStateId + i;
+        const bool top = (bsr.GetPropertyValue(stateId, "top") == "true");
+        const blockmodels::WaterSpec waterSpec{ top };
+        auto model = std::make_shared<const blockstate::BlockModel>(blockmodels::BuildWaterModel(waterSpec));
+        modelLibrary.RegisterModel(stateId, std::move(model), bsr);
+    }
+
+    for (uint16_t tid = 0; tid < bsr.GetTotalTypeCount(); ++tid) {
+        blockstate::AssertUniqueVariantKeysPerType(bsr, tid, "Game::InitializeBlockStates");
+    }
 
     ASCIIgL::Logger::Info("BlockStateRegistry: " +
         std::to_string(bsr.GetTotalTypeCount()) + " types, " +
@@ -659,9 +793,9 @@ void Game::InitializeItemDefinitions() {
 
     using IX = ecs::data::ItemIndex;
     auto& bsr = registry.ctx().get<blockstate::BlockStateRegistry>();
-    auto blockMesh = [&](const std::string& typeName) {
-        return IX::GetBlockMeshFromState(bsr.GetState(bsr.GetDefaultState(typeName)));
-    };
+    // auto blockMesh = [&](const std::string& typeName) {
+    //     return IX::GetBlockMeshFromState(bsr.GetState(bsr.GetDefaultState(typeName)));
+    // };
 
     // // === Terrain (restricted to current texture set) ===
     // itemIndex.RegisterBlockItem(registry, "minecraft:stone",       "Stone",       blockMesh("minecraft:stone"));

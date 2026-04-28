@@ -1,4 +1,4 @@
-// ecs/components/PhysicsMinecraft.hpp
+// ecs/components/PhysicsBody.hpp
 #pragma once
 
 #include <entt/entt.hpp>
@@ -40,7 +40,6 @@ struct PhysicsMaterial {
 
 struct Gravity {
     glm::vec3 acceleration = glm::vec3(0.0f, -9.81f, 0.0f); // default downward gravity
-    bool enabled{true};
 };
 
 struct StepPhysics {

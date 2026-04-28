@@ -88,6 +88,8 @@ private:
     GameState gameState;
     std::function<bool()> shouldExternalExit;
     bool shouldInternalExit;
+    /// Prevents duplicate teardown if \ref Shutdown is invoked from multiple paths (e.g. destructor + explicit call).
+    bool shutdownInvoked_ = false;
     
     // Private methods
     bool LoadResources();

@@ -1,0 +1,35 @@
+#pragma once
+
+#include <cstdint>
+#include <vector>
+
+#include <ASCIICraft/world/block/state/FaceDir.hpp>
+
+namespace blockstate {
+
+/// One flattened blockstate unique (type + property values) combination.
+/// Derived data is pre-computed at registration time for hot-path access.
+enum class RenderMode {
+    Opaque,      // fully opaque
+    Cutout,      // alpha-tested (binary transparency)
+    Translucent  // true blended transparency
+};
+
+struct BlockState {
+    uint32_t stateId = 0;
+    uint16_t typeId = 0;
+    std::vector<uint8_t> propertyValues;     // index into each property's allowedValues
+
+    // Pre-computed derived data
+    bool isRenderable = true;
+    bool isTransparent = false;
+    uint8_t lightEmission = 0;
+    uint8_t lightFilter = 15;                // how much light this block absorbs
+    RenderMode renderMode = RenderMode::Opaque;
+    bool isFullBlock = true;
+    /// If true, don't draw a face when the neighbor block is the same type (e.g. dirt, glass).
+    /// If false, always draw faces against same-type neighbors (e.g. leaves).
+    bool cullSameType = true;
+};
+
+} // namespace blockstate

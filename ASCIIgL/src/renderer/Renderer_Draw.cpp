@@ -153,9 +153,18 @@ void Renderer::SortTransparentDraws() {
 
 void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list) {
     Material* lastMat = nullptr;
+    bool currentCull = GetBackfaceCulling();
 
     for (const auto& dc : list) {
         if (!dc.mesh || !dc.material) continue;
+
+        if (dc.backfaceCulling != currentCull) {
+            currentCull = dc.backfaceCulling;
+            const bool wireframe = GetWireframe();
+            const bool ccw = GetCCW();
+            const int stateIndex = (wireframe ? 1 : 0) + (currentCull ? 2 : 0) + (ccw ? 4 : 0);
+            _context->RSSetState(_rasterizerStates[stateIndex].Get());
+        }
 
         Material* mat = dc.material;
 
@@ -164,16 +173,14 @@ void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list) {
             BindMaterial(mat);
         }
 
-        // Apply per-draw uniform overrides using pre-resolved descriptors.
         for (const auto& ov : dc.overrides) {
             if (!ov.desc) continue;
             mat->ApplyUniformOverride(*ov.desc, ov.value);
         }
 
-        DrawMesh(dc.mesh);
-
-        // Upload constant buffer if dirty
         UploadMaterialConstants(mat);
+
+        DrawMesh(dc.mesh);
     }
 }
 
@@ -231,8 +238,6 @@ void Renderer::EndGpuFrame() {
     if (Screen::GetInst().IsRenderToTerminal()) {
         DownloadFramebuffer();
     } else {
-        // Ensure quantization has completed before the window pass reads CHAR_INFO (terminal path does this via Flush in DownloadFramebuffer).
-        _context->Flush();
         RunAsciiWindowPass();
     }
 }

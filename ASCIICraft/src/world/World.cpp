@@ -11,17 +11,18 @@
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
 
-#include <ASCIICraft/world/ChunkRegion.hpp>
+#include <ASCIICraft/world/chunk/ChunkRegion.hpp>
 #include <ASCIICraft/util/Util.hpp>
 
 #include <entt/entt.hpp>
 
-World::World(entt::registry& registry, const WorldCoord spawnPoint, const unsigned int renderDistance)
-    : spawnPoint(spawnPoint)
-    , registry(registry) {
+World::World(entt::registry& registry, WorldParams params)
+    : registry(registry)
+    , spawnPoint(params.spawnPoint)
+    , worldSeed(params.worldSeed) {
     ASCIIgL::Logger::Info("World created");
 
-    chunkManager = std::make_unique<ChunkManager>(registry, WORLD_LIMIT, renderDistance);
+    chunkManager = std::make_unique<ChunkManager>(registry, worldDimensions, params.renderDistance, params.worldSeed);
 }
 
 World::~World() {

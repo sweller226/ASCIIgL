@@ -46,3 +46,44 @@ private:
 };
 
 } // namespace ASCIIgL
+
+// ---------------------------------------------------------------------------
+// Callsite-once logging macros
+// These log only once per callsite (per process lifetime), with no global
+// message dedup hashing/map lookups.
+// ---------------------------------------------------------------------------
+#define ASCIIGL_LOG_ERROR_ONCE(message) \
+    do { \
+        static bool _asciigl_logged_once_ = false; \
+        if (!_asciigl_logged_once_) { \
+            _asciigl_logged_once_ = true; \
+            ASCIIgL::Logger::Error((message)); \
+        } \
+    } while (0)
+
+#define ASCIIGL_LOG_WARNING_ONCE(message) \
+    do { \
+        static bool _asciigl_logged_once_ = false; \
+        if (!_asciigl_logged_once_) { \
+            _asciigl_logged_once_ = true; \
+            ASCIIgL::Logger::Warning((message)); \
+        } \
+    } while (0)
+
+#define ASCIIGL_LOG_INFO_ONCE(message) \
+    do { \
+        static bool _asciigl_logged_once_ = false; \
+        if (!_asciigl_logged_once_) { \
+            _asciigl_logged_once_ = true; \
+            ASCIIgL::Logger::Info((message)); \
+        } \
+    } while (0)
+
+#define ASCIIGL_LOG_DEBUG_ONCE(message) \
+    do { \
+        static bool _asciigl_logged_once_ = false; \
+        if (!_asciigl_logged_once_) { \
+            _asciigl_logged_once_ = true; \
+            ASCIIgL::Logger::Debug((message)); \
+        } \
+    } while (0)

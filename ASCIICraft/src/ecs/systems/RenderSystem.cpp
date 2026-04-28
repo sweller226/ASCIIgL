@@ -40,8 +40,6 @@ namespace ecs::systems {
             auto &r = view.get<components::Renderable>(ent);
 
             if (!r.visible || !r.mesh) continue;
-            
-            glm::vec3 worldCenter = t.position; // if mesh has offset, add it
 
             // need to do frustum culling
 
@@ -50,7 +48,7 @@ namespace ecs::systems {
             item.mesh = r.mesh;
             item.material = nullptr; // ECS entities don't use materials yet
             item.materialName = "";  // Will use default material
-            item.modelMatrix = t.getModel();
+            item.modelMatrix = t.getRenderModel();
             item.layer = r.layer;
 
             if (r.renderType == components::RenderType::ELEM_3D) {

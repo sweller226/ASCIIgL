@@ -38,10 +38,10 @@ void CameraSystem::ProcessCameraInput(components::PlayerCamera& cam, float dt) {
         yawDelta += m_input.GetMouseSensitivity() * dt;
     }
     if (m_input.IsActionHeld("camera_up")) {
-        pitchDelta += m_input.GetMouseSensitivity() * 0.8f * dt;
+        pitchDelta += m_input.GetMouseSensitivity() * 0.9f * dt;
     }
     if (m_input.IsActionHeld("camera_down")) {
-        pitchDelta -= m_input.GetMouseSensitivity() * 0.8f * dt;
+        pitchDelta -= m_input.GetMouseSensitivity() * 0.9f * dt;
     }
 
     cam.camera.setCamDir(cam.camera.GetYaw() + yawDelta, cam.camera.GetPitch() + pitchDelta);

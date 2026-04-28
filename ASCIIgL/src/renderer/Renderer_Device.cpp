@@ -1037,9 +1037,6 @@ void Renderer::DownloadFramebuffer()
         pixelBuffer.resize(cellCount);
     }
 
-    // Ensure quantization draw has completed before copying
-    _context->Flush();
-
     // Copy CHAR_INFO render target to staging (R16G16_UINT = glyph, attributes per pixel)
     _context->CopyResource(_stagingTexture.Get(), _charInfoTexture.Get());
 
@@ -1063,17 +1060,6 @@ void Renderer::DownloadFramebuffer()
     }
 
     _context->Unmap(_stagingTexture.Get(), 0);
-
-#if 1
-    // Debug: log CHAR_INFO readback (expect 65,15 when shader forces 'A')
-    {
-        const CHAR_INFO* pb = pixelBuffer.data();
-        Logger::Debug("[Renderer] CHAR_INFO readback: center=(" +
-            std::to_string((unsigned)pb[height/2 * width + width/2].Char.UnicodeChar) + "," +
-            std::to_string((unsigned)pb[height/2 * width + width/2].Attributes) + ") top-left=(" +
-            std::to_string((unsigned)pb[0].Char.UnicodeChar) + "," + std::to_string((unsigned)pb[0].Attributes) + ")");
-    }
-#endif
 }
 
 // =========================================================================

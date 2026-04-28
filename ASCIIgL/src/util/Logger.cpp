@@ -82,6 +82,8 @@ void Logger::LogInternal(LogLevel level, const std::string& message) {
 void Logger::LogInternal(LogLevel level, const std::wstring& message) {
     if (static_cast<int>(level) > static_cast<int>(currentLevel)) return;
     std::lock_guard<std::mutex> lock(logMutex);
+    std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+    const std::string utf8 = conv.to_bytes(message);
     if (logFile.is_open()) {
         auto now = std::chrono::system_clock::now();
         auto time_t = std::chrono::system_clock::to_time_t(now);
@@ -93,8 +95,7 @@ void Logger::LogInternal(LogLevel level, const std::wstring& message) {
             case LogLevel::Info:  logFile << "[INFO] "; break;
             case LogLevel::Debug: logFile << "[DEBUG] "; break;
         }
-        std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-        logFile << conv.to_bytes(message) << std::endl;
+        logFile << utf8 << std::endl;
     }
 }
 
