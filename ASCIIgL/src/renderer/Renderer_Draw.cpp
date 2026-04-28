@@ -238,8 +238,6 @@ void Renderer::EndGpuFrame() {
     if (Screen::GetInst().IsRenderToTerminal()) {
         DownloadFramebuffer();
     } else {
-        // Ensure quantization has completed before the window pass reads CHAR_INFO (terminal path does this via Flush in DownloadFramebuffer).
-        _context->Flush();
         RunAsciiWindowPass();
     }
 }

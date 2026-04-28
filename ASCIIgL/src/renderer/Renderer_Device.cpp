@@ -1037,9 +1037,6 @@ void Renderer::DownloadFramebuffer()
         pixelBuffer.resize(cellCount);
     }
 
-    // Ensure quantization draw has completed before copying
-    _context->Flush();
-
     // Copy CHAR_INFO render target to staging (R16G16_UINT = glyph, attributes per pixel)
     _context->CopyResource(_stagingTexture.Get(), _charInfoTexture.Get());
 

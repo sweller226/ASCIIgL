@@ -30,7 +30,7 @@ void PlacingSystem::HandleDebugBlockSelection() {
 
     if (!m_selectionInitialized) {
         try {
-            m_selectedTypeId = bsr->GetTypeId("minecraft:torch");
+            m_selectedTypeId = bsr->GetTypeId("minecraft:grass");
         } catch (...) {
             m_selectedTypeId = 0;
         }
