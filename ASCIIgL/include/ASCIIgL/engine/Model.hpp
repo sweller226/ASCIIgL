@@ -1,13 +1,12 @@
 #pragma once
 
 #include <memory>
-
-#include <ASCIIgL/engine/Mesh.hpp>
-#include <ASCIIgL/engine/Texture.hpp>
-
-#include <ASCIIgL/renderer/VertFormat.hpp>
+#include <string>
+#include <vector>
 
 namespace ASCIIgL {
+
+class Mesh;
 
 class Model
 {

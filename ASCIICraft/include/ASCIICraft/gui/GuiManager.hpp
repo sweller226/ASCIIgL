@@ -11,7 +11,7 @@
 #include <ASCIICraft/gui/Screen.hpp>
 #include <ASCIICraft/input/IInputSource.hpp>
 
-class EventBus;
+namespace ASCIIgL { class EventBus; }
 
 namespace ecs::systems { class RenderSystem; }
 
@@ -21,7 +21,7 @@ namespace gui {
 /// Game calls Update(), then Draw(renderSystem) to add GUI items directly to RenderSystem.
 class GuiManager {
 public:
-    GuiManager(entt::registry& registry, EventBus& eventBus, IInputSource& input);
+    GuiManager(entt::registry& registry, ASCIIgL::EventBus& eventBus, IInputSource& input);
 
     void SetScreenSize(glm::vec2 size);
     glm::vec2 GetScreenSize() const { return m_screenSize; }
@@ -48,7 +48,7 @@ private:
     void PopScreen();
 
     entt::registry& m_registry;
-    EventBus& m_eventBus;
+    ASCIIgL::EventBus& m_eventBus;
     IInputSource& m_input;
 
     glm::vec2 m_screenSize{550.0f, 350.0f};

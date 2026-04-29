@@ -1,0 +1,15 @@
+[submodule "ASCIIgL/vendor/glm"]
+	path = ASCIIgL/vendor/glm
+	url = https://github.com/g-truc/glm.git
+[submodule "ASCIIgL/vendor/nlohmann"]
+	path = ASCIIgL/vendor/nlohmann
+	url = https://github.com/nlohmann/json.git
+[submodule "ASCIIgL/vendor/stb_image"]
+	path = ASCIIgL/vendor/stb_image
+	url = https://github.com/nothings/stb.git
+[submodule "ASCIIgL/vendor/tinyobjloader"]
+	path = ASCIIgL/vendor/tinyobjloader
+	url = https://github.com/tinyobjloader/tinyobjloader.git
+[submodule "ASCIIgL/vendor/tracy"]
+	path = ASCIIgL/vendor/tracy
+	url = https://github.com/wolfpld/tracy.git

@@ -1,12 +1,12 @@
 #include <ASCIICraft/input/InputSystem.hpp>
 
-#include <ASCIICraft/events/EventBus.hpp>
+#include <ASCIIgL/util/EventBus.hpp>
 #include <ASCIICraft/events/InputEvents.hpp>
 #include <ASCIIgL/engine/InputManager.hpp>
 
 namespace input {
 
-InputSystem::InputSystem(EventBus& eventBus)
+InputSystem::InputSystem(ASCIIgL::EventBus& eventBus)
     : m_eventBus(eventBus)
 {}
 

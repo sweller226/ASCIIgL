@@ -99,7 +99,7 @@ bool Game::Initialize(bool renderToTerminal) {
 
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
     renderer.SetMonochromeDitherEnabled(true);
-    renderer.SetBackgroundCol(glm::ivec3(210, 210, 210));
+    renderer.SetBackgroundCol(glm::ivec3(255, 255, 255));
     renderer.SetWireframe(false);
     renderer.SetBackfaceCulling(true);
     renderer.SetCCW(true);
@@ -145,37 +145,32 @@ void Game::Run(std::function<bool()> shouldExternalExit, bool renderToTerminal) 
 
     ASCIIgL::Logger::Info("Starting game loop...");
 
-    ASCIIgL::Profiler::GetInst().SetEnabled(true);
-
     int frameCounter = 0;
     while (!shouldExternalExit() && !shouldInternalExit) {
         ASCIIgL::Screen::GetInst().ProcessMessages();
         if (ASCIIgL::Screen::GetInst().ShouldExit())
             break;
 
-        ASCIIgL::Profiler::GetInst().BeginFrame();
+        PROFILE_FRAME_MARK();
         ASCIIgL::FPSClock::GetInst().StartFPSClock();
 
         {
-            ASCIIgL::PROFILE_SCOPE("Update");
+            PROFILE_SCOPE("Update");
             Update();
         }
 
         {
-            ASCIIgL::PROFILE_SCOPE("RenderGame");
+            PROFILE_SCOPE("RenderGame");
             Render();
         }
 
         eventBus.endFrame();
 
         ASCIIgL::FPSClock::GetInst().EndFPSClock();
-        ASCIIgL::Profiler::GetInst().EndFrame();
         frameCounter++;
 
         if (frameCounter % 60 == 0) {
             ASCIIgL::Logger::Info("FPS: " + std::to_string(ASCIIgL::FPSClock::GetInst().GetFPS()));
-            ASCIIgL::Profiler::GetInst().LogReport();
-            ASCIIgL::Profiler::GetInst().Reset();
             frameCounter = 0;
         }
     }   
@@ -188,7 +183,10 @@ void Game::Update() {
     inputSystem.Update();
 
     for ([[maybe_unused]] const auto& e : eventBus.view<events::ToggleInventoryEvent>()) {
-        guiManager.ToggleInventoryScreen();
+        // Temporary behavior: allow close-only; ignore requests that would open inventory.
+        if (guiManager.IsInventoryOpen()) {
+            guiManager.ToggleInventoryScreen();
+        }
     }
     for ([[maybe_unused]] const auto& e : eventBus.view<events::QuitRequestedEvent>()) {
         ASCIIgL::Logger::Info("Quit action detected. Exiting game...");
@@ -233,7 +231,7 @@ void Game::Update() {
 void Game::Render() {
 
     {
-        ASCIIgL::PROFILE_SCOPE("Clear Px Buff/Begin GPU Frame");
+        PROFILE_SCOPE("Clear Px Buff/Begin GPU Frame");
         ASCIIgL::Screen::GetInst().ClearPixelBuffer();
         ASCIIgL::Renderer::GetInst().BeginGpuFrame();
     }
@@ -242,7 +240,7 @@ void Game::Render() {
     switch (gameState) {
         case GameState::Playing:
             {
-                ASCIIgL::PROFILE_SCOPE("Render.RenderPlaying");
+                PROFILE_SCOPE("Render.RenderPlaying");
                  RenderPlaying();
             }
             break;
@@ -250,22 +248,22 @@ void Game::Render() {
 
     // Execute queued GPU draws in two passes (opaque, then transparent)
     {
-        ASCIIgL::PROFILE_SCOPE("Render.FlushDraws");
+        PROFILE_SCOPE("Render.FlushDraws");
         ASCIIgL::Renderer::GetInst().FlushDraws();  
     }
 
     {
-        ASCIIgL::PROFILE_SCOPE("Render.EndGpuFrame");
+        PROFILE_SCOPE("Render.EndGpuFrame");
         ASCIIgL::Renderer::GetInst().EndGpuFrame();
     }
 
     {
-        ASCIIgL::PROFILE_SCOPE("Render.PixelBufferDraws");
+        PROFILE_SCOPE("Render.PixelBufferDraws");
         ASCIIgL::Renderer::GetInst().DrawScreenBorderPxBuff(0xF);
     }
 
     {
-        ASCIIgL::PROFILE_SCOPE("Render.PixelBufferOutput");
+        PROFILE_SCOPE("Render.PixelBufferOutput");
         ASCIIgL::Screen::GetInst().OutputBuffer();
     }
 }
@@ -300,8 +298,8 @@ bool Game::LoadTextures() {
     const glm::ivec3 EmeraldGreenHue  = glm::ivec3(10, 15, 12); // green/cyan tilt
     const glm::ivec3 ElectricMagentaHue = glm::ivec3(15, 10, 15); // magenta/purple
 
-    float darkL  = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(22, 22, 22));
-    float lightL = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(210, 210, 210));
+    float darkL  = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(30, 30, 30));
+    float lightL = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(212, 212, 212));
 
     // Build monochrome mapping from the current screen palette if possible.
     ASCIIgL::MonochromeMapping monoMap;

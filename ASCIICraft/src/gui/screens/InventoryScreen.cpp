@@ -6,7 +6,7 @@
 
 namespace gui {
 
-InventoryScreen::InventoryScreen(entt::registry& registry, EventBus& eventBus, entt::entity playerEntity,
+InventoryScreen::InventoryScreen(entt::registry& registry, ASCIIgL::EventBus& eventBus, entt::entity playerEntity,
                                   std::shared_ptr<ASCIIgL::Mesh> panelQuad,
                                   std::shared_ptr<ASCIIgL::Texture> inventoryTexture)
     : m_registry(&registry)

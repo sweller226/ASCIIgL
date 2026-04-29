@@ -4,7 +4,7 @@
 
 namespace gui {
 
-PlayHUDScreen::PlayHUDScreen(entt::registry& registry, EventBus& eventBus, entt::entity playerEntity)
+PlayHUDScreen::PlayHUDScreen(entt::registry& registry, ASCIIgL::EventBus& eventBus, entt::entity playerEntity)
     : m_registry(&registry)
     , m_eventBus(&eventBus)
 {

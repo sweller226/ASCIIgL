@@ -3,6 +3,8 @@
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/engine/MipChain.hpp>
 #include <ASCIIgL/engine/MonochromeMapping.hpp>
+
+#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image/stb_image.h>
 #include <algorithm>
 

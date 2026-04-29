@@ -14,7 +14,7 @@
 
 namespace ecs::systems {
 
-PlacingSystem::PlacingSystem(entt::registry& registry, EventBus& eventBus)
+PlacingSystem::PlacingSystem(entt::registry& registry, ASCIIgL::EventBus& eventBus)
     : m_registry(registry)
     , m_eventBus(eventBus)
 {}

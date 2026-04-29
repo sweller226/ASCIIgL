@@ -31,7 +31,7 @@
 #include <ASCIICraft/ecs/systems/blockupdate/PlacingSystem.hpp>
 
 // event systems
-#include <ASCIICraft/events/EventBus.hpp>
+#include <ASCIIgL/util/EventBus.hpp>
 
 // events
 #include <ASCIICraft/events/BreakBlockEvent.hpp>
@@ -64,7 +64,7 @@ public:
 private:
     // Resources
     entt::registry registry;
-    EventBus eventBus;
+    ASCIIgL::EventBus eventBus;
     
     // ecs systems (inputSystem first; gameplayInputFilter wraps it for movement/camera so GUI blocks input there)
     input::InputSystem inputSystem;

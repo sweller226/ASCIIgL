@@ -8,14 +8,9 @@
 
 #include <glm/glm.hpp>
 
-#include <ASCIIgL/renderer/Shader.hpp>
+#include <ASCIIgL/renderer/UniformLayout.hpp>
 #include <ASCIIgL/renderer/SamplerType.hpp>
 #include <ASCIIgL/engine/TextureArray.hpp>
-
-#ifdef _WIN32
-#include <d3d11.h>
-#include <wrl/client.h>
-#endif
 
 namespace ASCIIgL {
 
@@ -136,6 +131,7 @@ public:
     void UpdateConstantBufferData();
 
 private:
+    class Impl;
     Material();
 
     void SetUniformInternal(const std::string& name, const UniformValue& value);
@@ -149,11 +145,7 @@ private:
     
     // Texture slots
     std::vector<TextureSlot> _textureSlots;
-
-#ifdef _WIN32
-    Microsoft::WRL::ComPtr<ID3D11Buffer> _constantBuffer;
-    bool _constantBufferInitialized = false;
-#endif
+    std::unique_ptr<Impl> _impl;
 };
 
 // =========================================================================

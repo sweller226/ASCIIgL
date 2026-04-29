@@ -1,6 +1,6 @@
 #include <ASCIICraft/ecs/systems/MovementSystem.hpp>
 
-#include <ASCIICraft/events/EventBus.hpp>
+#include <ASCIIgL/util/EventBus.hpp>
 #include <ASCIICraft/events/InputEvents.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
 #include <ASCIIgL/util/Logger.hpp>
@@ -19,7 +19,7 @@
 
 namespace ecs::systems {
 
-MovementSystem::MovementSystem(entt::registry& registry, IInputSource& input, EventBus& eventBus)
+MovementSystem::MovementSystem(entt::registry& registry, IInputSource& input, ASCIIgL::EventBus& eventBus)
     : m_registry(registry)
     , m_input(input)
     , m_eventBus(eventBus)

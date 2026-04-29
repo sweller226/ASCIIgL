@@ -3,12 +3,12 @@
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 #include <ASCIICraft/ecs/components/ItemVisual.hpp>
 #include <ASCIICraft/ecs/data/ItemIndex.hpp>
-#include <ASCIICraft/events/EventBus.hpp>
+#include <ASCIIgL/util/EventBus.hpp>
 #include <ASCIICraft/events/GUIEvents.hpp>
 
 namespace gui {
 
-Slot::Slot(entt::registry& registry, EventBus& eventBus, entt::entity inventoryOwner, int slotIndex)
+Slot::Slot(entt::registry& registry, ASCIIgL::EventBus& eventBus, entt::entity inventoryOwner, int slotIndex)
     : m_registry(registry)
     , m_eventBus(eventBus)
     , m_inventoryOwner(inventoryOwner)

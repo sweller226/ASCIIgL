@@ -1,8 +1,6 @@
 #pragma once
 
 #include <ASCIIgL/renderer/VertFormat.hpp>
-#include <ASCIIgL/engine/Texture.hpp>
-#include <ASCIIgL/engine/TextureArray.hpp>
 
 #include <vector>
 #include <cstddef>
@@ -11,6 +9,8 @@ namespace ASCIIgL {
 
 // Forward declaration
 class Renderer;
+class Texture;
+class TextureArray;
 
 class Mesh // this class represents a mesh with generic vertex data and a vertex format descriptor
 {

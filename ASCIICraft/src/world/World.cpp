@@ -31,14 +31,14 @@ World::~World() {
 
 void World::Update() {
     {
-        ASCIIgL::PROFILE_SCOPE("Update.ChunkManagement");
+        PROFILE_SCOPE("Update.ChunkManagement");
         chunkManager->Update();
     }
 }
 
 void World::Render() {
     {
-        ASCIIgL::PROFILE_SCOPE("RenderWorld");
+        PROFILE_SCOPE("RenderWorld");
         chunkManager->RenderChunks();
     }
 }

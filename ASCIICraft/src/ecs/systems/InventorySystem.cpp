@@ -1,5 +1,5 @@
 #include <ASCIICraft/ecs/systems/InventorySystem.hpp>
-#include <ASCIICraft/events/EventBus.hpp>
+#include <ASCIIgL/util/EventBus.hpp>
 #include <ASCIICraft/events/ItemEvents.hpp>
 #include <ASCIICraft/ecs/factories/ItemFactory.hpp>
 
@@ -7,7 +7,7 @@ namespace ecs::systems {
 
 using namespace ecs::components;
 
-InventorySystem::InventorySystem(entt::registry& registry, EventBus& eventBus) 
+InventorySystem::InventorySystem(entt::registry& registry, ASCIIgL::EventBus& eventBus) 
     : registry(registry), eventBus(eventBus) {}
 
 void InventorySystem::Update() {

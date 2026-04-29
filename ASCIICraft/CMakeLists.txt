@@ -8,6 +8,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
+if(CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_CONFIGURATION_TYPES "FastDebug;Release" CACHE STRING "Build configurations" FORCE)
+endif()
+
 if(MSVC)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /VERBOSE")
 endif()
@@ -18,7 +22,7 @@ endif()
 add_subdirectory(vendor)
 
 # nlohmann/json (header-only, shipped in sibling ASCIIgL project vendor/)
-set(ASCIIgL_NLOHMANN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgL/vendor")
+set(ASCIIgL_NLOHMANN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgL/vendor/nlohmann/include")
 if(NOT TARGET nlohmann_json)
     add_library(nlohmann_json INTERFACE)
     target_include_directories(nlohmann_json INTERFACE
@@ -46,7 +50,7 @@ set(ASCIIgL_VENDOR_DIR "${ASCIIgL_ROOT}/vendor")
 add_subdirectory("${ASCIIgL_VENDOR_DIR}" EXCLUDE_FROM_ALL)
 
 # ---------------------------------------------------------------------------
-# Find the ASCIIgL library (try both release and debug versions)
+# Find the ASCIIgL library (try both release and fastdebug versions)
 # ---------------------------------------------------------------------------
 find_library(ASCIIgL_LIBRARY_RELEASE
     NAMES ASCIIgL
@@ -55,14 +59,14 @@ find_library(ASCIIgL_LIBRARY_RELEASE
     REQUIRED
 )
 
-find_library(ASCIIgL_LIBRARY_DEBUG
-    NAMES ASCIIgL_Debug
+find_library(ASCIIgL_LIBRARY_FASTDEBUG
+    NAMES ASCIIgL_FastDebug ASCIIgL
     PATHS "${ASCIIgL_LIB_DIR}"
     NO_DEFAULT_PATH
 )
 
-if(NOT ASCIIgL_LIBRARY_DEBUG)
-    set(ASCIIgL_LIBRARY_DEBUG ${ASCIIgL_LIBRARY_RELEASE})
+if(NOT ASCIIgL_LIBRARY_FASTDEBUG)
+    set(ASCIIgL_LIBRARY_FASTDEBUG ${ASCIIgL_LIBRARY_RELEASE})
 endif()
 
 # Create imported target for ASCIIgL
@@ -70,11 +74,12 @@ add_library(ASCIIgL STATIC IMPORTED)
 
 set_target_properties(ASCIIgL PROPERTIES
     IMPORTED_LOCATION_RELEASE "${ASCIIgL_LIBRARY_RELEASE}"
-    IMPORTED_LOCATION_DEBUG "${ASCIIgL_LIBRARY_DEBUG}"
+    IMPORTED_LOCATION_FASTDEBUG "${ASCIIgL_LIBRARY_FASTDEBUG}"
     INTERFACE_INCLUDE_DIRECTORIES "${ASCIIgL_INCLUDE_DIR}"
     INTERFACE_LINK_DIRECTORIES "${ASCIIgL_LIB_DIR}"
-    # Reference the namespaced glm target provided by ASCIIgL's vendor CMake
-    INTERFACE_LINK_LIBRARIES "glm::glm"
+    # Match ASCIIgL's public link interface so consumers of the packaged static lib
+    # inherit the required system libraries without relying on header pragmas.
+    INTERFACE_LINK_LIBRARIES "glm::glm;winmm;dwrite;d3d11;d3dcompiler;dxgi"
     IMPORTED_LOCATION_MINSIZEREL     "${ASCIIgL_LIBRARY_RELEASE}"
     IMPORTED_LOCATION_RELWITHDEBINFO "${ASCIIgL_LIBRARY_RELEASE}"
 )
@@ -99,6 +104,7 @@ file(GLOB_RECURSE ASCIICraft_HEADERS
 add_executable(ASCIICraft
     ${ASCIICraft_SOURCES}
     ${ASCIICraft_HEADERS}
+    "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgL/vendor/tracy/public/TracyClient.cpp"
 )
 
 # ---------------------------------------------------------------------------
@@ -106,6 +112,8 @@ add_executable(ASCIICraft
 # ---------------------------------------------------------------------------
 target_include_directories(ASCIICraft PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgL/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgL/vendor/tracy/public"
 )
 
 # ---------------------------------------------------------------------------
@@ -132,7 +140,7 @@ endif()
 
 # Platform-specific: prevent Windows min/max macros from breaking std::min/std::max
 if(WIN32)
-    target_compile_definitions(ASCIICraft PRIVATE NOMINMAX)
+    target_compile_definitions(ASCIICraft PRIVATE NOMINMAX TRACY_ENABLE)
     target_link_libraries(ASCIICraft PRIVATE winmm)
 endif()
 
@@ -140,7 +148,7 @@ endif()
 # Output Configuration
 # ---------------------------------------------------------------------------
 set_target_properties(ASCIICraft PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_BINARY_DIR}/bin/Debug"
+    RUNTIME_OUTPUT_DIRECTORY_FASTDEBUG   "${CMAKE_BINARY_DIR}/bin/FastDebug"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release"
 )
 

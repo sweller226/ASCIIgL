@@ -4,19 +4,18 @@
 
 #include <ASCIICraft/ecs/systems/ISystem.hpp>
 
-// Forward declaration
-class EventBus;
+namespace ASCIIgL { class EventBus; }
 
 namespace ecs::systems {
 
 class DroppedItemSystem : public ISystem {
 public:
-    DroppedItemSystem(entt::registry& registry, EventBus &eventBus);
+    DroppedItemSystem(entt::registry& registry, ASCIIgL::EventBus &eventBus);
     void Update() override;
 
 private:
     entt::registry& registry;
-    EventBus &eventBus;
+    ASCIIgL::EventBus &eventBus;
 
     void DespawnItems(const float dt);
     void SpinItems(const float dt);

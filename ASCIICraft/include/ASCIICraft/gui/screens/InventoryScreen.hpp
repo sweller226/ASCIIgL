@@ -6,7 +6,7 @@
 
 namespace ASCIIgL { class Texture; class Mesh; }
 namespace ecs::systems { class RenderSystem; }
-class EventBus;
+namespace ASCIIgL { class EventBus; }
 
 namespace gui {
 
@@ -14,7 +14,7 @@ namespace gui {
 class InventoryScreen : public Screen {
 public:
     /// panelQuad: one full-screen-sized quad; inventoryTexture is the single inventory PNG (Minecraft-style).
-    InventoryScreen(entt::registry& registry, EventBus& eventBus, entt::entity playerEntity,
+    InventoryScreen(entt::registry& registry, ASCIIgL::EventBus& eventBus, entt::entity playerEntity,
                    std::shared_ptr<ASCIIgL::Mesh> panelQuad,
                    std::shared_ptr<ASCIIgL::Texture> inventoryTexture = nullptr);
 
@@ -23,7 +23,7 @@ public:
 
 private:
     entt::registry* m_registry = nullptr;
-    EventBus* m_eventBus = nullptr;
+    ASCIIgL::EventBus* m_eventBus = nullptr;
     std::shared_ptr<ASCIIgL::Texture> m_inventoryTexture;
 };
 

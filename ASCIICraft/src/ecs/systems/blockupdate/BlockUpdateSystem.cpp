@@ -43,7 +43,7 @@ void RefreshFenceNeighbors(
 
 namespace ecs::systems {
 
-    BlockUpdateSystem::BlockUpdateSystem(entt::registry &registry, EventBus& eventBus) 
+    BlockUpdateSystem::BlockUpdateSystem(entt::registry &registry, ASCIIgL::EventBus& eventBus) 
         : m_registry(registry)
         , eventBus(eventBus) {}
 

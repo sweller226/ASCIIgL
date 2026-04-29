@@ -11,7 +11,7 @@
 
 namespace ecs::systems {
 
-MiningSystem::MiningSystem(entt::registry& registry, EventBus& eventBus)
+MiningSystem::MiningSystem(entt::registry& registry, ASCIIgL::EventBus& eventBus)
     : m_registry(registry)
     , m_eventBus(eventBus)
 {}

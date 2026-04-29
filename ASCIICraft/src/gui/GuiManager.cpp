@@ -5,7 +5,7 @@
 
 namespace gui {
 
-GuiManager::GuiManager(entt::registry& registry, EventBus& eventBus, IInputSource& input)
+GuiManager::GuiManager(entt::registry& registry, ASCIIgL::EventBus& eventBus, IInputSource& input)
     : m_registry(registry)
     , m_eventBus(eventBus)
     , m_input(input)
