@@ -29,7 +29,6 @@
 #include <ASCIICraft/world/block/models/WaterModelBuilder.hpp>
 #include <ASCIICraft/ecs/data/ItemIndex.hpp>
 
-#include <ASCIICraft/gui/GuiMeshes.hpp>
 #include <ASCIICraft/gui/screens/PlayHUDScreen.hpp>
 #include <ASCIICraft/gui/screens/InventoryScreen.hpp>
 
@@ -184,9 +183,6 @@ void Game::Update() {
 
     for ([[maybe_unused]] const auto& e : eventBus.view<events::ToggleInventoryEvent>()) {
         // Temporary behavior: allow close-only; ignore requests that would open inventory.
-        if (guiManager.IsInventoryOpen()) {
-            guiManager.ToggleInventoryScreen();
-        }
     }
     for ([[maybe_unused]] const auto& e : eventBus.view<events::QuitRequestedEvent>()) {
         ASCIIgL::Logger::Info("Quit action detected. Exiting game...");
@@ -325,6 +321,18 @@ bool Game::LoadTextures() {
         return false;
     }
 
+    constexpr int kFontGlyphTileSize = 8; // Minecraft default font atlas uses 8x8 glyph cells.
+    auto fontTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(
+        "res/font/default.png",
+        kFontGlyphTileSize,
+        "defaultFontTextureArray",
+        monoMap
+    );
+    if (!fontTextureArray || !fontTextureArray->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to load default bitmap font texture atlas");
+        return false;
+    }
+
     return true;
 }
 
@@ -436,7 +444,7 @@ bool Game::LoadResources() {
         guiMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
         guiMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
     }
-    // Register material (textures are set per-item via AddGuiItem texture parameter)
+    // Register material (textures are set per-item via AddGUIItem texture parameter)
     ASCIIgL::MaterialLibrary::GetInst().Register("guiMaterial", std::move(guiMaterial));
 
     // GUI item material: PosUVLayerLight + texture array for item icons in slots
@@ -483,22 +491,6 @@ bool Game::LoadResources() {
         guiItemMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
     }
 
-    auto* terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get();
-    guiItemMaterial->SetTextureArray(0, terrainTextureArray);
-    ASCIIgL::MaterialLibrary::GetInst().Register("guiItemMaterial", std::move(guiItemMaterial));
-
-    // OOP GUI: create play + inventory screens after textures/materials exist (CreateQuadMesh needs terrainTextureArray)
-    entt::entity player = ecs::components::GetPlayerEntity(registry);
-    if (player != entt::null) {
-        auto guiQuad = gui::CreateQuadMesh();
-        guiManager.SetPlayScreen(std::make_unique<gui::PlayHUDScreen>(
-            registry, eventBus, player));
-        auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().GetTexture("inventoryTexture");
-        if (!inventoryTexture)
-            ASCIIgL::Logger::Warning("LoadResources: inventoryTexture is null; inventory GUI will have no texture");
-        guiManager.SetInventoryScreen(std::make_unique<gui::InventoryScreen>(
-            registry, eventBus, player, guiQuad, inventoryTexture));
-    }
 
     ASCIIgL::Logger::Info("Resources loaded successfully");
     return true;

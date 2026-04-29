@@ -9,6 +9,7 @@ PlayHUDScreen::PlayHUDScreen(entt::registry& registry, ASCIIgL::EventBus& eventB
     , m_eventBus(&eventBus)
 {
     blocksInput = false;
+    name = "guiscreen:playHud";
 
     constexpr int slots = 9;
     constexpr float slotSize = 32.0f;

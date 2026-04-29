@@ -43,7 +43,7 @@ void Panel::Update(float dt) {
 void Panel::Draw(::ecs::systems::RenderSystem& renderSystem) const {
     if (!visible) return;
     if (backgroundMesh && backgroundMaterial)
-        renderSystem.AddGuiItem(screenPosition, size, layer, backgroundMesh, backgroundMaterial);
+        // renderSystem.AddGUIItem(screenPosition, size, layer, backgroundMesh, backgroundMaterial);
     for (const auto& c : children)
         c->Draw(renderSystem);
 }

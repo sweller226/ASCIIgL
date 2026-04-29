@@ -20,7 +20,7 @@ void Slot::Draw(::ecs::systems::RenderSystem& renderSystem) const {
 
     // Slots don't have background meshes in current design, but if they did, they'd use a material here
     // if (m_slotBackgroundMesh && m_slotBackgroundMaterial)
-    //     renderSystem.AddGuiItem(screenPosition, size, layer, m_slotBackgroundMesh, m_slotBackgroundMaterial);
+    //     renderSystem.AddGUIItem(screenPosition, size, layer, m_slotBackgroundMesh, m_slotBackgroundMaterial);
 
     if (m_inventoryOwner == entt::null || !m_registry.valid(m_inventoryOwner)) return;
 
@@ -41,7 +41,7 @@ void Slot::Draw(::ecs::systems::RenderSystem& renderSystem) const {
 
     // Item icons use guiItemMaterial (texture array already set)
     auto guiItemMat = ASCIIgL::MaterialLibrary::GetInst().Get("guiItemMaterial");
-    renderSystem.AddGuiItem(screenPosition, size, layer + 1, visual->mesh, guiItemMat, "guiItemMaterial");
+    // renderSystem.AddGUIItem(screenPosition, size, layer + 1, visual->mesh, guiItemMat, "guiItemMaterial");
 }
 
 void Slot::OnClicked(int mouseButton, bool shift) {

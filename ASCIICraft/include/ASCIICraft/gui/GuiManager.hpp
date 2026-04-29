@@ -8,7 +8,8 @@
 
 #include <entt/entt.hpp>
 
-#include <ASCIICraft/gui/Screen.hpp>
+#include <ASCIICraft/gui/GUISurfaceLibrary.hpp>
+#include <ASCIICraft/gui/GUIScreen.hpp>
 #include <ASCIICraft/input/IInputSource.hpp>
 
 namespace ASCIIgL { class EventBus; }
@@ -19,16 +20,12 @@ namespace gui {
 
 /// Central OOP GUI: screen stack, cursor, and 2D camera.
 /// Game calls Update(), then Draw(renderSystem) to add GUI items directly to RenderSystem.
-class GuiManager {
+class GUIManager {
 public:
-    GuiManager(entt::registry& registry, ASCIIgL::EventBus& eventBus, IInputSource& input);
+    GUIManager(entt::registry& registry, ASCIIgL::EventBus& eventBus, IInputSource& input);
 
     void SetScreenSize(glm::vec2 size);
     glm::vec2 GetScreenSize() const { return m_screenSize; }
-
-    void SetPlayScreen(std::unique_ptr<Screen> screen);
-    void SetInventoryScreen(std::unique_ptr<Screen> screen);
-    void ToggleInventoryScreen();
 
     void Update();
     /// Adds GUI items directly to RenderSystem. Call after RenderSystem::BeginFrame(), before RenderSystem::Render().
@@ -38,13 +35,14 @@ public:
     ASCIIgL::Camera2D* GetCamera2D() { return m_guiCamera.get(); }
     const ASCIIgL::Camera2D* GetCamera2D() const { return m_guiCamera.get(); }
 
-    bool IsBlockingInput() const;
     /// True when the inventory screen is on the stack (e.g. after pressing E).
-    bool IsInventoryOpen() const;
+    bool IsBlockingInput() const;
     glm::vec2 GetCursorPosition() const { return m_cursorPosition; }
+    GUISurfaceLibrary& GetMeshLibrary() { return m_meshLibrary; }
+    const GUISurfaceLibrary& GetMeshLibrary() const { return m_meshLibrary; }
 
 private:
-    void PushScreen(Screen* screen);
+    void PushScreen(GUIScreen* screen);
     void PopScreen();
 
     entt::registry& m_registry;
@@ -55,12 +53,11 @@ private:
     glm::vec2 m_cursorPosition{0.0f, 0.0f};
     glm::vec2 m_cursorSize{4.0f, 4.0f};
     float m_cursorMoveSpeed = 8.0f;
-
-    std::unique_ptr<Screen> m_playScreen;
-    std::unique_ptr<Screen> m_inventoryScreen;
-    std::vector<Screen*> m_screenStack;
+    
+    std::vector<GUIScreen*> m_screenStack;
 
     std::unique_ptr<ASCIIgL::Camera2D> m_guiCamera;
+    GUISurfaceLibrary m_meshLibrary;
 };
 
 } // namespace gui

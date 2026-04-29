@@ -5,7 +5,7 @@
 
 /// Wraps the real input source and blocks all gameplay input when GUI is active.
 /// Pass this to MovementSystem and CameraSystem so they see "no input" when the GUI is open,
-/// while GuiManager continues to use the real InputSystem for cursor and clicks.
+/// while GUIManager continues to use the real InputSystem for cursor and clicks.
 class GameplayInputFilter : public IInputSource {
 public:
     explicit GameplayInputFilter(input::InputSystem& inputSystem)

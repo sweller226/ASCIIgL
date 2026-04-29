@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ASCIICraft/gui/Screen.hpp>
+#include <ASCIICraft/gui/GUIScreen.hpp>
 #include <entt/entt.hpp>
 #include <memory>
 
@@ -9,7 +9,7 @@ namespace ASCIIgL { class EventBus; }
 namespace gui {
 
 /// Non-blocking play HUD: hotbar (9 slots) at bottom center.
-class PlayHUDScreen : public Screen {
+class PlayHUDScreen : public GUIScreen {
 public:
     PlayHUDScreen(entt::registry& registry, ASCIIgL::EventBus& eventBus, entt::entity playerEntity);
 

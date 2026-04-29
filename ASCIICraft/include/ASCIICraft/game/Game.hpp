@@ -23,7 +23,7 @@
 #include <ASCIICraft/input/GameplayInputFilter.hpp>
 #include <ASCIICraft/ecs/systems/RenderSystem.hpp>
 #include <ASCIICraft/ecs/systems/PhysicsSystem.hpp>
-#include <ASCIICraft/gui/GuiManager.hpp>
+#include <ASCIICraft/gui/GUIManager.hpp>
 
 // block update systems
 #include <ASCIICraft/ecs/systems/blockupdate/BlockUpdateSystem.hpp>
@@ -74,7 +74,7 @@ private:
     ecs::systems::PhysicsSystem physicsSystem;
     ecs::systems::RenderSystem renderSystem;
 
-    gui::GuiManager guiManager;
+    gui::GUIManager guiManager;
 
     // block updates
     ecs::systems::BlockUpdateSystem blockUpdateSystem;

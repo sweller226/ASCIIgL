@@ -1,8 +1,10 @@
 #include <ASCIICraft/ecs/systems/RenderSystem.hpp>
+
 #include <glm/gtc/matrix_transform.hpp>
+
 #include <ASCIIgL/renderer/Material.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
-#include <ASCIIgL/renderer/Shader.hpp>   // UniformDescriptor, UniformValue
+#include <ASCIIgL/renderer/Shader.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 
 namespace ecs::systems {
@@ -36,15 +38,11 @@ namespace ecs::systems {
         auto view = m_registry.view<components::Transform, components::Renderable>();
 
         for (auto [ent, t, r] : view.each()) {
-            auto &t = view.get<components::Transform>(ent);
-            auto &r = view.get<components::Renderable>(ent);
-
             if (!r.visible || !r.mesh) continue;
 
             // need to do frustum culling
 
             DrawItem item;
-            item.entity = ent;
             item.mesh = r.mesh;
             item.material = nullptr; // ECS entities don't use materials yet
             item.materialName = "";  // Will use default material
@@ -59,15 +57,11 @@ namespace ecs::systems {
         }
     }
 
-    void RenderSystem::AddGuiItem(glm::vec2 position, glm::vec2 size, int layer,
-                                   std::shared_ptr<ASCIIgL::Mesh> mesh,
-                                   std::shared_ptr<ASCIIgL::Material> material,
-                                   const std::string& materialName) {
-        if (!mesh) return;
+    void RenderSystem::AddGUIItem(glm::vec2 position, glm::vec2 size, int layer, gui::GUISurface guiSurface, const std::string& materialName) {
+        if (!guiSurface.mesh) return;
         DrawItem item;
-        item.entity = entt::null;
-        item.mesh = std::move(mesh);
-        item.material = std::move(material);
+        item.mesh = std::move(guiSurface.mesh);
+        item.material = std::move(guiSurface.material);
         item.materialName = materialName;
         // Widget layout gives top-left; quad is ±1 (extent 2), so scale by half-size then translate by center
         // Use z=0 for 2D GUI (layer is only used for draw order, not depth)

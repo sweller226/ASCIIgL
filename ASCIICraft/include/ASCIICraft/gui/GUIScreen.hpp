@@ -10,8 +10,9 @@ namespace gui {
 namespace ecs::systems { class RenderSystem; }
 
 /// Root container for a full screen. Has blocksInput flag; when true, gameplay input is disabled.
-class Screen : public Panel {
-public:
+class GUIScreen : public Panel {
+public: 
+    std::string name;
     bool blocksInput = false;
 
     /// Called each frame for layout (screen size already set on manager).
