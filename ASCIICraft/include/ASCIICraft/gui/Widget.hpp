@@ -35,7 +35,7 @@ public:
     virtual const Widget* HitTest(glm::vec2 point) const;
 
     virtual void Update(float dt) { (void)dt; }
-    virtual void Draw(::ecs::systems::RenderSystem& renderSystem) const;
+    virtual void Draw(::ecs::systems::RenderSystem& ecsRenderSystem) const;
 
     /// Set parent for layout (used by Panel::AddChild). Protected so only containers set it.
     void SetParent(Widget* p) { parent = p; }

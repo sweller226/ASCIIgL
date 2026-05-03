@@ -14,26 +14,20 @@
 
 namespace ASCIIgL { class EventBus; }
 
-namespace ecs::systems { class RenderSystem; }
-
 namespace gui {
 
 /// Central OOP GUI: screen stack, cursor, and 2D camera.
-/// Game calls Update(), then Draw(renderSystem) to add GUI items directly to RenderSystem.
+/// Game calls Update(), then Draw(ecsRenderSystem) to add GUI items directly to RenderSystem.
 class GUIManager {
 public:
     GUIManager(entt::registry& registry, ASCIIgL::EventBus& eventBus, IInputSource& input);
 
-    void SetScreenSize(glm::vec2 size);
     glm::vec2 GetScreenSize() const { return m_screenSize; }
 
     void Update();
-    /// Adds GUI items directly to RenderSystem. Call after RenderSystem::BeginFrame(), before RenderSystem::Render().
-    void Draw(::ecs::systems::RenderSystem& renderSystem);
+    void Render();
 
-    /// For RenderSystem. May be null until SetScreenSize has been called.
-    ASCIIgL::Camera2D* GetCamera2D() { return m_guiCamera.get(); }
-    const ASCIIgL::Camera2D* GetCamera2D() const { return m_guiCamera.get(); }
+    void SetActive2DCamera(ASCIIgL::Camera2D* camera2D) { m_guiCamera = camera2D; };
 
     /// True when the inventory screen is on the stack (e.g. after pressing E).
     bool IsBlockingInput() const;
@@ -56,7 +50,7 @@ private:
     
     std::vector<GUIScreen*> m_screenStack;
 
-    std::unique_ptr<ASCIIgL::Camera2D> m_guiCamera;
+    ASCIIgL::Camera2D* m_guiCamera;
     GUISurfaceLibrary m_meshLibrary;
 };
 

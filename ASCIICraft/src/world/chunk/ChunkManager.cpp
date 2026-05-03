@@ -253,7 +253,7 @@ void ChunkManager::ApplyEditsToChunk(Chunk* c, const std::vector<CrossChunkEdit>
 
 void ChunkManager::ProcessMetaBucketExpiry() {
     PROFILE_SCOPE("Chunk.UpdateChunkLoading.MetaBuckets");
-    const uint32_t now = NowSeconds();
+    const uint32_t now = util::NowSeconds();
     constexpr int MAX_META_SAVES_PER_FRAME = 4;
     int metaSaveCount = 0;
 
@@ -665,7 +665,7 @@ void ChunkManager::SetBlockState(int x, int y, int z, uint32_t stateId) {
             metaTimeTracker.push(chunkCoord);
         } else {
             it->second.edits.push_back(crossChunkEdit);
-            it->second.lastTouched = NowSeconds();
+            it->second.lastTouched = util::NowSeconds();
         }
     } else {
         chunk->SetBlockState(localPos.x, localPos.y, localPos.z, stateId);

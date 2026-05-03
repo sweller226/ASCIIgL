@@ -40,12 +40,12 @@ void Panel::Update(float dt) {
         c->Update(dt);
 }
 
-void Panel::Draw(::ecs::systems::RenderSystem& renderSystem) const {
+void Panel::Draw(::ecs::systems::RenderSystem& ecsRenderSystem) const {
     if (!visible) return;
     if (backgroundMesh && backgroundMaterial)
-        // renderSystem.AddGUIItem(screenPosition, size, layer, backgroundMesh, backgroundMaterial);
+        // ecsRenderSystem.AddGUIItem(screenPosition, size, layer, backgroundMesh, backgroundMaterial);
     for (const auto& c : children)
-        c->Draw(renderSystem);
+        c->Draw(ecsRenderSystem);
 }
 
 } // namespace gui

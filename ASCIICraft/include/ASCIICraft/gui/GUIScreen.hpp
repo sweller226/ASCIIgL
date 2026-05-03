@@ -20,7 +20,7 @@ public:
     /// Called each frame for update. Default runs Panel::Update(dt) for the widget tree.
     virtual void OnUpdate(float dt);
     /// Called to collect draw items.
-    virtual void OnDraw(::ecs::systems::RenderSystem& renderSystem) const;
+    virtual void OnDraw(::ecs::systems::RenderSystem& ecsRenderSystem) const;
     /// Optional: key press (action id). Return true if consumed.
     virtual bool OnKey(const std::string& actionId) { (void)actionId; return false; }
     /// Optional: cursor moved to screen position.

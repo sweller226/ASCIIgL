@@ -269,6 +269,41 @@ struct PosUVLayerLight {
     void SetLight(float light) { data[6] = light; }
 };
 
+struct PosColor {
+    float data[4]; // XYZ + RGBA (packed UByte4Normalized)
+
+    float X() const { return data[0]; }
+    float Y() const { return data[1]; }
+    float Z() const { return data[2]; }
+
+    glm::vec2 GetXY()  const { return glm::vec2(data[0], data[1]); }
+    glm::vec3 GetXYZ() const { return glm::vec3(data[0], data[1], data[2]); }
+
+    // Color is packed as 4 normalized bytes into one float
+    uint32_t GetColorPacked() const {
+        uint32_t packed;
+        std::memcpy(&packed, &data[3], sizeof(uint32_t));
+        return packed;
+    }
+
+    void SetXY(const glm::vec2 v)  { data[0] = v.x; data[1] = v.y; }
+    void SetXYZ(const glm::vec3 v) { data[0] = v.x; data[1] = v.y; data[2] = v.z; }
+
+    void SetColor(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+        uint32_t packed = (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | ((uint32_t)a << 24);
+        std::memcpy(&data[3], &packed, sizeof(uint32_t));
+    }
+
+    void SetColor(const glm::vec4& normalized) {
+        SetColor(
+            static_cast<uint8_t>(normalized.r * 255.0f),
+            static_cast<uint8_t>(normalized.g * 255.0f),
+            static_cast<uint8_t>(normalized.b * 255.0f),
+            static_cast<uint8_t>(normalized.a * 255.0f)
+        );
+    }
+};
+
 } // namespace VertStructs
 
 } // namespace ASCIIgL

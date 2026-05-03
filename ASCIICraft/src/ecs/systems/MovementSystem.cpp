@@ -15,7 +15,8 @@
 #include <ASCIICraft/ecs/components/PhysicsBody.hpp>
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/PlayerMode.hpp>
-#include <ASCIICraft/util/Util.hpp>
+
+#include <ASCIICraft/util/TimeUtil.hpp>
 
 namespace ecs::systems {
 
@@ -124,7 +125,7 @@ void MovementSystem::ProcessMovementInput() {
     }
 
     const float dt = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
-    const float currentTime = NowSeconds();
+    const float currentTime = util::NowSeconds();
 
     // --- input -> desired horizontal direction ---
     glm::vec3 forward = cam->camera.getCamFrontNoY();

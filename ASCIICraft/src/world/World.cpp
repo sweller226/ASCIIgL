@@ -12,7 +12,7 @@
 #include <ASCIIgL/renderer/Material.hpp>
 
 #include <ASCIICraft/world/chunk/ChunkRegion.hpp>
-#include <ASCIICraft/util/Util.hpp>
+#include <ASCIICraft/util/TimeUtil.hpp>
 
 #include <entt/entt.hpp>
 

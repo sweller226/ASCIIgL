@@ -23,6 +23,10 @@
 #include <ASCIICraft/input/GameplayInputFilter.hpp>
 #include <ASCIICraft/ecs/systems/RenderSystem.hpp>
 #include <ASCIICraft/ecs/systems/PhysicsSystem.hpp>
+#include <ASCIICraft/ecs/systems/LifetimeSystem.hpp>
+#include <ASCIICraft/ecs/systems/ParticleSystem.hpp>
+
+// GUI
 #include <ASCIICraft/gui/GUIManager.hpp>
 
 // block update systems
@@ -72,7 +76,9 @@ private:
     ecs::systems::MovementSystem movementSystem;
     ecs::systems::CameraSystem cameraSystem;
     ecs::systems::PhysicsSystem physicsSystem;
-    ecs::systems::RenderSystem renderSystem;
+    ecs::systems::RenderSystem ecsRenderSystem;
+    ecs::systems::LifetimeSystem lifetimeSystem;
+    ecs::systems::ParticleSystem particleSystem;
 
     gui::GUIManager guiManager;
 
@@ -84,6 +90,8 @@ private:
     // ecs factories
     ecs::factories::PlayerFactory playerFactory;
 
+    std::unique_ptr<ASCIIgL::Camera2D> guiCamera;
+
     // Game state
     GameState gameState;
     std::function<bool()> shouldExternalExit;
@@ -91,8 +99,12 @@ private:
     /// Prevents duplicate teardown if \ref Shutdown is invoked from multiple paths (e.g. destructor + explicit call).
     bool shutdownInvoked_ = false;
     
-    // Private methods
+    // Loading
     bool LoadResources();
+    bool LoadTerrainMaterial();
+    bool LoadGUIMaterial();
+    bool LoadGUIItemMaterial();
+
     bool LoadTextures();
     void InitializeWorld();
     void InitializePlayer();

@@ -11,16 +11,6 @@ GUIManager::GUIManager(entt::registry& registry, ASCIIgL::EventBus& eventBus, II
     , m_input(input)
 {}
 
-void GUIManager::SetScreenSize(glm::vec2 size) {
-    m_screenSize = size;
-    const auto w = static_cast<unsigned int>(size.x);
-    const auto h = static_cast<unsigned int>(size.y);
-    if (m_guiCamera)
-        m_guiCamera->setScreenDimensions(w, h);
-    else
-        m_guiCamera = std::make_unique<ASCIIgL::Camera2D>(glm::vec2(0.0f, 0.0f), w, h);
-}
-
 void GUIManager::PushScreen(GUIScreen* screen) {
     if (screen)
         m_screenStack.push_back(screen);
@@ -65,9 +55,9 @@ void GUIManager::Update() {
     }
 }
 
-void GUIManager::Draw(::ecs::systems::RenderSystem& renderSystem) {
-    for (GUIScreen* screen : m_screenStack)
-        screen->OnDraw(renderSystem);
+void GUIManager::Render() {
+    for (GUIScreen* screen : m_screenStack) {}
+        // screen->OnDraw();`````
 }
 
 bool GUIManager::IsBlockingInput() const {

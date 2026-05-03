@@ -36,6 +36,19 @@ namespace PaletteUtil {
 
     // Convert linear RGB (0–1) → sRGB 0–255
     glm::vec3 Linear1ToSrgb255(const glm::vec3& c);
+
+    // -------------------------
+    // sRGB → Linear (RGBA)
+    // -------------------------
+
+    glm::vec4 sRGB1ToLinear1(const glm::vec4& c);
+    glm::vec4 sRGB255ToLinear1(const glm::ivec4& c);
+
+    // -------------------------
+    // Linear → sRGB (RGBA)
+    // -------------------------
+
+    glm::vec4 Linear1ToSrgb255(const glm::vec4& c);
 }
 
 } // namespace ASCIIgL

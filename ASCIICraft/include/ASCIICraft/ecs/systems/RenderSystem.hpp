@@ -36,19 +36,17 @@ public:
     /// Add a GUI item directly to the 2D draw list. Call during GUI drawing phase (after BeginFrame, before Render).
     /// position/size are in screen pixels (top-left origin). Model matrix is built internally.
     /// material: material to use (must have texture already set). If null, uses materialName lookup.
-    void AddGUIItem(glm::vec2 position, glm::vec2 size, int layer,
-                    gui::GUISurface guiSurface,
-                    const std::string& materialName = {});
 
 private:
     struct DrawItem {
         std::shared_ptr<ASCIIgL::Mesh> mesh;
-        std::shared_ptr<ASCIIgL::Material> material;  // Material to use (if null, falls back to materialName)
+        std::shared_ptr<ASCIIgL::Material> material;
         glm::mat4 modelMatrix;
         int32_t layer;
-        std::string materialName;  // Fallback: material name if material is null (e.g. "guiItemMaterial")
+        std::string materialName;
+        std::vector<ASCIIgL::Renderer::UniformOverride> overrides; // per-entity, applied after system uniforms
     };
-
+    
     entt::registry& m_registry;
     components::PlayerCamera* m_active3DCamera = nullptr;
     ASCIIgL::Camera2D* m_active2DCamera = nullptr;

@@ -56,6 +56,19 @@ public:
 		, texture(nullptr)
 		, textureArray(inTexArray) {}
 
+	// Constructor with indices (no texture)
+	Mesh(std::vector<std::byte>&& inVertexData, const VertFormat& inFormat, std::vector<int>&& inIndices)
+		: vertexData(std::move(inVertexData))
+		, indices(std::move(inIndices))
+		, format(inFormat)
+		, texture(nullptr) {}
+
+	// Constructor without indices (no texture)
+	Mesh(std::vector<std::byte>&& inVertexData, const VertFormat& inFormat)
+    : vertexData(std::move(inVertexData))
+    , format(inFormat)
+    , texture(nullptr) {}
+
 	~Mesh();
 
 	// Immutable access to mesh data

@@ -1,5 +1,5 @@
 #include <ASCIICraft/gui/screens/InventoryScreen.hpp>
-#include <ASCIICraft/gui/GUIQuadMeshBuilder.hpp>
+#include <ASCIICraft/util/QuadMeshBuilder.hpp>
 #include <ASCIICraft/gui/Slot.hpp>
 #include <ASCIICraft/gui/Panel.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
@@ -62,8 +62,8 @@ InventoryScreen::InventoryScreen(entt::registry& registry, ASCIIgL::EventBus& ev
     }
 }
 
-void InventoryScreen::OnDraw(::ecs::systems::RenderSystem& renderSystem) const {
-    Panel::Draw(renderSystem);
+void InventoryScreen::OnDraw(::ecs::systems::RenderSystem& ecsRenderSystem) const {
+    Panel::Draw(ecsRenderSystem);
 }
 
 bool InventoryScreen::OnClick(glm::vec2 position, int button) {

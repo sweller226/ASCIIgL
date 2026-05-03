@@ -7,8 +7,8 @@ void GUIScreen::OnUpdate(float dt) {
     Panel::Update(dt);
 }
 
-void GUIScreen::OnDraw(::ecs::systems::RenderSystem& renderSystem) const {
-    Panel::Draw(renderSystem);
+void GUIScreen::OnDraw(::ecs::systems::RenderSystem& ecsRenderSystem) const {
+    Panel::Draw(ecsRenderSystem);
 }
 
 } // namespace gui

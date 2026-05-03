@@ -17,7 +17,7 @@ public:
 
     void SetSlotBackgroundMesh(std::shared_ptr<ASCIIgL::Mesh> mesh) { m_slotBackgroundMesh = std::move(mesh); }
 
-    void Draw(::ecs::systems::RenderSystem& renderSystem) const override;
+    void Draw(::ecs::systems::RenderSystem& ecsRenderSystem) const override;
 
     /// Called when this slot is clicked (from Screen hit-test). Emits SlotClickedEvent.
     void OnClicked(int mouseButton, bool shift);

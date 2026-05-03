@@ -128,7 +128,7 @@ void PlacingSystem::PlayerPlace() {
                 *bsr, *world->GetChunkManager(), baseStateId, rayCast.second, blockplacement::PlacementContext::PlayerPlacement
             );
 
-            PlaceBlockEvent placeEvent;
+            events::PlaceBlockEvent placeEvent;
             placeEvent.stateId = finalizedStateId;
             placeEvent.position = rayCast.second;
             m_eventBus.emit(placeEvent);

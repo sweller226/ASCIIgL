@@ -6,6 +6,8 @@
 
 #include <glm/vec3.hpp>
 
+#include <ASCIIgL/renderer/Renderer.hpp>
+
 namespace ASCIIgL { class Mesh; class Texture; }
 
 namespace ecs::components {
@@ -17,17 +19,16 @@ enum class RenderType : uint8_t {
 };
     
 struct Renderable {
-    // Shared ownership of mesh data. Mesh contains its own GPU cache pointer,
+    // Shared ownership of mesh data. Mesh contains its own GPU cache pointer,\
     // so the component only needs to reference the mesh object.
 
     RenderType renderType{RenderType::NOT_SET};
     std::shared_ptr<ASCIIgL::Mesh> mesh{nullptr};
+    std::shared_ptr<ASCIIgL::Material> material{nullptr};
     int32_t layer{0};
     bool visible{true};
 
-    void SetMesh(std::shared_ptr<ASCIIgL::Mesh> m) {
-        mesh = std::move(m);
-    }
+    std::vector<ASCIIgL::Renderer::UniformOverride> overrides; // per-draw uniform overrides
 };
 
 }

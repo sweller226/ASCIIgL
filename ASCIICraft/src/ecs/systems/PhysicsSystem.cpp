@@ -12,7 +12,8 @@
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 #include <ASCIICraft/ecs/factories/PlayerFactory.hpp>
-#include <ASCIICraft/util/Util.hpp>
+
+#include <ASCIICraft/util/TimeUtil.hpp>
 
 namespace ecs::systems {
 
@@ -249,7 +250,7 @@ void PhysicsSystem::UpdateGroundState(
 
     if (groundPhysics->onGround) {
         // Update lastOnGround if on ground
-        groundPhysics->lastOnGround = NowSeconds();
+        groundPhysics->lastOnGround = util::NowSeconds();
     }
     
     if (groundPhysics->onGround) {

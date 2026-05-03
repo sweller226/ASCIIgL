@@ -19,7 +19,7 @@ public:
                    GUISurfaceLibrary& meshLibrary,
                    std::shared_ptr<ASCIIgL::Texture> inventoryTexture = nullptr);
 
-    void OnDraw(::ecs::systems::RenderSystem& renderSystem) const override;
+    void OnDraw(::ecs::systems::RenderSystem& ecsRenderSystem) const override;
     bool OnClick(glm::vec2 position, int button) override;
 
 private:
