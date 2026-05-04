@@ -22,6 +22,8 @@ private:
 
     void ProcessCameraInput(components::PlayerCamera& cam, float dt);
     void LerpFOV(components::PlayerCamera& cam, components::PlayerController& ctrl, float dt);
+
+    std::string m_lastCardinal;
 };
 
 }

@@ -27,7 +27,7 @@ namespace ecs::systems {
 
         auto& t = m_registry.get<components::Transform>(p_ent);
 
-        EmitAmbientLeafParticles(dt, t);
+        // EmitAmbientLeafParticles(dt, t);
         ProcessSpawnEvents();
         DespawnDeadParticles();
     }
@@ -109,7 +109,7 @@ namespace ecs::systems {
 
                 auto& t = m_registry.emplace<components::Transform>(entity);
                 t.setPosition(e.origin);
-                t.setScale(glm::vec3(PARTICLE_SCALE));
+                t.setScale(e.scale);
 
                 auto& vel = m_registry.emplace<components::Velocity>(entity);
                 vel.linear  = e.velocity;

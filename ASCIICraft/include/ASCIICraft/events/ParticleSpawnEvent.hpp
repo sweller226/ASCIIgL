@@ -14,6 +14,7 @@ struct ParticleSpawnEvent {
     float     damping  = 0.0f;
     float     lifetime = 1.0f;
     int       count    = 1;
+    glm::vec3 scale = glm::vec3(0.125f, 0.125f, 0.125f);
 
     std::shared_ptr<ASCIIgL::Mesh>     mesh;
     std::shared_ptr<ASCIIgL::Material> material;
