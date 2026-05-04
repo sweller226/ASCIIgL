@@ -119,34 +119,30 @@ void PhysicsSystem::IntegrateEntities(float dt) {
     const World* world = GetWorldPtr(m_registry);
     if (!world) return;
 
-    // Process all entities with Transform, Velocity, and Collider
-    auto view = m_registry.view<components::Transform, components::Velocity, components::Collider>();
+    auto view = m_registry.view<components::Transform, components::Velocity>();
     
-    for (auto [ent, t, v, col] : view.each()) {
+    for (auto [ent, t, v] : view.each()) {
         const auto *gravityComp = m_registry.try_get<components::Gravity>(ent);
         const auto *stepComp    = m_registry.try_get<components::StepPhysics>(ent);
         auto *groundComp        = m_registry.try_get<components::GroundPhysics>(ent);
         const auto *flyingComp  = m_registry.try_get<components::FlyingPhysics>(ent);
+        auto *col               = m_registry.try_get<components::Collider>(ent);
 
         const bool canFly = (flyingComp && flyingComp->enabled);
 
-        // Apply gravity if not flying
         if (gravityComp && !canFly) {
             v.linear += gravityComp->acceleration * dt;
         }
 
-        // Don't apply damping to flying entities for instant response
         if (!canFly) {
             v.ApplyDamping(dt);
         }
-        
+
         v.ClampSpeed();
 
-        // Collision resolution only if collider is enabled
-        if (!col.disabled && stepComp && groundComp) {
-            ResolveAABBAgainstWorld(ent, t, col, v, dt, stepComp, groundComp);
+        if (col && !col->disabled && stepComp && groundComp) {
+            ResolveAABBAgainstWorld(ent, t, *col, v, dt, stepComp, groundComp);
         } else {
-            // No collision, just integrate position
             t.setPosition(t.position + v.linear * dt);
         }
     }

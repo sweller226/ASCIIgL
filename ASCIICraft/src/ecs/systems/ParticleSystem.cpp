@@ -3,7 +3,7 @@
 #include <ASCIIgL/engine/FPSClock.hpp>
 
 #include <ASCIICraft/ecs/components/Lifetime.hpp>
-#include <ASCIICraft/ecs/components/ParticleMovement.hpp>
+#include <ASCIICraft/ecs/components/Velocity.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
 #include <ASCIICraft/ecs/components/Renderable.hpp>
 
@@ -28,81 +28,74 @@ namespace ecs::systems {
         auto& t = m_registry.get<components::Transform>(p_ent);
 
         EmitAmbientLeafParticles(dt, t);
-
-        // Update opacity override for all particles based on remaining lifetime
-        auto particleMat = ASCIIgL::MaterialLibrary::GetInst().Get("leafParticleMaterial");
-        const ASCIIgL::UniformDescriptor* opacityDesc = particleMat
-            ? particleMat->GetUniformDescriptor("opacityLevel")
-            : nullptr;
-
-        auto view = m_registry.view<components::ParticleMovement, components::Lifetime, components::Renderable>();
-        for (auto [ent, movement, lifetime, renderable] : view.each()) {
-            float opacity = (lifetime.maxLifetimeSeconds > 0.0f)
-                ? 1.0f - (lifetime.ageSeconds / lifetime.maxLifetimeSeconds)
-                : 1.0f;
-            opacity = std::clamp(opacity, 0.0f, 1.0f);
-
-            renderable.overrides.clear();
-
-            if (opacityDesc) {
-                ASCIIgL::Renderer::UniformOverride ov;
-                ov.desc  = opacityDesc;
-                ov.value = ASCIIgL::UniformValue(opacity);
-                renderable.overrides.push_back(std::move(ov));
-            }
-        }
-
+        ProcessSpawnEvents();
         DespawnDeadParticles();
     }
 
     void ParticleSystem::DespawnDeadParticles() {
-        auto view = m_registry.view<components::ParticleMovement, components::Lifetime>();
+        entt::entity p_ent = components::GetPlayerEntity(m_registry);
+        const glm::vec3 playerPos = (p_ent != entt::null && m_registry.valid(p_ent))
+            ? m_registry.get<components::Transform>(p_ent).position
+            : glm::vec3(0.0f);
 
-        for (auto [ent, movement, lifetime] : view.each()) {
-            if (lifetime.shouldDespawn)
+        constexpr float despawnRadius2 = SPAWN_RADIUS * SPAWN_RADIUS;
+
+        auto view = m_registry.view<components::Velocity, components::Lifetime, components::Transform>();
+
+        for (auto [ent, velocity, lifetime, t] : view.each()) {
+            const glm::vec3 delta = t.position - playerPos;
+            const bool tooFar = glm::dot(delta, delta) > despawnRadius2;
+
+            if (lifetime.shouldDespawn || tooFar) {
                 m_registry.destroy(ent);
+                --m_particleCount;
+            }
         }
     }
 
     void ParticleSystem::EmitAmbientLeafParticles(float dt, components::Transform& playerTransform) {
-        constexpr float spawnInterval  = 0.2f;  // seconds between spawns
-        constexpr float spawnRadius    = 16.0f; // horizontal radius around player
-        constexpr float spawnHeight    = 6.0f;  // max height above player
-        constexpr float leafLifetime   = 4.0f;
-        constexpr float driftSpeed     = 0.4f;  // horizontal float speed
-        constexpr float fallSpeed      = 0.5f;  // downward drift speed
+        if (m_particleCount >= MAX_PARTICLES) return;
 
-        m_ambientTimer += dt;
-        if (m_ambientTimer < spawnInterval) return;
-        m_ambientTimer = 0.0f;
+        int toSpawn = std::min(SPAWN_PER_FRAME, MAX_PARTICLES - m_particleCount);
 
-        // Random position in a disc around the player, above them
-        const float angle  = m_rng.NextFloat() * glm::two_pi<float>();
-        const float radius = m_rng.NextFloat() * spawnRadius;
+        for (int i = 0; i < toSpawn; ++i) {
+            glm::vec3 offset;
+            do {
+                offset.x = (m_rng.NextFloat() - 0.5f) * 2.0f * SPAWN_RADIUS;
+                offset.y = (m_rng.NextFloat() - 0.5f) * SPAWN_HEIGHT;
+                offset.z = (m_rng.NextFloat() - 0.5f) * 2.0f * SPAWN_RADIUS;
+            } while (
+                std::abs(offset.x) < EXCLUSION_RADIUS &&
+                std::abs(offset.y) < EXCLUSION_HEIGHT &&
+                std::abs(offset.z) < EXCLUSION_RADIUS
+            );
 
-        glm::vec3 origin = playerTransform.position;
-        origin.x += std::cos(angle) * radius;
-        origin.z += std::sin(angle) * radius;
-        origin.y += 2.0f + m_rng.NextFloat() * spawnHeight;
+            glm::vec3 origin = playerTransform.position + offset;
+            origin.y = std::clamp(origin.y, MIN_SPAWN_HEIGHT, MAX_SPAWN_HEIGHT);
 
-        // Gentle random horizontal drift + slow fall
-        glm::vec3 velocity = {
-            (m_rng.NextFloat() - 0.5f) * driftSpeed,
-            -fallSpeed * (0.5f + m_rng.NextFloat() * 0.5f),
-            (m_rng.NextFloat() - 0.5f) * driftSpeed
-        };
+            glm::vec3 velocity = {
+                (m_rng.NextFloat() - 0.5f) * DRIFT_SPEED,
+                (m_rng.NextFloat() - 0.5f) * FALL_SPEED,
+                (m_rng.NextFloat() - 0.5f) * DRIFT_SPEED
+            };
 
-        events::ParticleSpawnEvent event;
-        event.origin       = origin;
-        event.velocity     = velocity;
-        event.acceleration = { 0.0f, -0.5f, 0.0f }; // light gravity
-        event.drag         = 0.3f;                    // air resistance for floaty feel
-        event.lifetime     = leafLifetime * (0.7f + m_rng.NextFloat() * 0.3f);
-        event.count        = 1;
-        event.mesh         = m_leafMesh;
-        event.material     = m_leafMaterial;
+            float speed = glm::length(velocity);
+            if (speed < MIN_SPEED && speed > 1e-6f)
+                velocity = (velocity / speed) * MIN_SPEED;
+            else if (speed <= 1e-6f)
+                velocity = glm::vec3(0.0f, -MIN_SPEED, 0.0f);
 
-        eventBus.emit(event);
+            events::ParticleSpawnEvent event;
+            event.origin   = origin;
+            event.velocity = velocity;
+            event.damping  = DAMPING;
+            event.lifetime = LIFETIME * (1.0f - LIFETIME_JITTER + m_rng.NextFloat() * LIFETIME_JITTER);
+            event.count    = 1;
+            event.mesh     = m_leafMesh;
+            event.material = m_leafMaterial;
+
+            eventBus.emit(event);
+        }
     }
 
     void ParticleSystem::ProcessSpawnEvents() {
@@ -116,25 +109,28 @@ namespace ecs::systems {
 
                 auto& t = m_registry.emplace<components::Transform>(entity);
                 t.setPosition(e.origin);
-                t.setScale(glm::vec3(1, 1, 1));
+                t.setScale(glm::vec3(PARTICLE_SCALE));
 
-                auto& movement = m_registry.emplace<components::ParticleMovement>(entity);
-                movement.velocity     = e.velocity;
-                movement.acceleration = e.acceleration;
-                movement.drag         = e.drag;
+                auto& vel = m_registry.emplace<components::Velocity>(entity);
+                vel.linear  = e.velocity;
+                vel.damping = e.damping;
 
                 auto& lifetime = m_registry.emplace<components::Lifetime>(entity);
                 lifetime.maxLifetimeSeconds = e.lifetime;
 
                 auto& renderable = m_registry.emplace<components::Renderable>(entity);
-                renderable.renderType = components::RenderType::ELEM_3D;
-                renderable.mesh       = e.mesh;
-                renderable.material   = e.material;
-                renderable.visible    = true;
+                renderable.renderType      = components::RenderType::ELEM_3D;
+                renderable.mesh            = e.mesh;
+                renderable.material        = e.material;
+                renderable.visible         = true;
+                renderable.backfaceCulling = false;
+                renderable.transparent     = true;
+                renderable.billboard       = true;
+
+                ++m_particleCount;
             }
         }
     }
-
 
     bool ParticleSystem::InitLeafMaterial() {
         auto leafVS = ASCIIgL::Shader::CreateFromSource(LeafParticleShaders::GetVSSource(), ASCIIgL::ShaderType::Vertex);
@@ -170,12 +166,13 @@ namespace ecs::systems {
     }
 
     bool ParticleSystem::Init() {
-        InitLeafMaterial();
+        if (!InitLeafMaterial()) return false;
 
         m_leafMesh = util::QuadMeshBuilder::BuildPosColorQuad(
             ASCIIgL::PaletteUtil::sRGB255ToLinear1(glm::ivec4(34, 139, 34, 255))
         );
 
         m_leafMaterial = ASCIIgL::MaterialLibrary::GetInst().Get("leafParticleMaterial");
+        return true;
     }
 }

@@ -1,4 +1,3 @@
-// ASCIICraft/rendering/LeafParticleShaders.cpp
 #include <ASCIICraft/rendering/LeafParticleShaders.hpp>
 
 namespace LeafParticleShaders {
@@ -8,7 +7,6 @@ const char* GetVSSource() {
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
-    float    opacityLevel;  // 0.0 = fully faded, 1.0 = fully opaque
 };
 
 struct VS_INPUT
@@ -38,7 +36,6 @@ const char* GetPSSource() {
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
-    float    opacityLevel;  // 0.0 = fully faded, 1.0 = fully opaque
 };
 
 struct PS_INPUT
@@ -49,21 +46,15 @@ struct PS_INPUT
 
 float4 main(PS_INPUT input) : SV_TARGET
 {
-    float4 color = input.color;
-    color.a *= opacityLevel;
-
-    // Discard nearly invisible particles to avoid overdraw cost
-    clip(color.a - 0.01f);
-
-    return color;
+    clip(input.color.a - 0.01f);
+    return input.color;
 }
 )";
 }
 
 ASCIIgL::UniformBufferLayout GetUniformLayout() {
     return ASCIIgL::UniformBufferLayout::Builder()
-        .Add("mvp",          ASCIIgL::UniformType::Mat4)
-        .Add("opacityLevel", ASCIIgL::UniformType::Float)
+        .Add("mvp", ASCIIgL::UniformType::Mat4)
         .Build();
 }
 

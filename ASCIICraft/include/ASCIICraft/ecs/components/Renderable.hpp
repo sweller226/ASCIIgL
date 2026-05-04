@@ -27,6 +27,9 @@ struct Renderable {
     std::shared_ptr<ASCIIgL::Material> material{nullptr};
     int32_t layer{0};
     bool visible{true};
+    bool backfaceCulling{true};
+    bool transparent{false};
+    bool billboard{false};
 
     std::vector<ASCIIgL::Renderer::UniformOverride> overrides; // per-draw uniform overrides
 };

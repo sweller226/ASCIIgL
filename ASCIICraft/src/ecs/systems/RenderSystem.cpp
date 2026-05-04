@@ -4,7 +4,6 @@
 
 #include <ASCIIgL/renderer/Material.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
-#include <ASCIIgL/renderer/Shader.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 
 namespace ecs::systems {
@@ -12,98 +11,56 @@ namespace ecs::systems {
 RenderSystem::RenderSystem(entt::registry& registry)
     : m_registry(registry) {}
 
-void RenderSystem::BeginFrame() {
-    m_drawList3D.clear();
-    m_drawList2D.clear();
-}
-
 void RenderSystem::Render() {
-    CollectVisible();
-
-    std::stable_sort(m_drawList3D.begin(), m_drawList3D.end(),
-                     [](const DrawItem& a, const DrawItem& b) { return a.layer < b.layer; });
-    std::stable_sort(m_drawList2D.begin(), m_drawList2D.end(),
-                     [](const DrawItem& a, const DrawItem& b) { return a.layer < b.layer; });
-
-    BatchAndDraw();
-}
-
-void RenderSystem::CollectVisible() {
     auto view = m_registry.view<components::Transform, components::Renderable>();
 
     for (auto [ent, t, r] : view.each()) {
-        if (!r.visible || !r.mesh) continue;
-
-        DrawItem item;
-        item.mesh         = r.mesh;
-        item.material     = r.material;
-        item.materialName = "";
-        item.modelMatrix  = t.getRenderModel();
-        item.layer        = r.layer;
-        item.overrides    = r.overrides; // carry per-entity overrides
-
-        if (r.renderType == components::RenderType::ELEM_3D)
-            m_drawList3D.push_back(std::move(item));
-        else if (r.renderType == components::RenderType::ELEM_2D)
-            m_drawList2D.push_back(std::move(item));
-    }
-}
-
-void RenderSystem::BatchAndDraw() {
-    auto ResolveMaterial = [](const DrawItem& item) -> std::shared_ptr<ASCIIgL::Material> {
-        if (item.material) return item.material;
-        if (!item.materialName.empty())
-            if (auto m = ASCIIgL::MaterialLibrary::GetInst().Get(item.materialName)) return m;
-        return ASCIIgL::MaterialLibrary::GetInst().GetDefault();
-    };
-
-    for (const auto& item : m_drawList3D) {
-        auto mat = ResolveMaterial(item);
-        if (!mat) continue;
+        if (!r.visible || !r.mesh || !r.material) continue;
 
         glm::mat4 mvp = glm::mat4(1.0f);
-        if (m_active3DCamera)
-            mvp = m_active3DCamera->camera.proj * m_active3DCamera->camera.view * item.modelMatrix;
 
-        ASCIIgL::Renderer::DrawCall dc;
-        dc.mesh        = item.mesh.get();
-        dc.material    = mat.get();
-        dc.layer       = item.layer;
-        dc.transparent = false;
-        dc.sortKey     = 0.0f;
+        if (r.renderType == components::RenderType::ELEM_3D) {
+            glm::mat4 model = r.billboard
+                ? m_active3DCamera->camera.GetBillboardMatrix(t.renderPosition, t.scale) : t.getRenderModel();
+            if (m_active3DCamera)
+                mvp = m_active3DCamera->camera.proj * m_active3DCamera->camera.view * model;
 
-        if (const ASCIIgL::UniformDescriptor* desc = mat->GetUniformDescriptor("mvp"))
-            dc.overrides.push_back({ desc, ASCIIgL::UniformValue(mvp) });
+            ASCIIgL::Renderer::DrawCall dc;
+            dc.mesh            = r.mesh.get();
+            dc.material        = r.material.get();
+            dc.layer           = r.layer;
+            dc.transparent     = false;
+            dc.sortKey         = 0.0f;
+            dc.backfaceCulling = r.backfaceCulling;
+            dc.transparent = r.transparent;
 
-        dc.overrides.insert(dc.overrides.end(), item.overrides.begin(), item.overrides.end());
+            if (const ASCIIgL::UniformDescriptor* desc = r.material->GetUniformDescriptor("mvp"))
+                dc.overrides.push_back({ desc, ASCIIgL::UniformValue(mvp) });
 
-        ASCIIgL::Renderer::GetInst().SubmitDraw(dc);
-    }
+            dc.overrides.insert(dc.overrides.end(), r.overrides.begin(), r.overrides.end());
 
-    if (!m_active2DCamera && !m_drawList2D.empty())
-        ASCIIgL::Logger::Warning("RenderSystem: drawing 2D entities with null camera");
+            ASCIIgL::Renderer::GetInst().SubmitDraw(dc);
+        } 
+        
+        else if (r.renderType == components::RenderType::ELEM_2D) {
+            if (m_active2DCamera)
+                mvp = m_active2DCamera->proj * m_active2DCamera->view * t.getRenderModel();
 
-    for (const auto& item : m_drawList2D) {
-        auto mat = ResolveMaterial(item);
-        if (!mat) continue;
+            ASCIIgL::Renderer::DrawCall dc;
+            dc.mesh            = r.mesh.get();
+            dc.material        = r.material.get();
+            dc.layer           = r.layer;
+            dc.transparent     = true;
+            dc.sortKey         = static_cast<float>(r.layer);
+            dc.backfaceCulling = r.backfaceCulling;
 
-        glm::mat4 mvp = glm::mat4(1.0f);
-        if (m_active2DCamera)
-            mvp = m_active2DCamera->proj * m_active2DCamera->view * item.modelMatrix;
+            if (const ASCIIgL::UniformDescriptor* desc = r.material->GetUniformDescriptor("mvp"))
+                dc.overrides.push_back({ desc, ASCIIgL::UniformValue(mvp) });
 
-        ASCIIgL::Renderer::DrawCall dc;
-        dc.mesh        = item.mesh.get();
-        dc.material    = mat.get();
-        dc.layer       = item.layer;
-        dc.transparent = true;
-        dc.sortKey     = static_cast<float>(item.layer);
+            dc.overrides.insert(dc.overrides.end(), r.overrides.begin(), r.overrides.end());
 
-        if (const ASCIIgL::UniformDescriptor* desc = mat->GetUniformDescriptor("mvp"))
-            dc.overrides.push_back({ desc, ASCIIgL::UniformValue(mvp) });
-
-        dc.overrides.insert(dc.overrides.end(), item.overrides.begin(), item.overrides.end());
-
-        ASCIIgL::Renderer::GetInst().SubmitDraw(dc);
+            ASCIIgL::Renderer::GetInst().SubmitDraw(dc);
+        }
     }
 }
 

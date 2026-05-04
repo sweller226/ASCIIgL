@@ -479,7 +479,6 @@ void Game::RenderPlaying() {
     GetWorldPtr(registry)->Render();
 
     guiManager.Render();
-    ecsRenderSystem.BeginFrame();
     ecsRenderSystem.Render();
 }
 

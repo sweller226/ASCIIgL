@@ -6,6 +6,8 @@
 #include <ASCIIgL/util/EventBus.hpp>
 #include <ASCIICraft/events/GUIEvents.hpp>
 
+#include <ASCIIgL/renderer/Material.hpp>
+
 namespace gui {
 
 Slot::Slot(entt::registry& registry, ASCIIgL::EventBus& eventBus, entt::entity inventoryOwner, int slotIndex)
