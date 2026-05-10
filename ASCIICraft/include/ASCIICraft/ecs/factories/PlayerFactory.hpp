@@ -32,14 +32,14 @@ class PlayerFactory {
   private:
   entt::registry& registry;
 
-  static constexpr glm::vec3 DEFAULT_GRAVITY = glm::vec3(0.0f, -32.0f, 0.0f); // Blocks per second squared
-  static constexpr GameMode DEFAULT_GAMEMODE = GameMode::Spectator;
+  static inline const glm::vec3 DEFAULT_GRAVITY               = glm::vec3(0.0f, -32.0f, 0.0f); // Blocks per second squared
+  static constexpr GameMode     DEFAULT_GAMEMODE               = GameMode::Spectator;
 
-  static constexpr glm::vec3 DEFAULT_COLLIDER_HALFEXTENTS = glm::vec3(0.3f, 0.9f, 0.3f);
-  static constexpr glm::vec3 DEFAULT_COLLIDER_OFFSET      = glm::vec3(0.0f, 0.9f, 0.0f);
-  static constexpr uint32_t  DEFAULT_COLLIDER_LAYER       = 1;
-  static constexpr uint32_t  DEFAULT_COLLIDER_MASK        = 0xFFFFFFFFu;
-  static constexpr bool      DEFAULT_COLLIDER_DISABLED    = false;
+  static inline const glm::vec3 DEFAULT_COLLIDER_HALFEXTENTS   = glm::vec3(0.3f, 0.9f, 0.3f);
+  static inline const glm::vec3 DEFAULT_COLLIDER_OFFSET        = glm::vec3(0.0f, 0.9f, 0.0f);
+  static constexpr uint32_t     DEFAULT_COLLIDER_LAYER         = 1;
+  static constexpr uint32_t     DEFAULT_COLLIDER_MASK          = 0xFFFFFFFFu;
+  static constexpr bool         DEFAULT_COLLIDER_DISABLED      = false;
 };
 
 }

@@ -3,6 +3,8 @@
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
 #include <ASCIICraft/ecs/components/Head.hpp>
 
+#include <ASCIIgL/engine/FPSClock.hpp>
+
 namespace ecs::systems {
 
 CameraSystem::CameraSystem(entt::registry& registry, IInputSource& input)

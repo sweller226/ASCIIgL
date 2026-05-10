@@ -2,7 +2,6 @@
 
 #include <entt/entt.hpp>
 
-#include <ASCIIgL/engine/FPSClock.hpp>
 #include <ASCIICraft/ecs/components/PlayerController.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 #include <ASCIICraft/ecs/systems/ISystem.hpp>

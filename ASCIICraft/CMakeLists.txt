@@ -38,54 +38,32 @@ list(APPEND CMAKE_PREFIX_PATH "${TBB_ROOT}")
 find_package(TBB CONFIG REQUIRED COMPONENTS tbb)
 
 # ---------------------------------------------------------------------------
-# ASCIIgL Engine paths (using distributed library)
+# ASCIIgL Engine (using distributed library + CMake config)
 # ---------------------------------------------------------------------------
 set(ASCIIgL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/lib/ASCIIgL-v1.0.0")
-set(ASCIIgL_LIB_DIR "${ASCIIgL_ROOT}/lib")
-set(ASCIIgL_INCLUDE_DIR "${ASCIIgL_ROOT}/include")
-set(ASCIIgL_VENDOR_DIR "${ASCIIgL_ROOT}/vendor")
-
-# Make ASCIIgL's shipped vendor targets available (should only expose glm::glm)
-# Ensure lib/ASCIIgL-v1.0.0/vendor/CMakeLists.txt creates only glm::glm (or prefers system glm)
-add_subdirectory("${ASCIIgL_VENDOR_DIR}" EXCLUDE_FROM_ALL)
+list(APPEND CMAKE_PREFIX_PATH "${ASCIIgL_ROOT}/cmake")
+find_package(ASCIIgL REQUIRED)
 
 # ---------------------------------------------------------------------------
-# Find the ASCIIgL library (try both release and fastdebug versions)
+# stb (header-only, in vendor/stb)
 # ---------------------------------------------------------------------------
-find_library(ASCIIgL_LIBRARY_RELEASE
-    NAMES ASCIIgL
-    PATHS "${ASCIIgL_LIB_DIR}"
+if(NOT TARGET stb)
+    add_library(stb INTERFACE)
+    target_include_directories(stb INTERFACE
+        "${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb"
+    )
+endif()
+
+# ---------------------------------------------------------------------------
+# OpenAL Soft
+# ---------------------------------------------------------------------------
+set(OPENAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/lib/OpenAL-Soft/openal-soft-1.25.1-bin")
+find_library(OPENAL_LIB
+    NAMES OpenAL32 openal
+    PATHS "${OPENAL_ROOT}/libs/Win64"
     NO_DEFAULT_PATH
     REQUIRED
 )
-
-find_library(ASCIIgL_LIBRARY_FASTDEBUG
-    NAMES ASCIIgL_FastDebug ASCIIgL
-    PATHS "${ASCIIgL_LIB_DIR}"
-    NO_DEFAULT_PATH
-)
-
-if(NOT ASCIIgL_LIBRARY_FASTDEBUG)
-    set(ASCIIgL_LIBRARY_FASTDEBUG ${ASCIIgL_LIBRARY_RELEASE})
-endif()
-
-# Create imported target for ASCIIgL
-add_library(ASCIIgL STATIC IMPORTED)
-
-set_target_properties(ASCIIgL PROPERTIES
-    IMPORTED_LOCATION_RELEASE "${ASCIIgL_LIBRARY_RELEASE}"
-    IMPORTED_LOCATION_FASTDEBUG "${ASCIIgL_LIBRARY_FASTDEBUG}"
-    INTERFACE_INCLUDE_DIRECTORIES "${ASCIIgL_INCLUDE_DIR}"
-    INTERFACE_LINK_DIRECTORIES "${ASCIIgL_LIB_DIR}"
-    # Match ASCIIgL's public link interface so consumers of the packaged static lib
-    # inherit the required system libraries without relying on header pragmas.
-    INTERFACE_LINK_LIBRARIES "glm::glm;winmm;dwrite;d3d11;d3dcompiler;dxgi"
-    IMPORTED_LOCATION_MINSIZEREL     "${ASCIIgL_LIBRARY_RELEASE}"
-    IMPORTED_LOCATION_RELWITHDEBINFO "${ASCIIgL_LIBRARY_RELEASE}"
-)
-
-# Provide a namespaced alias for consumers
-add_library(ASCIIgL::ASCIIgL ALIAS ASCIIgL)
 
 # ---------------------------------------------------------------------------
 # Source Files
@@ -104,7 +82,7 @@ file(GLOB_RECURSE ASCIICraft_HEADERS
 add_executable(ASCIICraft
     ${ASCIICraft_SOURCES}
     ${ASCIICraft_HEADERS}
-    "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgL/vendor/tracy/public/TracyClient.cpp"
+    "${ASCIIgL_ROOT}/vendor/tracy/public/TracyClient.cpp"
 )
 
 # ---------------------------------------------------------------------------
@@ -112,20 +90,19 @@ add_executable(ASCIICraft
 # ---------------------------------------------------------------------------
 target_include_directories(ASCIICraft PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgL/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgL/vendor/tracy/public"
+    "${OPENAL_ROOT}/include"
+    "${ASCIIgL_ROOT}/vendor/tracy/public"
 )
+
 
 # ---------------------------------------------------------------------------
 # Linking
 # ---------------------------------------------------------------------------
-# Link ASCIIgL (which transitively provides glm::glm)
 target_link_libraries(ASCIICraft PRIVATE ASCIIgL::ASCIIgL)
-
-# Link oneTBB (job queue)
 target_link_libraries(ASCIICraft PRIVATE TBB::tbb)
+target_link_libraries(ASCIICraft PRIVATE ${OPENAL_LIB})
+target_link_libraries(ASCIICraft PRIVATE stb)
 
-# Link vendor header-only targets from top-level vendor/ if present
 if(TARGET entt)
     target_link_libraries(ASCIICraft PRIVATE entt)
 endif()
@@ -138,7 +115,7 @@ if(TARGET nlohmann_json)
     target_link_libraries(ASCIICraft PRIVATE nlohmann_json)
 endif()
 
-# Platform-specific: prevent Windows min/max macros from breaking std::min/std::max
+# Platform-specific
 if(WIN32)
     target_compile_definitions(ASCIICraft PRIVATE NOMINMAX TRACY_ENABLE)
     target_link_libraries(ASCIICraft PRIVATE winmm)
@@ -148,8 +125,8 @@ endif()
 # Output Configuration
 # ---------------------------------------------------------------------------
 set_target_properties(ASCIICraft PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY_FASTDEBUG   "${CMAKE_BINARY_DIR}/bin/FastDebug"
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin/Release"
+    RUNTIME_OUTPUT_DIRECTORY_FASTDEBUG "${CMAKE_BINARY_DIR}/bin/FastDebug"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE   "${CMAKE_BINARY_DIR}/bin/Release"
 )
 
 # ---------------------------------------------------------------------------
@@ -167,7 +144,6 @@ add_custom_command(TARGET ASCIICraft POST_BUILD
     COMMENT "Copying game and library resources"
 )
 
-# Copy oneTBB DLLs to exe dir on Windows (required at runtime)
 if(WIN32)
     add_custom_command(TARGET ASCIICraft POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "Copying oneTBB DLLs"
@@ -178,5 +154,12 @@ if(WIN32)
             "${TBB_ROOT}/redist/intel64/vc14/tbb12_debug.dll"
             "$<TARGET_FILE_DIR:ASCIICraft>/tbb12_debug.dll"
         COMMENT "Copying oneTBB runtime DLLs"
+    )
+
+    add_custom_command(TARGET ASCIICraft POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${OPENAL_ROOT}/bin/Win64/soft_oal.dll"
+            "$<TARGET_FILE_DIR:ASCIICraft>/OpenAL32.dll"
+        COMMENT "Copying OpenAL32.dll"
     )
 endif()

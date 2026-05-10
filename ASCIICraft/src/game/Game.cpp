@@ -57,6 +57,7 @@ Game::Game()
     , miningSystem(registry, eventBus)
     , lifetimeSystem(registry)
     , particleSystem(registry, eventBus)
+    , soundSystem(registry, eventBus)
     , playerFactory(registry)
     , shouldInternalExit(false)
 {
@@ -216,6 +217,8 @@ void Game::Update() {
             movementSystem.Update();
             cameraSystem.Update();
             physicsSystem.Update();
+
+            soundSystem.Update();
 
             world->Update();
 

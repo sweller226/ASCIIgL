@@ -103,11 +103,13 @@ endif()
 # ============================================================================
 # Compiler Definitions
 # ============================================================================
-target_compile_definitions(ASCIIgL PUBLIC
-    WIN32_LEAN_AND_MEAN
-    NOMINMAX
-    TRACY_ENABLE
-    $<$<CONFIG:FastDebug>:ASCIIGL_FASTDEBUG>
+target_compile_definitions(ASCIIgL
+    PUBLIC
+        WIN32_LEAN_AND_MEAN
+        NOMINMAX
+        $<$<CONFIG:FastDebug>:ASCIIGL_FASTDEBUG>
+    PRIVATE
+        TRACY_ENABLE
 )
 
 # ============================================================================
