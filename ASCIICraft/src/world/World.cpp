@@ -43,6 +43,14 @@ void World::Render() {
     }
 }
 
+uint32_t World::GetBlockState(int x, int y, int z) const {
+    return chunkManager->GetBlockState(x, y, z);
+}
+
+uint32_t World::GetBlockState(const WorldCoord& pos) const {
+    return chunkManager->GetBlockState(pos);
+}
+
 World* GetWorldPtr(entt::registry& registry) {
     std::unique_ptr<World>* worldPtr = registry.ctx().find<std::unique_ptr<World>>();
 

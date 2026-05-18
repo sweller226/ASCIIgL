@@ -25,7 +25,9 @@
 #include <ASCIICraft/ecs/systems/PhysicsSystem.hpp>
 #include <ASCIICraft/ecs/systems/LifetimeSystem.hpp>
 #include <ASCIICraft/ecs/systems/ParticleSystem.hpp>
-#include <ASCIICraft/ecs/systems/SoundSystem.hpp>
+#include <ASCIICraft/ecs/systems/sound/MusicSystem.hpp>
+#include <ASCIICraft/ecs/systems/sound/SoundSystem.hpp>
+#include <ASCIICraft/ecs/systems/sound/StepSFXSystem.hpp>
 
 // GUI
 #include <ASCIICraft/gui/GUIManager.hpp>
@@ -81,6 +83,8 @@ private:
     ecs::systems::LifetimeSystem lifetimeSystem;
     ecs::systems::ParticleSystem particleSystem;
     ecs::systems::SoundSystem soundSystem;
+    ecs::systems::MusicSystem musicSystem;
+    ecs::systems::StepSFXSystem stepSfxSystem;
 
     gui::GUIManager guiManager;
 

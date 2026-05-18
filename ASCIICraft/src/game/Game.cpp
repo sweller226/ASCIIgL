@@ -38,6 +38,7 @@
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 #include <ASCIICraft/ecs/components/PlayerController.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/sound/SoundRegistry.hpp>
 
 // shaders
 #include <ASCIICraft/rendering/TerrainShaders.hpp>
@@ -58,6 +59,8 @@ Game::Game()
     , lifetimeSystem(registry)
     , particleSystem(registry, eventBus)
     , soundSystem(registry, eventBus)
+    , musicSystem(eventBus, soundSystem)
+    , stepSfxSystem(registry, eventBus)
     , playerFactory(registry)
     , shouldInternalExit(false)
 {
@@ -218,6 +221,8 @@ void Game::Update() {
             cameraSystem.Update();
             physicsSystem.Update();
 
+            stepSfxSystem.Update();
+            musicSystem.Update();
             soundSystem.Update();
 
             world->Update();
@@ -510,6 +515,9 @@ void Game::InitializeSystems() {
     guiManager.SetActive2DCamera(guiCamera.get());
 
     particleSystem.Init();
+
+    auto& soundRegistry = registry.ctx().emplace<sound::SoundRegistry>();
+    sound::RegisterDefaultSounds(soundRegistry);
 
     ASCIIgL::Logger::Debug("Systems initialized.");
 }

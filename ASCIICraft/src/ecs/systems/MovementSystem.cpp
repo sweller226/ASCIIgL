@@ -16,8 +16,6 @@
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/PlayerMode.hpp>
 
-#include <ASCIICraft/util/TimeUtil.hpp>
-
 namespace ecs::systems {
 
 MovementSystem::MovementSystem(entt::registry& registry, IInputSource& input, ASCIIgL::EventBus& eventBus)
@@ -125,7 +123,6 @@ void MovementSystem::ProcessMovementInput() {
     }
 
     const float dt = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
-    const float currentTime = util::NowSeconds();
 
     // --- input -> desired horizontal direction ---
     glm::vec3 forward = cam->camera.getCamFrontNoY();
@@ -174,19 +171,18 @@ void MovementSystem::ProcessMovementInput() {
 
     glm::vec3 desiredHoriz(moveXZ.x * targetSpeed, 0.0f, moveXZ.y * targetSpeed);
 
-    // --- jump cooldown ---
+    // --- jump timers ---
     jump->jumpCooldown = std::max(0.0f, jump->jumpCooldown - dt);
+    jump->bufferTime = std::max(0.0f, jump->bufferTime - dt);
 
-    // --- jump buffer (from discrete JumpPressedEvent; InputSystem emits when jump is pressed and not blocking) ---
-    jump->jumpBufferTimer = std::max(0.0f, jump->jumpBufferTimer - dt);
-    for ([[maybe_unused]] const auto& e : m_eventBus.view<events::JumpPressedEvent>()) {
-        jump->jumpBufferTimer = jump->JUMP_BUFFER_MAX;
-        break;
+    if (m_input.IsActionPressed("jump")) {
+        jump->bufferTime = jump->JUMP_BUFFER_MAX;
     }
 
-    // --- ground / coyote time ---
-    if (groundPhy->onGround) {
-        groundPhy->lastOnGround = currentTime;
+    if (!groundPhy->onGround) {
+        jump->coyoteTime = std::max(0.0f, jump->coyoteTime - dt);
+    } else {
+        jump->coyoteTime = jump->COYOTE_TIME_MAX;
     }
 
     // --- horizontal acceleration ---
@@ -211,16 +207,16 @@ void MovementSystem::ProcessMovementInput() {
     }
 
     // --- jump logic ---
-    bool coyoteAllowed = (currentTime - groundPhy->lastOnGround) <= jump->COYOTE_TIME_MAX;
-    bool canJumpNow = (groundPhy->onGround || coyoteAllowed) &&
-                      jump->jumpCooldown <= 0.0f &&
-                      !ctrl->isFlying();
-    bool bufferedJump = jump->jumpBufferTimer > 0.0f;
+    const bool jumpHeld = m_input.IsActionHeld("jump");
+    const bool wantsJump = jump->bufferTime > 0.0f
+        || (jumpHeld && groundPhy->onGround);
+    const bool canJump = (groundPhy->onGround || jump->coyoteTime > 0.0f)
+        && jump->jumpCooldown <= 0.0f
+        && !ctrl->isFlying();
 
-    if (bufferedJump && canJumpNow) {
-        float g = std::abs(grav->acceleration.y);
-        float jumpVelocity = std::sqrt(2.0f * g * jump->jumpHeight);
-        vel->linear.y = jumpVelocity;
+    if (wantsJump && canJump) {
+        jump->RefreshJumpVelocity(grav->acceleration.y);
+        vel->linear.y = jump->jumpVelocity;
 
         if (ctrl->isRunning()) {
             glm::vec3 fwd = glm::normalize(glm::vec3(forward.x, 0.0f, forward.z));
@@ -229,9 +225,9 @@ void MovementSystem::ProcessMovementInput() {
         }
 
         groundPhy->onGround = false;
-        groundPhy->lastOnGround = 0.0f;  // Reset coyote time to prevent multi-jump
-        jump->jumpCooldown = jump->jumpCooldownMax;
-        jump->jumpBufferTimer = 0.0f;
+        jump->coyoteTime = 0.0f;
+        jump->jumpCooldown = jump->JUMP_COOLDOWN_MAX;
+        jump->bufferTime = 0.0f;
     }
 
     // --- flying / spectator vertical control ---

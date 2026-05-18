@@ -21,6 +21,7 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     auto& ground  = registry.emplace<components::GroundPhysics>(p_ent);
     auto& flying  = registry.emplace<components::FlyingPhysics>(p_ent);
     auto& ctrl    = registry.emplace<components::PlayerController>(p_ent);
+    auto& stepSoundState = registry.emplace<components::StepSoundState>(p_ent);
     auto& jump    = registry.emplace<components::Jump>(p_ent);
     auto& cam     = registry.emplace<components::PlayerCamera>(p_ent);
     auto& pmode   = registry.emplace<components::PlayerMode>(p_ent);
@@ -34,6 +35,12 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
 
     // --- Velocity ---
     vel.maxSpeed = 100.0f;
+
+    // --- Step sound state ---
+    stepSoundState.distanceAccum = 0.0f;
+    stepSoundState.cooldown = 0.0f;
+    stepSoundState.lastPosition = position;
+    stepSoundState.initialized = false;
 
     // --- Camera ---
     glm::vec3 eyePos = position + glm::vec3(0, cam.PLAYER_EYE_HEIGHT, 0);
@@ -57,6 +64,8 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
 
     // --- Gravity ---
     grav.acceleration = DEFAULT_GRAVITY;
+    jump.RefreshJumpVelocity(grav.acceleration.y);
+    jump.coyoteTime = jump.COYOTE_TIME_MAX;
 
     // --- Player mode ---
     pmode.gamemode = mode;

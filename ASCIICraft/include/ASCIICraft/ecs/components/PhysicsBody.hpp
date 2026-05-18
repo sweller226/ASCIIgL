@@ -48,7 +48,6 @@ struct StepPhysics {
 
 struct GroundPhysics {
     bool onGround = false;
-    float lastOnGround = 0.0f;
 };
 
 struct FlyingPhysics {

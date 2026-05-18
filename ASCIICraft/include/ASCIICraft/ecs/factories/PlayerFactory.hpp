@@ -20,6 +20,7 @@
 #include <ASCIICraft/ecs/components/Reach.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
 #include <ASCIICraft/ecs/components/PlayerInput.hpp>
+#include <ASCIICraft/ecs/components/StepSoundState.hpp>
 
 namespace ecs::factories {
 
