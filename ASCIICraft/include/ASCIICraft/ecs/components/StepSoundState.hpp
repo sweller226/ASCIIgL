@@ -8,7 +8,7 @@ struct StepSoundState {
     float distanceAccum = 0.0f;
     float cooldown      = 0.0f;
     glm::vec3 lastPosition{0.0f};
-    bool      initialized = false;
+    bool      wasOnGround = false;
 };
 
 } // namespace ecs::components

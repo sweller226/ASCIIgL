@@ -20,6 +20,40 @@
 
 namespace ecs::systems {
 
+namespace {
+
+void ConsumeStep(components::StepSoundState& stepState, const glm::vec3& bodyCenter, float cooldown) {
+    stepState.distanceAccum = 0.0f;
+    stepState.cooldown = cooldown;
+    stepState.lastPosition = bodyCenter;
+}
+
+float GetStepDistance(
+    const components::PlayerController* ctrl,
+    float walkStepDistance,
+    float runStepDistance,
+    float sneakStepDistance
+) {
+    if (!ctrl) {
+        return walkStepDistance;
+    }
+
+    switch (ctrl->movementState) {
+        case MovementState::Running:
+            return runStepDistance;
+        case MovementState::Sneaking:
+            return sneakStepDistance;
+        default:
+            return walkStepDistance;
+    }
+}
+
+float GetStepVolume(const components::PlayerController* ctrl) {
+    return (ctrl && ctrl->movementState == MovementState::Sneaking) ? 0.4f : 1.0f;
+}
+
+} // namespace
+
 StepSFXSystem::StepSFXSystem(entt::registry& registry, ASCIIgL::EventBus& eventBus)
     : m_registry(registry)
     , m_eventBus(eventBus)
@@ -105,6 +139,40 @@ std::string StepSFXSystem::ResolveStepSoundId(
     return DEFAULT_STEP_SOUND_ID;
 }
 
+bool StepSFXSystem::TryEmitStepSound(
+    entt::entity ent,
+    const glm::vec3& bodyCenter,
+    const glm::vec3& halfExtents,
+    const World& world,
+    const blockstate::BlockStateRegistry& bsr,
+    const sound::SoundRegistry& soundRegistry,
+    util::RNG& rng
+) const {
+    const worldquery::VoxelOverlapHit floorBlock = worldquery::SampleFloorBlock(
+        world,
+        bodyCenter,
+        halfExtents
+    );
+    if (blockquery::IsAir(floorBlock.stateId)) {
+        return false;
+    }
+
+    const uint16_t typeId = bsr.GetTypeIdFromStateOr(floorBlock.stateId, 0);
+    const std::string soundId = ResolveStepSoundId(typeId, bsr);
+    if (!soundRegistry.Has(soundId)) {
+        ASCIIgL::Logger::Warningf("[StepSFXSystem] Unregistered step sound id: %s", soundId.c_str());
+        return false;
+    }
+
+    m_eventBus.emit(events::PlaySoundEvent{
+        soundId,
+        ent,
+        GetStepVolume(m_registry.try_get<components::PlayerController>(ent)),
+        rng.NextFloat(0.9f, 1.1f),
+    });
+    return true;
+}
+
 void StepSFXSystem::UpdateStepSounds(float deltaTime) {
     const World* world = GetWorldPtr(m_registry);
     const auto* bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
@@ -133,94 +201,79 @@ void StepSFXSystem::UpdateStepSounds(float deltaTime) {
 
     for (auto [ent, transform, collider, ground, vel, stepState] : view.each()) {
         if (collider.disabled) {
+            stepState.wasOnGround = false;
             continue;
         }
 
         const auto* flying = m_registry.try_get<components::FlyingPhysics>(ent);
         if (flying && flying->enabled) {
+            stepState.wasOnGround = false;
             continue;
         }
 
+        const auto* ctrl = m_registry.try_get<components::PlayerController>(ent);
+        const glm::vec3 bodyCenter = transform.position + collider.localOffset;
+        const float horizSpeed = glm::length(glm::vec2(vel.linear.x, vel.linear.z));
+        const bool landedThisFrame = ground.onGround && !stepState.wasOnGround;
+        stepState.wasOnGround = ground.onGround;
+        stepState.cooldown = std::max(0.0f, stepState.cooldown - deltaTime);
+
         if (!ground.onGround) {
-            stepState.distanceAccum = 0.0f;
+            // Keep current step progress, but track the latest air position so
+            // landing does not inherit a large horizontal delta from time aloft.
+            stepState.lastPosition = bodyCenter;
             continue;
+        }
+
+        if (landedThisFrame && stepState.cooldown <= 0.0f && horizSpeed >= MIN_STEP_SPEED) {
+            if (TryEmitStepSound(
+                ent,
+                bodyCenter,
+                collider.halfExtents,
+                *world,
+                *bsr,
+                *soundRegistry,
+                rng
+            )) {
+                ConsumeStep(stepState, bodyCenter, STEP_COOLDOWN);
+                continue;
+            }
         }
 
         if (stepState.cooldown > 0.0f) {
-            stepState.cooldown -= deltaTime;
             continue;
         }
 
-        const glm::vec3 bodyCenter = transform.position + collider.localOffset;
-        const float horizSpeed = glm::length(glm::vec2(vel.linear.x, vel.linear.z));
         if (horizSpeed < MIN_STEP_SPEED) {
             stepState.distanceAccum = 0.0f;
             stepState.lastPosition = bodyCenter;
-            stepState.initialized = true;
             continue;
-        }
-
-        if (!stepState.initialized) {
-            stepState.lastPosition = bodyCenter;
-            stepState.initialized = true;
         }
 
         const glm::vec2 delta(bodyCenter.x - stepState.lastPosition.x, bodyCenter.z - stepState.lastPosition.z);
         stepState.distanceAccum += glm::length(delta);
         stepState.lastPosition = bodyCenter;
 
-        float stepDistance = WALK_STEP_DISTANCE;
-        if (const auto* ctrl = m_registry.try_get<components::PlayerController>(ent)) {
-            switch (ctrl->movementState) {
-                case MovementState::Running:
-                    stepDistance = RUN_STEP_DISTANCE;
-                    break;
-                case MovementState::Sneaking:
-                    stepDistance = SNEAK_STEP_DISTANCE;
-                    break;
-                default:
-                    break;
-            }
-        }
+        const float stepDistance = GetStepDistance(ctrl, WALK_STEP_DISTANCE, RUN_STEP_DISTANCE, SNEAK_STEP_DISTANCE);
 
         if (stepState.distanceAccum < stepDistance) {
             continue;
         }
 
-        const worldquery::VoxelOverlapHit floorBlock = worldquery::SampleFloorBlock(
-            *world,
-            bodyCenter,
-            collider.halfExtents
-        );
-        if (blockquery::IsAir(floorBlock.stateId)) {
-            stepState.distanceAccum = 0.0f;
-            continue;
-        }
-
-        const uint16_t typeId = bsr->GetTypeIdFromStateOr(floorBlock.stateId, 0);
-        const std::string soundId = ResolveStepSoundId(typeId, *bsr);
-        if (!soundRegistry->Has(soundId)) {
-            ASCIIgL::Logger::Warningf("[StepSFXSystem] Unregistered step sound id: %s", soundId.c_str());
-            stepState.distanceAccum = 0.0f;
-            continue;
-        }
-
-        float volume = 1.0f;
-        if (const auto* ctrl = m_registry.try_get<components::PlayerController>(ent)) {
-            if (ctrl->movementState == MovementState::Sneaking) {
-                volume = 0.4f;
-            }
-        }
-
-        m_eventBus.emit(events::PlaySoundEvent{
-            soundId,
+        if (!TryEmitStepSound(
             ent,
-            volume,
-            rng.NextFloat(0.9f, 1.1f),
-        });
+            bodyCenter,
+            collider.halfExtents,
+            *world,
+            *bsr,
+            *soundRegistry,
+            rng
+        )) {
+            stepState.distanceAccum = 0.0f;
+            continue;
+        }
 
-        stepState.distanceAccum = 0.0f;
-        stepState.cooldown = STEP_COOLDOWN;
+        ConsumeStep(stepState, bodyCenter, STEP_COOLDOWN);
     }
 }
 

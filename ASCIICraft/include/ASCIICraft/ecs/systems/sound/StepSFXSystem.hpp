@@ -14,6 +14,16 @@ namespace blockstate {
 class BlockStateRegistry;
 } // namespace blockstate
 
+namespace sound {
+class SoundRegistry;
+} // namespace sound
+
+namespace util {
+class RNG;
+} // namespace util
+
+class World;
+
 namespace ecs::systems {
 
 class StepSFXSystem : public ISystem {
@@ -27,6 +37,16 @@ private:
     void UpdateStepSounds(float deltaTime);
 
     std::string ResolveStepSoundId(uint16_t typeId, const blockstate::BlockStateRegistry& bsr) const;
+
+    bool TryEmitStepSound(
+        entt::entity ent,
+        const glm::vec3& bodyCenter,
+        const glm::vec3& halfExtents,
+        const World& world,
+        const blockstate::BlockStateRegistry& bsr,
+        const sound::SoundRegistry& soundRegistry,
+        util::RNG& rng
+    ) const;
 
     void MapType(const blockstate::BlockStateRegistry& bsr, const char* typeName, const char* soundId);
 

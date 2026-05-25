@@ -40,7 +40,6 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     stepSoundState.distanceAccum = 0.0f;
     stepSoundState.cooldown = 0.0f;
     stepSoundState.lastPosition = position;
-    stepSoundState.initialized = false;
 
     // --- Camera ---
     glm::vec3 eyePos = position + glm::vec3(0, cam.PLAYER_EYE_HEIGHT, 0);
