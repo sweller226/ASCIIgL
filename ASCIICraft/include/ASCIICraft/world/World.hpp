@@ -46,6 +46,8 @@ public:
     ChunkManager* GetChunkManager() const { return chunkManager.get(); };
     ChunkManager* GetChunkManager() { return chunkManager.get(); };
 
+    uint32_t GetBlockState(int x, int y, int z) const;
+    uint32_t GetBlockState(const WorldCoord& pos) const;
 
 private:
     entt::registry& registry;

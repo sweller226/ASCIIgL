@@ -14,7 +14,7 @@
 
 namespace ecs::systems {
 
-PlacingSystem::PlacingSystem(entt::registry& registry, EventBus& eventBus)
+PlacingSystem::PlacingSystem(entt::registry& registry, ASCIIgL::EventBus& eventBus)
     : m_registry(registry)
     , m_eventBus(eventBus)
 {}
@@ -128,7 +128,7 @@ void PlacingSystem::PlayerPlace() {
                 *bsr, *world->GetChunkManager(), baseStateId, rayCast.second, blockplacement::PlacementContext::PlayerPlacement
             );
 
-            PlaceBlockEvent placeEvent;
+            events::PlaceBlockEvent placeEvent;
             placeEvent.stateId = finalizedStateId;
             placeEvent.position = rayCast.second;
             m_eventBus.emit(placeEvent);

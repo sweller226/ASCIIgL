@@ -1,12 +1,12 @@
 #include <ASCIICraft/input/InputSystem.hpp>
 
-#include <ASCIICraft/events/EventBus.hpp>
+#include <ASCIIgL/util/EventBus.hpp>
 #include <ASCIICraft/events/InputEvents.hpp>
 #include <ASCIIgL/engine/InputManager.hpp>
 
 namespace input {
 
-InputSystem::InputSystem(EventBus& eventBus)
+InputSystem::InputSystem(ASCIIgL::EventBus& eventBus)
     : m_eventBus(eventBus)
 {}
 
@@ -27,7 +27,6 @@ void InputSystem::Update() {
     // Gameplay events only when in Gameplay mode (e.g. no GUI blocking).
     if (m_inputMode == InputMode::Gameplay) {
         if (input.IsActionPressed("quit"))    m_eventBus.emit(events::QuitRequestedEvent{});
-        if (input.IsActionPressed("jump"))    m_eventBus.emit(events::JumpPressedEvent{});
         if (input.IsActionPressed("interact_left"))  m_eventBus.emit(events::PrimaryActionPressedEvent{});
         if (input.IsActionPressed("interact_right")) m_eventBus.emit(events::SecondaryActionPressedEvent{});
         // Game mode toggle (P) — hard-wired for now, not action-bound.

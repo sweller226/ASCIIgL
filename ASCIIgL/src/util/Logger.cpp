@@ -19,6 +19,18 @@
 namespace {
     std::ofstream logFile;
     std::mutex logMutex;
+
+    std::string StripNulBytes(const std::string& in) {
+        if (in.find('\0') == std::string::npos) {
+            return in;
+        }
+        std::string out;
+        out.reserve(in.size());
+        for (char c : in) {
+            if (c != '\0') out.push_back(c);
+        }
+        return out;
+    }
 }
 
 namespace ASCIIgL {
@@ -65,6 +77,7 @@ void Logger::LogInternal(LogLevel level, const std::string& message) {
     if (static_cast<int>(level) > static_cast<int>(currentLevel)) return;
     std::lock_guard<std::mutex> lock(logMutex);
     if (logFile.is_open()) {
+        const std::string sanitized = StripNulBytes(message);
         auto now = std::chrono::system_clock::now();
         auto time_t = std::chrono::system_clock::to_time_t(now);
         logFile << "[" << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S") << "] ";
@@ -75,7 +88,7 @@ void Logger::LogInternal(LogLevel level, const std::string& message) {
             case LogLevel::Info:  logFile << "[INFO] "; break;
             case LogLevel::Debug: logFile << "[DEBUG] "; break;
         }
-        logFile << message << std::endl;
+        logFile << sanitized << std::endl;
     }
 }
 
@@ -83,7 +96,7 @@ void Logger::LogInternal(LogLevel level, const std::wstring& message) {
     if (static_cast<int>(level) > static_cast<int>(currentLevel)) return;
     std::lock_guard<std::mutex> lock(logMutex);
     std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-    const std::string utf8 = conv.to_bytes(message);
+    const std::string utf8 = StripNulBytes(conv.to_bytes(message));
     if (logFile.is_open()) {
         auto now = std::chrono::system_clock::now();
         auto time_t = std::chrono::system_clock::to_time_t(now);

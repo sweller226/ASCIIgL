@@ -43,7 +43,7 @@ void RefreshFenceNeighbors(
 
 namespace ecs::systems {
 
-    BlockUpdateSystem::BlockUpdateSystem(entt::registry &registry, EventBus& eventBus) 
+    BlockUpdateSystem::BlockUpdateSystem(entt::registry &registry, ASCIIgL::EventBus& eventBus) 
         : m_registry(registry)
         , eventBus(eventBus) {}
 
@@ -53,7 +53,7 @@ namespace ecs::systems {
     }
 
     void BlockUpdateSystem::BreakBlockEvents() {
-        auto& events = eventBus.view<BreakBlockEvent>();
+        auto& events = eventBus.view<events::BreakBlockEvent>();
         World* world = GetWorldPtr(m_registry);
         auto* bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
         if (!world || !bsr) return;
@@ -69,7 +69,7 @@ namespace ecs::systems {
     }
     
     void BlockUpdateSystem::PlaceBlockEvents() {
-        auto& events = eventBus.view<PlaceBlockEvent>();
+        auto& events = eventBus.view<events::PlaceBlockEvent>();
         World* world = GetWorldPtr(m_registry);
 
         auto* bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();

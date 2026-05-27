@@ -10,7 +10,6 @@ struct PlayerInput {
 
     bool wantsToSprint = false;
     bool wantsToSneak  = false;
-    bool wantsToJump   = false;
     bool wantsToFlyUp  = false;
     bool wantsToFlyDown = false;
 };

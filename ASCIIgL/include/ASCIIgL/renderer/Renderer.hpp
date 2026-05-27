@@ -1,44 +1,35 @@
 #pragma once
 
-#include <vector>
-#include <array>
 #include <cstddef>
+#include <memory>
+#include <vector>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include <d3d11.h>
-#include <d3dcompiler.h>
-#include <wrl/client.h>
-
-#pragma comment(lib, "d3d11.lib")
-#pragma comment(lib, "d3dcompiler.lib")
-#pragma comment(lib, "dxgi.lib")
-
-#include <ASCIIgL/engine/Mesh.hpp>
-#include <ASCIIgL/engine/Model.hpp>
-#include <ASCIIgL/engine/Texture.hpp>
-#include <ASCIIgL/engine/TextureArray.hpp>
 #include <ASCIIgL/engine/Camera3D.hpp>
 #include <ASCIIgL/engine/Camera2D.hpp>
-
-#include <ASCIIgL/renderer/screen/Screen.hpp>
-
 #include <ASCIIgL/renderer/Palette.hpp>
+#include <ASCIIgL/renderer/UniformLayout.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
-#include <ASCIIgL/renderer/Shader.hpp>  // for UniformValue, UniformDescriptor
 #include <ASCIIgL/renderer/SamplerType.hpp>
+#include <ASCIIgL/renderer/screen/ScreenTypes.hpp>
+
+#ifdef _WIN32
+struct ID3D11Device;
+struct ID3D11ShaderResourceView;
+#endif
 
 namespace ASCIIgL {
 
 // Forward declarations
+class Mesh;
+class Model;
+class Texture;
+class TextureArray;
 class Shader;
 class ShaderProgram;
 class Material;
-
-// ComPtr alias for cleaner code
-template<typename T>
-using ComPtr = Microsoft::WRL::ComPtr<T>;
 
 class Renderer
 {
@@ -65,16 +56,13 @@ public:
         std::vector<UniformOverride> overrides; // per-draw uniform overrides
     };
 
-private:
-    bool _initialized = false;
+    /// Opaque GPU mesh cache; storage defined in engine implementation.
+    struct GPUMeshCache;
+    /// Implementation state (see src/renderer/RendererImpl.hpp).
+    struct Impl;
 
-    // =========================================================================
-    // Singleton and Construction
-    // =========================================================================
-    Renderer() = default;
-    ~Renderer();
-    Renderer(const Renderer&) = delete;
-    Renderer& operator=(const Renderer&) = delete;
+private:
+    std::unique_ptr<Impl> impl_;
 
     // =========================================================================
     // Buffer Configuration Constants
@@ -83,162 +71,30 @@ private:
     static constexpr size_t BUFFER_GROWTH_FACTOR = 2;
 
     // =========================================================================
-    // DirectX 11 Core Resources
+    // Singleton and Construction
     // =========================================================================
-    ComPtr<ID3D11Device> _device;
-    ComPtr<ID3D11DeviceContext> _context;
-    ComPtr<ID3D11Texture2D> _renderTarget;          // MSAA render target
-    ComPtr<ID3D11RenderTargetView> _renderTargetView;
-    ComPtr<ID3D11Texture2D> _resolvedTexture;       // Non-MSAA resolved texture for CPU download
-    ComPtr<ID3D11Texture2D> _depthStencilBuffer;
-    ComPtr<ID3D11DepthStencilView> _depthStencilView;
-    ComPtr<ID3D11DepthStencilState> _depthStencilState;
-    ComPtr<ID3D11DepthStencilState> _depthStencilStateNoTest;   // Depth disabled
-    ComPtr<ID3D11DepthStencilState> _depthStencilStateNoWrite; // Depth test on, write off (transparent/2D)
-    ComPtr<ID3D11BlendState> _blendStateOpaque;   // No blending (default)
-    ComPtr<ID3D11BlendState> _blendStateAlpha;   // Alpha blending for GUI (SrcAlpha, InvSrcAlpha)
+    Renderer();
+    ~Renderer();
+    Renderer(const Renderer&) = delete;
+    Renderer& operator=(const Renderer&) = delete;
 
-    // Debug swap chain for RenderDoc support
-    ComPtr<IDXGISwapChain> _debugSwapChain;
-    HWND _debugWindow = nullptr;
-
-    // Window swap chain (windowed mode): presents ASCII output to ScreenWindowImpl HWND
-    ComPtr<IDXGISwapChain> _windowSwapChain;
-    ComPtr<ID3D11RenderTargetView> _windowRTV;
-
-    // =========================================================================
-    // Per-Mesh GPU Buffer Cache
-    // =========================================================================
-    struct GPUMeshCache {
-        ComPtr<ID3D11Buffer> vertexBuffer;
-        ComPtr<ID3D11Buffer> indexBuffer;
-        size_t vertexCount = 0;
-        size_t indexCount = 0;
-    };
-    GPUMeshCache* GetOrCreateMeshCache(const Mesh* mesh);
-
-    // =========================================================================
-    // Texture Resources
-    // =========================================================================
-    ComPtr<ID3D11SamplerState> _samplerLinear;
-    ComPtr<ID3D11SamplerState> _samplerAnisotropic;
-    ComPtr<ID3D11ShaderResourceView> _currentTextureSRV;
-    
-    std::unordered_map<const Texture*, ComPtr<ID3D11ShaderResourceView>> _textureCache;
-    std::unordered_map<const TextureArray*, ComPtr<ID3D11ShaderResourceView>> _textureArrayCache;
-
-    // =========================================================================
-    // Rasterizer State
-    // =========================================================================
-    // [0-3]: Clockwise (CW), [4-7]: Counter-Clockwise (CCW)
-    // Index: wireframe(0/1) + cull(0/2) + ccw(0/4)
-    ComPtr<ID3D11RasterizerState> _rasterizerStates[8];
-
-    // =========================================================================
-    // Staging Texture (for GPU->CPU CHAR_INFO download)
-    // =========================================================================
-    ComPtr<ID3D11Texture2D> _stagingTexture;
-
-    // =========================================================================
-    // Quantization pass (color RT -> CHAR_INFO RT)
-    // =========================================================================
-    ComPtr<ID3D11Texture2D> _charInfoTexture;       // R16G16_UINT render target
-    ComPtr<ID3D11RenderTargetView> _charInfoRTV;
-    ComPtr<ID3D11ShaderResourceView> _charInfoSRV;  // CHAR_INFO as SRV for window pass
-    ComPtr<ID3D11ShaderResourceView> _resolvedTextureSRV;  // resolved color as SRV for quantization
-    ComPtr<ID3D11ShaderResourceView> _colorLUTSRV;        // 4096x1 R16G16_UINT (multi)
-    ComPtr<ID3D11ShaderResourceView> _monochromeLUTSRV;   // 1024x1 R16G16_UINT (mono)
-    ComPtr<ID3D11Texture1D> _colorLUTTexture;
-    ComPtr<ID3D11Texture1D> _monochromeLUTTexture;
-    ComPtr<ID3D11Buffer> _lutConstantsCB;          // Lmin, Lmax, isMonochrome (for quantization FS)
-    ComPtr<ID3D11VertexShader> _quantizationVS;
-    ComPtr<ID3D11PixelShader> _quantizationPS;
-    ComPtr<ID3D11InputLayout> _quantizationInputLayout;
-    ComPtr<ID3D11Buffer> _fullscreenQuadVB;       // for quantization fullscreen draw
     void RunQuantizationPass();
     void UploadLUTsToGPU();
     bool EnsureQuantizationResources();
     bool InitializeCharInfoTarget();
     bool InitializeQuantizationShaders();
 
-    // =========================================================================
-    // Font atlas (window mode only): Texture2DArray, one slice per glyph, point sampling
-    // =========================================================================
-    ComPtr<ID3D11Texture2D> _fontAtlasTexture;
-    ComPtr<ID3D11ShaderResourceView> _fontAtlasSRV;
-    ComPtr<ID3D11SamplerState> _fontAtlasSamplerPoint;
-    int _fontAtlasCellPixelsX = 0;
-    int _fontAtlasCellPixelsY = 0;
-    int _fontAtlasGlyphCount = 0;
     bool InitializeFontAtlas();
 
-    // =========================================================================
-    // ASCII-to-window pass (window mode only)
-    // =========================================================================
-    ComPtr<ID3D11PixelShader> _asciiWindowPS;
-    ComPtr<ID3D11Buffer>      _asciiWindowCB;
-    ComPtr<ID3D11Buffer>      _paletteBufferWindow;   // StructuredBuffer<float4> for 16 palette colors
-    ComPtr<ID3D11ShaderResourceView> _paletteSRVWindow;
-    /// Maps Unicode code point (0..255) -> ramp index for font atlas slice lookup (StructuredBuffer<uint>)
-    ComPtr<ID3D11Buffer>      _rampLookupBuffer;
-    ComPtr<ID3D11ShaderResourceView> _rampLookupSRV;
-
-    // =========================================================================
-    // Currently Bound Shader Program (nullptr = default)
-    // =========================================================================
-    ShaderProgram* _boundShaderProgram = nullptr;
-    Material* _boundMaterial = nullptr;
-
-    // =========================================================================
-    // Rendering Settings
-    // =========================================================================
-    bool _wireframe = false;
-    bool _backface_culling = true;
-    bool _ccw = false;
-
-    glm::ivec3 _background_col = glm::ivec3(0, 0, 0);
-
-    // =========================================================================
-    // Buffer methods (no CPU color buffer; output is CHAR_INFO via quantization pass)
-    // =========================================================================
-
-    // =========================================================================
-    // Antialiasing
-    // =========================================================================
-    int _antialiasing_samples = 4;
-    bool _antialiasing = false;
-
-    // Anisotropic filtering level for texture arrays (1, 2, 4, 8, 16). 1 = off.
-    int _maxAnisotropy = 16;
-
-    // =========================================================================
-    // Glyphs and Color LUT
-    // =========================================================================
-    std::vector<wchar_t> _charRamp;
-    std::vector<float> _charCoverage;
+    GPUMeshCache* GetOrCreateMeshCache(const Mesh* mesh);
 
     void LoadCharCoverageFromJson(const wchar_t* charRamp = nullptr, int charRampCount = 10);
     void PrecomputeColorLUT();
     void PrecomputeMonochromeColorLUT(Palette& palette);
     void PrecomputeMultiColorLUT(Palette& palette);
-    /// Map luminance L to index in [0, 1023] for monochrome LUT lookup.
     size_t MonochromeLuminanceToIndex(float L) const;
 
-    enum class ColorLUTState { NotComputed, Monochrome, MultiColor };
-    ColorLUTState _colorLUTState = ColorLUTState::NotComputed;
-    static constexpr unsigned int _rgbLUTDepth = 16; // DO NOT CHANGE THIS VALUE (WILL BREAK THE LUT)
-    std::array<CHAR_INFO, _rgbLUTDepth*_rgbLUTDepth*_rgbLUTDepth> _colorLUT;
-
-    static constexpr size_t _monochromeLUTSize = 1024;
-    // Each entry stores (target luminance, CHAR_INFO)
-    std::array<std::pair<float, CHAR_INFO>, _monochromeLUTSize> _monochromeLUT;
-
-    bool _monochromeDitherEnabled = false;
-
-    // =========================================================================
-    // Helper Drawing Functions
-    // =========================================================================
-    void DrawClippedLinePxBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, WCHAR pixel_type, unsigned short col);
+    void DrawClippedLinePxBuff(int x0, int y0, int x1, int y1, int minX, int maxX, int minY, int maxY, wchar_t pixel_type, unsigned short col);
 
     // =========================================================================
     // GPU Initialization Methods
@@ -247,7 +103,7 @@ private:
     bool InitializeRenderTarget();
     bool InitializeDepthStencil();
     bool InitializeSamplers();
-    bool CreateAnisotropicSampler();  // (re)creates _samplerAnisotropic using _maxAnisotropy
+    bool CreateAnisotropicSampler();  // (re)creates anisotropic sampler using _maxAnisotropy
     bool InitializeRasterizerStates();
     bool InitializeBlendStates();
     bool InitializeStagingTexture();
@@ -278,11 +134,14 @@ private:
     // =========================================================================
     // Draw Call Queues
     // =========================================================================
-    std::vector<DrawCall> _opaqueDraws;
-    std::vector<DrawCall> _transparentDraws;
     void SortOpaqueDraws();
     void SortTransparentDraws();
     void ExecuteDrawList(const std::vector<DrawCall>& list);
+
+#ifdef _WIN32
+    /// D3D device for shader compilation; nullptr if not initialized.
+    ID3D11Device* GetD3D11Device() const;
+#endif
 
 public:
     // =========================================================================
@@ -315,16 +174,16 @@ public:
     // =========================================================================
     // Low-Level Drawing API - Primitives, No pipeline involved
     // =========================================================================
-    void DrawLinePxBuff(int x1, int y1, int x2, int y2, WCHAR pixel_type, const unsigned short col);
+    void DrawLinePxBuff(int x1, int y1, int x2, int y2, wchar_t pixel_type, const unsigned short col);
 
-    void DrawTriangleWireframePxBuff(const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, WCHAR pixel_type, const unsigned short col);
+    void DrawTriangleWireframePxBuff(const glm::vec2& vert1, const glm::vec2& vert2, const glm::vec2& vert3, wchar_t pixel_type, const unsigned short col);
 
     void DrawScreenBorderPxBuff(const unsigned short col);
 
     // =========================================================================
     // Utility
     // =========================================================================
-    CHAR_INFO GetCharInfo(const glm::ivec3& rgb);
+    ScreenPixel GetCharInfo(const glm::ivec3& rgb);
 
     // =========================================================================
     // Settings API
@@ -347,8 +206,8 @@ public:
 
     /// Enables 4x4 Bayer ordered dithering for the monochrome LUT path.
     /// Default: false.
-    void SetMonochromeDitherEnabled(bool enabled) { _monochromeDitherEnabled = enabled; }
-    bool GetMonochromeDitherEnabled() const { return _monochromeDitherEnabled; }
+    void SetMonochromeDitherEnabled(bool enabled);
+    bool GetMonochromeDitherEnabled() const;
 
     /// Anisotropic filtering level for texture arrays. Valid: 1 (off), 2, 4, 8, 16. Default 16.
     void SetMaxAnisotropy(int level);
@@ -363,7 +222,7 @@ public:
     void InvalidateCachedTexture(const Texture* tex);
     
     // Get currently bound shader program (nullptr if using default)
-    ShaderProgram* GetBoundShaderProgram() const { return _boundShaderProgram; }
+    ShaderProgram* GetBoundShaderProgram() const;
 
     // =========================================================================
     // Draw Call Queue API / GPU Frame
@@ -411,4 +270,4 @@ private:
     void SetBlendEnabled(bool enabled);
 };
 
-} // namespace ASCIIgL
+}  // namespace ASCIIgL

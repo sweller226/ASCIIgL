@@ -27,6 +27,9 @@ namespace ASCIIgL {
 
 namespace {
 
+static_assert(sizeof(ScreenPixel) == sizeof(CHAR_INFO), "ScreenPixel must match CHAR_INFO size");
+static_assert(alignof(ScreenPixel) == alignof(CHAR_INFO), "ScreenPixel must match CHAR_INFO alignment");
+
 BOOL WINAPI ConsoleCtrlHandler(DWORD signal) {
     switch (signal) {
     case CTRL_C_EVENT:
@@ -177,55 +180,61 @@ void ScreenTerminalImpl::RenderTabTitle() {
     SetConsoleTitleA(titleBuffer);
 }
 
-void ScreenTerminalImpl::PlotPixel(const glm::vec2& p, const WCHAR character, const unsigned short Colour) {
+void ScreenTerminalImpl::PlotPixel(const glm::vec2& p, const wchar_t character, const unsigned short Colour) {
     int x = static_cast<int>(p.x);  // No doubling for square fonts
     int y = static_cast<int>(p.y);
     if (x >= 0 && x < static_cast<int>(screen._screen_width) && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot single pixel for square fonts
-        _pixelBuffer[y * screen._screen_width + x].Char.UnicodeChar = character;
-        _pixelBuffer[y * screen._screen_width + x].Attributes = static_cast<WORD>(Colour);
+        _pixelBuffer[y * screen._screen_width + x] = CHAR_INFO{ character, static_cast<WORD>(Colour) };
     }
 }
 
-void ScreenTerminalImpl::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol) {
+void ScreenTerminalImpl::PlotPixel(const glm::vec2& p, const ScreenPixel& charCol) {
     int x = static_cast<int>(p.x);  // No doubling for square fonts
     int y = static_cast<int>(p.y);
     if (x >= 0 && x < static_cast<int>(screen._screen_width) && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot single pixel for square fonts
-        _pixelBuffer[y * screen._screen_width + x] = charCol;
+        _pixelBuffer[y * screen._screen_width + x] = CHAR_INFO{ charCol.glyph, static_cast<WORD>(charCol.attributes) };
     }
 }
 
-void ScreenTerminalImpl::PlotPixel(int x, int y, WCHAR character, const unsigned short Colour) {
+void ScreenTerminalImpl::PlotPixel(int x, int y, wchar_t character, const unsigned short Colour) {
     // No doubling for square fonts
     if (x >= 0 && x < static_cast<int>(screen._screen_width) && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot single pixel for square fonts
-        _pixelBuffer[y * screen._screen_width + x].Char.UnicodeChar = character;
-        _pixelBuffer[y * screen._screen_width + x].Attributes = static_cast<WORD>(Colour);
+        _pixelBuffer[y * screen._screen_width + x] = CHAR_INFO{ character, static_cast<WORD>(Colour) };
     }
 }
 
-void ScreenTerminalImpl::PlotPixel(int x, int y, CHAR_INFO charCol) {
+void ScreenTerminalImpl::PlotPixel(int x, int y, const ScreenPixel& charCol) {
     // No doubling for square fonts
     if (x >= 0 && x < static_cast<int>(screen._screen_width) && y >= 0 && y < static_cast<int>(screen._screen_height)) {
         // Plot single pixel for square fonts
-        _pixelBuffer[y * screen._screen_width + x] = charCol;
+        _pixelBuffer[y * screen._screen_width + x] = CHAR_INFO{ charCol.glyph, static_cast<WORD>(charCol.attributes) };
     }
 }
 
-void ScreenTerminalImpl::PlotPixel(int idx, const CHAR_INFO charCol) {
+void ScreenTerminalImpl::PlotPixel(int idx, const ScreenPixel& charCol) {
     // No doubling for square fonts
     if (idx >= 0 && idx < static_cast<int>(screen._screen_width * screen._screen_height)) {
-        _pixelBuffer[idx] = charCol;
+        _pixelBuffer[idx] = CHAR_INFO{ charCol.glyph, static_cast<WORD>(charCol.attributes) };
     }
 }
 
-std::vector<CHAR_INFO>& ScreenTerminalImpl::GetPixelBuffer() {
-    return _pixelBuffer;
+ScreenPixel* ScreenTerminalImpl::GetPixelBufferData() {
+    return reinterpret_cast<ScreenPixel*>(_pixelBuffer.data());
 }
 
-HWND ScreenTerminalImpl::GetWindowHandle() {
-    return GetConsoleWindow();
+const ScreenPixel* ScreenTerminalImpl::GetPixelBufferData() const {
+    return reinterpret_cast<const ScreenPixel*>(_pixelBuffer.data());
+}
+
+size_t ScreenTerminalImpl::GetPixelBufferSize() const {
+    return _pixelBuffer.size();
+}
+
+NativeWindowHandle ScreenTerminalImpl::GetWindowHandle() {
+    return static_cast<NativeWindowHandle>(GetConsoleWindow());
 }
 
 void ScreenTerminalImpl::ProcessMessages() {

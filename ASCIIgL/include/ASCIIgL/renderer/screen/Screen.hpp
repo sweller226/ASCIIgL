@@ -1,21 +1,14 @@
 #pragma once
 
 #include <atomic>
+#include <cstddef>
 #include <string>
-#include <vector>
 #include <memory>
 
 #include <ASCIIgL/renderer/Palette.hpp>
+#include <ASCIIgL/renderer/screen/ScreenTypes.hpp>
 
 #include <glm/glm.hpp>
-
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
 
 namespace ASCIIgL {
 
@@ -52,11 +45,11 @@ public:
     void RenderTabTitle();
     void ClearPixelBuffer();
     void OutputBuffer();
-    void PlotPixel(const glm::vec2& p, WCHAR character, unsigned short Colour);
-    void PlotPixel(const glm::vec2& p, const CHAR_INFO charCol);
-    void PlotPixel(int x, int y, WCHAR character, unsigned short Colour);
-    void PlotPixel(int x, int y, const CHAR_INFO charCol);
-    void PlotPixel(int idx, const CHAR_INFO charCol);
+    void PlotPixel(const glm::vec2& p, wchar_t character, unsigned short Colour);
+    void PlotPixel(const glm::vec2& p, const ScreenPixel& charCol);
+    void PlotPixel(int x, int y, wchar_t character, unsigned short Colour);
+    void PlotPixel(int x, int y, const ScreenPixel& charCol);
+    void PlotPixel(int idx, const ScreenPixel& charCol);
 
     const std::wstring& GetTitle() const;
     void SetTitle(const std::wstring& title);
@@ -68,9 +61,11 @@ public:
     /// the current palette is monochrome. Otherwise returns nullptr.
     MonochromePalette* GetMonochromePalette();
     bool IsMonochromePalette() const;
-    std::vector<CHAR_INFO>& GetPixelBuffer();
+    ScreenPixel* GetPixelBufferData();
+    const ScreenPixel* GetPixelBufferData() const;
+    size_t GetPixelBufferSize() const;
     /// Window handle (console in terminal mode, app window in window mode). nullptr if not initialized.
-    HWND GetWindowHandle() const;
+    NativeWindowHandle GetWindowHandle() const;
 
     /// Call once per frame. Pumps Win32 messages (window mode); no-op in terminal mode. Sets exit flag on WM_QUIT or console Ctrl.
     void ProcessMessages();

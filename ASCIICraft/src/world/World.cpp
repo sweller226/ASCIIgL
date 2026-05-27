@@ -12,7 +12,7 @@
 #include <ASCIIgL/renderer/Material.hpp>
 
 #include <ASCIICraft/world/chunk/ChunkRegion.hpp>
-#include <ASCIICraft/util/Util.hpp>
+#include <ASCIICraft/util/TimeUtil.hpp>
 
 #include <entt/entt.hpp>
 
@@ -31,16 +31,24 @@ World::~World() {
 
 void World::Update() {
     {
-        ASCIIgL::PROFILE_SCOPE("Update.ChunkManagement");
+        PROFILE_SCOPE("Update.ChunkManagement");
         chunkManager->Update();
     }
 }
 
 void World::Render() {
     {
-        ASCIIgL::PROFILE_SCOPE("RenderWorld");
+        PROFILE_SCOPE("RenderWorld");
         chunkManager->RenderChunks();
     }
+}
+
+uint32_t World::GetBlockState(int x, int y, int z) const {
+    return chunkManager->GetBlockState(x, y, z);
+}
+
+uint32_t World::GetBlockState(const WorldCoord& pos) const {
+    return chunkManager->GetBlockState(pos);
 }
 
 World* GetWorldPtr(entt::registry& registry) {

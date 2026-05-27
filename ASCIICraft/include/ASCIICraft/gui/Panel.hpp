@@ -24,7 +24,7 @@ public:
     Widget* HitTest(glm::vec2 point) override;
     const Widget* HitTest(glm::vec2 point) const override;
     void Update(float dt) override;
-    void Draw(::ecs::systems::RenderSystem& renderSystem) const override;
+    void Draw(::ecs::systems::RenderSystem& ecsRenderSystem) const override;
 
 private:
     std::shared_ptr<ASCIIgL::Mesh> backgroundMesh;

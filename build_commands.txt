@@ -14,11 +14,11 @@ ASCIIgL
     .\scripts\create_distribution.ps1 -Clean -Version 1.5.0
 
 ASCIICraft
-    Run Debug Command
-    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Debug"
+    Run FastDebug Command
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\FastDebug"
     .\ASCIICraft.exe
 
-    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Debug"
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\FastDebug"
     .\ASCIICraft.exe --window
 
     Run Release Command
@@ -31,11 +31,21 @@ ASCIICraft
     Build Release
     ./scripts/build_release.ps1
 
-    Build Debug
-    ./scripts/build_debug.ps1
+    Build FastDebug
+    ./scripts/build_fastdebug.ps1
 
     Rebuild Library
     ./scripts/build_ASCIIgL_ASCIICraft.ps1
+
+Tracy
+    Open Profiler UI
+    ./scripts/run_tracy.ps1
+
+    Run Capture CLI help
+    ./scripts/run_tracy.ps1 capture -- -h
+
+    Run CSV export CLI help
+    ./scripts/run_tracy.ps1 csvexport -- -h
 
 CharCoverage
     Build Release

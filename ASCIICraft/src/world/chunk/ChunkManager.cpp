@@ -86,7 +86,7 @@ Chunk* ChunkManager::GetChunk(const ChunkCoord& coord) {
 }
 
 void ChunkManager::LoadChunk(const ChunkCoord& coord) {
-    ASCIIgL::PROFILE_SCOPE("Chunk.LoadChunk");
+    PROFILE_SCOPE("Chunk.LoadChunk");
     if (coord.y < 0) {
         return;
     }
@@ -252,8 +252,8 @@ void ChunkManager::ApplyEditsToChunk(Chunk* c, const std::vector<CrossChunkEdit>
 }
 
 void ChunkManager::ProcessMetaBucketExpiry() {
-    ASCIIgL::PROFILE_SCOPE("Chunk.UpdateChunkLoading.MetaBuckets");
-    const uint32_t now = NowSeconds();
+    PROFILE_SCOPE("Chunk.UpdateChunkLoading.MetaBuckets");
+    const uint32_t now = util::NowSeconds();
     constexpr int MAX_META_SAVES_PER_FRAME = 4;
     int metaSaveCount = 0;
 
@@ -290,7 +290,7 @@ void ChunkManager::ProcessMetaBucketExpiry() {
 void ChunkManager::LoadChunksInRadius(const ChunkCoord& playerChunk, unsigned int loadRadius) {
     std::vector<ChunkCoord> chunksToLoad;
     {
-        ASCIIgL::PROFILE_SCOPE("Chunk.UpdateChunkLoading.ComputeChunksToLoad");
+        PROFILE_SCOPE("Chunk.UpdateChunkLoading.ComputeChunksToLoad");
         int signedRadius = static_cast<int>(loadRadius);
         chunksToLoad.reserve(static_cast<size_t>(2 * signedRadius + 1) *
                             (2 * signedRadius + 1) *
@@ -311,7 +311,7 @@ void ChunkManager::LoadChunksInRadius(const ChunkCoord& playerChunk, unsigned in
 
     std::vector<ChunkCoord> newlyLoadedChunks;
     {
-        ASCIIgL::PROFILE_SCOPE("Chunk.UpdateChunkLoading.LoadNewChunks");
+        PROFILE_SCOPE("Chunk.UpdateChunkLoading.LoadNewChunks");
         newlyLoadedChunks.reserve(std::min(chunksToLoad.size(), static_cast<size_t>(MAX_CHUNK_LOADS_PER_FRAME)));
         for (size_t i = 0; i < chunksToLoad.size() && i < static_cast<size_t>(MAX_CHUNK_LOADS_PER_FRAME); ++i) {
             const ChunkCoord& coord = chunksToLoad[i];
@@ -331,7 +331,7 @@ void ChunkManager::LoadChunksInRadius(const ChunkCoord& playerChunk, unsigned in
 }
 
 void ChunkManager::UnloadDistantChunks(const ChunkCoord& playerChunk, unsigned int unloadRadius) {
-    ASCIIgL::PROFILE_SCOPE("Chunk.UpdateChunkLoading.UnloadChunks");
+    PROFILE_SCOPE("Chunk.UpdateChunkLoading.UnloadChunks");
     std::vector<ChunkCoord> chunksToUnload;
     for (const auto& pair : loadedChunks) {
         const ChunkCoord& coord = pair.first;
@@ -509,7 +509,7 @@ void ChunkManager::ApplyDrainedMeshResults() {
 }
 
 void ChunkManager::DrainAndApplyJobResults() {
-    ASCIIgL::PROFILE_SCOPE("Chunk.DrainAndApplyJobResults");
+    PROFILE_SCOPE("Chunk.DrainAndApplyJobResults");
     ApplyDrainedTerrainResults();
     ApplyDrainedMeshResults();
 }
@@ -665,7 +665,7 @@ void ChunkManager::SetBlockState(int x, int y, int z, uint32_t stateId) {
             metaTimeTracker.push(chunkCoord);
         } else {
             it->second.edits.push_back(crossChunkEdit);
-            it->second.lastTouched = NowSeconds();
+            it->second.lastTouched = util::NowSeconds();
         }
     } else {
         chunk->SetBlockState(localPos.x, localPos.y, localPos.z, stateId);
@@ -676,24 +676,24 @@ void ChunkManager::SetBlockState(int x, int y, int z, uint32_t stateId) {
 }
 
 void ChunkManager::Update() {
-    ASCIIgL::PROFILE_SCOPE("Chunk.Update");
+    PROFILE_SCOPE("Chunk.Update");
 
     {
-        ASCIIgL::PROFILE_SCOPE("Chunk.Update.DrainAndApplyJobResults");
+        PROFILE_SCOPE("Chunk.Update.DrainAndApplyJobResults");
         DrainAndApplyJobResults();
     }
     {
-        ASCIIgL::PROFILE_SCOPE("Chunk.Update.UpdateChunkLoading");
+        PROFILE_SCOPE("Chunk.Update.UpdateChunkLoading");
         UpdateChunkLoading();
     }
     {
-        ASCIIgL::PROFILE_SCOPE("Chunk.Update.EnqueueMeshForDirtyChunks");
+        PROFILE_SCOPE("Chunk.Update.EnqueueMeshForDirtyChunks");
         EnqueueMeshForDirtyChunks();
     }
     // Drain again so terrain that completed this frame (e.g. right after LoadChunk) gets
     // crossChunkEdits applied before next frame; avoids bucket sitting until next Drain.
     {
-        ASCIIgL::PROFILE_SCOPE("Chunk.Update.DrainAndApplyJobResultsLate");
+        PROFILE_SCOPE("Chunk.Update.DrainAndApplyJobResultsLate");
         DrainAndApplyJobResults();
     }
 }

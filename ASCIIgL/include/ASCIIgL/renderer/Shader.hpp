@@ -5,18 +5,10 @@
 #include <vector>
 #include <unordered_map>
 #include <cstdint>
-#include <cstring>
 #include <variant>
 
-#include <glm/glm.hpp>
-
+#include <ASCIIgL/renderer/UniformLayout.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
-
-#ifdef _WIN32
-#include <d3d11.h>
-#include <d3dcompiler.h>
-#include <wrl/client.h>
-#endif
 
 namespace ASCIIgL {
 
@@ -24,129 +16,12 @@ namespace ASCIIgL {
 class Texture;
 class Renderer;
 
-// =========================================================================
-// Shader Type Enum
-// =========================================================================
-
 enum class ShaderType {
     Vertex,
     Pixel
 };
 
-// =========================================================================
-// Uniform Types - Values that can be passed to shaders
-// =========================================================================
-
-// Supported uniform value types (variant for type-safe storage)
-using UniformValue = std::variant<
-    float,
-    glm::vec2,
-    glm::vec3,
-    glm::vec4,
-    int,
-    glm::ivec2,
-    glm::ivec3,
-    glm::ivec4,
-    glm::mat3,
-    glm::mat4
->;
-
-// Uniform type enum for serialization/reflection
-enum class UniformType {
-    Float,
-    Float2,
-    Float3,
-    Float4,
-    Int,
-    Int2,
-    Int3,
-    Int4,
-    Mat3,
-    Mat4
-};
-
-// =========================================================================
-// Uniform Descriptor - Describes a single uniform in a constant buffer
-// =========================================================================
-
-struct UniformDescriptor {
-    std::string name;
-    UniformType type;
-    uint32_t offset;      // Byte offset in constant buffer
-    uint32_t size;        // Size in bytes
-
-    UniformDescriptor(const std::string& name, UniformType type, uint32_t offset);
-    
-    static uint32_t GetTypeSize(UniformType type);
-    static uint32_t GetTypeAlignment(UniformType type);  // For HLSL packing rules
-};
-
-// =========================================================================
-// Uniform Buffer Layout - Describes the layout of a constant buffer
-// =========================================================================
-
-class UniformBufferLayout {
-public:
-    class Builder {
-    public:
-        Builder& Add(const std::string& name, UniformType type);
-        UniformBufferLayout Build() const;
-
-    private:
-        std::vector<UniformDescriptor> _uniforms;
-        uint32_t _currentOffset = 0;
-    };
-
-    const std::vector<UniformDescriptor>& GetUniforms() const { return _uniforms; }
-    uint32_t GetSize() const { return _size; }
-    bool HasUniform(const std::string& name) const;
-    const UniformDescriptor* GetUniform(const std::string& name) const;
-
-private:
-    friend class Builder;
-    std::vector<UniformDescriptor> _uniforms;
-    uint32_t _size = 0;
-};
-
-// =========================================================================
-// Shader include map - For sharing HLSL utility code via #include
-// =========================================================================
-// Map: include name (as used in #include "Name.hlsl") -> full HLSL source.
-// Pass to CreateFromSource when building shaders that use #include.
 using ShaderIncludeMap = std::unordered_map<std::string, std::string>;
-
-// Implements ID3DInclude so HLSL #include "Name.hlsl" resolves from a ShaderIncludeMap.
-// Use with D3DCompile(..., pInclude, ...) when compiling shaders that use #include.
-class ShaderIncludeHandler : public ID3DInclude {
-public:
-    explicit ShaderIncludeHandler(const ShaderIncludeMap* map) : _map(map) {}
-
-    HRESULT STDMETHODCALLTYPE Open(
-        D3D_INCLUDE_TYPE /*IncludeType*/,
-        LPCSTR pFileName,
-        LPCVOID /*pParentData*/,
-        LPCVOID* ppData,
-        UINT* pBytes) override
-    {
-        if (!_map || !ppData || !pBytes) return E_INVALIDARG;
-        auto it = _map->find(pFileName);
-        if (it == _map->end()) {
-            const char* base = std::strrchr(pFileName, '/');
-            if (!base) base = std::strrchr(pFileName, '\\');
-            const char* name = base ? base + 1 : pFileName;
-            it = _map->find(name);
-        }
-        if (it == _map->end()) return E_FAIL;
-        *ppData = it->second.data();
-        *pBytes = static_cast<UINT>(it->second.size());
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE Close(LPCVOID /*pData*/) override { return S_OK; }
-
-private:
-    const ShaderIncludeMap* _map;
-};
 
 // =========================================================================
 // Shader - Represents a single compiled shader (vertex or pixel)
@@ -185,6 +60,7 @@ public:
     const std::string& GetCompileError() const { return _compileError; }
 
 private:
+    class Impl;
     Shader(ShaderType type);
 
     bool CompileFromSource(const std::string& source, const std::string& entryPoint,
@@ -194,12 +70,7 @@ private:
     ShaderType _type;
     bool _isValid = false;
     std::string _compileError;
-
-#ifdef _WIN32
-    Microsoft::WRL::ComPtr<ID3DBlob> _bytecode;
-    Microsoft::WRL::ComPtr<ID3D11VertexShader> _vertexShader;
-    Microsoft::WRL::ComPtr<ID3D11PixelShader> _pixelShader;
-#endif
+    std::unique_ptr<Impl> _impl;
 };
 
 // =========================================================================
@@ -227,6 +98,7 @@ public:
     const std::string& GetError() const { return _error; }
 
 private:
+    class Impl;
     ShaderProgram();
 
     bool Initialize(
@@ -244,10 +116,7 @@ private:
     UniformBufferLayout _uniformLayout;
     bool _isValid = false;
     std::string _error;
-
-#ifdef _WIN32
-    Microsoft::WRL::ComPtr<ID3D11InputLayout> _inputLayout;
-#endif
+    std::unique_ptr<Impl> _impl;
 };
 
 // =========================================================================

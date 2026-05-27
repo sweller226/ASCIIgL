@@ -204,4 +204,21 @@ void Camera3D::SetPitch(float Ppitch) {
 	recalculateViewMat();
 }
 
+glm::mat4 Camera3D::GetBillboardMatrix(const glm::vec3& position, const glm::vec3& scale) const {
+    glm::mat4 billboard(1.0f);
+
+    // Transpose of the view matrix's upper-left 3x3 gives camera axes in world space
+    billboard[0] = glm::vec4(view[0][0], view[1][0], view[2][0], 0.0f); // right
+    billboard[1] = glm::vec4(view[0][1], view[1][1], view[2][1], 0.0f); // up
+    billboard[2] = glm::vec4(view[0][2], view[1][2], view[2][2], 0.0f); // forward
+
+    billboard[0] *= scale.x;
+    billboard[1] *= scale.y;
+    billboard[2] *= scale.z;
+
+    billboard[3] = glm::vec4(position, 1.0f);
+
+    return billboard;
+}
+
 } // namespace ASCIIgL

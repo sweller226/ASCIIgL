@@ -29,7 +29,6 @@
 #include <ASCIICraft/world/block/models/WaterModelBuilder.hpp>
 #include <ASCIICraft/ecs/data/ItemIndex.hpp>
 
-#include <ASCIICraft/gui/GuiMeshes.hpp>
 #include <ASCIICraft/gui/screens/PlayHUDScreen.hpp>
 #include <ASCIICraft/gui/screens/InventoryScreen.hpp>
 
@@ -39,6 +38,7 @@
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 #include <ASCIICraft/ecs/components/PlayerController.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/sound/SoundRegistry.hpp>
 
 // shaders
 #include <ASCIICraft/rendering/TerrainShaders.hpp>
@@ -50,12 +50,17 @@ Game::Game()
     , gameplayInputFilter(inputSystem)
     , movementSystem(registry, gameplayInputFilter, eventBus)
     , physicsSystem(registry)
-    , renderSystem(registry)
+    , ecsRenderSystem(registry)
     , cameraSystem(registry, gameplayInputFilter)
     , guiManager(registry, eventBus, inputSystem)
     , blockUpdateSystem(registry, eventBus)
     , placingSystem(registry, eventBus)
     , miningSystem(registry, eventBus)
+    , lifetimeSystem(registry)
+    , particleSystem(registry, eventBus)
+    , soundSystem(registry, eventBus)
+    , musicSystem(eventBus, soundSystem)
+    , stepSfxSystem(registry, eventBus)
     , playerFactory(registry)
     , shouldInternalExit(false)
 {
@@ -94,12 +99,14 @@ bool Game::Initialize(bool renderToTerminal) {
     SCREEN_HEIGHT = ASCIIgL::Screen::GetInst().GetHeight();
     ASCIIgL::Logger::Debug("Screen initialized: " + std::to_string(SCREEN_WIDTH) + "x" + std::to_string(SCREEN_HEIGHT));
 
+    guiCamera = std::make_unique<ASCIIgL::Camera2D>(glm::vec2(0, 0), SCREEN_WIDTH, SCREEN_HEIGHT);
+
     ASCIIgL::FPSClock::GetInst().Initialize(static_cast<unsigned int>(TARGET_FPS), 1.0f);
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
 
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
     renderer.SetMonochromeDitherEnabled(true);
-    renderer.SetBackgroundCol(glm::ivec3(210, 210, 210));
+    renderer.SetBackgroundCol(glm::ivec3(255, 255, 255));
     renderer.SetWireframe(false);
     renderer.SetBackfaceCulling(true);
     renderer.SetCCW(true);
@@ -145,37 +152,32 @@ void Game::Run(std::function<bool()> shouldExternalExit, bool renderToTerminal) 
 
     ASCIIgL::Logger::Info("Starting game loop...");
 
-    ASCIIgL::Profiler::GetInst().SetEnabled(true);
-
     int frameCounter = 0;
     while (!shouldExternalExit() && !shouldInternalExit) {
         ASCIIgL::Screen::GetInst().ProcessMessages();
         if (ASCIIgL::Screen::GetInst().ShouldExit())
             break;
 
-        ASCIIgL::Profiler::GetInst().BeginFrame();
+        PROFILE_FRAME_MARK();
         ASCIIgL::FPSClock::GetInst().StartFPSClock();
 
         {
-            ASCIIgL::PROFILE_SCOPE("Update");
+            PROFILE_SCOPE("Update");
             Update();
         }
 
         {
-            ASCIIgL::PROFILE_SCOPE("RenderGame");
+            PROFILE_SCOPE("RenderGame");
             Render();
         }
 
         eventBus.endFrame();
 
         ASCIIgL::FPSClock::GetInst().EndFPSClock();
-        ASCIIgL::Profiler::GetInst().EndFrame();
         frameCounter++;
 
         if (frameCounter % 60 == 0) {
             ASCIIgL::Logger::Info("FPS: " + std::to_string(ASCIIgL::FPSClock::GetInst().GetFPS()));
-            ASCIIgL::Profiler::GetInst().LogReport();
-            ASCIIgL::Profiler::GetInst().Reset();
             frameCounter = 0;
         }
     }   
@@ -188,7 +190,7 @@ void Game::Update() {
     inputSystem.Update();
 
     for ([[maybe_unused]] const auto& e : eventBus.view<events::ToggleInventoryEvent>()) {
-        guiManager.ToggleInventoryScreen();
+        // Temporary behavior: allow close-only; ignore requests that would open inventory.
     }
     for ([[maybe_unused]] const auto& e : eventBus.view<events::QuitRequestedEvent>()) {
         ASCIIgL::Logger::Info("Quit action detected. Exiting game...");
@@ -205,18 +207,23 @@ void Game::Update() {
                 return;
             }
 
+            lifetimeSystem.Update();
+
             guiManager.Update();
 
             miningSystem.Update();
-
             placingSystem.Update();
-
             blockUpdateSystem.Update();
+            
+            particleSystem.Update();
 
             movementSystem.Update();
             cameraSystem.Update();
-
             physicsSystem.Update();
+
+            stepSfxSystem.Update();
+            musicSystem.Update();
+            soundSystem.Update();
 
             world->Update();
 
@@ -233,7 +240,7 @@ void Game::Update() {
 void Game::Render() {
 
     {
-        ASCIIgL::PROFILE_SCOPE("Clear Px Buff/Begin GPU Frame");
+        PROFILE_SCOPE("Clear Px Buff/Begin GPU Frame");
         ASCIIgL::Screen::GetInst().ClearPixelBuffer();
         ASCIIgL::Renderer::GetInst().BeginGpuFrame();
     }
@@ -242,7 +249,7 @@ void Game::Render() {
     switch (gameState) {
         case GameState::Playing:
             {
-                ASCIIgL::PROFILE_SCOPE("Render.RenderPlaying");
+                PROFILE_SCOPE("Render.RenderPlaying");
                  RenderPlaying();
             }
             break;
@@ -250,22 +257,22 @@ void Game::Render() {
 
     // Execute queued GPU draws in two passes (opaque, then transparent)
     {
-        ASCIIgL::PROFILE_SCOPE("Render.FlushDraws");
+        PROFILE_SCOPE("Render.FlushDraws");
         ASCIIgL::Renderer::GetInst().FlushDraws();  
     }
 
     {
-        ASCIIgL::PROFILE_SCOPE("Render.EndGpuFrame");
+        PROFILE_SCOPE("Render.EndGpuFrame");
         ASCIIgL::Renderer::GetInst().EndGpuFrame();
     }
 
     {
-        ASCIIgL::PROFILE_SCOPE("Render.PixelBufferDraws");
+        PROFILE_SCOPE("Render.PixelBufferDraws");
         ASCIIgL::Renderer::GetInst().DrawScreenBorderPxBuff(0xF);
     }
 
     {
-        ASCIIgL::PROFILE_SCOPE("Render.PixelBufferOutput");
+        PROFILE_SCOPE("Render.PixelBufferOutput");
         ASCIIgL::Screen::GetInst().OutputBuffer();
     }
 }
@@ -300,8 +307,8 @@ bool Game::LoadTextures() {
     const glm::ivec3 EmeraldGreenHue  = glm::ivec3(10, 15, 12); // green/cyan tilt
     const glm::ivec3 ElectricMagentaHue = glm::ivec3(15, 10, 15); // magenta/purple
 
-    float darkL  = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(22, 22, 22));
-    float lightL = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(210, 210, 210));
+    float darkL  = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(30, 30, 30));
+    float lightL = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(212, 212, 212));
 
     // Build monochrome mapping from the current screen palette if possible.
     ASCIIgL::MonochromeMapping monoMap;
@@ -327,197 +334,160 @@ bool Game::LoadTextures() {
         return false;
     }
 
+    constexpr int kFontGlyphTileSize = 8; // Minecraft default font atlas uses 8x8 glyph cells.
+    auto fontTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(
+        "res/font/default.png",
+        kFontGlyphTileSize,
+        "defaultFontTextureArray",
+        monoMap
+    );
+    if (!fontTextureArray || !fontTextureArray->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to load default bitmap font texture atlas");
+        return false;
+    }
+
     return true;
 }
 
 bool Game::LoadResources() {
     ASCIIgL::Logger::Info("Loading game resources...");
-    
-    // Create gradient mapping shader program
-    auto terrainVS = ASCIIgL::Shader::CreateFromSource(
-        TerrainShaders::GetTerrainVSSource(),
-        ASCIIgL::ShaderType::Vertex
-    );
-    
-    ASCIIgL::ShaderIncludeMap terrainIncludes;
-    ASCIIgL::HLSLIncludes::AddToMap(terrainIncludes);
-    auto terrainPS = ASCIIgL::Shader::CreateFromSource(
-        TerrainShaders::GetTerrainPSSource(),
-        ASCIIgL::ShaderType::Pixel,
-        "main",
-        &terrainIncludes
-    );
-    
-    if (!terrainVS || !terrainVS->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile gradient map vertex shader: " + terrainVS->GetCompileError());
-        return false;
-    }
-    
-    if (!terrainPS || !terrainPS->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile gradient map pixel shader: " + terrainPS->GetCompileError());
-        return false;
-    }
-    
-    // Create shader program with gradient map uniform layout (PosUVLayerLight = terrain + per-vertex light)
-    auto blockShaderProgram = ASCIIgL::ShaderProgram::Create(
-        std::move(terrainVS),
-        std::move(terrainPS),
-        ASCIIgL::VertFormats::PosUVLayerLight(),
-        TerrainShaders::GetTerrainPSUniformLayout()
-    );
-    
-    if (!blockShaderProgram || !blockShaderProgram->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to create gradient map shader program");
-        return false;
-    }
 
-    auto blockMaterial = ASCIIgL::Material::Create(std::move(blockShaderProgram));
-
-    
-    if (!blockMaterial) {
-        ASCIIgL::Logger::Error("Failed to create block material");
-        return false;
-    }
-    
-    // Set texture array (weak reference inside Material, owned by TextureLibrary)
-    blockMaterial->SetTextureArray(0, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get());
-    
-    // Set gradient colors from palette entries with smallest and largest luminance (matches monochrome LUT)
-    auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
-    blockMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
-    blockMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
-
-    // Register material
-    ASCIIgL::MaterialLibrary::GetInst().Register("blockMaterial", std::move(blockMaterial));
-
-    auto guiVS = ASCIIgL::Shader::CreateFromSource(
-        GUIShaders::GetGUIVSSource(),
-        ASCIIgL::ShaderType::Vertex
-    );
-
-    ASCIIgL::ShaderIncludeMap guiIncludes;
-    ASCIIgL::HLSLIncludes::AddToMap(guiIncludes);
-    auto guiPS = ASCIIgL::Shader::CreateFromSource(
-        GUIShaders::GetGUIPSSource(),
-        ASCIIgL::ShaderType::Pixel,
-        "main",
-        &guiIncludes
-    );
-
-    if (!guiVS || !guiVS->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile GUI vertex shader: " + guiVS->GetCompileError());
-        return false;
-    }
-
-    if (!guiPS || !guiPS->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile GUI pixel shader: " + guiPS->GetCompileError());
-        return false;
-    }
-
-    auto guiShaderProgram = ASCIIgL::ShaderProgram::Create(
-        std::move(guiVS),
-        std::move(guiPS),
-        ASCIIgL::VertFormats::PosUV(),
-        GUIShaders::GetGUIPSUniformLayout()
-    );
-
-    if (!guiShaderProgram || !guiShaderProgram->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to create GUI shader program");
-        return false;
-    }
-
-    auto guiMaterial = ASCIIgL::Material::Create(std::move(guiShaderProgram));
-
-    if (!guiMaterial) {
-        ASCIIgL::Logger::Error("Failed to create GUI material");
-        return false;
-    }
-
-    {
-        auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
-        guiMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
-        guiMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
-    }
-    // Register material (textures are set per-item via AddGuiItem texture parameter)
-    ASCIIgL::MaterialLibrary::GetInst().Register("guiMaterial", std::move(guiMaterial));
-
-    // GUI item material: PosUVLayerLight + texture array for item icons in slots
-    auto itemVS = ASCIIgL::Shader::CreateFromSource(
-        GUIShaders::GetItemVSSource(),
-        ASCIIgL::ShaderType::Vertex
-    );
-
-    ASCIIgL::ShaderIncludeMap itemIncludes;
-    ASCIIgL::HLSLIncludes::AddToMap(itemIncludes);
-    auto itemPS = ASCIIgL::Shader::CreateFromSource(
-        GUIShaders::GetItemPSSource(),
-        ASCIIgL::ShaderType::Pixel,
-        "main",
-        &itemIncludes
-    );
-
-    if (!itemVS || !itemVS->IsValid() || !itemPS || !itemPS->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile GUI item shaders");
-        return false;
-    }
-    
-    auto guiItemShaderProgram = ASCIIgL::ShaderProgram::Create(
-        std::move(itemVS),
-        std::move(itemPS),
-        ASCIIgL::VertFormats::PosUVLayerLight(),
-        GUIShaders::GetItemPSUniformLayout()
-    );
-
-    if (!guiItemShaderProgram || !guiItemShaderProgram->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to create GUI item shader program");
-        return false;
-    }
-
-    auto guiItemMaterial = ASCIIgL::Material::Create(std::move(guiItemShaderProgram));
-    if (!guiItemMaterial) {
-        ASCIIgL::Logger::Error("Failed to create GUI item material");
-        return false;
-    }
-
-    {
-        auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
-        guiItemMaterial->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
-        guiItemMaterial->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
-    }
-
-    auto* terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get();
-    guiItemMaterial->SetTextureArray(0, terrainTextureArray);
-    ASCIIgL::MaterialLibrary::GetInst().Register("guiItemMaterial", std::move(guiItemMaterial));
-
-    // OOP GUI: create play + inventory screens after textures/materials exist (CreateQuadMesh needs terrainTextureArray)
-    entt::entity player = ecs::components::GetPlayerEntity(registry);
-    if (player != entt::null) {
-        auto guiQuad = gui::CreateQuadMesh();
-        guiManager.SetPlayScreen(std::make_unique<gui::PlayHUDScreen>(
-            registry, eventBus, player));
-        auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().GetTexture("inventoryTexture");
-        if (!inventoryTexture)
-            ASCIIgL::Logger::Warning("LoadResources: inventoryTexture is null; inventory GUI will have no texture");
-        guiManager.SetInventoryScreen(std::make_unique<gui::InventoryScreen>(
-            registry, eventBus, player, guiQuad, inventoryTexture));
-    }
+    if (!LoadTerrainMaterial())      return false;
+    if (!LoadGUIMaterial())          return false;
+    if (!LoadGUIItemMaterial())      return false;
 
     ASCIIgL::Logger::Info("Resources loaded successfully");
     return true;
 }
 
+bool Game::LoadTerrainMaterial() {
+    auto terrainVS = ASCIIgL::Shader::CreateFromSource(TerrainShaders::GetTerrainVSSource(), ASCIIgL::ShaderType::Vertex);
+
+    ASCIIgL::ShaderIncludeMap includes;
+    ASCIIgL::HLSLIncludes::AddToMap(includes);
+    auto terrainPS = ASCIIgL::Shader::CreateFromSource(TerrainShaders::GetTerrainPSSource(), ASCIIgL::ShaderType::Pixel, "main", &includes);
+
+    if (!terrainVS || !terrainVS->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile terrain vertex shader: " + terrainVS->GetCompileError());
+        return false;
+    }
+    if (!terrainPS || !terrainPS->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile terrain pixel shader: " + terrainPS->GetCompileError());
+        return false;
+    }
+
+    auto program = ASCIIgL::ShaderProgram::Create(
+        std::move(terrainVS), std::move(terrainPS),
+        ASCIIgL::VertFormats::PosUVLayerLight(),
+        TerrainShaders::GetTerrainPSUniformLayout()
+    );
+    if (!program || !program->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to create terrain shader program");
+        return false;
+    }
+
+    auto material = ASCIIgL::Material::Create(std::move(program));
+    if (!material) {
+        ASCIIgL::Logger::Error("Failed to create terrain material");
+        return false;
+    }
+
+    material->SetTextureArray(0, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get());
+
+    auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
+    material->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
+    material->SetFloat4("gradientEnd",   glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
+
+    ASCIIgL::MaterialLibrary::GetInst().Register("blockMaterial", std::move(material));
+    return true;
+}
+
+bool Game::LoadGUIMaterial() {
+    ASCIIgL::ShaderIncludeMap includes;
+    ASCIIgL::HLSLIncludes::AddToMap(includes);
+
+    auto vs = ASCIIgL::Shader::CreateFromSource(GUIShaders::GetGUIVSSource(), ASCIIgL::ShaderType::Vertex);
+    auto ps = ASCIIgL::Shader::CreateFromSource(GUIShaders::GetGUIPSSource(), ASCIIgL::ShaderType::Pixel, "main", &includes);
+
+    if (!vs || !vs->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile GUI vertex shader: " + vs->GetCompileError());
+        return false;
+    }
+    if (!ps || !ps->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile GUI pixel shader: " + ps->GetCompileError());
+        return false;
+    }
+
+    auto program = ASCIIgL::ShaderProgram::Create(
+        std::move(vs), std::move(ps),
+        ASCIIgL::VertFormats::PosUV(),
+        GUIShaders::GetGUIPSUniformLayout()
+    );
+    if (!program || !program->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to create GUI shader program");
+        return false;
+    }
+
+    auto material = ASCIIgL::Material::Create(std::move(program));
+    if (!material) {
+        ASCIIgL::Logger::Error("Failed to create GUI material");
+        return false;
+    }
+
+    auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
+    material->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
+    material->SetFloat4("gradientEnd",   glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
+
+    ASCIIgL::MaterialLibrary::GetInst().Register("guiMaterial", std::move(material));
+    return true;
+}
+
+bool Game::LoadGUIItemMaterial() {
+    ASCIIgL::ShaderIncludeMap includes;
+    ASCIIgL::HLSLIncludes::AddToMap(includes);
+
+    auto vs = ASCIIgL::Shader::CreateFromSource(GUIShaders::GetItemVSSource(), ASCIIgL::ShaderType::Vertex);
+    auto ps = ASCIIgL::Shader::CreateFromSource(GUIShaders::GetItemPSSource(), ASCIIgL::ShaderType::Pixel, "main", &includes);
+
+    if (!vs || !vs->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile GUI item vertex shader: " + vs->GetCompileError());
+        return false;
+    }
+    if (!ps || !ps->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile GUI item pixel shader: " + ps->GetCompileError());
+        return false;
+    }
+
+    auto program = ASCIIgL::ShaderProgram::Create(
+        std::move(vs), std::move(ps),
+        ASCIIgL::VertFormats::PosUVLayerLight(),
+        GUIShaders::GetItemPSUniformLayout()
+    );
+    if (!program || !program->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to create GUI item shader program");
+        return false;
+    }
+
+    auto material = ASCIIgL::Material::Create(std::move(program));
+    if (!material) {
+        ASCIIgL::Logger::Error("Failed to create GUI item material");
+        return false;
+    }
+
+    auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
+    material->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
+    material->SetFloat4("gradientEnd",   glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
+
+    ASCIIgL::MaterialLibrary::GetInst().Register("guiItemMaterial", std::move(material));
+    return true;
+}
+
 void Game::RenderPlaying() {
     // Keep 2D GUI camera in sync with viewport (GPU pipeline uses Screen dimensions; 2D ortho must match)
-    guiManager.SetScreenSize(glm::vec2(
-        static_cast<float>(ASCIIgL::Screen::GetInst().GetWidth()),
-        static_cast<float>(ASCIIgL::Screen::GetInst().GetHeight())));
-
     GetWorldPtr(registry)->Render();
 
-    renderSystem.BeginFrame();
-    guiManager.Draw(renderSystem);
-    renderSystem.SetActive2DCamera(guiManager.GetCamera2D());
-    renderSystem.Render();
+    guiManager.Render();
+    ecsRenderSystem.Render();
 }
 
 void Game::InitializeWorld() {
@@ -539,10 +509,15 @@ void Game::InitializeSystems() {
 
     entt::entity player = ecs::components::GetPlayerEntity(registry);
     if (player != entt::null) {
-        renderSystem.SetActive3DCamera(registry.try_get<ecs::components::PlayerCamera>(player));
+        ecsRenderSystem.SetActive3DCamera(registry.try_get<ecs::components::PlayerCamera>(player));
     }
 
-    guiManager.SetScreenSize(glm::vec2(static_cast<float>(SCREEN_WIDTH), static_cast<float>(SCREEN_HEIGHT)));
+    guiManager.SetActive2DCamera(guiCamera.get());
+
+    particleSystem.Init();
+
+    auto& soundRegistry = registry.ctx().emplace<sound::SoundRegistry>();
+    sound::RegisterDefaultSounds(soundRegistry);
 
     ASCIIgL::Logger::Debug("Systems initialized.");
 }

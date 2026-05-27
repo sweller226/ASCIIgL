@@ -50,22 +50,22 @@ entt::entity ItemFactory::createDroppedItem(
     registry.emplace<GroundPhysics>(entity);
 
     // Rendering - try prototype entity mesh if none provided
-    std::shared_ptr<ASCIIgL::Mesh> finalMesh = mesh;
-    if (!finalMesh) {
+    std::shared_ptr<ASCIIgL::Mesh> resolvedMesh = mesh;
+
+    if (!resolvedMesh) {
         auto& itemIndex = registry.ctx().get<data::ItemIndex>();
         auto proto = itemIndex.Resolve(itemStack.itemId);
         if (proto != entt::null) {
-            auto* visual = registry.try_get<components::ItemVisual>(proto);
-            if (visual && visual->mesh) {
-                finalMesh = visual->mesh;
+            if (auto* visual = registry.try_get<components::ItemVisual>(proto)) {
+                resolvedMesh = visual->mesh;
             }
         }
     }
 
-    if (finalMesh) {
+    if (resolvedMesh) {
         auto& renderable = registry.emplace<Renderable>(entity);
         renderable.renderType = RenderType::ELEM_3D;
-        renderable.SetMesh(finalMesh);
+        renderable.mesh = std::move(resolvedMesh);
     }
 
     // Dropped item tag for system queries

@@ -20,8 +20,8 @@ bool Widget::ContainsPoint(glm::vec2 point) const {
            point.y >= screenPosition.y && point.y < screenPosition.y + size.y;
 }
 
-void Widget::Draw(::ecs::systems::RenderSystem& renderSystem) const {
-    (void)renderSystem;
+void Widget::Draw(::ecs::systems::RenderSystem& ecsRenderSystem) const {
+    (void)ecsRenderSystem;
 }
 
 Widget* Widget::HitTest(glm::vec2 point) {
