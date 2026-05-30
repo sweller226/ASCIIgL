@@ -110,6 +110,7 @@ private:
     bool LoadTerrainMaterial();
     bool LoadGUIMaterial();
     bool LoadGUIItemMaterial();
+    bool LoadGUITextMaterial();
 
     bool LoadTextures();
     void InitializeWorld();

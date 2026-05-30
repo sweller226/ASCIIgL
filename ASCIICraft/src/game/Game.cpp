@@ -43,6 +43,7 @@
 // shaders
 #include <ASCIICraft/rendering/TerrainShaders.hpp>
 #include <ASCIICraft/rendering/GUIShaders.hpp>
+#include <ASCIICraft/rendering/GUITextShaders.hpp>
 
 Game::Game()
     : gameState(GameState::Playing)
@@ -355,6 +356,7 @@ bool Game::LoadResources() {
     if (!LoadTerrainMaterial())      return false;
     if (!LoadGUIMaterial())          return false;
     if (!LoadGUIItemMaterial())      return false;
+    if (!LoadGUITextMaterial())      return false;
 
     ASCIIgL::Logger::Info("Resources loaded successfully");
     return true;
@@ -479,6 +481,53 @@ bool Game::LoadGUIItemMaterial() {
     material->SetFloat4("gradientEnd",   glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
 
     ASCIIgL::MaterialLibrary::GetInst().Register("guiItemMaterial", std::move(material));
+    return true;
+}
+
+bool Game::LoadGUITextMaterial() {
+    ASCIIgL::ShaderIncludeMap includes;
+    ASCIIgL::HLSLIncludes::AddToMap(includes);
+
+    auto vs = ASCIIgL::Shader::CreateFromSource(GUITextShaders::GetGUITextVSSource(), ASCIIgL::ShaderType::Vertex);
+    auto ps = ASCIIgL::Shader::CreateFromSource(GUITextShaders::GetGUITextPSSource(), ASCIIgL::ShaderType::Pixel, "main", &includes);
+
+    if (!vs || !vs->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile GUI text vertex shader: " + vs->GetCompileError());
+        return false;
+    }
+    if (!ps || !ps->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to compile GUI text pixel shader: " + ps->GetCompileError());
+        return false;
+    }
+
+    auto program = ASCIIgL::ShaderProgram::Create(
+        std::move(vs), std::move(ps),
+        ASCIIgL::VertFormats::PosUVLayer(),
+        GUITextShaders::GetGUITextPSUniformLayout()
+    );
+    if (!program || !program->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to create GUI text shader program");
+        return false;
+    }
+
+    auto material = ASCIIgL::Material::Create(std::move(program));
+    if (!material) {
+        ASCIIgL::Logger::Error("Failed to create GUI text material");
+        return false;
+    }
+
+    auto fontTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("defaultFontTextureArray");
+    if (!fontTextureArray) {
+        ASCIIgL::Logger::Error("defaultFontTextureArray missing for GUI text material");
+        return false;
+    }
+    material->SetTextureArray(0, fontTextureArray.get());
+
+    auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
+    material->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
+    material->SetFloat4("gradientEnd",   glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
+
+    ASCIIgL::MaterialLibrary::GetInst().Register("guiTextMaterial", std::move(material));
     return true;
 }
 
