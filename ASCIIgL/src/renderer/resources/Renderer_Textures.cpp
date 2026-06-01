@@ -127,7 +127,9 @@ bool Renderer::CreateTextureFromASCIIgLTexture(const Texture* tex, ID3D11ShaderR
     desc.Width = baseW;
     desc.Height = baseH;
     desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    // PNG/stb bytes are sRGB-encoded (see Texture.cpp); UNORM_SRGB decodes to linear on sample,
+    // matching Texture2DArray uploads and the sRGB render target (shaders output linear).
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
@@ -216,6 +218,7 @@ void Renderer::BindTexture(const Texture* tex, int slot, SamplerType type) {
     } else {
         ComPtr<ID3D11ShaderResourceView> newSRV;
         if (!CreateTextureFromASCIIgLTexture(tex, &newSRV)) {
+            Logger::Warning("[Renderer] Failed to upload texture to GPU (slot " + std::to_string(slot) + ")");
             UnbindTexture(slot);
             return;
         }

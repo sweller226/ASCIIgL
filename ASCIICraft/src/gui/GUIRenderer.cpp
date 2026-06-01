@@ -1,6 +1,7 @@
 #include <ASCIICraft/gui/GUIRenderer.hpp>
 
 #include <ASCIIgL/engine/Camera2D.hpp>
+#include <ASCIIgL/engine/Mesh.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 
@@ -11,16 +12,31 @@ namespace gui {
 GUIRenderer::GUIRenderer(ASCIIgL::Camera2D& camera2D)
     : m_camera2D(camera2D) {}
 
-void GUIRenderer::SubmitQuad(glm::vec2 topLeftPx,
-                             glm::vec2 sizePx,
-                             int layer,
-                             const std::shared_ptr<ASCIIgL::Mesh>& mesh,
-                             const std::shared_ptr<ASCIIgL::Material>& material) const {
+void GUIRenderer::RenderGUIQuad(glm::vec2 topLeftPx,
+                                glm::vec2 sizePx,
+                                int layer,
+                                const std::shared_ptr<ASCIIgL::Mesh>& mesh,
+                                const std::shared_ptr<ASCIIgL::Material>& material) const {
+    // QuadMeshBuilder uses a -1..1 unit square; scale by half-size and place at rect center.
+    const glm::vec2 halfSize = sizePx * 0.5f;
+    const glm::vec2 center = topLeftPx + halfSize;
+
     glm::mat4 model(1.0f);
-    model = glm::translate(model, glm::vec3(topLeftPx.x, topLeftPx.y, 0.0f));
-    model = glm::scale(model, glm::vec3(sizePx.x, sizePx.y, 1.0f));
+    model = glm::translate(model, glm::vec3(center.x, center.y, 0.0f));
+    model = glm::scale(model, glm::vec3(halfSize.x, halfSize.y, 1.0f));
 
     SubmitMesh(model, layer, mesh, material);
+}
+
+void GUIRenderer::RenderTextMesh(glm::vec2 topLeftPx,
+                                 int layer,
+                                 const std::shared_ptr<ASCIIgL::Mesh>& textMesh) const {
+    auto textMaterial = ASCIIgL::MaterialLibrary::GetInst().Get("guiTextMaterial");
+    if (!textMaterial) return;
+
+    glm::mat4 model(1.0f);
+    model = glm::translate(model, glm::vec3(topLeftPx.x, topLeftPx.y, 0.0f));
+    SubmitMesh(model, layer, textMesh, textMaterial);
 }
 
 void GUIRenderer::SubmitMesh(const glm::mat4& model,
@@ -28,6 +44,11 @@ void GUIRenderer::SubmitMesh(const glm::mat4& model,
                              const std::shared_ptr<ASCIIgL::Mesh>& mesh,
                              const std::shared_ptr<ASCIIgL::Material>& material) const {
     if (!mesh || !material) return;
+
+    // PosUV quads store the atlas on the mesh; ensure the material's diffuse slot matches.
+    if (const ASCIIgL::Texture* meshTexture = mesh->GetTexture()) {
+        material->SetTexture("diffuseTexture", meshTexture);
+    }
 
     glm::mat4 mvp = m_camera2D.proj * m_camera2D.view * model;
 
@@ -38,6 +59,7 @@ void GUIRenderer::SubmitMesh(const glm::mat4& model,
     dc.transparent = true;
     dc.sortKey = static_cast<float>(layer);
     dc.backfaceCulling = false;
+    dc.depthTest = false;
 
     if (const ASCIIgL::UniformDescriptor* desc = material->GetUniformDescriptor("mvp")) {
         dc.overrides.push_back({desc, ASCIIgL::UniformValue(mvp)});

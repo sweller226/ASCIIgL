@@ -1,21 +1,53 @@
 #include <ASCIICraft/gui/screens/InventoryScreen.hpp>
-#include <ASCIICraft/util/QuadMeshBuilder.hpp>
+
 #include <ASCIICraft/gui/Slot.hpp>
-#include <ASCIICraft/gui/Panel.hpp>
-#include <ASCIIgL/renderer/Material.hpp>
-#include <ASCIICraft/ecs/systems/RenderSystem.hpp>
+#include <ASCIICraft/gui/GUIRenderer.hpp>
+#include <ASCIICraft/gui/GUISurface.hpp>
+#include <ASCIIgL/engine/TextureLibrary.hpp>
 
 namespace gui {
 
-InventoryScreen::InventoryScreen(entt::registry& registry, ASCIIgL::EventBus& eventBus, entt::entity playerEntity,
-                                  GUISurfaceLibrary& meshLibrary,
-                                  std::shared_ptr<ASCIIgL::Texture> inventoryTexture)
+namespace {
+
+constexpr float kInventoryAtlasSize = 256.0f;
+constexpr int kInventoryContainerX = 0;
+constexpr int kInventoryContainerY = 0;
+constexpr int kInventoryContainerW = 176;
+constexpr int kInventoryContainerH = 166;
+
+} // namespace
+
+InventoryScreen::InventoryScreen(entt::registry& registry,
+                                 ASCIIgL::EventBus& eventBus,
+                                 entt::entity playerEntity,
+                                 GUISurfaceLibrary& surfaceLibrary)
     : m_registry(&registry)
     , m_eventBus(&eventBus)
-    , m_inventoryTexture(std::move(inventoryTexture))
 {
     blocksInput = true;
     name = "guiscreen:inventory";
+    layer = 100;
+    pivot = {0.0f, 0.0f};
+    anchor = {0.5f, 0.5f};
+
+    auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().GetTexture("inventoryTexture");
+    if (inventoryTexture) {
+        m_inventoryPanelSurface = surfaceLibrary.GetOrCreate("inventory.panel", [&]() {
+            return GUISurface::FromAtlasRegion(
+                inventoryTexture,
+                kInventoryAtlasSize,
+                kInventoryContainerX,
+                kInventoryContainerY,
+                kInventoryContainerW,
+                kInventoryContainerH
+            );
+        });
+
+        const float panelWidth = static_cast<float>(kInventoryContainerW);
+        const float panelHeight = static_cast<float>(kInventoryContainerH);
+        size = {panelWidth, panelHeight};
+        offset = {-panelWidth * 0.5f, -panelHeight * 0.5f};
+    }
 
     constexpr int columns = 9;
     constexpr int rows = 4;
@@ -23,35 +55,12 @@ InventoryScreen::InventoryScreen(entt::registry& registry, ASCIIgL::EventBus& ev
     constexpr float slotSpacing = 4.0f;
     constexpr float padding = 16.0f;
 
-    float panelWidth = padding * 2 + columns * slotSize + (columns - 1) * slotSpacing;
-    float panelHeight = padding * 2 + rows * slotSize + (rows - 1) * slotSpacing;
-
-    size = {panelWidth, panelHeight};
-    anchor = {0.5f, 0.5f};
-    offset = {-panelWidth / 2.0f, -panelHeight / 2.0f};  // center panel: pivot (0,0) so top-left = screen center + offset
-    pivot = {0.0f, 0.0f};
-    layer = 100;
-    // auto panelQuad = meshLibrary.GetOrCreateSurface(
-    //     "inventory.panel.quad",
-    //     [texture = m_inventoryTexture]() {
-    //         return GUIQuadMeshBuilder::BuildPosUVQuad(texture);
-    //     }
-    // ).mesh;
-    // SetBackgroundMesh(panelQuad);
-    
-    // Create material for this panel's texture (cached by MaterialLibrary)
-    if (m_inventoryTexture) {
-        auto material = ASCIIgL::MaterialLibrary::GetInst().GetOrCreateFromTemplate("guiMaterial", m_inventoryTexture.get());
-        SetBackgroundMaterial(material);
-    }
-
-    // Slots laid out from panel top-left: offset = (padding + col*..., padding + row*...)
     for (int row = 0; row < rows; ++row) {
         for (int col = 0; col < columns; ++col) {
-            int slotIndex = row * columns + col;
+            const int slotIndex = row * columns + col;
             auto slot = std::make_unique<Slot>(*m_registry, *m_eventBus, playerEntity, slotIndex);
             slot->size = {slotSize, slotSize};
-            slot->layer = 101;
+            slot->layer = layer + 1;
             slot->pivot = {0.0f, 0.0f};
             slot->offset = {
                 padding + col * (slotSize + slotSpacing),
@@ -62,8 +71,27 @@ InventoryScreen::InventoryScreen(entt::registry& registry, ASCIIgL::EventBus& ev
     }
 }
 
-void InventoryScreen::OnDraw(::ecs::systems::RenderSystem& ecsRenderSystem) const {
-    Panel::Draw(ecsRenderSystem);
+void InventoryScreen::Draw(GUIRenderer& renderer) const {
+    if (!visible) return;
+
+    if (m_inventoryPanelSurface.mesh && m_inventoryPanelSurface.material) {
+        renderer.RenderGUIQuad(
+            screenPosition,
+            size,
+            layer,
+            m_inventoryPanelSurface.mesh,
+            m_inventoryPanelSurface.material
+        );
+    }
+
+    for (const auto& child : GetChildren())
+        child->Draw(renderer);
+}
+
+bool InventoryScreen::TryGetInitialCursorPosition(glm::vec2 screenSize, glm::vec2& out) const {
+    const glm::vec2 topLeft = anchor * screenSize - pivot * size + offset;
+    out = topLeft + size * 0.5f;
+    return true;
 }
 
 bool InventoryScreen::OnClick(glm::vec2 position, int button) {

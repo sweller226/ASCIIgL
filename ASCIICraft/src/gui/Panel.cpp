@@ -1,5 +1,5 @@
 #include <ASCIICraft/gui/Panel.hpp>
-#include <ASCIICraft/ecs/systems/RenderSystem.hpp>
+#include <ASCIICraft/gui/GUIRenderer.hpp>
 
 namespace gui {
 
@@ -40,12 +40,12 @@ void Panel::Update(float dt) {
         c->Update(dt);
 }
 
-void Panel::Draw(::ecs::systems::RenderSystem& ecsRenderSystem) const {
+void Panel::Draw(GUIRenderer& renderer) const {
     if (!visible) return;
     if (backgroundMesh && backgroundMaterial)
-        // ecsRenderSystem.AddGUIItem(screenPosition, size, layer, backgroundMesh, backgroundMaterial);
+        renderer.RenderGUIQuad(screenPosition, size, layer, backgroundMesh, backgroundMaterial);
     for (const auto& c : children)
-        c->Draw(ecsRenderSystem);
+        c->Draw(renderer);
 }
 
 } // namespace gui

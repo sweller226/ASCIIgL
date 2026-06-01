@@ -11,6 +11,7 @@
 #include <ASCIIgL/util/Logger.hpp>
 
 #include <ASCIICraft/world/block/placement/BlockPlacement.hpp>
+#include <ASCIICraft/world/block/state/FaceDir.hpp>
 #include <ASCIICraft/world/Sizes.hpp>
 
 namespace {
@@ -297,10 +298,19 @@ void TerrainGenerator::CheckTreePlacement(
     
     float noiseHash = treeNoise->GetNoise(static_cast<float>(worldX), static_cast<float>(worldZ));
     
-    float north = treeNoise->GetNoise(static_cast<float>(worldX), static_cast<float>(worldZ + 1));
-    float south = treeNoise->GetNoise(static_cast<float>(worldX), static_cast<float>(worldZ - 1));
-    float east = treeNoise->GetNoise(static_cast<float>(worldX + 1), static_cast<float>(worldZ));
-    float west = treeNoise->GetNoise(static_cast<float>(worldX - 1), static_cast<float>(worldZ));
+    const WorldCoord here(worldX, worldY, worldZ);
+    float north = treeNoise->GetNoise(
+        static_cast<float>(NeighborCoord(here, FaceDir::North).x),
+        static_cast<float>(NeighborCoord(here, FaceDir::North).z));
+    float south = treeNoise->GetNoise(
+        static_cast<float>(NeighborCoord(here, FaceDir::South).x),
+        static_cast<float>(NeighborCoord(here, FaceDir::South).z));
+    float east = treeNoise->GetNoise(
+        static_cast<float>(NeighborCoord(here, FaceDir::East).x),
+        static_cast<float>(NeighborCoord(here, FaceDir::East).z));
+    float west = treeNoise->GetNoise(
+        static_cast<float>(NeighborCoord(here, FaceDir::West).x),
+        static_cast<float>(NeighborCoord(here, FaceDir::West).z));
     
     bool isLocalMax = (noiseHash > north) && (noiseHash > south) && 
                       (noiseHash > east) && (noiseHash > west);

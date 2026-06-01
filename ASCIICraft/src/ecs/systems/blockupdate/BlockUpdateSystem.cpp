@@ -8,6 +8,7 @@
 #include <ASCIICraft/world/World.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 #include <ASCIICraft/world/block/placement/FencePlacement.hpp>
+#include <ASCIICraft/world/block/state/FaceDir.hpp>
 
 namespace {
 
@@ -16,14 +17,8 @@ void RefreshFenceNeighbors(
     ChunkManager& chunkManager,
     const WorldCoord& changedPos
 ) {
-    const WorldCoord neighbors[4] = {
-        WorldCoord(changedPos.x - 1, changedPos.y, changedPos.z),
-        WorldCoord(changedPos.x, changedPos.y, changedPos.z + 1),
-        WorldCoord(changedPos.x, changedPos.y, changedPos.z - 1),
-        WorldCoord(changedPos.x + 1, changedPos.y, changedPos.z),
-    };
-
-    for (const auto& neighborPos : neighbors) {
+    for (FaceDir dir : kHorizontalFaceDirs) {
+        const WorldCoord neighborPos = NeighborCoord(changedPos, dir);
         const uint32_t neighborStateId = chunkManager.GetBlockState(neighborPos);
         if (!bsr.IsValidState(neighborStateId)) continue;
 

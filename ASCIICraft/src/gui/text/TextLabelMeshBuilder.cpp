@@ -79,6 +79,7 @@ std::shared_ptr<ASCIIgL::Mesh> TextLabelMeshBuilder::BuildMesh(const BitmapFont&
         const float x1 = x0 + glyphW;
         const float y1 = y0 + glyphH;
         const float layer = static_cast<float>(glyph.layer);
+        // D3D11 V=0 at texture top; y0/y1 are screen Y-down (top/bottom).
         V v0{}; v0.SetXYZ({x0, y0, 0.0f}); v0.SetUV({0.0f, 0.0f}); v0.SetLayer(layer);
         V v1{}; v1.SetXYZ({x0, y1, 0.0f}); v1.SetUV({0.0f, 1.0f}); v1.SetLayer(layer);
         V v2{}; v2.SetXYZ({x1, y1, 0.0f}); v2.SetUV({1.0f, 1.0f}); v2.SetLayer(layer);

@@ -1,10 +1,18 @@
 #include <ASCIICraft/world/block/FaceCulling.hpp>
 
-#include <ASCIICraft/world/Sizes.hpp>
-#include <ASCIICraft/world/chunk/Chunk.hpp>
+#include <array>
+
+#include <ASCIICraft/world/block/state/FaceDir.hpp>
 #include <ASCIICraft/world/chunk/ChunkUtil.hpp>
 
-static uint32_t GetBlockStateAt(
+namespace {
+
+glm::ivec3 NeighborLocalBlockPos(int x, int y, int z, FaceDir face) {
+    const glm::ivec3 offset = FaceDirNeighborOffset(face);
+    return {x + offset.x, y + offset.y, z + offset.z};
+}
+
+uint32_t GetBlockStateAt(
     int x, int y, int z,
     const uint32_t* chunkBlocks,
     const std::array<const uint32_t*, 6>& neighborBlocks
@@ -12,32 +20,20 @@ static uint32_t GetBlockStateAt(
     if (chunkutil::IsValidBlockCoord(x, y, z)) {
         return chunkBlocks[chunkutil::GetBlockIndex(x, y, z)];
     }
-    int neighborChunkDir = -1;
-    int localX = x, localY = y, localZ = z;
-    if (x < 0) {
-        neighborChunkDir = 5;
-        localX = sizes::CHUNK_SIZE - 1;
-    } else if (x >= sizes::CHUNK_SIZE) {
-        neighborChunkDir = 4;
-        localX = 0;
-    } else if (y < 0) {
-        neighborChunkDir = 1;
-        localY = sizes::CHUNK_SIZE - 1;
-    } else if (y >= sizes::CHUNK_SIZE) {
-        neighborChunkDir = 0;
-        localY = 0;
-    } else if (z < 0) {
-        neighborChunkDir = 3;
-        localZ = sizes::CHUNK_SIZE - 1;
-    } else if (z >= sizes::CHUNK_SIZE) {
-        neighborChunkDir = 2;
-        localZ = 0;
+
+    FaceDir acrossFace = FaceDir::Top;
+    if (!chunkutil::TryWrapCrossChunkLocal(x, y, z, acrossFace)) {
+        return blockstate::BlockStateRegistry::AIR_STATE_ID;
     }
-    if (neighborChunkDir >= 0 && neighborBlocks[neighborChunkDir]) {
-        return neighborBlocks[neighborChunkDir][chunkutil::GetBlockIndex(localX, localY, localZ)];
+
+    const int neighborFaceIndex = FaceDirToIndex(acrossFace);
+    if (neighborBlocks[neighborFaceIndex]) {
+        return neighborBlocks[neighborFaceIndex][chunkutil::GetBlockIndex(x, y, z)];
     }
     return blockstate::BlockStateRegistry::AIR_STATE_ID;
 }
+
+} // namespace
 
 namespace faceculling {
     void ComputeVisibleFacesFullBlock(
@@ -50,19 +46,12 @@ namespace faceculling {
     ) {
         visibleFaces.resize(6, false);
 
-        for (int face = 0; face < 6; ++face) {
-            int neighborX = x, neighborY = y, neighborZ = z;
-            switch (face) {
-                case 0: neighborY++; break;
-                case 1: neighborY--; break;
-                case 2: neighborZ++; break;
-                case 3: neighborZ--; break;
-                case 4: neighborX++; break;
-                case 5: neighborX--; break;
-            }
+        for (int faceIndex = 0; faceIndex < kFaceCount; ++faceIndex) {
+            const FaceDir face = FaceDirFromIndex(faceIndex);
+            const glm::ivec3 neighborPos = NeighborLocalBlockPos(x, y, z, face);
 
             uint32_t neighborStateId = GetBlockStateAt(
-                neighborX, neighborY, neighborZ,
+                neighborPos.x, neighborPos.y, neighborPos.z,
                 chunkBlocks, neighborBlocks
             );
 
@@ -73,7 +62,7 @@ namespace faceculling {
                 (state.cullSameType && neighborState.typeId == state.typeId);
             const bool neighborOccludes = baseNeighborOccludes && neighborState.isFullBlock;
 
-            visibleFaces[face] = !neighborOccludes;
+            visibleFaces[faceIndex] = !neighborOccludes;
         }
     }
 
@@ -87,19 +76,12 @@ namespace faceculling {
     ) {
         visibleFaces.resize(6, false);
 
-        for (int face = 0; face < 6; ++face) {
-            int neighborX = x, neighborY = y, neighborZ = z;
-            switch (face) {
-                case 0: neighborY++; break;
-                case 1: neighborY--; break;
-                case 2: neighborZ++; break;
-                case 3: neighborZ--; break;
-                case 4: neighborX++; break;
-                case 5: neighborX--; break;
-            }
+        for (int faceIndex = 0; faceIndex < kFaceCount; ++faceIndex) {
+            const FaceDir face = FaceDirFromIndex(faceIndex);
+            const glm::ivec3 neighborPos = NeighborLocalBlockPos(x, y, z, face);
 
             const uint32_t neighborStateId = GetBlockStateAt(
-                neighborX, neighborY, neighborZ,
+                neighborPos.x, neighborPos.y, neighborPos.z,
                 chunkBlocks, neighborBlocks
             );
             const auto& neighborState = bsr.GetState(neighborStateId);
@@ -107,7 +89,7 @@ namespace faceculling {
             // Water should not render internal faces against adjacent water,
             // regardless of per-state shape differences (top/full variants).
             if (neighborState.typeId == state.typeId) {
-                visibleFaces[face] = false;
+                visibleFaces[faceIndex] = false;
                 continue;
             }
 
@@ -117,7 +99,7 @@ namespace faceculling {
                 neighborState.renderMode == blockstate::RenderMode::Opaque &&
                 neighborState.isFullBlock;
 
-            visibleFaces[face] = !neighborOccludes;
+            visibleFaces[faceIndex] = !neighborOccludes;
         }
     }
 }

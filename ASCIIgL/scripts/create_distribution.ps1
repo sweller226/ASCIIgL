@@ -88,11 +88,10 @@ function New-Distribution {
         Write-Warning "Issue copying vendor folder, exit code: $LASTEXITCODE"
     }
 
-    # Copy TracyClient.cpp explicitly — excluded above by /XF *.cpp but required by consumers
-    $tracyDest = "$OutputDir/vendor/tracy/public"
-    New-Item -Path $tracyDest -ItemType Directory -Force | Out-Null
-    Copy-Item "vendor/tracy/public/TracyClient.cpp" "$tracyDest/TracyClient.cpp" -Force
-    Write-Success "Copied TracyClient.cpp"
+    # Tracy: TracyClient.cpp #includes other .cpp under public/common and public/client.
+    # robocopy /XF *.cpp strips those; copy the full public tree for consumer builds.
+    Copy-Item "vendor/tracy/public" "$OutputDir/vendor/tracy/public" -Recurse -Force
+    Write-Success "Copied Tracy public sources (TracyClient.cpp + included .cpp files)"
 
     # Copy CMake config
     if (-not (Test-Path "cmake/ASCIIgLConfig.cmake")) {

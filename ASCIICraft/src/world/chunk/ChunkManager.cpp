@@ -20,16 +20,8 @@
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 
 #include <ASCIICraft/world/Sizes.hpp>
-
-// Static member definition - ordered to match face indices in Chunk::GenerateMesh()
-const ChunkCoord ChunkManager::FACE_NEIGHBOR_OFFSETS[6] = {
-    ChunkCoord(0, 1, 0),   // Face 0: Top (Y+)
-    ChunkCoord(0, -1, 0),  // Face 1: Bottom (Y-)
-    ChunkCoord(0, 0, 1),   // Face 2: North (Z+)
-    ChunkCoord(0, 0, -1),  // Face 3: South (Z-)
-    ChunkCoord(1, 0, 0),   // Face 4: East (X+)
-    ChunkCoord(-1, 0, 0)   // Face 5: West (X-)
-};
+#include <ASCIICraft/world/block/state/FaceDir.hpp>
+#include <ASCIICraft/world/chunk/ChunkUtil.hpp>
 
 ChunkManager::ChunkManager(
     entt::registry& registry,
@@ -206,7 +198,7 @@ void ChunkManager::UnloadChunk(const ChunkCoord& coord) {
     }
 
     for (int i = 0; i < 6; ++i) {
-        ChunkCoord neighborCoord = coord + FACE_NEIGHBOR_OFFSETS[i];
+        ChunkCoord neighborCoord = NeighborChunkCoord(coord, FaceDirFromIndex(i));
         auto neighborIt = loadedChunks.find(neighborCoord);
         if (neighborIt != loadedChunks.end() && neighborIt->second) {
             Chunk* neighborChunk = neighborIt->second.get();
@@ -454,7 +446,7 @@ void ChunkManager::BatchInvalidateChunkFaceNeighborMeshes(const ChunkCoord& coor
     
     // Add neighboring chunks
     for (int i = 0; i < 6; ++i) {
-        ChunkCoord neighborCoord = coord + FACE_NEIGHBOR_OFFSETS[i];
+        ChunkCoord neighborCoord = NeighborChunkCoord(coord, FaceDirFromIndex(i));
         if (IsChunkLoaded(neighborCoord)) {
             chunksToInvalidate.insert(neighborCoord);
         }
@@ -585,7 +577,7 @@ void ChunkManager::EnqueueMeshForDirtyChunks() {
 
 bool ChunkManager::AllNeighborsGenerated(const ChunkCoord& coord) const {
     for (int i = 0; i < 6; ++i) {
-        ChunkCoord neighborCoord = coord + FACE_NEIGHBOR_OFFSETS[i];
+        ChunkCoord neighborCoord = NeighborChunkCoord(coord, FaceDirFromIndex(i));
         if (IsChunkOutsideWorld(neighborCoord))
             continue;
         auto it = loadedChunks.find(neighborCoord);
@@ -600,7 +592,7 @@ void ChunkManager::UpdateChunkNeighbors(const ChunkCoord& coord) {
     if (!chunk) return;
 
     for (int i = 0; i < 6; ++i) {
-        ChunkCoord neighborCoord = coord + FACE_NEIGHBOR_OFFSETS[i];
+        ChunkCoord neighborCoord = NeighborChunkCoord(coord, FaceDirFromIndex(i));
         Chunk* neighborChunk = GetChunk(neighborCoord);
         chunk->SetNeighbor(i, neighborChunk);
 
@@ -863,28 +855,15 @@ std::pair<bool, WorldCoord> ChunkManager::BlockIntersectsViewForPlacement(glm::v
 }
 
 void ChunkManager::BlockUpdateNeighboursDirty(const ChunkCoord& chunkCoord, const glm::ivec3& localPos) {
-    // Lambda to safely mark a chunk dirty
     auto mark = [&](const ChunkCoord& cc) {
         if (Chunk* c = GetChunk(cc)) {
             c->SetDirty(true);
         }
     };
 
-    // X-axis neighbors
-    if (localPos.x == 0)
-        mark(chunkCoord + ChunkCoord(-1, 0, 0));
-    if (localPos.x == sizes::CHUNK_SIZE - 1)
-        mark(chunkCoord + ChunkCoord(1, 0, 0));
-
-    // Y-axis neighbors
-    if (localPos.y == 0)
-        mark(chunkCoord + ChunkCoord(0, -1, 0));
-    if (localPos.y == sizes::CHUNK_SIZE - 1)
-        mark(chunkCoord + ChunkCoord(0, 1, 0));
-
-    // Z-axis neighbors
-    if (localPos.z == 0)
-        mark(chunkCoord + ChunkCoord(0, 0, -1));
-    if (localPos.z == sizes::CHUNK_SIZE - 1)
-        mark(chunkCoord + ChunkCoord(0, 0, 1));
+    for (FaceDir face : kAllFaceDirs) {
+        if (chunkutil::IsOnChunkFaceBoundary(localPos, face)) {
+            mark(NeighborChunkCoord(chunkCoord, face));
+        }
+    }
 }

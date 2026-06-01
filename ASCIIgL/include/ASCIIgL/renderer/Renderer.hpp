@@ -52,6 +52,7 @@ public:
         int           layer       = 0;
         bool          transparent = false;     // false = opaque pass, true = transparent pass
         bool          backfaceCulling = true;  // per-draw cull state override
+        bool          depthTest = true;        // false = HUD/overlay draws that must not be depth-occluded
         float         sortKey     = 0.0f;      // used for transparent sorting (e.g. depth or layer)
         std::vector<UniformOverride> overrides; // per-draw uniform overrides
     };

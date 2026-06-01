@@ -18,18 +18,22 @@ class GUIRenderer {
 public:
     explicit GUIRenderer(ASCIIgL::Camera2D& camera2D);
 
-    void SubmitQuad(glm::vec2 topLeftPx,
-                    glm::vec2 sizePx,
-                    int layer,
-                    const std::shared_ptr<ASCIIgL::Mesh>& mesh,
-                    const std::shared_ptr<ASCIIgL::Material>& material) const;
+    void RenderGUIQuad(glm::vec2 topLeftPx,
+                       glm::vec2 sizePx,
+                       int layer,
+                       const std::shared_ptr<ASCIIgL::Mesh>& mesh,
+                       const std::shared_ptr<ASCIIgL::Material>& material) const;
 
+    void RenderTextMesh(glm::vec2 topLeftPx,
+                        int layer,
+                        const std::shared_ptr<ASCIIgL::Mesh>& textMesh) const;
+
+private:
     void SubmitMesh(const glm::mat4& model,
                     int layer,
                     const std::shared_ptr<ASCIIgL::Mesh>& mesh,
                     const std::shared_ptr<ASCIIgL::Material>& material) const;
 
-private:
     ASCIIgL::Camera2D& m_camera2D;
 };
 

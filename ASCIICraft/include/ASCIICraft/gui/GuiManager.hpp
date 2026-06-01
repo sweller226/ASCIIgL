@@ -9,6 +9,8 @@
 #include <entt/entt.hpp>
 
 #include <ASCIICraft/gui/GUISurfaceLibrary.hpp>
+#include <ASCIICraft/gui/GUISurface.hpp>
+#include <ASCIICraft/gui/GUIRenderer.hpp>
 #include <ASCIICraft/gui/GUIScreen.hpp>
 #include <ASCIICraft/input/IInputSource.hpp>
 
@@ -27,30 +29,42 @@ public:
     void Update();
     void Render();
 
-    void SetActive2DCamera(ASCIIgL::Camera2D* camera2D) { m_guiCamera = camera2D; };
+    void SetActive2DCamera(ASCIIgL::Camera2D* camera2D);
+    /// Builds cursor mesh/material from "cursorTexture". Call after guiMaterial is registered.
+    void BuildCursorSurface();
+    void SetBaseScreen(GUIScreen* screen);
+
+    /// Push \p screen if it is not the top screen; otherwise pop it.
+    /// Requires that a base screen is already set (stack size >= 1).
+    void ToggleScreen(GUIScreen* screen);
 
     /// True when the inventory screen is on the stack (e.g. after pressing E).
     bool IsBlockingInput() const;
+    bool IsTopScreen(const GUIScreen* screen) const;
     glm::vec2 GetCursorPosition() const { return m_cursorPosition; }
     GUISurfaceLibrary& GetMeshLibrary() { return m_meshLibrary; }
     const GUISurfaceLibrary& GetMeshLibrary() const { return m_meshLibrary; }
 
-private:
     void PushScreen(GUIScreen* screen);
     void PopScreen();
+
+private:
+    void UpdateCursor(GUIScreen* top);
 
     entt::registry& m_registry;
     ASCIIgL::EventBus& m_eventBus;
     IInputSource& m_input;
 
-    glm::vec2 m_screenSize{550.0f, 350.0f};
+    glm::vec2 m_screenSize{0.0f, 0.0f};
     glm::vec2 m_cursorPosition{0.0f, 0.0f};
-    glm::vec2 m_cursorSize{4.0f, 4.0f};
-    float m_cursorMoveSpeed = 8.0f;
+    glm::vec2 m_cursorSize{16.0f, 16.0f};
+    float m_cursorMoveSpeed = 32.0f;
+    GUISurface m_cursorSurface{};
     
     std::vector<GUIScreen*> m_screenStack;
 
-    ASCIIgL::Camera2D* m_guiCamera;
+    ASCIIgL::Camera2D* m_guiCamera = nullptr;
+    std::unique_ptr<GUIRenderer> m_renderer;
     GUISurfaceLibrary m_meshLibrary;
 };
 

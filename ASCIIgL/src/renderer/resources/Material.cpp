@@ -320,6 +320,15 @@ void Material::SetShaderProgram(std::shared_ptr<ShaderProgram> program) {
     _impl->constantBufferInitialized = false;
 }
 
+void Material::ResetConstantBufferData() {
+    if (!_program || !_program->IsValid()) return;
+
+    const auto& layout = _program->GetUniformLayout();
+    _constantBufferData.assign(layout.GetSize(), std::byte{0});
+    _uniformsDirty = true;
+    UpdateConstantBufferData();
+}
+
 // =========================================================================
 // Clone
 // =========================================================================

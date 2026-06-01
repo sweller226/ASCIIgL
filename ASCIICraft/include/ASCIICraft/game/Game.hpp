@@ -50,6 +50,9 @@ enum class GameState {
     Exiting
 };
 
+namespace gui { class PlayHUDScreen; }
+namespace gui { class InventoryScreen; }
+
 class Game {
 public:
     Game();
@@ -86,7 +89,10 @@ private:
     ecs::systems::MusicSystem musicSystem;
     ecs::systems::StepSFXSystem stepSfxSystem;
 
+    // GUI screens
     gui::GUIManager guiManager;
+    std::unique_ptr<gui::PlayHUDScreen> playHudScreen_;
+    std::unique_ptr<gui::InventoryScreen> inventoryScreen_;
 
     // block updates
     ecs::systems::BlockUpdateSystem blockUpdateSystem;
@@ -116,6 +122,7 @@ private:
     void InitializeWorld();
     void InitializePlayer();
     void InitializeSystems();
+    void InitializeGUI();
     void RenderPlaying();
     void InitializeItemDefinitions();
     void InitializeBlockStates();

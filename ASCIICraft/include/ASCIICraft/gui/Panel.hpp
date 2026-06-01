@@ -5,7 +5,6 @@
 #include <vector>
 
 namespace ASCIIgL { class Mesh; class Material; }
-namespace ecs::systems { class RenderSystem; }
 
 namespace gui {
 
@@ -24,7 +23,7 @@ public:
     Widget* HitTest(glm::vec2 point) override;
     const Widget* HitTest(glm::vec2 point) const override;
     void Update(float dt) override;
-    void Draw(::ecs::systems::RenderSystem& ecsRenderSystem) const override;
+    void Draw(GUIRenderer& renderer) const override;
 
 private:
     std::shared_ptr<ASCIIgL::Mesh> backgroundMesh;

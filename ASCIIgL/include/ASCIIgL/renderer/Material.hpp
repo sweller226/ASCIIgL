@@ -128,6 +128,10 @@ public:
     // Clone this material (creates a copy with same shader but independent uniforms)
     std::unique_ptr<Material> Clone() const;
 
+    /// Rebuild packed constant-buffer bytes from current base uniforms.
+    /// Useful before applying per-draw overrides to avoid stale values.
+    void ResetConstantBufferData();
+
     void UpdateConstantBufferData();
 
 private:

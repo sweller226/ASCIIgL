@@ -1,5 +1,5 @@
 #include <ASCIICraft/gui/Slot.hpp>
-#include <ASCIICraft/ecs/systems/RenderSystem.hpp>
+#include <ASCIICraft/gui/GUIRenderer.hpp>
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 #include <ASCIICraft/ecs/components/ItemVisual.hpp>
 #include <ASCIICraft/ecs/data/ItemIndex.hpp>
@@ -17,13 +17,9 @@ Slot::Slot(entt::registry& registry, ASCIIgL::EventBus& eventBus, entt::entity i
     , m_slotIndex(slotIndex)
 {}
 
-void Slot::Draw(::ecs::systems::RenderSystem& ecsRenderSystem) const {
+void Slot::Draw(GUIRenderer& renderer) const {
     if (!visible) return;
-
-    // Slots don't have background meshes in current design, but if they did, they'd use a material here
-    // if (m_slotBackgroundMesh && m_slotBackgroundMaterial)
-    //     ecsRenderSystem.AddGUIItem(screenPosition, size, layer, m_slotBackgroundMesh, m_slotBackgroundMaterial);
-
+    
     if (m_inventoryOwner == entt::null || !m_registry.valid(m_inventoryOwner)) return;
 
     auto* inv = m_registry.try_get<ecs::components::Inventory>(m_inventoryOwner);
@@ -43,7 +39,7 @@ void Slot::Draw(::ecs::systems::RenderSystem& ecsRenderSystem) const {
 
     // Item icons use guiItemMaterial (texture array already set)
     auto guiItemMat = ASCIIgL::MaterialLibrary::GetInst().Get("guiItemMaterial");
-    // ecsRenderSystem.AddGUIItem(screenPosition, size, layer + 1, visual->mesh, guiItemMat, "guiItemMaterial");
+    renderer.RenderGUIQuad(screenPosition, size, layer + 1, visual->mesh, guiItemMat);
 }
 
 void Slot::OnClicked(int mouseButton, bool shift) {

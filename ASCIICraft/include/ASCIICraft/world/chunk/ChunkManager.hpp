@@ -127,8 +127,6 @@ private:
     /// Apply a list of cross-chunk edits to a chunk (local coords). Used when applying terrain meta and when loading from file.
     void ApplyEditsToChunk(Chunk* c, const std::vector<CrossChunkEdit>& edits);
 
-    static const ChunkCoord FACE_NEIGHBOR_OFFSETS[6];
-    /// Tuned for 16x16x16 chunks (more chunks per volume than tall column chunks).
     static constexpr int MAX_QUEUES_PER_FRAME = 128;
     static constexpr int MAX_CHUNK_LOADS_PER_FRAME = 128; // spread disk I/O; higher ok for small chunks
     static constexpr int MAX_CHUNK_UNLOADS_PER_FRAME = 128; // cap unloads per frame; rest drained next frame

@@ -585,12 +585,15 @@ void Renderer::BindMaterial(Material* material) {
         BindShaderProgram(program.get());
     }
     
-    // Bind textures (material's per-slot sampler type is used)
+    // Bind textures (material's per-slot sampler type is used).
+    // Unbind empty slots so a prior material cannot leave stale SRVs on the same register.
     for (const auto& slot : material->_textureSlots) {
         if (slot.texture) {
             BindTexture(slot.texture, slot.slot, slot.samplerType);
         } else if (slot.textureArray) {
             BindTextureArray(slot.textureArray, slot.slot, slot.samplerType);
+        } else {
+            UnbindTexture(static_cast<int>(slot.slot));
         }
     }
 }

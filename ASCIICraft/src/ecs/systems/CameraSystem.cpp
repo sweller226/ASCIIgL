@@ -2,6 +2,7 @@
 
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
 #include <ASCIICraft/ecs/components/Head.hpp>
+#include <ASCIICraft/world/block/state/FaceDir.hpp>
 
 #include <ASCIIgL/engine/FPSClock.hpp>
 
@@ -50,11 +51,7 @@ void CameraSystem::ProcessCameraInput(components::PlayerCamera& cam, float dt) {
 }
 
 static std::string GetCardinalDirection(const glm::vec3& front) {
-    // yaw: east = -Z, west = +Z, north = +X, south = -X (matches your WorldCoord convention)
-    if (std::abs(front.x) > std::abs(front.z))
-        return front.x > 0.0f ? "West" : "East";
-    else
-        return front.z > 0.0f ? "South" : "North";
+    return FaceDirCardinalLabel(DominantHorizontalFaceDir(front));
 }
 
 void CameraSystem::LerpFOV(components::PlayerCamera& cam, components::PlayerController& ctrl, float dt) {

@@ -138,10 +138,10 @@ std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetQuadItemMesh(int layer)
         vert.SetLight(fullBright);
         vertices.push_back(vert);
     };
-    addQuadVert(-1.0f, -1.0f, 0.0f, 0.0f);
-    addQuadVert(-1.0f,  1.0f, 0.0f, 1.0f);
-    addQuadVert( 1.0f,  1.0f, 1.0f, 1.0f);
-    addQuadVert( 1.0f, -1.0f, 1.0f, 0.0f);
+    addQuadVert(-1.0f, -1.0f, 0.0f, 1.0f);
+    addQuadVert(-1.0f,  1.0f, 0.0f, 0.0f);
+    addQuadVert( 1.0f,  1.0f, 1.0f, 0.0f);
+    addQuadVert( 1.0f, -1.0f, 1.0f, 1.0f);
 
     indices = { 0, 1, 2, 0, 2, 3 };
 
@@ -209,10 +209,10 @@ std::shared_ptr<ASCIIgL::Mesh> ItemIndex::GetBlockMeshFromState(const blockstate
     // pushFace(FaceDir::Top,    p011, p111, p110, p010);
     // // Bottom (-Y)
     // pushFace(FaceDir::Bottom, p001, p000, p100, p101);
-    // // North (+Z)
-    // pushFace(FaceDir::North,  p001, p011, p111, p101);
-    // // South (-Z)
-    // pushFace(FaceDir::South,  p100, p110, p010, p000);
+    // // North (-Z)
+    // pushFace(FaceDir::North,  p100, p110, p010, p000);
+    // // South (+Z)
+    // pushFace(FaceDir::South,  p001, p011, p111, p101);
     // // East (+X)
     // pushFace(FaceDir::East,   p101, p111, p110, p100);
     // // West (-X)

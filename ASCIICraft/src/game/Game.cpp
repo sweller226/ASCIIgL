@@ -136,6 +136,9 @@ bool Game::Initialize(bool renderToTerminal) {
         return false;
     }
 
+    ASCIIgL::Logger::Debug("Initializing GUI...");
+    InitializeGUI();
+
     ASCIIgL::InputManager::GetInst().Initialize();
     ASCIIgL::Logger::Debug("InputManager initialized.");
 
@@ -191,7 +194,10 @@ void Game::Update() {
     inputSystem.Update();
 
     for ([[maybe_unused]] const auto& e : eventBus.view<events::ToggleInventoryEvent>()) {
-        // Temporary behavior: allow close-only; ignore requests that would open inventory.
+        if (!inventoryScreen_) continue;
+
+        // Minecraft-like: hotbar (base HUD) stays visible; inventory overlays on top.
+        guiManager.ToggleScreen(inventoryScreen_.get());
     }
     for ([[maybe_unused]] const auto& e : eventBus.view<events::QuitRequestedEvent>()) {
         ASCIIgL::Logger::Info("Quit action detected. Exiting game...");
@@ -329,9 +335,27 @@ bool Game::LoadTextures() {
         return false;   
     }
 
-    auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture("res/textures/gui/container/inventory.png", "inventoryTexture", monoMap);
+    auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture(
+        "res/textures/gui/container/inventory.png", "inventoryTexture", ASCIIgL::MonochromeMapping{}
+    );
     if (!inventoryTexture) {
         ASCIIgL::Logger::Error("Failed to load inventory texture");
+        return false;
+    }
+
+    auto widgetsTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture(
+        "res/textures/gui/widgets.png", "widgetsTexture", ASCIIgL::MonochromeMapping{}
+    );
+    if (!widgetsTexture) {
+        ASCIIgL::Logger::Error("Failed to load widgets texture");
+        return false;
+    }
+
+    auto cursorTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture(
+        "res/textures/gui/cursor.png", "cursorTexture", ASCIIgL::MonochromeMapping{}
+    );
+    if (!cursorTexture) {
+        ASCIIgL::Logger::Error("Failed to load cursor texture");
         return false;
     }
 
@@ -569,6 +593,39 @@ void Game::InitializeSystems() {
     sound::RegisterDefaultSounds(soundRegistry);
 
     ASCIIgL::Logger::Debug("Systems initialized.");
+}
+
+void Game::InitializeGUI() {
+    ASCIIgL::Logger::Debug("Initializing GUI screens...");
+    guiManager.BuildCursorSurface();
+
+    const entt::entity player = ecs::components::GetPlayerEntity(registry);
+    if (player == entt::null) {
+        ASCIIgL::Logger::Warning("PlayHUDScreen not created: player entity missing.");
+        return;
+    }
+
+    playHudScreen_ = std::make_unique<gui::PlayHUDScreen>(
+        registry, eventBus, player, guiManager.GetMeshLibrary()
+    );
+    guiManager.SetBaseScreen(playHudScreen_.get());
+    playHudScreen_->Layout(
+        {static_cast<float>(ASCIIgL::Screen::GetInst().GetWidth()),
+         static_cast<float>(ASCIIgL::Screen::GetInst().GetHeight())},
+        nullptr
+    );
+    ASCIIgL::Logger::Debug("GUI initialized: PlayHUDScreen set as base screen.");
+
+    // Create inventory screen but do not push it until E is pressed.
+    inventoryScreen_ = std::make_unique<gui::InventoryScreen>(
+        registry, eventBus, player, guiManager.GetMeshLibrary()
+    );
+    inventoryScreen_->Layout(
+        {static_cast<float>(ASCIIgL::Screen::GetInst().GetWidth()),
+         static_cast<float>(ASCIIgL::Screen::GetInst().GetHeight())},
+        nullptr
+    );
+    ASCIIgL::Logger::Debug("GUI initialized: InventoryScreen created (not pushed).");
 }
 
 void Game::InitializeBlockStates() {

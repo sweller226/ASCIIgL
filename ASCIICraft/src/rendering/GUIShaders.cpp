@@ -35,7 +35,7 @@ PS_INPUT main(VS_INPUT input)
 
 const char* GetGUIPSSource() {
     return R"(
-Texture2D guiTexture : register(t0);
+Texture2D diffuseTexture : register(t0);
 SamplerState samplerState : register(s0);
 
 cbuffer ConstantBuffer : register(b0)
@@ -51,7 +51,8 @@ struct PS_INPUT
 
 float4 main(PS_INPUT input) : SV_TARGET
 {
-    float4 texColor = guiTexture.Sample(samplerState, input.texcoord);
+    float4 texColor = diffuseTexture.Sample(samplerState, input.texcoord);
+    if (texColor.a < 0.01) discard;
     return texColor;
 }
 )";
