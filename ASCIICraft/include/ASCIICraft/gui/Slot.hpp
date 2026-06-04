@@ -9,7 +9,7 @@ namespace ASCIIgL { class EventBus; }
 
 namespace gui {
 
-/// ECS-bound slot: reads Inventory + ItemIndex for draw; emits SlotClickedEvent on click.
+/// ECS-bound slot: reads Inventory + ItemRegistry for draw; emits SlotClickedEvent on click.
 class Slot : public Widget {
 public:
     Slot(entt::registry& registry, ASCIIgL::EventBus& eventBus, entt::entity inventoryOwner, int slotIndex);

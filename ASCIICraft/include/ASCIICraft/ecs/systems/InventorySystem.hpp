@@ -44,8 +44,11 @@ private:
     entt::registry& registry;
     ASCIIgL::EventBus& eventBus;
 
+    void processDropPressed();
+    void processDropCarriedStackPressed();
     void processPickupEvents();
     void processDropEvents();
+    void processSlotClickedEvents();
 };
 
 } // namespace ecs::systems

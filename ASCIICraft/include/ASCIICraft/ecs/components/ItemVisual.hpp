@@ -11,7 +11,7 @@ namespace ecs::components {
 /// processed by the render system.
 struct ItemVisual {
     std::shared_ptr<ASCIIgL::Mesh> mesh;
-    bool is2DIcon = false;  // If true, use icon texture array instead of block texture array
+    bool is2DIcon = false;
 };
 
 } // namespace ecs::components

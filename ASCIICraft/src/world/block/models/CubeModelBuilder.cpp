@@ -72,7 +72,6 @@ inline void AppendFace(
 ) {
     const int sourceFaceIndex = SourceFaceForWorldFace(worldFaceIndex, spec.facing);
     const int layer = spec.faceLayers[sourceFaceIndex];
-    const float light = 1.0f;
 
     const int startIndex = static_cast<int>(verts.size());
     const auto& unitFaceVerts = modelbuilderutil::GetUnitFaceVerts(worldFaceIndex);
@@ -95,7 +94,6 @@ inline void AppendFace(
         vert.SetXYZ(pos);
         vert.SetUV(glm::vec2(u, v));
         vert.SetLayer(static_cast<float>(layer));
-        vert.SetLight(light);
         verts.push_back(vert);
     }
 

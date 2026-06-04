@@ -3,83 +3,22 @@
 #include <array>
 #include <vector>
 #include <cstdint>
-#include <cstring>
 #include <unordered_set>
 #include <mutex>
 
 #include <glm/glm.hpp>
 
-#include <ASCIIgL/renderer/VertFormat.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 
+#include <ASCIICraft/world/block/models/BlockModelMeshBuilder.hpp>
 #include <ASCIICraft/world/block/state/BlockState.hpp>
 #include <ASCIICraft/world/chunk/Chunk.hpp>
-#include <ASCIICraft/world/block/FaceCulling.hpp>
 #include <ASCIICraft/world/chunk/ChunkUtil.hpp>
-
-#include <algorithm>
 
 namespace {
 
 static std::mutex g_missingModelWarnMutex;
 static std::unordered_set<uint32_t> g_missingModelWarnedStateIds;
-
-static void AppendFaces(
-    std::vector<std::byte>& dstVerts,
-    std::vector<int>& dstIndices,
-    const blockstate::RenderLayer& layer,
-    const glm::vec3& worldOffset,
-    const std::vector<bool>& visibleFaces
-) {
-    using V = ASCIIgL::VertStructs::PosUVLayerLight;
-    constexpr unsigned kFaceUnset = 255;
-    // Scratch typed storage: keeps vertex math aligned/typed while public buffers remain byte-packed.
-    std::vector<V> scratchVerts;
-    for (size_t i = 0; i < layer.faces.size(); ++i) {
-        const blockstate::FaceRange& f = layer.faces[i];
-        // Neighbor culling masks by world direction (six faces). JSON models emit quads in arbitrary order,
-        // so we mask using cardinalFace on each FaceRange — not the index within layer.faces.
-        if (!visibleFaces.empty()) {
-            if (f.cardinalFace != kFaceUnset && f.cardinalFace < visibleFaces.size()) {
-                if (!visibleFaces[f.cardinalFace]) {
-                    continue;
-                }
-            }
-        }
-
-        const int baseVertex = static_cast<int>(dstVerts.size() / sizeof(V));
-
-        if (f.vertByteCount <= 0 || (f.vertByteCount % static_cast<int>(sizeof(V)) != 0)) {
-            continue;
-        }
-        const size_t oldSize = dstVerts.size();
-        const int vertCount = f.vertByteCount / sizeof(V);
-        if (vertCount <= 0) {
-            continue;
-        }
-
-        scratchVerts.resize(static_cast<size_t>(vertCount));
-        std::memcpy(
-            scratchVerts.data(),
-            layer.vertices.data() + static_cast<size_t>(f.vertByteOffset),
-            static_cast<size_t>(f.vertByteCount)
-        );
-        for (V& v : scratchVerts) {
-            v.SetXYZ(v.GetXYZ() + worldOffset);
-        }
-
-        dstVerts.resize(oldSize + static_cast<size_t>(f.vertByteCount));
-        std::memcpy(
-            dstVerts.data() + oldSize,
-            scratchVerts.data(),
-            static_cast<size_t>(f.vertByteCount)
-        );
-
-        for (int j = 0; j < f.idxCount; ++j) {
-            dstIndices.push_back(baseVertex + layer.indices[f.idxOffset + j]);
-        }
-    }
-}
 
 } // namespace
 
@@ -137,7 +76,7 @@ ChunkMeshData BuildChunkMeshData(
                     ? out.transparentIndices
                     : (model->opaqueNoCull ? out.opaqueNoCullIndices : out.opaqueIndices);
                 const blockstate::RenderLayer& layer = blockIsTranslucent ? model->transparent : model->opaque;
-                AppendFaces(dstVerts, dstIndices, layer, worldOffset, visibleFaces);
+                blockmodels::AppendRenderLayer(dstVerts, dstIndices, layer, worldOffset, visibleFaces);
             }
         }
     }

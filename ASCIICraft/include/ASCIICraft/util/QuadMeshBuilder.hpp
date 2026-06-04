@@ -6,6 +6,7 @@
 namespace ASCIIgL {
 class Mesh;
 class Texture;
+class TextureArray;
 }
 
 namespace util {
@@ -26,8 +27,8 @@ public:
     static std::shared_ptr<ASCIIgL::Mesh> BuildPosUVQuad(const std::shared_ptr<ASCIIgL::Texture>& texture, const glm::vec4& uvRect);
 
     /// Texture array quad (XYZ + UV + Layer)
-    static std::shared_ptr<ASCIIgL::Mesh> BuildPosUVLayerQuad(ASCIIgL::Texture* texture, float layer);
-    static std::shared_ptr<ASCIIgL::Mesh> BuildPosUVLayerQuad(const std::shared_ptr<ASCIIgL::Texture>& texture, float layer);
+    static std::shared_ptr<ASCIIgL::Mesh> BuildPosUVLayerQuad(ASCIIgL::TextureArray* textureArray, float layer);
+    static std::shared_ptr<ASCIIgL::Mesh> BuildPosUVLayerQuad(const std::shared_ptr<ASCIIgL::TextureArray>& textureArray, float layer);
 
     /// Colored quad (XYZ + RGBA), no texture
     static std::shared_ptr<ASCIIgL::Mesh> BuildPosColorQuad(const glm::vec4& color);

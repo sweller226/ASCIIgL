@@ -1,7 +1,7 @@
 #include <ASCIICraft/world/block/models/WaterModelBuilder.hpp>
 #include <ASCIICraft/world/block/models/ModelBuilderUtil.hpp>
 
-#include <ASCIICraft/world/block/textures/BlockTextureCatalog.hpp>
+#include <ASCIICraft/textures/BlockTextureCatalog.hpp>
 #include <ASCIICraft/world/block/FaceCulling.hpp>
 
 #include <vector>
@@ -22,7 +22,10 @@ void AppendFace(
     std::vector<int>& indices
 ) {
     const int startIndex = static_cast<int>(verts.size());
-    const float layer = static_cast<float>(blocktextures::GetLayerForTextureId("minecraft:blocks/water_still"));
+    const float layer = static_cast<float>(textures::GetLayerForTextureId(
+        blocktextures::GetBlockTextureCatalog(),
+        "minecraft:blocks/water_still"
+    ));
     const auto& faceVerts = modelbuilderutil::GetUnitFaceVerts(faceIndex);
     const auto& faceUVs = modelbuilderutil::GetFaceUVs();
     const auto& faceIndices = modelbuilderutil::GetFaceIndices();
@@ -38,7 +41,6 @@ void AppendFace(
         v.SetXYZ(pos);
         v.SetUV(glm::vec2(uv.x, 1.0f - uv.y));
         v.SetLayer(layer);
-        v.SetLight(1.0f);
         verts.push_back(v);
     }
 

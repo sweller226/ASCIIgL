@@ -1,4 +1,4 @@
-#include <ASCIICraft/world/block/textures/BlockTextureCatalog.hpp>
+#include <ASCIICraft/textures/BlockTextureCatalog.hpp>
 
 namespace blocktextures {
 
@@ -36,39 +36,4 @@ const std::vector<CatalogEntry>& GetBlockTextureCatalog() {
     return kCatalog;
 }
 
-std::vector<std::string> BuildBlockTexturePaths() {
-    std::vector<std::string> out;
-    const auto& catalog = GetBlockTextureCatalog();
-    out.reserve(catalog.size());
-    for (const auto& e : catalog) {
-        out.emplace_back(e.filePath);
-    }
-    return out;
-}
-
-std::unordered_map<std::string, int> BuildTextureIdToLayerMap() {
-    std::unordered_map<std::string, int> out;
-    const auto& catalog = GetBlockTextureCatalog();
-    out.reserve(catalog.size());
-    for (size_t i = 0; i < catalog.size(); ++i) {
-        out[std::string(catalog[i].textureId)] = static_cast<int>(i);
-    }
-    return out;
-}
-
-std::string CanonicalizeTextureId(const std::string& textureId) {
-    if (textureId.find(':') != std::string::npos) {
-        return textureId;
-    }
-    return "minecraft:" + textureId;
-}
-
-int GetLayerForTextureId(const std::string& textureId) {
-    static const std::unordered_map<std::string, int> kMap = BuildTextureIdToLayerMap();
-    auto it = kMap.find(CanonicalizeTextureId(textureId));
-    if (it == kMap.end()) return -1;
-    return it->second;
-}
-
 } // namespace blocktextures
-

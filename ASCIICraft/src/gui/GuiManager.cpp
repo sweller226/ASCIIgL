@@ -1,12 +1,31 @@
 #include <ASCIICraft/gui/GUIManager.hpp>
 #include <ASCIICraft/gui/GUIScreen.hpp>
+#include <ASCIICraft/gui/GuiSlotHover.hpp>
+#include <ASCIICraft/gui/Slot.hpp>
 #include <ASCIICraft/gui/GUISurface.hpp>
+#include <ASCIICraft/events/ItemEvents.hpp>
+#include <ASCIICraft/gui/GuiItemIcon.hpp>
+#include <ASCIICraft/ecs/components/ItemCarried.hpp>
+#include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIIgL/util/EventBus.hpp>
 #include <ASCIIgL/engine/TextureLibrary.hpp>
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <algorithm>
 #include <glm/vec2.hpp>
 
 namespace gui {
+
+namespace {
+
+void SetGuiSlotHover(entt::registry& registry, const GuiSlotHover& hover) {
+    if (auto* ctx = registry.ctx().find<GuiSlotHover>()) {
+        *ctx = hover;
+    } else {
+        registry.ctx().emplace<GuiSlotHover>(hover);
+    }
+}
+
+} // namespace
 
 GUIManager::GUIManager(entt::registry& registry, ASCIIgL::EventBus& eventBus, IInputSource& input)
     : m_registry(registry)
@@ -41,7 +60,11 @@ void GUIManager::Update() {
     }
 
     GUIScreen* top = m_screenStack.back();
-    UpdateCursor(top);
+    if (top->blocksInput) {
+        UpdateCursor(top);
+    } else {
+        SetGuiSlotHover(m_registry, {});
+    }
 }
 
 void GUIManager::Render() {
@@ -51,9 +74,18 @@ void GUIManager::Render() {
         screen->Draw(*m_renderer);
     }
 
-    if (!m_screenStack.empty() && m_screenStack.back()->blocksInput &&
-        m_cursorSurface.mesh && m_cursorSurface.material) {
-        m_renderer->RenderGUIQuad(m_cursorPosition, m_cursorSize, 10000, m_cursorSurface.mesh, m_cursorSurface.material);
+    if (!m_screenStack.empty() && m_screenStack.back()->blocksInput) {
+        const entt::entity player = ecs::components::GetPlayerEntity(m_registry);
+        if (player != entt::null && m_registry.valid(player)) {
+            if (const auto* carried = m_registry.try_get<ecs::components::ItemCarried>(player)) {
+                DrawItemStackIcon(m_registry, *m_renderer, carried->stack, m_cursorPosition, m_cursorSize, 9999);
+            }
+        }
+
+        if (m_cursorSurface.mesh && m_cursorSurface.material) {
+            m_renderer->RenderGUIQuad(
+                m_cursorPosition, m_cursorSize, 10000, m_cursorSurface.mesh, m_cursorSurface.material);
+        }
     }
 }
 
@@ -125,8 +157,19 @@ void GUIManager::UpdateCursor(GUIScreen* top) {
 
     top->OnCursorMove(m_cursorPosition);
 
+    GuiSlotHover hover{};
+    if (Widget* w = top->HitTest(m_cursorPosition)) {
+        if (auto* slot = dynamic_cast<Slot*>(w)) {
+            hover.inventoryOwner = slot->GetInventoryOwner();
+            hover.slotIndex = slot->GetSlotIndex();
+        }
+    }
+    SetGuiSlotHover(m_registry, hover);
+
     if (m_input.IsActionPressed("interact_left")) {
-        if (!top->OnClick(m_cursorPosition, 0)) { /* consumed or not */ }
+        if (!top->OnClick(m_cursorPosition, 0)) {
+            m_eventBus.emit(events::DropCarriedStackPressedEvent{});
+        }
     }
     if (m_input.IsActionPressed("interact_right")) {
         if (!top->OnClick(m_cursorPosition, 1)) { /* consumed or not */ }

@@ -25,9 +25,11 @@
 #include <ASCIICraft/world/block/models/JsonModelLoader.hpp>
 #include <ASCIICraft/world/block/state/JsonBlockStateLoader.hpp>
 #include <ASCIICraft/world/block/state/VariantKey.hpp>
-#include <ASCIICraft/world/block/textures/BlockTextureCatalog.hpp>
+#include <ASCIICraft/textures/BlockTextureCatalog.hpp>
+#include <ASCIICraft/textures/ItemTextureCatalog.hpp>
+#include <ASCIICraft/textures/TextureCatalog.hpp>
 #include <ASCIICraft/world/block/models/WaterModelBuilder.hpp>
-#include <ASCIICraft/ecs/data/ItemIndex.hpp>
+#include <ASCIICraft/ecs/data/ItemRegistry.hpp>
 
 #include <ASCIICraft/gui/screens/PlayHUDScreen.hpp>
 #include <ASCIICraft/gui/screens/InventoryScreen.hpp>
@@ -57,6 +59,9 @@ Game::Game()
     , blockUpdateSystem(registry, eventBus)
     , placingSystem(registry, eventBus)
     , miningSystem(registry, eventBus)
+    , inventorySystem(registry, eventBus)
+    , droppedItemSystem(registry, eventBus)
+    , hotbarSystem(registry)
     , lifetimeSystem(registry)
     , particleSystem(registry, eventBus)
     , soundSystem(registry, eventBus)
@@ -121,11 +126,11 @@ bool Game::Initialize(bool renderToTerminal) {
     ASCIIgL::Logger::Debug("Initializing world...");
     InitializeWorld();
 
-    ASCIIgL::Logger::Debug("Initializing player...");
-    InitializePlayer();
-
     ASCIIgL::Logger::Debug("Initializing item definitions...");
     InitializeItemDefinitions();
+
+    ASCIIgL::Logger::Debug("Initializing player...");
+    InitializePlayer();
 
     ASCIIgL::Logger::Debug("Initializing ECS systems...");
     InitializeSystems();
@@ -218,6 +223,8 @@ void Game::Update() {
 
             guiManager.Update();
 
+            hotbarSystem.Update();
+
             miningSystem.Update();
             placingSystem.Update();
             blockUpdateSystem.Update();
@@ -227,6 +234,9 @@ void Game::Update() {
             movementSystem.Update();
             cameraSystem.Update();
             physicsSystem.Update();
+
+            droppedItemSystem.Update();
+            inventorySystem.Update();
 
             stepSfxSystem.Update();
             musicSystem.Update();
@@ -327,12 +337,21 @@ bool Game::LoadTextures() {
     monoMap.contrast = 1.0f;
 
     // Load block textures from central catalog order.
-    std::vector<std::string> blockTexturePaths = blocktextures::BuildBlockTexturePaths();
+    std::vector<std::string> blockTexturePaths =
+        textures::BuildTexturePaths(blocktextures::GetBlockTextureCatalog());
 
     auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(blockTexturePaths, "terrainTextureArray", monoMap);
     if (!blockTextureArray || !blockTextureArray->IsValid()) {
         ASCIIgL::Logger::Error("Failed to load block texture array");
         return false;   
+    }
+
+    std::vector<std::string> itemTexturePaths =
+        textures::BuildTexturePaths(itemtextures::GetItemTextureCatalog());
+    auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(itemTexturePaths, "itemTextureArray", monoMap);
+    if (!itemTextureArray || !itemTextureArray->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to load item texture array");
+        return false;
     }
 
     auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture(
@@ -404,7 +423,7 @@ bool Game::LoadTerrainMaterial() {
 
     auto program = ASCIIgL::ShaderProgram::Create(
         std::move(terrainVS), std::move(terrainPS),
-        ASCIIgL::VertFormats::PosUVLayerLight(),
+        ASCIIgL::VertFormats::PosUVLayer(),
         TerrainShaders::GetTerrainPSUniformLayout()
     );
     if (!program || !program->IsValid()) {
@@ -486,7 +505,7 @@ bool Game::LoadGUIItemMaterial() {
 
     auto program = ASCIIgL::ShaderProgram::Create(
         std::move(vs), std::move(ps),
-        ASCIIgL::VertFormats::PosUVLayerLight(),
+        ASCIIgL::VertFormats::PosUVLayer(),
         GUIShaders::GetItemPSUniformLayout()
     );
     if (!program || !program->IsValid()) {
@@ -503,6 +522,13 @@ bool Game::LoadGUIItemMaterial() {
     auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
     material->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
     material->SetFloat4("gradientEnd",   glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
+
+    auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray");
+    if (!itemTextureArray) {
+        ASCIIgL::Logger::Error("itemTextureArray missing for GUI item material");
+        return false;
+    }
+    material->SetTextureArray(0, itemTextureArray.get());
 
     ASCIIgL::MaterialLibrary::GetInst().Register("guiItemMaterial", std::move(material));
     return true;
@@ -870,60 +896,60 @@ void Game::InitializeBlockStates() {
 }
 
 void Game::InitializeItemDefinitions() {
-    auto& itemIndex = registry.ctx().emplace<ecs::data::ItemIndex>();
+    auto& itemRegistry = registry.ctx().emplace<ecs::data::ItemRegistry>();
 
-    using IX = ecs::data::ItemIndex;
-    auto& bsr = registry.ctx().get<blockstate::BlockStateRegistry>();
-    // auto blockMesh = [&](const std::string& typeName) {
-    //     return IX::GetBlockMeshFromState(bsr.GetState(bsr.GetDefaultState(typeName)));
-    // };
+    const auto itemLayer = [](const char* textureId) -> float {
+        return static_cast<float>(
+            textures::GetLayerForTextureId(itemtextures::GetItemTextureCatalog(), textureId)
+        );
+    };
 
-    // // === Terrain (restricted to current texture set) ===
-    // itemIndex.RegisterBlockItem(registry, "minecraft:stone",       "Stone",       blockMesh("minecraft:stone"));
-    // itemIndex.RegisterBlockItem(registry, "minecraft:cobblestone", "Cobblestone", blockMesh("minecraft:cobblestone"));
-    // itemIndex.RegisterBlockItem(registry, "minecraft:dirt",        "Dirt",        blockMesh("minecraft:dirt"));
-    // itemIndex.RegisterBlockItem(registry, "minecraft:grass",       "Grass Block", blockMesh("minecraft:grass"));
-    // itemIndex.RegisterBlockItem(registry, "minecraft:bedrock",     "Bedrock",     blockMesh("minecraft:bedrock"));
+    // === Block items (all registered block types except air and water) ===
+    itemRegistry.RegisterBlockItem(registry, "minecraft:bedrock",          "Bedrock");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:stone",            "Stone");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:dandelion",        "Dandelion");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:poppy",            "Poppy");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:tall_grass",       "Tall Grass");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:fern",             "Fern");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:fence",            "Oak Fence");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone",      "Cobblestone");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:stone_stairs",     "Stone Stairs");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone_slab", "Cobblestone Slab");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:dirt",             "Dirt");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:grass",            "Grass Block");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:oak_log",          "Oak Log");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:oak_planks",         "Oak Planks");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:oak_slab",         "Oak Slab");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:oak_leaves",       "Oak Leaves");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:crafting_table",   "Crafting Table");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:bookshelf",        "Bookshelf");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:brick_block",      "Bricks");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:furnace",          "Furnace");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:glass",            "Glass");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:torch",            "Torch");
 
-    // // === Wood & Plants (subset)
-    // itemIndex.RegisterBlockItem(registry, "minecraft:oak_log",       "Oak Log",       blockMesh("minecraft:oak_log"));
-    // itemIndex.RegisterBlockItem(registry, "minecraft:oak_leaves",    "Oak Leaves",    blockMesh("minecraft:oak_leaves"));
+    // === Resources / Materials ===
+    itemRegistry.RegisterResourceItem(registry, "minecraft:coal",       "Coal",       itemLayer("minecraft:items/coal"));
+    itemRegistry.RegisterResourceItem(registry, "minecraft:diamond",    "Diamond",    itemLayer("minecraft:items/diamond"));
+    itemRegistry.RegisterResourceItem(registry, "minecraft:iron_ingot", "Iron Ingot", itemLayer("minecraft:items/iron_ingot"));
+    itemRegistry.RegisterResourceItem(registry, "minecraft:gold_ingot", "Gold Ingot", itemLayer("minecraft:items/gold_ingot"));
+    itemRegistry.RegisterResourceItem(registry, "minecraft:stick",      "Stick",      itemLayer("minecraft:items/stick"));
 
-    // // (Other ores, planks, utility, and special blocks are temporarily disabled
-    // //  until their textures are added to the texture array.)
+    // === Swords ===
+    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_sword",  "Wooden Sword",  itemLayer("minecraft:items/wood_sword"),  {2.0f, 1, 60},   {4.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_sword",   "Stone Sword",   itemLayer("minecraft:items/stone_sword"), {4.0f, 2, 132},  {5.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:iron_sword",    "Iron Sword",    itemLayer("minecraft:items/iron_sword"),  {6.0f, 3, 251},  {6.0f, 1.6f});
+    // === Shovels ===
+    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_shovel",  "Wooden Shovel",  itemLayer("minecraft:items/wood_shovel"),  {2.0f, 1, 60},   {1.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_shovel",   "Stone Shovel",   itemLayer("minecraft:items/stone_shovel"), {4.0f, 2, 132},  {2.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:iron_shovel",    "Iron Shovel",    itemLayer("minecraft:items/iron_shovel"),  {6.0f, 3, 251},  {3.0f, 1.6f});
+    // === Pickaxes ===
+    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_pickaxe",  "Wooden Pickaxe",  itemLayer("minecraft:items/wood_pickaxe"),  {2.0f, 1, 60},   {2.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_pickaxe",   "Stone Pickaxe",   itemLayer("minecraft:items/stone_pickaxe"), {4.0f, 2, 132},  {3.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:iron_pickaxe",    "Iron Pickaxe",    itemLayer("minecraft:items/iron_pickaxe"),  {6.0f, 3, 251},  {4.0f, 1.6f});
 
-    // // === Resources / Materials ===
-    // itemIndex.RegisterResourceItem(registry, 263, "minecraft:coal",       "Coal",       IX::GetQuadItemMesh(7, 10));
-    // itemIndex.RegisterResourceItem(registry, 264, "minecraft:diamond",    "Diamond",    IX::GetQuadItemMesh(8, 10));
-    // itemIndex.RegisterResourceItem(registry, 265, "minecraft:iron_ingot", "Iron Ingot", IX::GetQuadItemMesh(9, 10));
-    // itemIndex.RegisterResourceItem(registry, 266, "minecraft:gold_ingot", "Gold Ingot", IX::GetQuadItemMesh(10, 10));
-    // itemIndex.RegisterResourceItem(registry, 280, "minecraft:stick",      "Stick",      IX::GetQuadItemMesh(5, 9));
-
-    // // === Swords ===
-    // itemIndex.RegisterToolItem(registry, 268, "minecraft:wooden_sword",  "Wooden Sword",  IX::GetQuadItemMesh(0, 4), {2.0f, 1, 60},   {4.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 272, "minecraft:stone_sword",   "Stone Sword",   IX::GetQuadItemMesh(1, 4), {4.0f, 2, 132},  {5.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 267, "minecraft:iron_sword",    "Iron Sword",    IX::GetQuadItemMesh(2, 4), {6.0f, 3, 251},  {6.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 276, "minecraft:diamond_sword", "Diamond Sword", IX::GetQuadItemMesh(3, 4), {8.0f, 4, 1562}, {7.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 283, "minecraft:gold_sword",    "Golden Sword",  IX::GetQuadItemMesh(4, 4), {12.0f, 1, 33},  {4.0f, 1.6f});
-
-    // // === Shovels ===
-    // itemIndex.RegisterToolItem(registry, 269, "minecraft:wooden_shovel",  "Wooden Shovel",  IX::GetQuadItemMesh(0, 5), {2.0f, 1, 60},   {1.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 273, "minecraft:stone_shovel",   "Stone Shovel",   IX::GetQuadItemMesh(1, 5), {4.0f, 2, 132},  {2.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 256, "minecraft:iron_shovel",    "Iron Shovel",    IX::GetQuadItemMesh(2, 5), {6.0f, 3, 251},  {3.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 277, "minecraft:diamond_shovel", "Diamond Shovel", IX::GetQuadItemMesh(3, 5), {8.0f, 4, 1562}, {4.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 284, "minecraft:gold_shovel",    "Golden Shovel",  IX::GetQuadItemMesh(4, 5), {12.0f, 1, 33},  {1.0f, 1.6f});
-
-    // // === Pickaxes ===
-    // itemIndex.RegisterToolItem(registry, 270, "minecraft:wooden_pickaxe",  "Wooden Pickaxe",  IX::GetQuadItemMesh(0, 6), {2.0f, 1, 60},   {2.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 274, "minecraft:stone_pickaxe",   "Stone Pickaxe",   IX::GetQuadItemMesh(1, 6), {4.0f, 2, 132},  {3.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 257, "minecraft:iron_pickaxe",    "Iron Pickaxe",    IX::GetQuadItemMesh(2, 6), {6.0f, 3, 251},  {4.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 278, "minecraft:diamond_pickaxe", "Diamond Pickaxe", IX::GetQuadItemMesh(3, 6), {8.0f, 4, 1562}, {5.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 285, "minecraft:gold_pickaxe",    "Golden Pickaxe",  IX::GetQuadItemMesh(4, 6), {12.0f, 1, 33},  {2.0f, 1.6f});
-
-    // // === Axes ===
-    // itemIndex.RegisterToolItem(registry, 271, "minecraft:wooden_axe",  "Wooden Axe",  IX::GetQuadItemMesh(0, 7), {2.0f, 1, 60},   {3.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 275, "minecraft:stone_axe",   "Stone Axe",   IX::GetQuadItemMesh(1, 7), {4.0f, 2, 132},  {4.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 258, "minecraft:iron_axe",    "Iron Axe",    IX::GetQuadItemMesh(2, 7), {6.0f, 3, 251},  {5.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 279, "minecraft:diamond_axe", "Diamond Axe", IX::GetQuadItemMesh(3, 7), {8.0f, 4, 1562}, {6.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 286, "minecraft:gold_axe",    "Golden Axe",  IX::GetQuadItemMesh(4, 7), {12.0f, 1, 33},  {3.0f, 1.6f});
+    // === Axes ===
+    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_axe",  "Wooden Axe",  itemLayer("minecraft:items/wood_axe"),  {2.0f, 1, 60},   {3.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_axe",   "Stone Axe",   itemLayer("minecraft:items/stone_axe"), {4.0f, 2, 132},  {4.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:iron_axe",    "Iron Axe",    itemLayer("minecraft:items/iron_axe"),  {6.0f, 3, 251},  {5.0f, 1.6f});
 }

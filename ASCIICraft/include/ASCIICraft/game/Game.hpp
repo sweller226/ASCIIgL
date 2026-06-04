@@ -36,6 +36,9 @@
 #include <ASCIICraft/ecs/systems/blockupdate/BlockUpdateSystem.hpp>
 #include <ASCIICraft/ecs/systems/blockupdate/MiningSystem.hpp>
 #include <ASCIICraft/ecs/systems/blockupdate/PlacingSystem.hpp>
+#include <ASCIICraft/ecs/systems/InventorySystem.hpp>
+#include <ASCIICraft/ecs/systems/DroppedItemSystem.hpp>
+#include <ASCIICraft/ecs/systems/HotbarSystem.hpp>
 
 // event systems
 #include <ASCIIgL/util/EventBus.hpp>
@@ -44,6 +47,7 @@
 #include <ASCIICraft/events/BreakBlockEvent.hpp>
 #include <ASCIICraft/events/PlaceBlockEvent.hpp>
 #include <ASCIICraft/events/InputEvents.hpp>
+#include <ASCIICraft/events/GUIEvents.hpp>
 
 enum class GameState {
     Playing,
@@ -98,6 +102,9 @@ private:
     ecs::systems::BlockUpdateSystem blockUpdateSystem;
     ecs::systems::MiningSystem miningSystem;
     ecs::systems::PlacingSystem placingSystem;
+    ecs::systems::InventorySystem inventorySystem;
+    ecs::systems::DroppedItemSystem droppedItemSystem;
+    ecs::systems::HotbarSystem hotbarSystem;
 
     // ecs factories
     ecs::factories::PlayerFactory playerFactory;

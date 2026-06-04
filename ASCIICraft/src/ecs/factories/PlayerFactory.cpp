@@ -1,5 +1,9 @@
 #include <ASCIICraft/ecs/factories/PlayerFactory.hpp>
 
+#include <ASCIICraft/ecs/components/Inventory.hpp>
+#include <ASCIICraft/ecs/components/ItemCarried.hpp>
+#include <ASCIICraft/ecs/components/HotbarSelection.hpp>
+#include <ASCIICraft/ecs/data/ItemRegistry.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 
 namespace ecs::factories {
@@ -29,6 +33,32 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     auto& head    = registry.emplace<components::Head>(p_ent);
     auto& reach   = registry.emplace<components::Reach>(p_ent);
     auto& input   = registry.emplace<components::PlayerInput>(p_ent);
+
+    // --- Inventory (36 slots: 0-8 hotbar, 9-35 main) ---
+    auto& inv = registry.emplace<components::Inventory>(p_ent, 36);
+    if (auto* itemRegistry = registry.ctx().find<ecs::data::ItemRegistry>()) {
+        const auto seedSlot = [&](int slot, const char* itemName, int count) {
+            const int id = itemRegistry->GetIdFromName(itemName, registry);
+            if (id < 0 || slot < 0 || slot >= inv.capacity) {
+                return;
+            }
+            inv.slots[slot] = components::ItemStack::fromRegistry(registry, id, count);
+        };
+
+        seedSlot(0, "minecraft:stone", 64);
+        seedSlot(1, "minecraft:dirt", 64);
+        seedSlot(2, "minecraft:grass", 64);
+        seedSlot(3, "minecraft:oak_log", 16);
+        seedSlot(4, "minecraft:coal", 32);
+        seedSlot(5, "minecraft:wooden_pickaxe", 1);
+        seedSlot(6, "minecraft:iron_sword", 1);
+        seedSlot(7, "minecraft:torch", 16);
+        seedSlot(8, "minecraft:diamond", 8);
+    } else {
+        ASCIIgL::Logger::Warning("PlayerFactory: ItemRegistry missing; inventory left empty.");
+    }
+    registry.emplace<components::ItemCarried>(p_ent);
+    registry.emplace<components::HotbarSelection>(p_ent);
 
     // --- Transform ---
     t.setPosition(position);

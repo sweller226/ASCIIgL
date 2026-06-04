@@ -6,12 +6,16 @@
 
 namespace events {
 
+/// Emitted when the player presses the key bound to "toggle inventory" (e.g. E).
+/// Emitted regardless of blocking so the GUI can close when the key is pressed again.
+struct ToggleInventoryEvent {};
+
 /// Emitted when a GUI slot is clicked (OOP or ECS). For OOP, slot is entt::null; use inventoryOwner + slotIndex.
 struct SlotClickedEvent {
     entt::entity slot = entt::null;           // ECS slot entity, or null for OOP
     entt::entity inventoryOwner = entt::null;  // Entity with Inventory (required for OOP)
     int slotIndex = -1;
-    int mouseButton = 0;  // 0 = left, 1 = right, 2 = middle
+    int mouseButton = 0;  // 0 = pick (F), 1 = right (R)
     bool shift = false;
 };
 

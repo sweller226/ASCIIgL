@@ -1,4 +1,5 @@
 #include <ASCIICraft/gui/screens/PlayHUDScreen.hpp>
+#include <ASCIICraft/ecs/components/HotbarSelection.hpp>
 #include <ASCIICraft/gui/Slot.hpp>
 #include <ASCIICraft/gui/Panel.hpp>
 #include <ASCIICraft/gui/GUIRenderer.hpp>
@@ -38,6 +39,7 @@ PlayHUDScreen::PlayHUDScreen(entt::registry& registry,
                              GUISurfaceLibrary& surfaceLibrary)
     : m_registry(&registry)
     , m_eventBus(&eventBus)
+    , m_playerEntity(playerEntity)
 {
     blocksInput = false;
     name = "guiscreen:playHud";
@@ -106,6 +108,26 @@ void PlayHUDScreen::Draw(GUIRenderer& renderer) const {
             m_hotbarBgSurface.mesh,
             m_hotbarBgSurface.material
         );
+    }
+
+    if (m_hotbarSelectionSurface.mesh && m_hotbarSelectionSurface.material
+        && m_playerEntity != entt::null && m_registry->valid(m_playerEntity)) {
+        const auto* selection = m_registry->try_get<ecs::components::HotbarSelection>(m_playerEntity);
+        if (selection) {
+            constexpr float kSelectionInsetX = (static_cast<float>(kHotbarSelectionW) - kSlotSize) * 0.5f;
+            constexpr float kSelectionInsetY = (static_cast<float>(kHotbarSelectionH) - kHotbarBgH) * 0.5f;
+            const glm::vec2 selectionPos{
+                m_hotbarTopLeft.x + kSlotInset + static_cast<float>(selection->selectedSlot) * kSlotSize - kSelectionInsetX,
+                m_hotbarTopLeft.y - kSelectionInsetY
+            };
+            renderer.RenderGUIQuad(
+                selectionPos,
+                {static_cast<float>(kHotbarSelectionW), static_cast<float>(kHotbarSelectionH)},
+                layer + 1,
+                m_hotbarSelectionSurface.mesh,
+                m_hotbarSelectionSurface.material
+            );
+        }
     }
 
     for (const auto& child : GetChildren())

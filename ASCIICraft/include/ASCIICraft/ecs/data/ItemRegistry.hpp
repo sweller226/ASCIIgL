@@ -9,13 +9,12 @@
 #include <ASCIICraft/ecs/components/ItemProperties.hpp>
 
 namespace ASCIIgL { class Mesh; }
-namespace blockstate { struct BlockState; }
 
 namespace ecs::data {
 
-/// Thin O(1) lookup index for item definition entities.
-/// Stored in registry.ctx() — replaces the ItemRegistry singleton.
-class ItemIndex {
+/// Registry of item definition entities (id/name → prototype).
+/// Stored in registry.ctx() alongside BlockStateRegistry.
+class ItemRegistry {
 public:
     /// Register a definition entity. Returns false if ID or name already exists.
     bool Register(int id, const std::string& name, entt::entity entity);
@@ -35,6 +34,12 @@ public:
     /// Check if a numeric ID is registered.
     bool Exists(int id) const;
 
+    /// Registry name for a numeric id (e.g. "minecraft:stone"). Empty if unknown.
+    std::string GetNameFromId(int id, entt::registry& reg) const;
+
+    /// Numeric id for a registry name. -1 if unknown.
+    int GetIdFromName(const std::string& name, entt::registry& reg) const;
+
     /// Clear all registrations.
     void Clear();
 
@@ -42,40 +47,27 @@ public:
     // Item Definition Builders
     // ========================================================================
 
-    /// Register a placeable block item (auto-incrementing ID = blockId).
+    /// Register a placeable block item (auto-incrementing item id).
     entt::entity RegisterBlockItem(
         entt::registry& reg,
         const std::string& name, const std::string& display,
-        std::shared_ptr<ASCIIgL::Mesh> mesh, int maxStack = 64
+        int maxStack = 64
     );
 
-    /// Register a stackable resource/material item (2D icon).
+    /// Register a stackable resource/material item (2D icon, auto-incrementing item id).
     entt::entity RegisterResourceItem(
         entt::registry& reg,
-        int id, const std::string& name, const std::string& display,
-        std::shared_ptr<ASCIIgL::Mesh> mesh, int maxStack = 64
+        const std::string& name, const std::string& display,
+        float iconLayer, int maxStack = 64
     );
 
-    /// Register a tool/weapon item (unstackable, 2D icon).
+    /// Register a tool/weapon item (2D icon, auto-incrementing item id).
     entt::entity RegisterToolItem(
         entt::registry& reg,
-        int id, const std::string& name, const std::string& display,
-        std::shared_ptr<ASCIIgL::Mesh> mesh,
+        const std::string& name, const std::string& display,
+        float iconLayer,
         ecs::components::ToolProperty tool, ecs::components::WeaponProperty weapon
     );
-
-    // ========================================================================
-    // Mesh Utilities
-    // ========================================================================
-
-    /// Create a quad mesh for a 2D item icon from a texture array layer ID.
-    static std::shared_ptr<ASCIIgL::Mesh> GetQuadItemMesh(int layerID);
-
-    /// Create a quad mesh for a 2D item icon from atlas grid coordinates.
-    static std::shared_ptr<ASCIIgL::Mesh> GetQuadItemMesh(int x, int y, int atlas_size = 16);
-
-    /// Create a 3D block-preview cube mesh from a BSR BlockState's face texture layers.
-    static std::shared_ptr<ASCIIgL::Mesh> GetBlockMeshFromState(const blockstate::BlockState& state);
 
     /// Get the current next ID value (useful for inspecting the counter).
     int GetNextId() const { return nextId; }
@@ -84,6 +76,12 @@ public:
     void SetNextId(int id) { nextId = id; }
 
 private:
+    std::shared_ptr<ASCIIgL::Mesh> buildIconMesh(float iconLayer) const;
+    std::shared_ptr<ASCIIgL::Mesh> buildBlockItemMesh(
+        entt::registry& reg,
+        entt::entity definitionEntity
+    ) const;
+
     int nextId = 1;  // Auto-increment counter, starts at 1
     std::unordered_map<int, entt::entity> byId;
     std::unordered_map<std::string, entt::entity> byName;

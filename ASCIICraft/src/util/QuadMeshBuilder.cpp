@@ -2,6 +2,7 @@
 
 #include <ASCIIgL/engine/Mesh.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
+#include <ASCIIgL/engine/TextureArray.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 
 #include <cstddef>
@@ -83,8 +84,8 @@ std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVQuad(const std::shared
     return BuildPosUVQuad(texture.get(), uvRect);
 }
 
-std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVLayerQuad(ASCIIgL::Texture* texture, float layer) {
-    if (!texture) return nullptr;
+std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVLayerQuad(ASCIIgL::TextureArray* textureArray, float layer) {
+    if (!textureArray) return nullptr;
 
     using V = ASCIIgL::VertStructs::PosUVLayer;
     std::vector<V> vertices(4);
@@ -104,12 +105,12 @@ std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVLayerQuad(ASCIIgL::Tex
         std::move(byteVertices),
         ASCIIgL::VertFormats::PosUVLayer(),
         std::move(indices),
-        texture
+        textureArray
     );
 }
 
-std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVLayerQuad(const std::shared_ptr<ASCIIgL::Texture>& texture, float layer) {
-    return BuildPosUVLayerQuad(texture.get(), layer);
+std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVLayerQuad(const std::shared_ptr<ASCIIgL::TextureArray>& textureArray, float layer) {
+    return BuildPosUVLayerQuad(textureArray.get(), layer);
 }
 
 std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosColorQuad(const glm::vec4& color) {

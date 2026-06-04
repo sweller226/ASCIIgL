@@ -25,6 +25,7 @@ public:
 private:
     entt::registry* m_registry = nullptr;
     ASCIIgL::EventBus* m_eventBus = nullptr;
+    entt::entity m_playerEntity = entt::null;
     GUISurface m_hotbarBgSurface{};
     GUISurface m_hotbarSelectionSurface{};
     glm::vec2 m_hotbarTopLeft{0.0f, 0.0f};

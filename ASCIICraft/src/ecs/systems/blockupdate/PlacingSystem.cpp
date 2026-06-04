@@ -55,20 +55,20 @@ void PlacingSystem::HandleDebugBlockSelection() {
     bool changed = false;
     const uint16_t maxTypeId = static_cast<uint16_t>(bsr->GetTotalTypeCount() > 0 ? bsr->GetTotalTypeCount() - 1 : 0);
 
-    // 1 / 2: type down/up
-    if (input.IsKeyPressed(ASCIIgL::Key::NUM_1) && m_selectedTypeId > 0) {
+    // Numpad 1 / 2: type down/up
+    if (input.IsKeyPressed(ASCIIgL::Key::NUMPAD_1) && m_selectedTypeId > 0) {
         --m_selectedTypeId;
         m_selectedStateId = bsr->GetDefaultState(m_selectedTypeId);
         changed = true;
     }
-    if (input.IsKeyPressed(ASCIIgL::Key::NUM_2) && m_selectedTypeId < maxTypeId) {
+    if (input.IsKeyPressed(ASCIIgL::Key::NUMPAD_2) && m_selectedTypeId < maxTypeId) {
         ++m_selectedTypeId;
         m_selectedStateId = bsr->GetDefaultState(m_selectedTypeId);
         changed = true;
     }
 
     // 3 / 4: state down/up (bounded to selected type range)
-    if (input.IsKeyPressed(ASCIIgL::Key::NUM_3)) {
+    if (input.IsKeyPressed(ASCIIgL::Key::NUMPAD_3)) {
         clampStateToCurrentType();
         const auto& type = bsr->GetType(m_selectedTypeId);
         const uint32_t minState = type.baseStateId;
@@ -77,7 +77,7 @@ void PlacingSystem::HandleDebugBlockSelection() {
             changed = true;
         }
     }
-    if (input.IsKeyPressed(ASCIIgL::Key::NUM_4)) {
+    if (input.IsKeyPressed(ASCIIgL::Key::NUMPAD_4)) {
         clampStateToCurrentType();
         const auto& type = bsr->GetType(m_selectedTypeId);
         const uint32_t maxState = type.baseStateId + type.stateCount - 1;
@@ -117,7 +117,7 @@ void PlacingSystem::PlayerPlace() {
             auto* bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
             if (!bsr) break;
 
-            // Temporary debug selector (keys 1/2 type, 3/4 state) chooses placed blockstate.
+            // Temporary debug selector (numpad 1/2 type, 3/4 state) chooses placed blockstate.
             uint32_t baseStateId = m_selectedStateId;
             if (!bsr->IsValidState(baseStateId)) {
                 baseStateId = bsr->GetDefaultState(0);

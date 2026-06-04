@@ -3,7 +3,7 @@
 
 #include <ASCIICraft/world/block/FaceCulling.hpp>
 #include <ASCIICraft/world/block/state/FaceDir.hpp>
-#include <ASCIICraft/world/block/textures/BlockTextureCatalog.hpp>
+#include <ASCIICraft/textures/BlockTextureCatalog.hpp>
 
 #include <array>
 #include <cmath>
@@ -287,7 +287,10 @@ jsonutil::LoadResult<blockstate::BlockModel> BakeResolvedModel(
                 continue;
             }
             const auto& face = faceKv.second;
-            const int layerIdx = blocktextures::GetLayerForTextureId(face.texture);
+            const int layerIdx = textures::GetLayerForTextureId(
+                blocktextures::GetBlockTextureCatalog(),
+                face.texture
+            );
             if (layerIdx < 0) {
                 return jsonutil::Fail<blockstate::BlockModel>(
                     "BakeResolvedModel: missing texture catalog entry for '" + face.texture + "'"
@@ -318,7 +321,6 @@ jsonutil::LoadResult<blockstate::BlockModel> BakeResolvedModel(
                 v.SetXYZ(p);
                 v.SetUV(glm::vec2(faceUVs[i].x, 1.0f - faceUVs[i].y)); // match existing V flip convention
                 v.SetLayer(texLayer);
-                v.SetLight(1.0f);
                 packedVerts.push_back(v);
             }
 

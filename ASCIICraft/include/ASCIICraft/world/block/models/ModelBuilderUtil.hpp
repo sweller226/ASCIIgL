@@ -11,7 +11,7 @@
 
 namespace blockmodels::modelbuilderutil {
 
-using V = ASCIIgL::VertStructs::PosUVLayerLight;
+using V = ASCIIgL::VertStructs::PosUVLayer;
 
 constexpr int FACE_COUNT = 6;
 constexpr int VERTS_PER_FACE = 4;

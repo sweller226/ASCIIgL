@@ -71,7 +71,7 @@ void Chunk::ApplyMeshData(ChunkMeshData&& data, ASCIIgL::TextureArray* blockText
     if (data.HasOpaque()) {
         opaqueMesh = std::make_unique<ASCIIgL::Mesh>(
             std::move(data.opaqueVertices),
-            ASCIIgL::VertFormats::PosUVLayerLight(),
+            ASCIIgL::VertFormats::PosUVLayer(),
             std::move(data.opaqueIndices),
             blockTextures
         );
@@ -81,7 +81,7 @@ void Chunk::ApplyMeshData(ChunkMeshData&& data, ASCIIgL::TextureArray* blockText
     if (data.HasTransparent()) {
         transparentMesh = std::make_unique<ASCIIgL::Mesh>(
             std::move(data.transparentVertices),
-            ASCIIgL::VertFormats::PosUVLayerLight(),
+            ASCIIgL::VertFormats::PosUVLayer(),
             std::move(data.transparentIndices),
             blockTextures
         );
@@ -91,7 +91,7 @@ void Chunk::ApplyMeshData(ChunkMeshData&& data, ASCIIgL::TextureArray* blockText
     if (data.HasOpaqueNoCull()) {
         opaqueNoCullMesh = std::make_unique<ASCIIgL::Mesh>(
             std::move(data.opaqueNoCullVertices),
-            ASCIIgL::VertFormats::PosUVLayerLight(),
+            ASCIIgL::VertFormats::PosUVLayer(),
             std::move(data.opaqueNoCullIndices),
             blockTextures
         );

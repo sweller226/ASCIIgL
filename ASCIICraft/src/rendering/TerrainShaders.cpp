@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include <ASCIICraft/world/block/textures/BlockTextureCatalog.hpp>
+#include <ASCIICraft/textures/BlockTextureCatalog.hpp>
 
 namespace TerrainShaders {
 
@@ -20,17 +20,15 @@ cbuffer ConstantBuffer : register(b0)
 struct VS_INPUT
 {
     float3 position : POSITION;
-    float3 texcoord : TEXCOORD0;  // UV + Layer index
-    float light : LIGHT;           // Per-vertex directional light multiplier
+    float3 texcoord : TEXCOORD0;  // UV.xy + Layer.z
 };
 
 struct PS_INPUT
 {
     float4 position : SV_POSITION;
-    float3 texcoord : TEXCOORD0;  // UV + Layer passed to pixel shader
-    float dist : TEXCOORD1;       // Distance from camera
-    float light : TEXCOORD2;      // Interpolated light multiplier
-    nointerpolation float  waterPhaseOffset : TEXCOORD3; // Per-block random phase offset for water (no interpolation)
+    float3 texcoord : TEXCOORD0;
+    float dist : TEXCOORD1;
+    nointerpolation float waterPhaseOffset : TEXCOORD2;
 };
 
 PS_INPUT main(VS_INPUT input)
@@ -39,9 +37,7 @@ PS_INPUT main(VS_INPUT input)
     output.position = mul(mvp, float4(input.position, 1.0));
     output.texcoord = input.texcoord;
     output.dist = distance(input.position, cameraPos);
-    output.light = input.light;
 
-    // Compute a deterministic per-block phase offset from snapped world XZ position.
     float2 tileCoord = floor(input.position.xz);
     float rand = frac(sin(dot(tileCoord, float2(12.9898, 78.233))) * 43758.5453);
     output.waterPhaseOffset = rand;
@@ -52,7 +48,10 @@ PS_INPUT main(VS_INPUT input)
 
 const char* GetTerrainPSSource() {
     static const std::string source = []() {
-        int waterLayer = blocktextures::GetLayerForTextureId("minecraft:blocks/water_still");
+        int waterLayer = textures::GetLayerForTextureId(
+            blocktextures::GetBlockTextureCatalog(),
+            "minecraft:blocks/water_still"
+        );
         
         return std::string(R"(
 #include "ColorMonochrome.hlsl"
@@ -74,10 +73,9 @@ cbuffer ConstantBuffer : register(b0)
 struct PS_INPUT
 {
     float4 position : SV_POSITION;
-    float3 texcoord : TEXCOORD0;  // UV.xy + Layer.z
-    float dist : TEXCOORD1;       // Distance from camera
-    float light : TEXCOORD2;      // Per-vertex directional light
-    nointerpolation float waterPhaseOffset : TEXCOORD3; // Per-block phase offset (no interpolation)
+    float3 texcoord : TEXCOORD0;
+    float dist : TEXCOORD1;
+    nointerpolation float waterPhaseOffset : TEXCOORD2;
 };
 
 float4 main(PS_INPUT input) : SV_TARGET
@@ -101,10 +99,8 @@ float4 main(PS_INPUT input) : SV_TARGET
     static const float ALPHA_CUTOFF = 0.5;
     clip(texColor.a - ALPHA_CUTOFF);
     
-    // Per-vertex directional lighting on already-baked monochrome texture color
-    float3 mappedColor = texColor.rgb * input.light;
+    float3 mappedColor = texColor.rgb;
 
-    // Fog (fogColor assumed sRGB; linearize for correct blend in linear space)
     float fogFactor = saturate((input.dist - fogParams.x) / (fogParams.y - fogParams.x));
     float3 fogLinear = sRGBToLinear(fogColor);
     float3 finalColorLinear = lerp(mappedColor, fogLinear, fogFactor);

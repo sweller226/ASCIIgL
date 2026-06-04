@@ -16,14 +16,20 @@ void GUIRenderer::RenderGUIQuad(glm::vec2 topLeftPx,
                                 glm::vec2 sizePx,
                                 int layer,
                                 const std::shared_ptr<ASCIIgL::Mesh>& mesh,
-                                const std::shared_ptr<ASCIIgL::Material>& material) const {
+                                const std::shared_ptr<ASCIIgL::Material>& material,
+                                const bool meshUsesZeroToOneBounds) const {
     // QuadMeshBuilder uses a -1..1 unit square; scale by half-size and place at rect center.
     const glm::vec2 halfSize = sizePx * 0.5f;
     const glm::vec2 center = topLeftPx + halfSize;
 
     glm::mat4 model(1.0f);
     model = glm::translate(model, glm::vec3(center.x, center.y, 0.0f));
-    model = glm::scale(model, glm::vec3(halfSize.x, halfSize.y, 1.0f));
+    model = glm::scale(model, glm::vec3(halfSize.x, halfSize.y, halfSize.x));
+    if (meshUsesZeroToOneBounds) {
+        // Block item meshes are baked in 0..1 world space; remap to the same -1..1 footprint as GUI quads.
+        model = model * glm::translate(glm::mat4(1.0f), glm::vec3(-0.5f, -0.5f, -0.5f));
+        model = model * glm::scale(glm::mat4(1.0f), glm::vec3(2.0f));
+    }
 
     SubmitMesh(model, layer, mesh, material);
 }

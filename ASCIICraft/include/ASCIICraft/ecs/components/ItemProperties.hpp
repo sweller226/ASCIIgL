@@ -38,7 +38,7 @@ struct WeaponProperty {
 
 /// Property for blocks that can be placed
 struct PlaceableProperty {
-    int blockId = -1;            // Which block to place
+    int typeId = -1;            // Which block to place
 };
 
 } // namespace ecs::components

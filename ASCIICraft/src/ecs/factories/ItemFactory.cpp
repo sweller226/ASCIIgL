@@ -11,7 +11,7 @@
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 
 // Data
-#include <ASCIICraft/ecs/data/ItemIndex.hpp>
+#include <ASCIICraft/ecs/data/ItemRegistry.hpp>
 #include <ASCIICraft/ecs/components/ItemVisual.hpp>
 #include <ASCIICraft/ecs/components/Stackable.hpp>
 #include <ASCIICraft/ecs/components/ItemId.hpp>
@@ -53,8 +53,8 @@ entt::entity ItemFactory::createDroppedItem(
     std::shared_ptr<ASCIIgL::Mesh> resolvedMesh = mesh;
 
     if (!resolvedMesh) {
-        auto& itemIndex = registry.ctx().get<data::ItemIndex>();
-        auto proto = itemIndex.Resolve(itemStack.itemId);
+        auto& itemRegistry = registry.ctx().get<data::ItemRegistry>();
+        auto proto = itemRegistry.Resolve(itemStack.itemId);
         if (proto != entt::null) {
             if (auto* visual = registry.try_get<components::ItemVisual>(proto)) {
                 resolvedMesh = visual->mesh;
@@ -94,9 +94,9 @@ entt::entity ItemFactory::createDroppedItemById(
     const glm::vec3& velocity,
     const DroppedItemConfig& config
 ) {
-    // Look up item in ItemIndex
-    auto& itemIndex = registry.ctx().get<data::ItemIndex>();
-    auto proto = itemIndex.Resolve(itemId);
+    // Look up item in ItemRegistry
+    auto& itemRegistry = registry.ctx().get<data::ItemRegistry>();
+    auto proto = itemRegistry.Resolve(itemId);
     if (proto == entt::null) {
         return entt::null; // Item not registered
     }
@@ -108,7 +108,6 @@ entt::entity ItemFactory::createDroppedItemById(
     stack.count = count;
     stack.maxStackSize = stackable ? stackable->maxStackSize : 1;
 
-    // Use prototype mesh
     auto* visual = registry.try_get<components::ItemVisual>(proto);
     std::shared_ptr<ASCIIgL::Mesh> defMesh = (visual && visual->mesh) ? visual->mesh : nullptr;
     return createDroppedItem(stack, position, velocity, defMesh, config);
@@ -122,8 +121,8 @@ entt::entity ItemFactory::createDroppedItemByName(
     const DroppedItemConfig& config
 ) {
     // Look up item by name
-    auto& itemIndex = registry.ctx().get<data::ItemIndex>();
-    auto proto = itemIndex.Resolve(itemName);
+    auto& itemRegistry = registry.ctx().get<data::ItemRegistry>();
+    auto proto = itemRegistry.Resolve(itemName);
     if (proto == entt::null) {
         return entt::null; // Item not registered
     }
