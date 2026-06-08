@@ -27,7 +27,7 @@ public:
     /// Returns entt::null if not found.
     entt::entity Resolve(int id) const;
 
-    /// Look up definition entity by registry name (e.g., "minecraft:diamond").
+    /// Look up definition entity by registry name (e.g., "minecraft:coal").
     /// Returns entt::null if not found.
     entt::entity Resolve(const std::string& name) const;
 

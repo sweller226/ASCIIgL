@@ -41,7 +41,8 @@ public:
     /// True when the inventory screen is on the stack (e.g. after pressing E).
     bool IsBlockingInput() const;
     bool IsTopScreen(const GUIScreen* screen) const;
-    glm::vec2 GetCursorPosition() const { return m_cursorPosition; }
+    /// Screen-pixel hotspot (center of cursor sprite). Used for hit-test, clicks, and movement.
+    glm::vec2 GetCursorHotspot() const { return m_cursorHotspot; }
     GUISurfaceLibrary& GetMeshLibrary() { return m_meshLibrary; }
     const GUISurfaceLibrary& GetMeshLibrary() const { return m_meshLibrary; }
 
@@ -50,13 +51,15 @@ public:
 
 private:
     void UpdateCursor(GUIScreen* top);
+    /// Top-left of the cursor/carried-item cell for RenderGUIQuad (hotspot − size/2).
+    glm::vec2 GetCursorDrawTopLeft() const;
 
     entt::registry& m_registry;
     ASCIIgL::EventBus& m_eventBus;
     IInputSource& m_input;
 
     glm::vec2 m_screenSize{0.0f, 0.0f};
-    glm::vec2 m_cursorPosition{0.0f, 0.0f};
+    glm::vec2 m_cursorHotspot{0.0f, 0.0f};
     glm::vec2 m_cursorSize{16.0f, 16.0f};
     float m_cursorMoveSpeed = 32.0f;
     GUISurface m_cursorSurface{};

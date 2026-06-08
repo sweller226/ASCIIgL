@@ -123,6 +123,7 @@ private:
     bool LoadTerrainMaterial();
     bool LoadGUIMaterial();
     bool LoadGUIItemMaterial();
+    bool LoadGUIBlockMaterial();
     bool LoadGUITextMaterial();
 
     bool LoadTextures();

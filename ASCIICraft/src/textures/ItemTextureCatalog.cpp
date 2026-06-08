@@ -6,7 +6,6 @@ const std::vector<CatalogEntry>& GetItemTextureCatalog() {
     static const std::vector<CatalogEntry> kCatalog = {
         // Resources / materials
         {"minecraft:items/coal",       "res/textures/items/coal.png"},
-        {"minecraft:items/diamond",    "res/textures/items/diamond.png"},
         {"minecraft:items/iron_ingot", "res/textures/items/iron_ingot.png"},
         {"minecraft:items/gold_ingot", "res/textures/items/gold_ingot.png"},
         {"minecraft:items/stick",      "res/textures/items/stick.png"},

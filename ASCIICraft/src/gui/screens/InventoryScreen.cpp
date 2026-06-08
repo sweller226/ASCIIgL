@@ -18,15 +18,16 @@ constexpr int kInventoryContainerH = 166;
 // Minecraft inventory.png slot layout (176x166 survival player inventory).
 // Hotbar and main inventory are separate regions (gap = player preview / armor between them).
 constexpr float kSlotHitSize = 18.0f;  // full cell for hit-test (icons still draw 16x16 centered)
-constexpr float kSlotOriginX = 8.0f;
 constexpr float kSlotStep = 18.0f;
+constexpr float kSlotGridOffsetX = 7.0f;   // subtract from each column
+constexpr float kSlotGridOffsetY = -1.0f;  // subtract from each rowY
 
 // inventory.png pixel Y (top-left of each 18x18 cell; +Y = downward on screen).
 constexpr float kHotbarSlotY = 142.0f;
 constexpr float kMainInvTopY = 84.0f; // topmost main row (slots 27-35); bottom row = +36px (slots 9-17)
 
 glm::vec2 SlotCellOffset(int column, float rowY) {
-    return {kSlotOriginX + static_cast<float>(column) * kSlotStep, rowY};
+    return {kSlotGridOffsetX + static_cast<float>(column) * kSlotStep, rowY + kSlotGridOffsetY};
 }
 
 void AddInventorySlot(InventoryScreen& screen,

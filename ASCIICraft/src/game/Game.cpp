@@ -6,7 +6,7 @@
 #include <ASCIIgL/renderer/Palette.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
-#include <ASCIIgL/renderer/HLSLIncludes.hpp>
+#include <ASCIIgL/renderer/MaterialBuilder.hpp>
 
 #include <ASCIIgL/engine/TextureLibrary.hpp>
 #include <ASCIIgL/engine/MipFilters.hpp>
@@ -45,6 +45,7 @@
 // shaders
 #include <ASCIICraft/rendering/TerrainShaders.hpp>
 #include <ASCIICraft/rendering/GUIShaders.hpp>
+#include <ASCIICraft/rendering/GUIBlockShaders.hpp>
 #include <ASCIICraft/rendering/GUITextShaders.hpp>
 
 Game::Game()
@@ -399,6 +400,7 @@ bool Game::LoadResources() {
     if (!LoadTerrainMaterial())      return false;
     if (!LoadGUIMaterial())          return false;
     if (!LoadGUIItemMaterial())      return false;
+    if (!LoadGUIBlockMaterial())     return false;
     if (!LoadGUITextMaterial())      return false;
 
     ASCIIgL::Logger::Info("Resources loaded successfully");
@@ -406,179 +408,102 @@ bool Game::LoadResources() {
 }
 
 bool Game::LoadTerrainMaterial() {
-    auto terrainVS = ASCIIgL::Shader::CreateFromSource(TerrainShaders::GetTerrainVSSource(), ASCIIgL::ShaderType::Vertex);
-
-    ASCIIgL::ShaderIncludeMap includes;
-    ASCIIgL::HLSLIncludes::AddToMap(includes);
-    auto terrainPS = ASCIIgL::Shader::CreateFromSource(TerrainShaders::GetTerrainPSSource(), ASCIIgL::ShaderType::Pixel, "main", &includes);
-
-    if (!terrainVS || !terrainVS->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile terrain vertex shader: " + terrainVS->GetCompileError());
-        return false;
-    }
-    if (!terrainPS || !terrainPS->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile terrain pixel shader: " + terrainPS->GetCompileError());
-        return false;
-    }
-
-    auto program = ASCIIgL::ShaderProgram::Create(
-        std::move(terrainVS), std::move(terrainPS),
+    return ASCIIgL::BuildAndRegisterMaterial({
+        "blockMaterial",
+        "terrain",
+        TerrainShaders::GetTerrainVSSource(),
+        TerrainShaders::GetTerrainPSSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
-        TerrainShaders::GetTerrainPSUniformLayout()
-    );
-    if (!program || !program->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to create terrain shader program");
-        return false;
-    }
-
-    auto material = ASCIIgL::Material::Create(std::move(program));
-    if (!material) {
-        ASCIIgL::Logger::Error("Failed to create terrain material");
-        return false;
-    }
-
-    material->SetTextureArray(0, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get());
-
-    auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
-    material->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
-    material->SetFloat4("gradientEnd",   glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
-
-    ASCIIgL::MaterialLibrary::GetInst().Register("blockMaterial", std::move(material));
-    return true;
+        TerrainShaders::GetTerrainPSUniformLayout(),
+        true,
+        true,
+        [](ASCIIgL::Material& material) {
+            auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
+            if (!terrainTextureArray) {
+                ASCIIgL::Logger::Error("terrainTextureArray missing for terrain material");
+                return false;
+            }
+            material.SetTextureArray(0, terrainTextureArray.get());
+            return true;
+        }
+    });
 }
 
 bool Game::LoadGUIMaterial() {
-    ASCIIgL::ShaderIncludeMap includes;
-    ASCIIgL::HLSLIncludes::AddToMap(includes);
-
-    auto vs = ASCIIgL::Shader::CreateFromSource(GUIShaders::GetGUIVSSource(), ASCIIgL::ShaderType::Vertex);
-    auto ps = ASCIIgL::Shader::CreateFromSource(GUIShaders::GetGUIPSSource(), ASCIIgL::ShaderType::Pixel, "main", &includes);
-
-    if (!vs || !vs->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile GUI vertex shader: " + vs->GetCompileError());
-        return false;
-    }
-    if (!ps || !ps->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile GUI pixel shader: " + ps->GetCompileError());
-        return false;
-    }
-
-    auto program = ASCIIgL::ShaderProgram::Create(
-        std::move(vs), std::move(ps),
+    return ASCIIgL::BuildAndRegisterMaterial({
+        "guiMaterial",
+        "GUI",
+        GUIShaders::GetGUIVSSource(),
+        GUIShaders::GetGUIPSSource(),
         ASCIIgL::VertFormats::PosUV(),
         GUIShaders::GetGUIPSUniformLayout()
-    );
-    if (!program || !program->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to create GUI shader program");
-        return false;
-    }
-
-    auto material = ASCIIgL::Material::Create(std::move(program));
-    if (!material) {
-        ASCIIgL::Logger::Error("Failed to create GUI material");
-        return false;
-    }
-
-    auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
-    material->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
-    material->SetFloat4("gradientEnd",   glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
-
-    ASCIIgL::MaterialLibrary::GetInst().Register("guiMaterial", std::move(material));
-    return true;
+    });
 }
 
 bool Game::LoadGUIItemMaterial() {
-    ASCIIgL::ShaderIncludeMap includes;
-    ASCIIgL::HLSLIncludes::AddToMap(includes);
-
-    auto vs = ASCIIgL::Shader::CreateFromSource(GUIShaders::GetItemVSSource(), ASCIIgL::ShaderType::Vertex);
-    auto ps = ASCIIgL::Shader::CreateFromSource(GUIShaders::GetItemPSSource(), ASCIIgL::ShaderType::Pixel, "main", &includes);
-
-    if (!vs || !vs->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile GUI item vertex shader: " + vs->GetCompileError());
-        return false;
-    }
-    if (!ps || !ps->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile GUI item pixel shader: " + ps->GetCompileError());
-        return false;
-    }
-
-    auto program = ASCIIgL::ShaderProgram::Create(
-        std::move(vs), std::move(ps),
+    return ASCIIgL::BuildAndRegisterMaterial({
+        "guiItemMaterial",
+        "GUI item",
+        GUIShaders::GetItemVSSource(),
+        GUIShaders::GetItemPSSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
-        GUIShaders::GetItemPSUniformLayout()
-    );
-    if (!program || !program->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to create GUI item shader program");
-        return false;
-    }
+        GUIShaders::GetItemPSUniformLayout(),
+        true,
+        true,
+        [](ASCIIgL::Material& material) {
+            auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray");
+            if (!itemTextureArray) {
+                ASCIIgL::Logger::Error("itemTextureArray missing for GUI item material");
+                return false;
+            }
+            material.SetTextureArray(0, itemTextureArray.get());
+            return true;
+        }
+    });
+}
 
-    auto material = ASCIIgL::Material::Create(std::move(program));
-    if (!material) {
-        ASCIIgL::Logger::Error("Failed to create GUI item material");
-        return false;
-    }
-
-    auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
-    material->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
-    material->SetFloat4("gradientEnd",   glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
-
-    auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray");
-    if (!itemTextureArray) {
-        ASCIIgL::Logger::Error("itemTextureArray missing for GUI item material");
-        return false;
-    }
-    material->SetTextureArray(0, itemTextureArray.get());
-
-    ASCIIgL::MaterialLibrary::GetInst().Register("guiItemMaterial", std::move(material));
-    return true;
+bool Game::LoadGUIBlockMaterial() {
+    return ASCIIgL::BuildAndRegisterMaterial({
+        "guiBlockMaterial",
+        "GUI block",
+        GUIBlockShaders::GetBlockVSSource(),
+        GUIBlockShaders::GetBlockPSSource(),
+        ASCIIgL::VertFormats::PosUVLayer(),
+        GUIBlockShaders::GetBlockPSUniformLayout(),
+        true,
+        true,
+        [](ASCIIgL::Material& material) {
+            auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
+            if (!terrainTextureArray) {
+                ASCIIgL::Logger::Error("terrainTextureArray missing for GUI block material");
+                return false;
+            }
+            material.SetTextureArray(0, terrainTextureArray.get());
+            return true;
+        }
+    });
 }
 
 bool Game::LoadGUITextMaterial() {
-    ASCIIgL::ShaderIncludeMap includes;
-    ASCIIgL::HLSLIncludes::AddToMap(includes);
-
-    auto vs = ASCIIgL::Shader::CreateFromSource(GUITextShaders::GetGUITextVSSource(), ASCIIgL::ShaderType::Vertex);
-    auto ps = ASCIIgL::Shader::CreateFromSource(GUITextShaders::GetGUITextPSSource(), ASCIIgL::ShaderType::Pixel, "main", &includes);
-
-    if (!vs || !vs->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile GUI text vertex shader: " + vs->GetCompileError());
-        return false;
-    }
-    if (!ps || !ps->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile GUI text pixel shader: " + ps->GetCompileError());
-        return false;
-    }
-
-    auto program = ASCIIgL::ShaderProgram::Create(
-        std::move(vs), std::move(ps),
+    return ASCIIgL::BuildAndRegisterMaterial({
+        "guiTextMaterial",
+        "GUI text",
+        GUITextShaders::GetGUITextVSSource(),
+        GUITextShaders::GetGUITextPSSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
-        GUITextShaders::GetGUITextPSUniformLayout()
-    );
-    if (!program || !program->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to create GUI text shader program");
-        return false;
-    }
-
-    auto material = ASCIIgL::Material::Create(std::move(program));
-    if (!material) {
-        ASCIIgL::Logger::Error("Failed to create GUI text material");
-        return false;
-    }
-
-    auto fontTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("defaultFontTextureArray");
-    if (!fontTextureArray) {
-        ASCIIgL::Logger::Error("defaultFontTextureArray missing for GUI text material");
-        return false;
-    }
-    material->SetTextureArray(0, fontTextureArray.get());
-
-    auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
-    material->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
-    material->SetFloat4("gradientEnd",   glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
-
-    ASCIIgL::MaterialLibrary::GetInst().Register("guiTextMaterial", std::move(material));
-    return true;
+        GUITextShaders::GetGUITextPSUniformLayout(),
+        true,
+        true,
+        [](ASCIIgL::Material& material) {
+            auto fontTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("defaultFontTextureArray");
+            if (!fontTextureArray) {
+                ASCIIgL::Logger::Error("defaultFontTextureArray missing for GUI text material");
+                return false;
+            }
+            material.SetTextureArray(0, fontTextureArray.get());
+            return true;
+        }
+    });
 }
 
 void Game::RenderPlaying() {
@@ -930,7 +855,6 @@ void Game::InitializeItemDefinitions() {
 
     // === Resources / Materials ===
     itemRegistry.RegisterResourceItem(registry, "minecraft:coal",       "Coal",       itemLayer("minecraft:items/coal"));
-    itemRegistry.RegisterResourceItem(registry, "minecraft:diamond",    "Diamond",    itemLayer("minecraft:items/diamond"));
     itemRegistry.RegisterResourceItem(registry, "minecraft:iron_ingot", "Iron Ingot", itemLayer("minecraft:items/iron_ingot"));
     itemRegistry.RegisterResourceItem(registry, "minecraft:gold_ingot", "Gold Ingot", itemLayer("minecraft:items/gold_ingot"));
     itemRegistry.RegisterResourceItem(registry, "minecraft:stick",      "Stick",      itemLayer("minecraft:items/stick"));

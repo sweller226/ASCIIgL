@@ -42,13 +42,18 @@ bool DrawItemStackIcon(entt::registry& registry,
     };
     const glm::vec2 iconTopLeft = cellTopLeftPx + (cellSizePx - iconSize) * 0.5f;
 
-    auto guiItemMat = ASCIIgL::MaterialLibrary::GetInst().Get("guiItemMaterial");
+    const char* materialName = visual->is2DIcon ? "guiItemMaterial" : "guiBlockMaterial";
+    auto material = ASCIIgL::MaterialLibrary::GetInst().Get(materialName);
+    if (!material) {
+        return false;
+    }
+
     renderer.RenderGUIQuad(
         iconTopLeft,
         iconSize,
         layer,
         visual->mesh,
-        guiItemMat,
+        material,
         !visual->is2DIcon
     );
     return true;

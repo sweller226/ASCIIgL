@@ -33,6 +33,10 @@ GUIManager::GUIManager(entt::registry& registry, ASCIIgL::EventBus& eventBus, II
     , m_input(input)
 {}
 
+glm::vec2 GUIManager::GetCursorDrawTopLeft() const {
+    return m_cursorHotspot - m_cursorSize * 0.5f;
+}
+
 void GUIManager::PushScreen(GUIScreen* screen) {
     if (screen)
         m_screenStack.push_back(screen);
@@ -75,16 +79,17 @@ void GUIManager::Render() {
     }
 
     if (!m_screenStack.empty() && m_screenStack.back()->blocksInput) {
+        const glm::vec2 cursorTopLeft = GetCursorDrawTopLeft();
         const entt::entity player = ecs::components::GetPlayerEntity(m_registry);
         if (player != entt::null && m_registry.valid(player)) {
             if (const auto* carried = m_registry.try_get<ecs::components::ItemCarried>(player)) {
-                DrawItemStackIcon(m_registry, *m_renderer, carried->stack, m_cursorPosition, m_cursorSize, 9999);
+                DrawItemStackIcon(m_registry, *m_renderer, carried->stack, cursorTopLeft, m_cursorSize, 9999);
             }
         }
 
         if (m_cursorSurface.mesh && m_cursorSurface.material) {
             m_renderer->RenderGUIQuad(
-                m_cursorPosition, m_cursorSize, 10000, m_cursorSurface.mesh, m_cursorSurface.material);
+                cursorTopLeft, m_cursorSize, 10000, m_cursorSurface.mesh, m_cursorSurface.material);
         }
     }
 }
@@ -131,9 +136,9 @@ void GUIManager::ToggleScreen(GUIScreen* screen) {
         const unsigned screenW = ASCIIgL::Screen::GetInst().GetWidth();
         const unsigned screenH = ASCIIgL::Screen::GetInst().GetHeight();
         const glm::vec2 screenSize{static_cast<float>(screenW), static_cast<float>(screenH)};
-        glm::vec2 initialCursor{};
-        if (screen->TryGetInitialCursorPosition(screenSize, initialCursor)) {
-            m_cursorPosition = initialCursor;
+        glm::vec2 initialHotspot{};
+        if (screen->TryGetInitialCursorPosition(screenSize, initialHotspot)) {
+            m_cursorHotspot = initialHotspot;
         }
     }
 }
@@ -144,21 +149,27 @@ void GUIManager::UpdateCursor(GUIScreen* top) {
     const float dt = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
     const float cursorStep = m_cursorMoveSpeed * dt;
 
-    if (m_input.IsActionHeld("camera_left"))  m_cursorPosition.x -= cursorStep;
-    if (m_input.IsActionHeld("camera_right")) m_cursorPosition.x += cursorStep;
-    if (m_input.IsActionHeld("camera_up"))    m_cursorPosition.y -= cursorStep;
-    if (m_input.IsActionHeld("camera_down"))  m_cursorPosition.y += cursorStep;
+    if (m_input.IsActionHeld("camera_left"))  m_cursorHotspot.x -= cursorStep;
+    if (m_input.IsActionHeld("camera_right")) m_cursorHotspot.x += cursorStep;
+    if (m_input.IsActionHeld("camera_up"))    m_cursorHotspot.y -= cursorStep;
+    if (m_input.IsActionHeld("camera_down"))  m_cursorHotspot.y += cursorStep;
 
-    m_cursorPosition.x = std::clamp(m_cursorPosition.x, 0.0f, m_screenSize.x);
-    m_cursorPosition.y = std::clamp(m_cursorPosition.y, 0.0f, m_screenSize.y);
+    const glm::vec2 halfSize = m_cursorSize * 0.5f;
+    const glm::vec2 minHotspot = halfSize;
+    const glm::vec2 maxHotspot{
+        std::max(halfSize.x, m_screenSize.x - halfSize.x),
+        std::max(halfSize.y, m_screenSize.y - halfSize.y)
+    };
+    m_cursorHotspot.x = std::clamp(m_cursorHotspot.x, minHotspot.x, maxHotspot.x);
+    m_cursorHotspot.y = std::clamp(m_cursorHotspot.y, minHotspot.y, maxHotspot.y);
 
     if (m_input.IsActionPressed("quit"))
         PopScreen();
 
-    top->OnCursorMove(m_cursorPosition);
+    top->OnCursorMove(m_cursorHotspot);
 
     GuiSlotHover hover{};
-    if (Widget* w = top->HitTest(m_cursorPosition)) {
+    if (Widget* w = top->HitTest(m_cursorHotspot)) {
         if (auto* slot = dynamic_cast<Slot*>(w)) {
             hover.inventoryOwner = slot->GetInventoryOwner();
             hover.slotIndex = slot->GetSlotIndex();
@@ -167,12 +178,12 @@ void GUIManager::UpdateCursor(GUIScreen* top) {
     SetGuiSlotHover(m_registry, hover);
 
     if (m_input.IsActionPressed("interact_left")) {
-        if (!top->OnClick(m_cursorPosition, 0)) {
+        if (!top->OnClick(m_cursorHotspot, 0)) {
             m_eventBus.emit(events::DropCarriedStackPressedEvent{});
         }
     }
     if (m_input.IsActionPressed("interact_right")) {
-        if (!top->OnClick(m_cursorPosition, 1)) { /* consumed or not */ }
+        if (!top->OnClick(m_cursorHotspot, 1)) { /* consumed or not */ }
     }
 }
 

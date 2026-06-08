@@ -12,14 +12,10 @@ namespace {
 
 constexpr float kWidgetsAtlasSize = 256.0f;
 constexpr float kHotbarBottomMargin = 0.0f;
-constexpr float kSlotSize = 20.0f;
-constexpr float kSlotInset = 3.0f;
-
-// widgets.png atlas regions (256x256), Minecraft-style pixel coords (origin top-left).
-// Future button regions:
-//   button.disabled: (0, 46, 200, 20)
-//   button.normal:   (0, 66, 200, 20)
-//   button.hover:    (0, 86, 200, 20)
+constexpr float kSlotStep = 20.0f;       // grid spacing (matches selection frame math)
+constexpr float kSlotContentSize = 18.0f; // inner groove; 20px cells have 1px border per side
+constexpr float kSlotContentPad = (kSlotStep - kSlotContentSize) * 0.5f;
+constexpr float kSlotInset = 1.0f;
 
 constexpr int kHotbarBgX = 0;
 constexpr int kHotbarBgY = 0;
@@ -29,7 +25,7 @@ constexpr int kHotbarBgH = 22;
 constexpr int kHotbarSelectionX = 0;
 constexpr int kHotbarSelectionY = 22;
 constexpr int kHotbarSelectionW = 24;
-constexpr int kHotbarSelectionH = 23;
+constexpr int kHotbarSelectionH = 24;
 
 } // namespace
 
@@ -66,7 +62,7 @@ PlayHUDScreen::PlayHUDScreen(entt::registry& registry,
     constexpr int slots = 9;
     for (int i = 0; i < slots; ++i) {
         auto slot = std::make_unique<Slot>(*m_registry, *m_eventBus, playerEntity, i);
-        slot->size = {kSlotSize, kSlotSize};
+        slot->size = {kSlotContentSize, kSlotContentSize};
         slot->layer = 51;
         slot->pivot = {0.0f, 0.0f};
         AddChild(std::move(slot));
@@ -85,12 +81,13 @@ void PlayHUDScreen::Layout(glm::vec2 screenSize, const glm::vec2* parentTopLeft)
     const glm::vec2 hotbarPivot{0.5f, 1.0f};
     const glm::vec2 hotbarOffset{0.0f, -kHotbarBottomMargin};
     m_hotbarTopLeft = hotbarAnchor * screenSize - hotbarPivot * hotbarSize + hotbarOffset;
+    m_hotbarTopLeft = glm::round(m_hotbarTopLeft);
 
     int slotIndex = 0;
     for (auto& child : GetChildren()) {
         child->offset = {
-            m_hotbarTopLeft.x + kSlotInset + static_cast<float>(slotIndex) * kSlotSize,
-            m_hotbarTopLeft.y + kSlotInset
+            m_hotbarTopLeft.x + kSlotInset + kSlotContentPad + static_cast<float>(slotIndex) * kSlotStep,
+            m_hotbarTopLeft.y + kSlotInset + kSlotContentPad
         };
         child->Layout(screenSize, &screenPosition);
         ++slotIndex;
@@ -114,10 +111,10 @@ void PlayHUDScreen::Draw(GUIRenderer& renderer) const {
         && m_playerEntity != entt::null && m_registry->valid(m_playerEntity)) {
         const auto* selection = m_registry->try_get<ecs::components::HotbarSelection>(m_playerEntity);
         if (selection) {
-            constexpr float kSelectionInsetX = (static_cast<float>(kHotbarSelectionW) - kSlotSize) * 0.5f;
+            constexpr float kSelectionInsetX = (static_cast<float>(kHotbarSelectionW) - kSlotStep) * 0.5f;
             constexpr float kSelectionInsetY = (static_cast<float>(kHotbarSelectionH) - kHotbarBgH) * 0.5f;
             const glm::vec2 selectionPos{
-                m_hotbarTopLeft.x + kSlotInset + static_cast<float>(selection->selectedSlot) * kSlotSize - kSelectionInsetX,
+                m_hotbarTopLeft.x + kSlotInset + static_cast<float>(selection->selectedSlot) * kSlotStep - kSelectionInsetX,
                 m_hotbarTopLeft.y - kSelectionInsetY
             };
             renderer.RenderGUIQuad(

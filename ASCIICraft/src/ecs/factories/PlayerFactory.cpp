@@ -53,7 +53,7 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
         seedSlot(5, "minecraft:wooden_pickaxe", 1);
         seedSlot(6, "minecraft:iron_sword", 1);
         seedSlot(7, "minecraft:torch", 16);
-        seedSlot(8, "minecraft:diamond", 8);
+        seedSlot(8, "minecraft:iron_ingot", 8);
     } else {
         ASCIIgL::Logger::Warning("PlayerFactory: ItemRegistry missing; inventory left empty.");
     }

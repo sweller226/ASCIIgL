@@ -45,7 +45,7 @@ public:
         const DroppedItemConfig& config = {}
     );
 
-    /// Creates a dropped item entity by registry name (e.g., "minecraft:diamond").
+    /// Creates a dropped item entity by registry name (e.g., "minecraft:coal").
     /// @return The created entity, or entt::null if item name not found
     entt::entity createDroppedItemByName(
         const std::string& itemName,

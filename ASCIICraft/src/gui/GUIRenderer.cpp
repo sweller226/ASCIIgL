@@ -24,9 +24,10 @@ void GUIRenderer::RenderGUIQuad(glm::vec2 topLeftPx,
 
     glm::mat4 model(1.0f);
     model = glm::translate(model, glm::vec3(center.x, center.y, 0.0f));
-    model = glm::scale(model, glm::vec3(halfSize.x, halfSize.y, halfSize.x));
+    // Block meshes are Y-up (world); Camera2D is Y-down — flip when drawing 0..1 block bounds.
+    const float yHalf = meshUsesZeroToOneBounds ? -halfSize.y : halfSize.y;
+    model = glm::scale(model, glm::vec3(halfSize.x, yHalf, halfSize.x));
     if (meshUsesZeroToOneBounds) {
-        // Block item meshes are baked in 0..1 world space; remap to the same -1..1 footprint as GUI quads.
         model = model * glm::translate(glm::mat4(1.0f), glm::vec3(-0.5f, -0.5f, -0.5f));
         model = model * glm::scale(glm::mat4(1.0f), glm::vec3(2.0f));
     }
