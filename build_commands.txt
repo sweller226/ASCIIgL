@@ -22,11 +22,12 @@ ASCIICraft
     .\ASCIICraft.exe --window
 
     Run Release Command
-    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
+    cd "C:\Users\UwU\Documents\minecraft\ASCIIgL\ASCIICraft\build\bin\Release"
     .\ASCIICraft.exe
 
-    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
-    .\ASCIICraft.exe --window
+    To Run the project
+    cd "C:\Users\UwU\Documents\minecraft\ASCIIgL\ASCIICraft\build\bin\Release"
+    .\ASCIICraft.exe --window 
 
     Build Release
     ./scripts/build_release.ps1
