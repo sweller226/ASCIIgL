@@ -23,7 +23,14 @@
 #include <ASCIICraft/input/GameplayInputFilter.hpp>
 #include <ASCIICraft/ecs/systems/RenderSystem.hpp>
 #include <ASCIICraft/ecs/systems/PhysicsSystem.hpp>
-#include <ASCIICraft/gui/GuiManager.hpp>
+#include <ASCIICraft/ecs/systems/LifetimeSystem.hpp>
+#include <ASCIICraft/ecs/systems/ParticleSystem.hpp>
+#include <ASCIICraft/ecs/systems/sound/MusicSystem.hpp>
+#include <ASCIICraft/ecs/systems/sound/SoundSystem.hpp>
+#include <ASCIICraft/ecs/systems/sound/StepSFXSystem.hpp>
+
+// GUI
+#include <ASCIICraft/gui/GUIManager.hpp>
 
 // block update systems
 #include <ASCIICraft/ecs/systems/blockupdate/BlockUpdateSystem.hpp>
@@ -31,7 +38,7 @@
 #include <ASCIICraft/ecs/systems/blockupdate/PlacingSystem.hpp>
 
 // event systems
-#include <ASCIICraft/events/EventBus.hpp>
+#include <ASCIIgL/util/EventBus.hpp>
 
 // events
 #include <ASCIICraft/events/BreakBlockEvent.hpp>
@@ -64,7 +71,7 @@ public:
 private:
     // Resources
     entt::registry registry;
-    EventBus eventBus;
+    ASCIIgL::EventBus eventBus;
     
     // ecs systems (inputSystem first; gameplayInputFilter wraps it for movement/camera so GUI blocks input there)
     input::InputSystem inputSystem;
@@ -72,9 +79,14 @@ private:
     ecs::systems::MovementSystem movementSystem;
     ecs::systems::CameraSystem cameraSystem;
     ecs::systems::PhysicsSystem physicsSystem;
-    ecs::systems::RenderSystem renderSystem;
+    ecs::systems::RenderSystem ecsRenderSystem;
+    ecs::systems::LifetimeSystem lifetimeSystem;
+    ecs::systems::ParticleSystem particleSystem;
+    ecs::systems::SoundSystem soundSystem;
+    ecs::systems::MusicSystem musicSystem;
+    ecs::systems::StepSFXSystem stepSfxSystem;
 
-    gui::GuiManager guiManager;
+    gui::GUIManager guiManager;
 
     // block updates
     ecs::systems::BlockUpdateSystem blockUpdateSystem;
@@ -84,6 +96,8 @@ private:
     // ecs factories
     ecs::factories::PlayerFactory playerFactory;
 
+    std::unique_ptr<ASCIIgL::Camera2D> guiCamera;
+
     // Game state
     GameState gameState;
     std::function<bool()> shouldExternalExit;
@@ -91,8 +105,12 @@ private:
     /// Prevents duplicate teardown if \ref Shutdown is invoked from multiple paths (e.g. destructor + explicit call).
     bool shutdownInvoked_ = false;
     
-    // Private methods
+    // Loading
     bool LoadResources();
+    bool LoadTerrainMaterial();
+    bool LoadGUIMaterial();
+    bool LoadGUIItemMaterial();
+
     bool LoadTextures();
     void InitializeWorld();
     void InitializePlayer();

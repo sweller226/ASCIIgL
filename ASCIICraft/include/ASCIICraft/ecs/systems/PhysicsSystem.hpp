@@ -3,13 +3,18 @@
 
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
-#include <functional>
 
 #include <ASCIICraft/ecs/components/PhysicsBody.hpp>
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/Velocity.hpp>
 #include <ASCIICraft/ecs/components/PlayerMode.hpp>
 #include <ASCIICraft/ecs/systems/ISystem.hpp>
+
+class World;
+
+namespace blockstate {
+class BlockStateRegistry;
+} // namespace blockstate
 
 namespace ecs::systems {
 
@@ -21,57 +26,66 @@ public:
     void Update() override;
 
 private:
-    /// Run a single fixed physics step
-    void Step(float fixedDt);
+    struct VoxelOverlapProbe {
+        const World *world = nullptr;
+        const blockstate::BlockStateRegistry *bsr = nullptr;
+        glm::vec3 halfExtents{};
+        bool colliderDisabled = false;
 
-    /// Apply physics integration to all entities with Transform, Velocity, and Collider
-    void IntegrateEntities(float dt);
-    
-    /// Resolve AABB collision against world voxels
-    void ResolveAABBAgainstWorld(entt::entity ent, 
-                                 components::Transform &t,
-                                 components::Collider &col, 
-                                 components::Velocity &vel,
-                                 float dt,
-                                 const components::StepPhysics *stepPhysics,
-                                 components::GroundPhysics *groundPhysics);
-    
-    /// Update ground contact state and apply friction
-    void UpdateGroundState(const glm::vec3 &pos,
-                          const glm::vec3 &halfExtents,
-                          components::Velocity &vel,
-                          const std::function<bool(const glm::vec3&)> &overlapsVoxel,
-                          components::GroundPhysics *groundPhysics);
-    
-    /// Attempt to step up obstacles (e.g., stairs, slabs)
-    /// @return true if step-up succeeded, false otherwise
-    bool TryStepUp(const components::Collider &col,
-                   const components::Velocity &vel,
-                   float stepHeight,
-                   float dt,
-                   glm::vec3 &currentPos);
-    
-    /// Slide along collision surfaces horizontally (X and Z axes)
-    void SlideHorizontal(glm::vec3 &pos, 
-                        components::Velocity &vel, 
-                        float dt,
-                        const std::function<bool(const glm::vec3&)> &overlapsVoxel);
-    
-    /// Binary search to find maximum safe movement distance before collision
-    /// @return Maximum safe distance in range [0, maxDistance]
+        bool operator()(const glm::vec3 &center) const;
+    };
+
+    void Step(float fixedDt);
+    void IntegrateEntities(float dt, const World &world);
+
+    void ResolveAABBAgainstWorld(
+        components::Transform &t,
+        components::Collider &col,
+        components::Velocity &vel,
+        float dt,
+        const World &world,
+        const blockstate::BlockStateRegistry *bsr,
+        const components::StepPhysics *stepPhysics,
+        components::GroundPhysics *groundPhysics
+    );
+
+    void UpdateGroundState(
+        const glm::vec3 &pos,
+        const glm::vec3 &halfExtents,
+        components::Velocity &vel,
+        const VoxelOverlapProbe &overlaps,
+        components::GroundPhysics *groundPhysics
+    );
+
+    bool TryStepUp(
+        const components::Velocity &vel,
+        float stepHeight,
+        float dt,
+        glm::vec3 &currentPos,
+        const VoxelOverlapProbe &overlaps
+    );
+
+    void SlideHorizontal(
+        glm::vec3 &pos,
+        components::Velocity &vel,
+        float dt,
+        const VoxelOverlapProbe &overlaps
+    );
+
     float BinarySearchCollision(
-        const glm::vec3 &startPos, 
+        const glm::vec3 &startPos,
         const glm::vec3 &direction,
         float maxDistance,
-        const std::function<bool(const glm::vec3&)> &overlapsVoxel) const;
+        const VoxelOverlapProbe &overlaps
+    ) const;
 
     entt::registry &m_registry;
     float m_accumulator{0.0f};
 
-    /// Fixed tick rate (30 ticks/sec like Minecraft)
     static constexpr float FixedDt = 1.0f / 30.0f;
-
     static constexpr float AIR_FRICTION = 1.0f;
+    static constexpr float GROUND_PROBE_DISTANCE = 0.05f;
+    static constexpr float MOVE_EPSILON = 0.0001f;
 };
 
 } // namespace ecs::systems

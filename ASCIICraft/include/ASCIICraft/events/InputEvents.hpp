@@ -10,10 +10,6 @@ struct ToggleInventoryEvent {};
 /// Only emitted when not blocking (so Escape closes GUI first when a panel is open).
 struct QuitRequestedEvent {};
 
-/// Emitted when the player presses the key bound to "jump" (e.g. Space).
-/// Only emitted when not blocking. MovementSystem consumes this to set jump buffer.
-struct JumpPressedEvent {};
-
 /// Emitted when the player presses the key bound to "interact_left" / primary action (e.g. left click / Q).
 /// Only emitted when not blocking. MiningSystem consumes for break block.
 struct PrimaryActionPressedEvent {};

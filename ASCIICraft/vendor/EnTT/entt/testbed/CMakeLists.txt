@@ -16,7 +16,7 @@ option(SDL_SHARED "Disable SDL shared library" OFF)
 
 FetchContent_MakeAvailable(SDL3)
 
-# Fetch ImGui
+# Fetch ImGUI
 
 FetchContent_Declare(
     imgui

@@ -34,10 +34,10 @@ uint32_t FinalizeFencePlacedState(
     uint32_t stateId,
     const WorldCoord& position
 ) {
-    const WorldCoord eastPos(position.x - 1, position.y, position.z);
+    const WorldCoord eastPos(position.x + 1, position.y, position.z);
     const WorldCoord northPos(position.x, position.y, position.z - 1);
     const WorldCoord southPos(position.x, position.y, position.z + 1);
-    const WorldCoord westPos(position.x + 1, position.y, position.z);
+    const WorldCoord westPos(position.x - 1, position.y, position.z);
 
     const auto isFenceNeighbor = [&](const WorldCoord& p) {
         const uint32_t neighborStateId = chunkManager.GetBlockState(p);

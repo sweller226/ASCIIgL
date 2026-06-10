@@ -2,7 +2,7 @@
 
 #include <ASCIICraft/input/IInputSource.hpp>
 
-class EventBus;
+namespace ASCIIgL { class EventBus; }
 
 namespace input {
 
@@ -18,7 +18,7 @@ enum class InputMode {
 /// When mode is GUI, Update() does not emit gameplay events. Other input (e.g. inventory toggle) is unaffected.
 class InputSystem : public IInputSource {
 public:
-    explicit InputSystem(EventBus& eventBus);
+    explicit InputSystem(ASCIIgL::EventBus& eventBus);
 
     void Update();
 
@@ -31,7 +31,7 @@ public:
     float GetMouseSensitivity() const override;
 
 private:
-    EventBus& m_eventBus;
+    ASCIIgL::EventBus& m_eventBus;
     InputMode m_inputMode = InputMode::Gameplay;
 };
 

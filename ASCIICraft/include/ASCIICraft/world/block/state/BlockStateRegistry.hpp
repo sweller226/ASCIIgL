@@ -54,6 +54,9 @@ public:
     /// Get the typeId from a stateId (O(1) via the state's stored typeId).
     uint16_t GetTypeIdFromState(uint32_t stateId) const;
 
+    /// Like GetTypeIdFromState, but returns \p fallback when \p stateId is invalid.
+    uint16_t GetTypeIdFromStateOr(uint32_t stateId, uint16_t fallback = 0) const;
+
     // ========================================================================
     // Property Mutation (returns NEW state ID, never mutates)
     // ========================================================================

@@ -70,7 +70,7 @@ namespace {
         glm::vec3 out = t;
         switch (axis) {
             case 'x': out = glm::vec3(t.x, t.y * c - t.z * s, t.y * s + t.z * c); break;
-            case 'y': out = glm::vec3(t.x * c + t.z * s, t.y, -t.x * s + t.z * c); break;
+            case 'y': out = glm::vec3(t.x * c - t.z * s, t.y, t.x * s + t.z * c); break;
             case 'z': out = glm::vec3(t.x * c - t.y * s, t.x * s + t.y * c, t.z); break;
             default: break;
         }

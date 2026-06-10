@@ -110,6 +110,8 @@ int ScreenWindowImpl::Initialize(unsigned int width, unsigned int height, float 
         Logger::Info(L"Screen dimensions adjusted to " + std::to_wstring(adjustedWidth) + L"x" + std::to_wstring(adjustedHeight));
     }
 
+    _pixelBuffer.resize(static_cast<size_t>(adjustedWidth) * static_cast<size_t>(adjustedHeight));
+
     // Window size = logical size × cell size
     int winWidth = static_cast<int>(adjustedWidth) * cellPixelsX;
     int winHeight = static_cast<int>(adjustedHeight) * cellPixelsY;
@@ -152,45 +154,50 @@ void ScreenWindowImpl::RenderTabTitle() {
         SetWindowTextW(_hwnd, screen._title.c_str());
 }
 
-void ScreenWindowImpl::PlotPixel(const glm::vec2& p, WCHAR character, unsigned short Colour) {
+void ScreenWindowImpl::PlotPixel(const glm::vec2& p, wchar_t character, unsigned short Colour) {
     (void)p; (void)character; (void)Colour;
     static bool warned = false;
     if (!warned) { Logger::Warning(L"ScreenWindowImpl: pixel buffer not used in window mode."); warned = true; }
 }
 
-void ScreenWindowImpl::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol) {
+void ScreenWindowImpl::PlotPixel(const glm::vec2& p, const ScreenPixel& charCol) {
     (void)p; (void)charCol;
     static bool warned = false;
     if (!warned) { Logger::Warning(L"ScreenWindowImpl: pixel buffer not used in window mode."); warned = true; }
 }
 
-void ScreenWindowImpl::PlotPixel(int x, int y, WCHAR character, unsigned short Colour) {
+void ScreenWindowImpl::PlotPixel(int x, int y, wchar_t character, unsigned short Colour) {
     (void)x; (void)y; (void)character; (void)Colour;
     static bool warned = false;
     if (!warned) { Logger::Warning(L"ScreenWindowImpl: pixel buffer not used in window mode."); warned = true; }
 }
 
-void ScreenWindowImpl::PlotPixel(int x, int y, const CHAR_INFO charCol) {
+void ScreenWindowImpl::PlotPixel(int x, int y, const ScreenPixel& charCol) {
     (void)x; (void)y; (void)charCol;
     static bool warned = false;
     if (!warned) { Logger::Warning(L"ScreenWindowImpl: pixel buffer not used in window mode."); warned = true; }
 }
 
-void ScreenWindowImpl::PlotPixel(int idx, const CHAR_INFO charCol) {
+void ScreenWindowImpl::PlotPixel(int idx, const ScreenPixel& charCol) {
     (void)idx; (void)charCol;
     static bool warned = false;
     if (!warned) { Logger::Warning(L"ScreenWindowImpl: pixel buffer not used in window mode."); warned = true; }
 }
 
-std::vector<CHAR_INFO>& ScreenWindowImpl::GetPixelBuffer() {
-    static std::vector<CHAR_INFO> empty;
-    static bool warned = false;
-    if (!warned) { Logger::Warning(L"ScreenWindowImpl: pixel buffer not used in window mode."); warned = true; }
-    return empty;
+ScreenPixel* ScreenWindowImpl::GetPixelBufferData() {
+    return _pixelBuffer.data();
 }
 
-HWND ScreenWindowImpl::GetWindowHandle() {
-    return _hwnd;
+const ScreenPixel* ScreenWindowImpl::GetPixelBufferData() const {
+    return _pixelBuffer.data();
+}
+
+size_t ScreenWindowImpl::GetPixelBufferSize() const {
+    return _pixelBuffer.size();
+}
+
+NativeWindowHandle ScreenWindowImpl::GetWindowHandle() {
+    return static_cast<NativeWindowHandle>(_hwnd);
 }
 
 void ScreenWindowImpl::ProcessMessages() {

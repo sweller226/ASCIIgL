@@ -1,4 +1,5 @@
 #include <ASCIICraft/gui/screens/InventoryScreen.hpp>
+#include <ASCIICraft/util/QuadMeshBuilder.hpp>
 #include <ASCIICraft/gui/Slot.hpp>
 #include <ASCIICraft/gui/Panel.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
@@ -6,14 +7,15 @@
 
 namespace gui {
 
-InventoryScreen::InventoryScreen(entt::registry& registry, EventBus& eventBus, entt::entity playerEntity,
-                                  std::shared_ptr<ASCIIgL::Mesh> panelQuad,
+InventoryScreen::InventoryScreen(entt::registry& registry, ASCIIgL::EventBus& eventBus, entt::entity playerEntity,
+                                  GUISurfaceLibrary& meshLibrary,
                                   std::shared_ptr<ASCIIgL::Texture> inventoryTexture)
     : m_registry(&registry)
     , m_eventBus(&eventBus)
     , m_inventoryTexture(std::move(inventoryTexture))
 {
     blocksInput = true;
+    name = "guiscreen:inventory";
 
     constexpr int columns = 9;
     constexpr int rows = 4;
@@ -29,7 +31,13 @@ InventoryScreen::InventoryScreen(entt::registry& registry, EventBus& eventBus, e
     offset = {-panelWidth / 2.0f, -panelHeight / 2.0f};  // center panel: pivot (0,0) so top-left = screen center + offset
     pivot = {0.0f, 0.0f};
     layer = 100;
-    SetBackgroundMesh(panelQuad);
+    // auto panelQuad = meshLibrary.GetOrCreateSurface(
+    //     "inventory.panel.quad",
+    //     [texture = m_inventoryTexture]() {
+    //         return GUIQuadMeshBuilder::BuildPosUVQuad(texture);
+    //     }
+    // ).mesh;
+    // SetBackgroundMesh(panelQuad);
     
     // Create material for this panel's texture (cached by MaterialLibrary)
     if (m_inventoryTexture) {
@@ -54,8 +62,8 @@ InventoryScreen::InventoryScreen(entt::registry& registry, EventBus& eventBus, e
     }
 }
 
-void InventoryScreen::OnDraw(::ecs::systems::RenderSystem& renderSystem) const {
-    Panel::Draw(renderSystem);
+void InventoryScreen::OnDraw(::ecs::systems::RenderSystem& ecsRenderSystem) const {
+    Panel::Draw(ecsRenderSystem);
 }
 
 bool InventoryScreen::OnClick(glm::vec2 position, int button) {

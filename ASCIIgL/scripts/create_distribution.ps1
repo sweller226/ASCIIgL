@@ -65,21 +65,20 @@ function New-Distribution {
     # Copy Release library
     Copy-Item "build/lib/Release/ASCIIgL.lib" "$OutputDir/lib/" -Force
     Write-Success "Copied Release library"
-    
-    # Copy Debug library if available
-    if (Test-Path "build/lib/Debug/ASCIIgL.lib") {
-        Copy-Item "build/lib/Debug/ASCIIgL.lib" "$OutputDir/lib/ASCIIgL_Debug.lib" -Force
-        Write-Success "Copied Debug library"
+
+    # Copy FastDebug library if available
+    if (Test-Path "build/lib/FastDebug/ASCIIgL.lib") {
+        Copy-Item "build/lib/FastDebug/ASCIIgL.lib" "$OutputDir/lib/ASCIIgL_FastDebug.lib" -Force
+        Write-Success "Copied FastDebug library"
     } else {
-        Write-Warning "Debug library not found, run build_debug.ps1 first for complete package"
+        Write-Warning "FastDebug library not found, run build_fastdebug.ps1 first for complete package"
     }
     
     # Copy headers
     Copy-Item "include" "$OutputDir/" -Recurse -Force
     Write-Success "Copied headers"
     
-    # Copy entire vendor folder (includes GLM, stb_image headers needed by public API)
-    # Exclude .cpp files since this is a static library distribution
+    # Copy entire vendor folder (headers only — exclude .cpp files)
     robocopy "vendor" "$OutputDir/vendor" /E /XF *.cpp | Out-Null
     # Robocopy exit codes: 0-3 are success, 4+ are errors
     if ($LASTEXITCODE -le 3) {
@@ -88,7 +87,22 @@ function New-Distribution {
     } else {
         Write-Warning "Issue copying vendor folder, exit code: $LASTEXITCODE"
     }
-    
+
+    # Copy TracyClient.cpp explicitly — excluded above by /XF *.cpp but required by consumers
+    $tracyDest = "$OutputDir/vendor/tracy/public"
+    New-Item -Path $tracyDest -ItemType Directory -Force | Out-Null
+    Copy-Item "vendor/tracy/public/TracyClient.cpp" "$tracyDest/TracyClient.cpp" -Force
+    Write-Success "Copied TracyClient.cpp"
+
+    # Copy CMake config
+    if (-not (Test-Path "cmake/ASCIIgLConfig.cmake")) {
+        Write-Error "cmake/ASCIIgLConfig.cmake not found! Please create it first."
+        exit 1
+    }
+    New-Item -Path "$OutputDir/cmake" -ItemType Directory -Force | Out-Null
+    Copy-Item "cmake/ASCIIgLConfig.cmake" "$OutputDir/cmake/" -Force
+    Write-Success "Copied CMake config"
+        
     # Copy resources (fonts, etc.)
     if (Test-Path "res") {
         Copy-Item "res" "$OutputDir/" -Recurse -Force

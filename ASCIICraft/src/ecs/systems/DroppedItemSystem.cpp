@@ -2,7 +2,7 @@
 
 #include <ASCIIgL/engine/FPSClock.hpp>
 
-#include <ASCIICraft/events/EventBus.hpp>
+#include <ASCIIgL/util/EventBus.hpp>
 #include <ASCIICraft/events/ItemEvents.hpp>
 
 #include <ASCIICraft/ecs/components/Transform.hpp>
@@ -18,7 +18,7 @@
 
 namespace ecs::systems {
 
-DroppedItemSystem::DroppedItemSystem(entt::registry& registry, EventBus& eventBus) 
+DroppedItemSystem::DroppedItemSystem(entt::registry& registry, ASCIIgL::EventBus& eventBus) 
     : registry(registry), eventBus(eventBus) {}
 
 void DroppedItemSystem::Update() {

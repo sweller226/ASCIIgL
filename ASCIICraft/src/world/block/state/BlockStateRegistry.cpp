@@ -109,6 +109,13 @@ uint16_t BlockStateRegistry::GetTypeIdFromState(uint32_t stateId) const {
     return states[stateId].typeId;
 }
 
+uint16_t BlockStateRegistry::GetTypeIdFromStateOr(uint32_t stateId, uint16_t fallback) const {
+    if (!IsValidState(stateId)) {
+        return fallback;
+    }
+    return states[stateId].typeId;
+}
+
 // ============================================================================
 // Property Mutation
 // ============================================================================

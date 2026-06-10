@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-#include <ASCIICraft/util/Util.hpp>
+#include <ASCIICraft/util/TimeUtil.hpp>
 
 constexpr int META_BUCKET_TIME_LIMIT = 300;
 
@@ -25,7 +25,7 @@ struct CrossChunkEdit {
 struct MetaBucket {
   MetaBucket() {
     edits = {};
-    lastTouched = NowSeconds();
+    lastTouched = util::NowSeconds();
   }
   std::vector<CrossChunkEdit> edits;
   uint32_t lastTouched;

@@ -3,6 +3,8 @@
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
 #include <ASCIICraft/ecs/components/Head.hpp>
 
+#include <ASCIIgL/engine/FPSClock.hpp>
+
 namespace ecs::systems {
 
 CameraSystem::CameraSystem(entt::registry& registry, IInputSource& input)
@@ -47,6 +49,14 @@ void CameraSystem::ProcessCameraInput(components::PlayerCamera& cam, float dt) {
     cam.camera.setCamDir(cam.camera.GetYaw() + yawDelta, cam.camera.GetPitch() + pitchDelta);
 }
 
+static std::string GetCardinalDirection(const glm::vec3& front) {
+    // yaw: east = -Z, west = +Z, north = +X, south = -X (matches your WorldCoord convention)
+    if (std::abs(front.x) > std::abs(front.z))
+        return front.x > 0.0f ? "West" : "East";
+    else
+        return front.z > 0.0f ? "South" : "North";
+}
+
 void CameraSystem::LerpFOV(components::PlayerCamera& cam, components::PlayerController& ctrl, float dt) {
     // Smoothly adjust FOV when sprinting (slight increase for speed effect)
     float targetFOV = cam.FOV;
@@ -63,6 +73,12 @@ void CameraSystem::LerpFOV(components::PlayerCamera& cam, components::PlayerCont
     
     // Update camera FOV
     cam.camera.SetFov(newFOV);
+
+    const std::string cardinal = GetCardinalDirection(cam.camera.getCamFront());
+    if (cardinal != m_lastCardinal) {
+        ASCIIgL::Logger::Debug("CameraSystem: player now facing " + cardinal);
+        m_lastCardinal = cardinal;
+    }
 }
 
 }

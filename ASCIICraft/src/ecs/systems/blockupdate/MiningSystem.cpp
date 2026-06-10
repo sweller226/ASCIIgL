@@ -11,7 +11,7 @@
 
 namespace ecs::systems {
 
-MiningSystem::MiningSystem(entt::registry& registry, EventBus& eventBus)
+MiningSystem::MiningSystem(entt::registry& registry, ASCIIgL::EventBus& eventBus)
     : m_registry(registry)
     , m_eventBus(eventBus)
 {}
@@ -36,7 +36,7 @@ void MiningSystem::CreativeBreakEvents() {
         auto rayCast = world->GetChunkManager()->BlockIntersectsView(head.lookDir, head.relativePos + position, reach.reach);
 
         if (rayCast.first != blockstate::BlockStateRegistry::AIR_STATE_ID) {
-            BreakBlockEvent breakEvent;
+            events::BreakBlockEvent breakEvent;
             breakEvent.stateId = rayCast.first;
             breakEvent.position = rayCast.second;
             m_eventBus.emit(breakEvent);

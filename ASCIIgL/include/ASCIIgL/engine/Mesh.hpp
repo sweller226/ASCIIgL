@@ -1,8 +1,6 @@
 #pragma once
 
 #include <ASCIIgL/renderer/VertFormat.hpp>
-#include <ASCIIgL/engine/Texture.hpp>
-#include <ASCIIgL/engine/TextureArray.hpp>
 
 #include <vector>
 #include <cstddef>
@@ -11,6 +9,8 @@ namespace ASCIIgL {
 
 // Forward declaration
 class Renderer;
+class Texture;
+class TextureArray;
 
 class Mesh // this class represents a mesh with generic vertex data and a vertex format descriptor
 {
@@ -55,6 +55,19 @@ public:
 		, format(inFormat)
 		, texture(nullptr)
 		, textureArray(inTexArray) {}
+
+	// Constructor with indices (no texture)
+	Mesh(std::vector<std::byte>&& inVertexData, const VertFormat& inFormat, std::vector<int>&& inIndices)
+		: vertexData(std::move(inVertexData))
+		, indices(std::move(inIndices))
+		, format(inFormat)
+		, texture(nullptr) {}
+
+	// Constructor without indices (no texture)
+	Mesh(std::vector<std::byte>&& inVertexData, const VertFormat& inFormat)
+    : vertexData(std::move(inVertexData))
+    , format(inFormat)
+    , texture(nullptr) {}
 
 	~Mesh();
 

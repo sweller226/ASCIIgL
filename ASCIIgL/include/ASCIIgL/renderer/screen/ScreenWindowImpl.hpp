@@ -3,6 +3,14 @@
 #include <ASCIIgL/renderer/screen/ScreenImpl.hpp>
 #include <vector>
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
 namespace ASCIIgL {
 
 class Screen;
@@ -13,6 +21,7 @@ class ScreenWindowImpl : public ScreenImpl {
 private:
     Screen& screen;
     HWND _hwnd = nullptr;
+    std::vector<ScreenPixel> _pixelBuffer;
 
 public:
     ScreenWindowImpl(Screen& screenRef);
@@ -22,13 +31,15 @@ public:
     void ClearPixelBuffer() override;
     void OutputBuffer() override;
     void RenderTabTitle() override;
-    void PlotPixel(const glm::vec2& p, WCHAR character, unsigned short Colour) override;
-    void PlotPixel(const glm::vec2& p, const CHAR_INFO charCol) override;
-    void PlotPixel(int x, int y, WCHAR character, unsigned short Colour) override;
-    void PlotPixel(int x, int y, const CHAR_INFO charCol) override;
-    void PlotPixel(int idx, const CHAR_INFO charCol) override;
-    std::vector<CHAR_INFO>& GetPixelBuffer() override;
-    HWND GetWindowHandle() override;
+    void PlotPixel(const glm::vec2& p, wchar_t character, unsigned short Colour) override;
+    void PlotPixel(const glm::vec2& p, const ScreenPixel& charCol) override;
+    void PlotPixel(int x, int y, wchar_t character, unsigned short Colour) override;
+    void PlotPixel(int x, int y, const ScreenPixel& charCol) override;
+    void PlotPixel(int idx, const ScreenPixel& charCol) override;
+    ScreenPixel* GetPixelBufferData() override;
+    const ScreenPixel* GetPixelBufferData() const override;
+    size_t GetPixelBufferSize() const override;
+    NativeWindowHandle GetWindowHandle() override;
     void ProcessMessages() override;
 };
 

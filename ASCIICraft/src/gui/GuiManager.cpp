@@ -1,69 +1,37 @@
-#include <ASCIICraft/gui/GuiManager.hpp>
-#include <ASCIICraft/gui/Screen.hpp>
+#include <ASCIICraft/gui/GUIManager.hpp>
+#include <ASCIICraft/gui/GUIScreen.hpp>
 #include <algorithm>
 #include <glm/vec2.hpp>
 
 namespace gui {
 
-GuiManager::GuiManager(entt::registry& registry, EventBus& eventBus, IInputSource& input)
+GUIManager::GUIManager(entt::registry& registry, ASCIIgL::EventBus& eventBus, IInputSource& input)
     : m_registry(registry)
     , m_eventBus(eventBus)
     , m_input(input)
 {}
 
-void GuiManager::SetScreenSize(glm::vec2 size) {
-    m_screenSize = size;
-    const auto w = static_cast<unsigned int>(size.x);
-    const auto h = static_cast<unsigned int>(size.y);
-    if (m_guiCamera)
-        m_guiCamera->setScreenDimensions(w, h);
-    else
-        m_guiCamera = std::make_unique<ASCIIgL::Camera2D>(glm::vec2(0.0f, 0.0f), w, h);
-}
-
-void GuiManager::SetPlayScreen(std::unique_ptr<Screen> screen) {
-    m_playScreen = std::move(screen);
-    m_screenStack.clear();
-    if (m_playScreen)
-        m_screenStack.push_back(m_playScreen.get());
-}
-
-void GuiManager::SetInventoryScreen(std::unique_ptr<Screen> screen) {
-    m_inventoryScreen = std::move(screen);
-}
-
-void GuiManager::ToggleInventoryScreen() {
-    if (!m_inventoryScreen) return;
-    auto it = std::find(m_screenStack.begin(), m_screenStack.end(), m_inventoryScreen.get());
-    if (it != m_screenStack.end()) {
-        m_screenStack.erase(it);
-    } else {
-        m_screenStack.push_back(m_inventoryScreen.get());
-        m_cursorPosition = m_screenSize * 0.5f;
-    }
-}
-
-void GuiManager::PushScreen(Screen* screen) {
+void GUIManager::PushScreen(GUIScreen* screen) {
     if (screen)
         m_screenStack.push_back(screen);
 }
 
-void GuiManager::PopScreen() {
+void GUIManager::PopScreen() {
     if (m_screenStack.size() > 1)
         m_screenStack.pop_back();
 }
 
-void GuiManager::Update() {
+void GUIManager::Update() {
     const float dt = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
     if (m_screenStack.empty()) return;
 
-    for (Screen* screen : m_screenStack) {
+    for (GUIScreen* screen : m_screenStack) {
         screen->Layout(m_screenSize, nullptr);
         screen->OnLayout(m_screenSize);
         screen->OnUpdate(dt);
     }
 
-    Screen* top = m_screenStack.back();
+    GUIScreen* top = m_screenStack.back();
     if (top->blocksInput) {
         if (m_input.IsActionHeld("camera_left"))  m_cursorPosition.x -= m_cursorMoveSpeed;
         if (m_input.IsActionHeld("camera_right")) m_cursorPosition.x += m_cursorMoveSpeed;
@@ -87,19 +55,14 @@ void GuiManager::Update() {
     }
 }
 
-void GuiManager::Draw(::ecs::systems::RenderSystem& renderSystem) {
-    for (Screen* screen : m_screenStack)
-        screen->OnDraw(renderSystem);
+void GUIManager::Render() {
+    for (GUIScreen* screen : m_screenStack) {}
+        // screen->OnDraw();`````
 }
 
-bool GuiManager::IsBlockingInput() const {
+bool GUIManager::IsBlockingInput() const {
     if (m_screenStack.empty()) return false;
     return m_screenStack.back()->blocksInput;
-}
-
-bool GuiManager::IsInventoryOpen() const {
-    if (!m_inventoryScreen) return false;
-    return std::find(m_screenStack.begin(), m_screenStack.end(), m_inventoryScreen.get()) != m_screenStack.end();
 }
 
 } // namespace gui

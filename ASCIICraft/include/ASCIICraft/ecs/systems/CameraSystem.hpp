@@ -2,7 +2,6 @@
 
 #include <entt/entt.hpp>
 
-#include <ASCIIgL/engine/FPSClock.hpp>
 #include <ASCIICraft/ecs/components/PlayerController.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 #include <ASCIICraft/ecs/systems/ISystem.hpp>
@@ -22,6 +21,8 @@ private:
 
     void ProcessCameraInput(components::PlayerCamera& cam, float dt);
     void LerpFOV(components::PlayerCamera& cam, components::PlayerController& ctrl, float dt);
+
+    std::string m_lastCardinal;
 };
 
 }

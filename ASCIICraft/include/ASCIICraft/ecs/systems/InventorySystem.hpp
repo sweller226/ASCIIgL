@@ -5,8 +5,7 @@
 #include <ASCIICraft/ecs/systems/ISystem.hpp>
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 
-// Forward declarations
-class EventBus;
+namespace ASCIIgL { class EventBus; }
 
 namespace ecs::systems {
 
@@ -14,7 +13,7 @@ namespace ecs::systems {
 /// Contains static helpers for inventory manipulation.
 class InventorySystem : public ISystem {
 public:
-    explicit InventorySystem(entt::registry& registry, EventBus& eventBus);
+    explicit InventorySystem(entt::registry& registry, ASCIIgL::EventBus& eventBus);
     void Update() override;
 
     // ========================================================================
@@ -43,7 +42,7 @@ public:
 
 private:
     entt::registry& registry;
-    EventBus& eventBus;
+    ASCIIgL::EventBus& eventBus;
 
     void processPickupEvents();
     void processDropEvents();

@@ -1,4 +1,6 @@
 #include <ASCIIgL/engine/Model.hpp>
+#include <ASCIIgL/engine/Mesh.hpp>
+#include <ASCIIgL/engine/Texture.hpp>
 
 #include <tinyobjloader/tiny_obj_loader.h>
 #include <iostream>

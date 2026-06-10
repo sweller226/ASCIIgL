@@ -110,23 +110,23 @@ void Screen::OutputBuffer() {
     _impl->OutputBuffer();
 }
 
-void Screen::PlotPixel(const glm::vec2& p, WCHAR character, unsigned short Colour) {
+void Screen::PlotPixel(const glm::vec2& p, wchar_t character, unsigned short Colour) {
     _impl->PlotPixel(p, character, Colour);
 }
 
-void Screen::PlotPixel(const glm::vec2& p, const CHAR_INFO charCol) {
+void Screen::PlotPixel(const glm::vec2& p, const ScreenPixel& charCol) {
     _impl->PlotPixel(p, charCol);
 }
 
-void Screen::PlotPixel(int x, int y, WCHAR character, unsigned short Colour) {
+void Screen::PlotPixel(int x, int y, wchar_t character, unsigned short Colour) {
     _impl->PlotPixel(x, y, character, Colour);
 }
 
-void Screen::PlotPixel(int x, int y, const CHAR_INFO charCol) {
+void Screen::PlotPixel(int x, int y, const ScreenPixel& charCol) {
     _impl->PlotPixel(x, y, charCol);
 }
 
-void Screen::PlotPixel(int idx, const CHAR_INFO charCol) {
+void Screen::PlotPixel(int idx, const ScreenPixel& charCol) {
     _impl->PlotPixel(idx, charCol); // Divide x by 2 for wide buffer
 }
 
@@ -150,11 +150,19 @@ unsigned int Screen::GetHeight() const {
     return _screen_height;
 }
 
-std::vector<CHAR_INFO>& Screen::GetPixelBuffer() {
-    return _impl->GetPixelBuffer();
+ScreenPixel* Screen::GetPixelBufferData() {
+    return _impl ? _impl->GetPixelBufferData() : nullptr;
 }
 
-HWND Screen::GetWindowHandle() const {
+const ScreenPixel* Screen::GetPixelBufferData() const {
+    return _impl ? _impl->GetPixelBufferData() : nullptr;
+}
+
+size_t Screen::GetPixelBufferSize() const {
+    return _impl ? _impl->GetPixelBufferSize() : 0;
+}
+
+NativeWindowHandle Screen::GetWindowHandle() const {
     return _impl ? _impl->GetWindowHandle() : nullptr;
 }
 

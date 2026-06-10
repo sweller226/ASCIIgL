@@ -63,6 +63,9 @@ public:
 	// Setters (automatically recalculate view matrix)
 	void SetYaw(float Pyaw);
 	void SetPitch(float Ppitch);
+
+	// utilities
+	glm::mat4 GetBillboardMatrix(const glm::vec3& position, const glm::vec3& scale) const;
 };
 
 } // namespace ASCIIgL
