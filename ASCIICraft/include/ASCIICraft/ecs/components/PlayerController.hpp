@@ -27,7 +27,7 @@ struct PlayerController {
     static constexpr float RUN_SPEED = 5.612f;       // Blocks per second
     static constexpr float WALK_SPEED = 4.3f;
     static constexpr float SNEAK_SPEED = 1.295f;     // Blocks per second
-    static constexpr float FLY_SPEED = 10.89f;       // Blocks per second
+    static constexpr float FLY_SPEED = 100.0f;
     static constexpr float JUMP_HEIGHT = 1.35f;      // Blocks
 
     static constexpr float GROUND_ACCEL = 50.0f;

@@ -300,8 +300,8 @@ bool Game::LoadTextures() {
     const glm::ivec3 EmeraldGreenHue  = glm::ivec3(10, 15, 12); // green/cyan tilt
     const glm::ivec3 ElectricMagentaHue = glm::ivec3(15, 10, 15); // magenta/purple
 
-    float darkL  = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(22, 22, 22));
-    float lightL = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(210, 210, 210));
+    float darkL  = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(30, 30, 30));
+    float lightL = ASCIIgL::PaletteUtil::sRGB255_Luminance(glm::ivec3(212, 212, 212));
 
     // Build monochrome mapping from the current screen palette if possible.
     ASCIIgL::MonochromeMapping monoMap;
@@ -593,6 +593,7 @@ void Game::InitializeBlockStates() {
     registerOpaqueJsonBacked("minecraft:bedrock");
 
     registerOpaqueJsonBacked("minecraft:stone");
+    registerOpaqueJsonBacked("minecraft:sand");
 
     bsr.RegisterType("minecraft:dandelion", {});
     const uint16_t dandelionType = bsr.GetTypeId("minecraft:dandelion");
