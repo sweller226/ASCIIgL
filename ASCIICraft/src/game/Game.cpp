@@ -593,7 +593,6 @@ void Game::InitializeBlockStates() {
     registerOpaqueJsonBacked("minecraft:bedrock");
 
     registerOpaqueJsonBacked("minecraft:stone");
-    registerOpaqueJsonBacked("minecraft:sand");
 
     bsr.RegisterType("minecraft:dandelion", {});
     const uint16_t dandelionType = bsr.GetTypeId("minecraft:dandelion");
