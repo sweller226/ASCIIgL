@@ -2,12 +2,11 @@
 
 #include <ASCIICraft/gui/Widget.hpp>
 #include <ASCIICraft/gui/text/BitmapFont.hpp>
-#include <ASCIICraft/gui/text/TextLabel.hpp>
+#include <ASCIICraft/gui/text/TextLabelStyle.hpp>
+#include <ASCIICraft/gui/text/TextLabelMesh.hpp>
 
 #include <memory>
 #include <string>
-
-namespace ASCIIgL { class Mesh; }
 
 namespace gui::text {
 
@@ -23,9 +22,11 @@ public:
     void SetText(std::string text);
     const std::string& GetText() const { return m_text; }
 
-    TextLabel& Style() { MarkDirty(); return m_style; }
-    const TextLabel& Style() const { return m_style; }
-    void SetStyle(const TextLabel& style);
+    TextLabelStyle& Style() { MarkDirty(); return m_style; }
+    const TextLabelStyle& Style() const { return m_style; }
+    void SetStyle(const TextLabelStyle& style);
+
+    const glm::vec2& ContentSizePx() const { return m_textMesh.contentSizePx; }
 
     void MarkDirty() const { m_meshDirty = true; }
 
@@ -36,10 +37,10 @@ private:
 
     const BitmapFont* m_font = nullptr; // non-owning; managed by caller/resource layer
     std::string m_text;
-    TextLabel m_style{};
+    TextLabelStyle m_style{};
 
     mutable bool m_meshDirty = true;
-    mutable std::shared_ptr<ASCIIgL::Mesh> m_mesh;
+    mutable TextLabelMesh m_textMesh{};
 };
 
 } // namespace gui::text

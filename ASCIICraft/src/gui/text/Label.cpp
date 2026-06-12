@@ -22,7 +22,7 @@ void Label::SetText(std::string text) {
     m_meshDirty = true;
 }
 
-void Label::SetStyle(const TextLabel& style) {
+void Label::SetStyle(const TextLabelStyle& style) {
     m_style = style;
     m_meshDirty = true;
 }
@@ -31,9 +31,9 @@ void Label::Draw(gui::GUIRenderer& renderer) const {
     if (!visible || !enabled) return;
 
     RebuildMeshIfNeeded();
-    if (!m_mesh) return;
+    if (!m_textMesh) return;
 
-    renderer.RenderTextMesh(screenPosition, layer, m_mesh);
+    renderer.RenderTextMesh(screenPosition, layer, m_textMesh.mesh);
 }
 
 void Label::RebuildMeshIfNeeded() const {
@@ -41,17 +41,20 @@ void Label::RebuildMeshIfNeeded() const {
     m_meshDirty = false;
 
     if (!m_font || m_text.empty()) {
-        m_mesh.reset();
+        m_textMesh = {};
         return;
     }
 
-    TextLabel label = m_style;
-    glm::vec2 bounds = label.boundsPx;
-    if (bounds.x <= 0.0f || bounds.y <= 0.0f) {
-        bounds = size;
+    TextLabelStyle style = m_style;
+    if (style.boundsPx.x <= 0.0f || style.boundsPx.y <= 0.0f) {
+        style.boundsPx = size;
+    }
+    if (style.boundsPx.x <= 0.0f || style.boundsPx.y <= 0.0f) {
+        m_textMesh = {};
+        return;
     }
 
-    m_mesh = TextLabelMeshBuilder::BuildMesh(*m_font, m_text, label.scale, label, bounds);
+    m_textMesh = TextLabelMeshBuilder::Build(*m_font, m_text, style.scale, style);
 }
 
 } // namespace gui::text

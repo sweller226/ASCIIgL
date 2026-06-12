@@ -374,14 +374,8 @@ void Renderer::PrecomputeMonochromeColorLUT(Palette& palette) {
         }
 
         wchar_t glyph = impl_->_charRamp[bestCharIndex];
-        unsigned short fgColor = static_cast<unsigned short>(palette.GetFgColor(bestFgIndex));
-        unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
-        unsigned short combinedColor = fgColor | bgColor;
-        if (fgColor > 0xF || bgColor > 0xF0) {
-            fgColor = fgColor & 0xF;
-            bgColor = bgColor & 0xF0;
-            combinedColor = fgColor | bgColor;
-        }
+        const unsigned short combinedColor = static_cast<unsigned short>(
+            ((bestBgIndex & 0xF) << 4) | (bestFgIndex & 0xF));
         impl_->_monochromeLUT[i] = std::make_pair(targetLuminance, ScreenPixel{ glyph, combinedColor });
     }
 
@@ -427,9 +421,7 @@ void Renderer::PrecomputeMultiColorLUT(Palette& palette) {
                             float coverage = impl_->_charCoverage[charIdx];
                             glm::vec3 simLinear = coverage * fgLinear + (1.0f - coverage) * bgLinear;
                             glm::vec3 diff = targetLinear - simLinear;
-                            float error = 0.2126f * diff.r * diff.r
-                                + 0.7152f * diff.g * diff.g
-                                + 0.0722f * diff.b * diff.b;
+                            float error = glm::dot(PaletteUtil::Rec709WeightsVec(), diff * diff);
                             if (error < minError) {
                                 minError = error;
                                 bestFgIndex = fgIdx;
@@ -442,19 +434,14 @@ void Renderer::PrecomputeMultiColorLUT(Palette& palette) {
 
                 int index = (r * Renderer::Impl::_rgbLUTDepth * Renderer::Impl::_rgbLUTDepth) + (g * Renderer::Impl::_rgbLUTDepth) + b;
                 wchar_t glyph = impl_->_charRamp[bestCharIndex];
-                unsigned short fgColor = static_cast<unsigned short>(palette.GetFgColor(bestFgIndex));
-                unsigned short bgColor = static_cast<unsigned short>(palette.GetBgColor(bestBgIndex));
-                unsigned short combinedColor = fgColor | bgColor;
-                if (fgColor > 0xF || bgColor > 0xF0) {
-                    fgColor = fgColor & 0xF;
-                    bgColor = bgColor & 0xF0;
-                    combinedColor = fgColor | bgColor;
-                }
+                const unsigned short combinedColor = static_cast<unsigned short>(
+                    ((bestBgIndex & 0xF) << 4) | (bestFgIndex & 0xF));
                 impl_->_colorLUT[index] = {glyph, combinedColor};
             }
         }
     }
     impl_->_lutGpuResourcesDirty = true;
+    Logger::Info("[Renderer] Multi-color color LUT precompute complete.");
 }
 
 ScreenPixel Renderer::GetCharInfo(const glm::ivec3& rgb) {

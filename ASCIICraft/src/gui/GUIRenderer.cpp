@@ -5,6 +5,7 @@
 #include <ASCIIgL/renderer/Material.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 
+#include <glm/common.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace gui {
@@ -17,10 +18,12 @@ void GUIRenderer::RenderGUIQuad(glm::vec2 topLeftPx,
                                 int layer,
                                 const std::shared_ptr<ASCIIgL::Mesh>& mesh,
                                 const std::shared_ptr<ASCIIgL::Material>& material,
-                                const bool meshUsesZeroToOneBounds) const {
+                                const bool meshUsesZeroToOneBounds,
+                                const glm::mat4& localModel) const {
     // QuadMeshBuilder uses a -1..1 unit square; scale by half-size and place at rect center.
+    const glm::vec2 topLeft = glm::round(topLeftPx);
     const glm::vec2 halfSize = sizePx * 0.5f;
-    const glm::vec2 center = topLeftPx + halfSize;
+    const glm::vec2 center = topLeft + halfSize;
 
     glm::mat4 model(1.0f);
     model = glm::translate(model, glm::vec3(center.x, center.y, 0.0f));
@@ -28,8 +31,12 @@ void GUIRenderer::RenderGUIQuad(glm::vec2 topLeftPx,
     const float yHalf = meshUsesZeroToOneBounds ? -halfSize.y : halfSize.y;
     model = glm::scale(model, glm::vec3(halfSize.x, yHalf, halfSize.x));
     if (meshUsesZeroToOneBounds) {
-        model = model * glm::translate(glm::mat4(1.0f), glm::vec3(-0.5f, -0.5f, -0.5f));
-        model = model * glm::scale(glm::mat4(1.0f), glm::vec3(2.0f));
+        // Map 0..1 block space to -1..1 centered on the slot: v' = 2*(v - 0.5).
+        // GLM gtc transforms post-multiply (m = m * op), so build scale then translate.
+        glm::mat4 blockFromUnit(1.0f);
+        blockFromUnit = glm::scale(blockFromUnit, glm::vec3(2.0f));
+        blockFromUnit = glm::translate(blockFromUnit, glm::vec3(-0.5f, -0.5f, -0.5f));
+        model = model * localModel * blockFromUnit;
     }
 
     SubmitMesh(model, layer, mesh, material);
@@ -41,8 +48,10 @@ void GUIRenderer::RenderTextMesh(glm::vec2 topLeftPx,
     auto textMaterial = ASCIIgL::MaterialLibrary::GetInst().Get("guiTextMaterial");
     if (!textMaterial) return;
 
+    const glm::vec2 topLeft = glm::round(topLeftPx);
+
     glm::mat4 model(1.0f);
-    model = glm::translate(model, glm::vec3(topLeftPx.x, topLeftPx.y, 0.0f));
+    model = glm::translate(model, glm::vec3(topLeft.x, topLeft.y, 0.0f));
     SubmitMesh(model, layer, textMesh, textMaterial);
 }
 

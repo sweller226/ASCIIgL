@@ -22,7 +22,8 @@ namespace ecs::data {
 entt::entity ItemRegistry::RegisterBlockItem(
     entt::registry& reg,
     const std::string& name, const std::string& display,
-    int maxStack
+    int maxStack,
+    std::optional<components::ItemGuiMeshTransform> guiTransform
 ) {
     auto e = reg.create();
     int id = RegisterNext(name, e);
@@ -39,6 +40,9 @@ entt::entity ItemRegistry::RegisterBlockItem(
     auto& visual = reg.emplace<components::ItemVisual>(e);
     visual.is2DIcon = false;
     visual.mesh = buildBlockItemMesh(reg, e);
+    reg.emplace<components::ItemGuiMeshTransform>(
+        e,
+        guiTransform.value_or(components::ItemGuiMeshTransform::DefaultBlockThirdPerson()));
     return e;
 }
 

@@ -3,7 +3,9 @@
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 #include <ASCIICraft/ecs/components/ItemCarried.hpp>
 #include <ASCIICraft/ecs/components/HotbarSelection.hpp>
+#include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 #include <ASCIICraft/ecs/data/ItemRegistry.hpp>
+#include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 
 namespace ecs::factories {
@@ -74,6 +76,11 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     // --- Camera ---
     glm::vec3 eyePos = position + glm::vec3(0, cam.PLAYER_EYE_HEIGHT, 0);
     glm::vec3 lookDir = glm::vec3(0.0f, 0.0f, -1.0f);
+    const unsigned screenW = ASCIIgL::Screen::GetInst().GetWidth();
+    const unsigned screenH = ASCIIgL::Screen::GetInst().GetHeight();
+    if (screenW > 0u && screenH > 0u) {
+        cam.camera.setScreenDimensions(screenW, screenH);
+    }
     cam.camera.setCamPos(eyePos);
     cam.camera.setCamDir(lookDir);
 

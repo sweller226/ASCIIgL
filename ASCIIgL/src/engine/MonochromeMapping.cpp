@@ -8,24 +8,20 @@ namespace ASCIIgL {
 
 namespace {
 
-constexpr float REC709_R = 0.2126f;
-constexpr float REC709_G = 0.7152f;
-constexpr float REC709_B = 0.0722f;
-
 inline glm::vec3 LinearLuminanceToGradientRGB(float luminance,
                                               const glm::vec3& linearStart,
                                               const glm::vec3& linearEnd)
 {
-    const glm::vec3 REC709(REC709_R, REC709_G, REC709_B);
+    const glm::vec3 rec709 = PaletteUtil::Rec709WeightsVec();
 
-    float minLum = glm::dot(linearStart, REC709);
-    float maxLum = glm::dot(linearEnd,   REC709);
+    float minLum = glm::dot(linearStart, rec709);
+    float maxLum = glm::dot(linearEnd,   rec709);
 
     float t = std::clamp(luminance, 0.0f, 1.0f);
     float L_out = minLum + (maxLum - minLum) * t;
 
     glm::vec3 gradientDir = glm::normalize(linearEnd - linearStart + glm::vec3(1e-6f));
-    float lumWeight = std::max(glm::dot(gradientDir, REC709), 1e-6f);
+    float lumWeight = std::max(glm::dot(gradientDir, rec709), 1e-6f);
     return gradientDir * (L_out / lumWeight);
 }
 

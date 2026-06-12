@@ -2,11 +2,13 @@
 
 #include <string>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 
 #include <entt/entt.hpp>
 
 #include <ASCIICraft/ecs/components/ItemProperties.hpp>
+#include <ASCIICraft/ecs/components/ItemVisual.hpp>
 
 namespace ASCIIgL { class Mesh; }
 
@@ -51,7 +53,8 @@ public:
     entt::entity RegisterBlockItem(
         entt::registry& reg,
         const std::string& name, const std::string& display,
-        int maxStack = 64
+        int maxStack = 64,
+        std::optional<components::ItemGuiMeshTransform> guiTransform = std::nullopt
     );
 
     /// Register a stackable resource/material item (2D icon, auto-incrementing item id).

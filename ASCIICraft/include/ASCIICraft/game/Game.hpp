@@ -63,8 +63,8 @@ public:
     ~Game();
     
     // Core game functions
-    bool Initialize(bool renderToTerminal = true);
-    void Run(std::function<bool()> shouldExternalExit, bool renderToTerminal = true);
+    bool Initialize(bool renderToTerminal = true, bool multicolor = false);
+    void Run(std::function<bool()> shouldExternalExit, bool renderToTerminal = true, bool multicolor = false);
     void Shutdown();
     
     // Game state management
@@ -125,8 +125,9 @@ private:
     bool LoadGUIItemMaterial();
     bool LoadGUIBlockMaterial();
     bool LoadGUITextMaterial();
+    bool LoadFont();
 
-    bool LoadTextures();
+    bool LoadTextures(bool multicolor);
     void InitializeWorld();
     void InitializePlayer();
     void InitializeSystems();

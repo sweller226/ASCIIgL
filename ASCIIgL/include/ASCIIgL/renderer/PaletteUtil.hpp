@@ -5,6 +5,15 @@
 namespace ASCIIgL {
 
 namespace PaletteUtil {
+    // Rec. 709 linear RGB luminance weights
+    inline constexpr float Rec709R = 0.2126f;
+    inline constexpr float Rec709G = 0.7152f;
+    inline constexpr float Rec709B = 0.0722f;
+
+    inline glm::vec3 Rec709WeightsVec() {
+        return glm::vec3(Rec709R, Rec709G, Rec709B);
+    }
+
     // -------------------------
     // sRGB → Linear
     // -------------------------

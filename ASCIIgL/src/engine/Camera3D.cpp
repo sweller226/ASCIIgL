@@ -1,5 +1,7 @@
 #include <math.h>
 #include <algorithm>
+#include <limits>
+#include <cmath>
 
 #include <ASCIIgL/engine/Camera3D.hpp>
 #include <ASCIIgL/renderer/screen/Screen.hpp>
@@ -7,24 +9,41 @@
 
 namespace ASCIIgL {
 
+namespace {
+
+float SafeAspectRatio(unsigned int width, unsigned int height) {
+	if (width == 0u || height == 0u) {
+		return 16.0f / 9.0f;
+	}
+	return static_cast<float>(width) / static_cast<float>(height);
+}
+
+} // namespace
+
 Camera3D::Camera3D(glm::vec3 Pposition, float Pfov, glm::vec2 yawPitch, float PzNear, float PzFar)
 	: pos(Pposition), fov(Pfov), pitch(yawPitch.y), yaw(yawPitch.x), zNear(PzNear), zFar(PzFar)
 {
-	// Calculate initial screen dimensions from aspect ratio (assuming height = 1080 for default)
 	auto& screen = Screen::GetInst();
 
-	if (!screen.IsInitialized()) {
-		Logger::Warning("Initializing Camera3D before screen. Resorting to defaults.");
-		screenHeight = 500; // defaults if failed
+	if (screen.IsInitialized()) {
+		screenWidth = screen.GetWidth();
+		screenHeight = screen.GetHeight();
+	} else {
+		Logger::Warning("Initializing Camera3D before screen. Using default 800x500.");
 		screenWidth = 800;
+		screenHeight = 500;
 	}
 
-	screenHeight = screen.GetHeight();
-	screenWidth = screen.GetWidth();
-	aspect = (float)screenWidth / (float)screenHeight;
+	if (screenWidth == 0u || screenHeight == 0u) {
+		Logger::Warning("[Camera3D] Screen dimensions are zero; using default 800x500.");
+		screenWidth = 800;
+		screenHeight = 500;
+	}
+
+	aspect = SafeAspectRatio(screenWidth, screenHeight);
 	
-	recalculateViewMat(); // this function uses all all class attributes
-	recalculateProjMat(); // calculating the perspective projection
+	recalculateViewMat();
+	recalculateProjMat();
 }
 
 Camera3D::~Camera3D()
@@ -141,12 +160,20 @@ void Camera3D::setScreenDimensions(unsigned int width, unsigned int height)
 {
 	screenWidth = width;
 	screenHeight = height;
-	aspect = (float)width / (float)height; // update aspect ratio
-	recalculateProjMat(); // recalculate projection matrix with new aspect ratio
+	if (screenWidth == 0u || screenHeight == 0u) {
+		Logger::Warning("[Camera3D] setScreenDimensions called with zero; keeping previous aspect.");
+		return;
+	}
+	aspect = SafeAspectRatio(screenWidth, screenHeight);
+	recalculateProjMat();
 }
 
 void Camera3D::recalculateProjMat()
 {
+	if (aspect <= std::numeric_limits<float>::epsilon() || !std::isfinite(aspect)) {
+		Logger::Warning("[Camera3D] Invalid aspect ratio; using 16:9 fallback.");
+		aspect = 16.0f / 9.0f;
+	}
 	proj = glm::perspective(glm::radians(fov), aspect, zNear, zFar);
 }
 

@@ -16,7 +16,7 @@ ASCIIgL
 ASCIICraft
     Run FastDebug Command
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\FastDebug"
-    .\ASCIICraft.exe
+    .\ASCIICraft.exe --color
 
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\FastDebug"
     .\ASCIICraft.exe --window
@@ -27,6 +27,9 @@ ASCIICraft
 
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
     .\ASCIICraft.exe --window
+
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
+    .\ASCIICraft.exe --color
 
     Build Release
     ./scripts/build_release.ps1

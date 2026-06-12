@@ -14,40 +14,44 @@
 
 namespace ASCIIgL {
 
-PaletteEntry::PaletteEntry(const glm::ivec3& rgbVal, unsigned short hexVal)
+PaletteEntry::PaletteEntry(const glm::ivec3& rgbVal)
     : rgb(rgbVal)
     , rgb16(rgbVal.r / 17, rgbVal.g / 17, rgbVal.b / 17)
     , normalized(glm::vec3(rgbVal) / 255.0f)
-    , luminance(PaletteUtil::sRGB255_Luminance(rgbVal))
-    , hex(hexVal) {}
+    , luminance(PaletteUtil::sRGB255_Luminance(rgbVal)) {}
 
-PaletteEntry::PaletteEntry() : rgb(0, 0, 0), rgb16(0, 0, 0), normalized(0.0f), luminance(0.0f), hex(0) {}
+PaletteEntry::PaletteEntry()
+    : rgb(0, 0, 0)
+    , rgb16(0, 0, 0)
+    , normalized(0.0f)
+    , luminance(0.0f) {}
 
-PaletteEntry::PaletteEntry(int r, int g, int b, unsigned short hexVal)
-    : PaletteEntry(glm::ivec3(r, g, b), hexVal) {}
+PaletteEntry::PaletteEntry(int r, int g, int b)
+    : PaletteEntry(glm::ivec3(r, g, b)) {}
 
 void Palette::SetDefaultEntries() {
-    // Default 16-color palette in 0-255 range:
-    // - Index 0-15: Standard 16 colors (mapped to attributes 0x0-0xF)
-    entries = {{
-        //   rgb (0-255)              hex    // Description
-        { {0, 0, 0},                0x0 },   // Index 0: black
-        { {0, 0, 136},              0x1 },   // Index 1: blue
-        { {0, 136, 0},              0x2 },   // Index 2: green
-        { {0, 136, 136},            0x3 },   // Index 3: cyan
-        { {136, 0, 0},              0x4 },   // Index 4: red
-        { {136, 0, 136},            0x5 },   // Index 5: purple/magenta
-        { {136, 136, 0},            0x6 },   // Index 6: yellow
-        { {187, 187, 187},          0x7 },   // Index 7: white/light gray
-        { {136, 136, 136},          0x8 },   // Index 8: brightBlack/dark gray
-        { {0, 0, 255},              0x9 },   // Index 9: brightBlue
-        { {0, 255, 0},              0xA },   // Index 10: brightGreen
-        { {0, 255, 255},            0xB },   // Index 11: brightCyan
-        { {255, 0, 0},              0xC },   // Index 12: brightRed
-        { {255, 0, 255},            0xD },   // Index 13: brightPurple
-        { {255, 255, 0},            0xE },   // Index 14: brightYellow
-        { {255, 255, 255},          0xF }    // Index 15: brightWhite
-    }};
+    static const glm::ivec3 kDefaultColors[COLOR_COUNT] = {
+        {0, 0, 0},       // black
+        {0, 0, 136},     // blue
+        {0, 136, 0},     // green
+        {0, 136, 136},   // cyan
+        {136, 0, 0},     // red
+        {136, 0, 136},   // purple/magenta
+        {136, 136, 0},   // yellow
+        {187, 187, 187}, // white/light gray
+        {136, 136, 136}, // bright black/dark gray
+        {0, 0, 255},     // bright blue
+        {0, 255, 0},     // bright green
+        {0, 255, 255},   // bright cyan
+        {255, 0, 0},     // bright red
+        {255, 0, 255},   // bright purple
+        {255, 255, 0},   // bright yellow
+        {255, 255, 255}, // bright white
+    };
+
+    for (unsigned int i = 0; i < COLOR_COUNT; ++i) {
+        entries[i] = PaletteEntry(kDefaultColors[i]);
+    }
 }
 
 Palette::Palette() {
@@ -192,7 +196,7 @@ Palette::Palette(
 
         for (int k = 0; k < K; ++k) {
             glm::ivec3 rgb = PaletteUtil::Linear1ToSrgb255(centers[k]);
-            entries[k] = PaletteEntry(rgb, static_cast<unsigned short>(k));
+            entries[k] = PaletteEntry(rgb);
         }
     } else {
         // No samples; fall back to default palette.
@@ -240,7 +244,7 @@ MonochromePalette::MonochromePalette(float darkL, float lightL, const glm::ivec3
 
         glm::ivec3 color = PaletteUtil::Linear1ToSrgb255(colorLin);
 
-        entries[i] = PaletteEntry(color, static_cast<unsigned short>(i));
+        entries[i] = PaletteEntry(color);
     }
 
     // Ensure entries are sorted by luminance (ascending)
@@ -316,7 +320,7 @@ MonochromePalette::MonochromePalette(std::array<PaletteEntry, 16> customEntries)
 MonochromePalette::MonochromePalette(
     const std::vector<std::pair<float, std::shared_ptr<Texture>>>& textures,
     const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays)
-    : Palette(textures, textureArrays, false)
+    : Palette(textures, textureArrays, true)
 {
     InferParamsFromEntries();
 }
@@ -367,21 +371,6 @@ unsigned int Palette::GetMaxLumIdx() const {
         }
     }
     return best;
-}
-
-unsigned short Palette::GetHex(unsigned int idx) const {
-    if (idx >= COLOR_COUNT) return 0x0;
-    return static_cast<unsigned short>(entries[idx].hex & 0xF);
-}
-
-unsigned short Palette::GetFgColor(unsigned int idx) const {
-    if (idx >= COLOR_COUNT) return 0x0;
-    return static_cast<unsigned short>(entries[idx].hex & 0xF);
-}
-
-unsigned short Palette::GetBgColor(unsigned int idx) const {
-    if (idx >= COLOR_COUNT) return 0x0;
-    return static_cast<unsigned short>((entries[idx].hex & 0xF) << 4);
 }
 
 } // namespace ASCIIgL

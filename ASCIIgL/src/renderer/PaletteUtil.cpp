@@ -33,9 +33,8 @@ glm::vec3 sRGB255ToLinear1(const glm::ivec3& c) {
     );
 }
 
-// Linear luminance (vec3 only)
 float LinearRGB_Luminance(const glm::vec3& c) {
-    return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+    return glm::dot(c, Rec709WeightsVec());
 }
 
 float sRGB255_Luminance(const glm::ivec3& c) {

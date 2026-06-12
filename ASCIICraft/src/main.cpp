@@ -61,6 +61,14 @@ static bool ParseRenderToTerminal(int argc, char* argv[]) {
     return renderToTerminal;
 }
 
+static bool ParseMulticolor(int argc, char* argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--color")
+            return true;
+    }
+    return false;
+}
+
 int main(int argc, char* argv[]) {
     // Initialize logging
     #ifdef NDEBUG
@@ -72,13 +80,14 @@ int main(int argc, char* argv[]) {
     ASCIIgL::Logger::Info("ASCIICraft starting...");
 
     bool renderToTerminal = ParseRenderToTerminal(argc, argv);
+    bool multicolor = ParseMulticolor(argc, argv);
 
     try {
         Game game;
         ConsoleHandlerScope closeHandler(&game);
 
         // Exit when user closes window or console (handled by ASCIIgL::Screen)
-        game.Run([]() { return ASCIIgL::Screen::GetInst().ShouldExit(); }, renderToTerminal);
+        game.Run([]() { return ASCIIgL::Screen::GetInst().ShouldExit(); }, renderToTerminal, multicolor);
     }
     catch (const std::exception& e) {
         ASCIIgL::Logger::Error("Game crashed with exception: " + std::string(e.what()));

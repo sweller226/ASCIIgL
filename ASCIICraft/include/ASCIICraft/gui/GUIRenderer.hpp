@@ -24,7 +24,8 @@ public:
                        int layer,
                        const std::shared_ptr<ASCIIgL::Mesh>& mesh,
                        const std::shared_ptr<ASCIIgL::Material>& material,
-                       bool meshUsesZeroToOneBounds = false) const;
+                       bool meshUsesZeroToOneBounds = false,
+                       const glm::mat4& localModel = glm::mat4(1.0f)) const;
 
     void RenderTextMesh(glm::vec2 topLeftPx,
                         int layer,

@@ -82,12 +82,15 @@ void GUIManager::Render() {
         const glm::vec2 cursorTopLeft = GetCursorDrawTopLeft();
         const entt::entity player = ecs::components::GetPlayerEntity(m_registry);
         if (player != entt::null && m_registry.valid(player)) {
+            if (m_cursorSurface.mesh && m_cursorSurface.material) {
+                m_renderer->RenderGUIQuad(
+                    cursorTopLeft, m_cursorSize, 9998, m_cursorSurface.mesh, m_cursorSurface.material);
+            }
+
             if (const auto* carried = m_registry.try_get<ecs::components::ItemCarried>(player)) {
                 DrawItemStackIcon(m_registry, *m_renderer, carried->stack, cursorTopLeft, m_cursorSize, 9999);
             }
-        }
-
-        if (m_cursorSurface.mesh && m_cursorSurface.material) {
+        } else if (m_cursorSurface.mesh && m_cursorSurface.material) {
             m_renderer->RenderGUIQuad(
                 cursorTopLeft, m_cursorSize, 10000, m_cursorSurface.mesh, m_cursorSurface.material);
         }

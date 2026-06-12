@@ -3,8 +3,6 @@
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include <string>
-
 namespace gui::text {
 
 enum class TextWrapMode {
@@ -30,8 +28,7 @@ enum class TextVAlign {
     Bottom,
 };
 
-struct TextLabel {
-    std::string meshKey;
+struct TextLabelStyle {
     glm::vec2 position{0.0f, 0.0f};
 
     float scale = 1.0f;
@@ -46,7 +43,7 @@ struct TextLabel {
 
     // Wrap width in pixels (<= 0 disables wrapping).
     float maxWidthPx = 0.0f;
-    // Optional label bounds for alignment/overflow logic.
+    // Layout/clip/alignment box in pixels (required for mesh build).
     glm::vec2 boundsPx{0.0f, 0.0f};
 
     // Color/tint placeholders for future shader support.

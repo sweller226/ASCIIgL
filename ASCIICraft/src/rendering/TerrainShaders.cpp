@@ -12,8 +12,6 @@ const char* GetTerrainVSSource() {
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
-    float4 gradientStart;   // Start color of gradient (dark)
-    float4 gradientEnd;     // End color of gradient (bright)
     float3 cameraPos;       // Camera world position for fog calculation
 };
 
@@ -62,8 +60,6 @@ SamplerState samplerState : register(s0);
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
-    float4 gradientStart;   // Start color of gradient (dark), alpha = unused
-    float4 gradientEnd;     // End color of gradient (bright), alpha = unused
     float3 cameraPos;       // Unused in PS but part of CBuffer layout
     float4 fogParams;       // x=start, y=end
     float3 fogColor;        // Color to fade to at distance (matches background)
@@ -116,8 +112,6 @@ float4 main(PS_INPUT input) : SV_TARGET
 ASCIIgL::UniformBufferLayout GetTerrainPSUniformLayout() {
     return ASCIIgL::UniformBufferLayout::Builder()
         .Add("mvp", ASCIIgL::UniformType::Mat4)
-        .Add("gradientStart", ASCIIgL::UniformType::Float4)
-        .Add("gradientEnd", ASCIIgL::UniformType::Float4)
         .Add("cameraPos", ASCIIgL::UniformType::Float3)
         .Add("fogParams", ASCIIgL::UniformType::Float4)
         .Add("fogColor", ASCIIgL::UniformType::Float3)

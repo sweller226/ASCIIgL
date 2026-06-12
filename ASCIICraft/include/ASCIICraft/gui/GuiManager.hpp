@@ -61,7 +61,7 @@ private:
     glm::vec2 m_screenSize{0.0f, 0.0f};
     glm::vec2 m_cursorHotspot{0.0f, 0.0f};
     glm::vec2 m_cursorSize{16.0f, 16.0f};
-    float m_cursorMoveSpeed = 32.0f;
+    float m_cursorMoveSpeed = 56.0f;
     GUISurface m_cursorSurface{};
     
     std::vector<GUIScreen*> m_screenStack;

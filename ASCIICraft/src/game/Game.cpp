@@ -33,6 +33,7 @@
 
 #include <ASCIICraft/gui/screens/PlayHUDScreen.hpp>
 #include <ASCIICraft/gui/screens/InventoryScreen.hpp>
+#include <ASCIICraft/gui/text/BitmapFont.hpp>
 
 // ecs components
 #include <ASCIICraft/ecs/components/Transform.hpp>
@@ -43,10 +44,8 @@
 #include <ASCIICraft/sound/SoundRegistry.hpp>
 
 // shaders
+#include <ASCIIgL/renderer/Shader.hpp>
 #include <ASCIICraft/rendering/TerrainShaders.hpp>
-#include <ASCIICraft/rendering/GUIShaders.hpp>
-#include <ASCIICraft/rendering/GUIBlockShaders.hpp>
-#include <ASCIICraft/rendering/GUITextShaders.hpp>
 
 Game::Game()
     : gameState(GameState::Playing)
@@ -79,25 +78,25 @@ Game::~Game() {
     Shutdown();
 }
 
-bool Game::Initialize(bool renderToTerminal) {
+bool Game::Initialize(bool renderToTerminal, bool multicolor) {
     ASCIIgL::Logger::Info("Initializing ASCIICraft...");
 
     ASCIIgL::Logger::Debug("Preloading textures for palette generation...");
 
-    LoadTextures();
+    LoadTextures(multicolor);
 
-    std::vector<std::pair<float, std::shared_ptr<ASCIIgL::Texture>>> textureWeights = {
-        {0.0f, ASCIIgL::TextureLibrary::GetInst().GetTexture("inventoryTexture")}
-    };
-
+    std::vector<std::pair<float, std::shared_ptr<ASCIIgL::Texture>>> textureWeights;
     std::vector<std::pair<float, std::shared_ptr<ASCIIgL::TextureArray>>> textureArrayWeights = {
-        {1.0f, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray")}
+        {1.0f, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray")},
+        {0.0f, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray")}
     };
 
-    ASCIIgL::MonochromePalette gamePalette(textureWeights, textureArrayWeights);
+    std::unique_ptr<ASCIIgL::Palette> gamePalette = multicolor
+        ? std::make_unique<ASCIIgL::Palette>(textureWeights, textureArrayWeights)
+        : std::make_unique<ASCIIgL::MonochromePalette>(textureWeights, textureArrayWeights);
 
     ASCIIgL::Logger::Debug("Initializing screen...");
-    if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette, renderToTerminal) != 0) {
+    if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, *gamePalette, renderToTerminal) != 0) {
         ASCIIgL::Logger::Error("Failed to initialize screen");
         return false;
     }
@@ -112,7 +111,7 @@ bool Game::Initialize(bool renderToTerminal) {
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
 
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
-    renderer.SetMonochromeDitherEnabled(true);
+    renderer.SetMonochromeDitherEnabled(!multicolor);
     renderer.SetBackgroundCol(glm::ivec3(255, 255, 255));
     renderer.SetWireframe(false);
     renderer.SetBackfaceCulling(true);
@@ -142,6 +141,11 @@ bool Game::Initialize(bool renderToTerminal) {
         return false;
     }
 
+    if (!LoadFont()) {
+        ASCIIgL::Logger::Error("Failed to load GUI font");
+        return false;
+    }
+
     ASCIIgL::Logger::Debug("Initializing GUI...");
     InitializeGUI();
 
@@ -154,8 +158,8 @@ bool Game::Initialize(bool renderToTerminal) {
     return true;
 }
 
-void Game::Run(std::function<bool()> shouldExternalExit, bool renderToTerminal) {
-    if (!Initialize(renderToTerminal)) {
+void Game::Run(std::function<bool()> shouldExternalExit, bool renderToTerminal, bool multicolor) {
+    if (!Initialize(renderToTerminal, multicolor)) {
         ASCIIgL::Logger::Error("Failed to initialize game");
         return;
     }
@@ -315,7 +319,7 @@ void Game::Shutdown() {
     ASCIIgL::Logger::Info("ASCIICraft shutdown complete");
 }
 
-bool Game::LoadTextures() {
+bool Game::LoadTextures(bool multicolor) {
     ASCIIgL::Logger::Info("Loading game textures...");
 
     // Alternative monochrome hue directions (console palette indices 0â€“15 per channel).
@@ -330,7 +334,7 @@ bool Game::LoadTextures() {
 
     // Build monochrome mapping from the current screen palette if possible.
     ASCIIgL::MonochromeMapping monoMap;
-    monoMap.enabled = true;
+    monoMap.enabled = !multicolor;
     monoMap.darkL = darkL;
     monoMap.lightL = lightL;
     monoMap.hueDir = NeutralGrayHue;
@@ -416,7 +420,7 @@ bool Game::LoadTerrainMaterial() {
         ASCIIgL::VertFormats::PosUVLayer(),
         TerrainShaders::GetTerrainPSUniformLayout(),
         true,
-        true,
+        false,
         [](ASCIIgL::Material& material) {
             auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
             if (!terrainTextureArray) {
@@ -433,10 +437,12 @@ bool Game::LoadGUIMaterial() {
     return ASCIIgL::BuildAndRegisterMaterial({
         "guiMaterial",
         "GUI",
-        GUIShaders::GetGUIVSSource(),
-        GUIShaders::GetGUIPSSource(),
+        ASCIIgL::DefaultShaders::GetDefaultVertexShaderSource(),
+        ASCIIgL::DefaultShaders::GetDefaultPixelShaderSource(),
         ASCIIgL::VertFormats::PosUV(),
-        GUIShaders::GetGUIPSUniformLayout()
+        ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
+        false,
+        false
     });
 }
 
@@ -444,12 +450,12 @@ bool Game::LoadGUIItemMaterial() {
     return ASCIIgL::BuildAndRegisterMaterial({
         "guiItemMaterial",
         "GUI item",
-        GUIShaders::GetItemVSSource(),
-        GUIShaders::GetItemPSSource(),
+        ASCIIgL::DefaultShaders::GetTextureArrayVertexShaderSource(),
+        ASCIIgL::DefaultShaders::GetTextureArrayPixelShaderSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
-        GUIShaders::GetItemPSUniformLayout(),
-        true,
-        true,
+        ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
+        false,
+        false,
         [](ASCIIgL::Material& material) {
             auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray");
             if (!itemTextureArray) {
@@ -466,12 +472,12 @@ bool Game::LoadGUIBlockMaterial() {
     return ASCIIgL::BuildAndRegisterMaterial({
         "guiBlockMaterial",
         "GUI block",
-        GUIBlockShaders::GetBlockVSSource(),
-        GUIBlockShaders::GetBlockPSSource(),
+        ASCIIgL::DefaultShaders::GetTextureArrayVertexShaderSource(),
+        ASCIIgL::DefaultShaders::GetTextureArrayPixelShaderSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
-        GUIBlockShaders::GetBlockPSUniformLayout(),
-        true,
-        true,
+        ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
+        false,
+        false,
         [](ASCIIgL::Material& material) {
             auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
             if (!terrainTextureArray) {
@@ -488,12 +494,12 @@ bool Game::LoadGUITextMaterial() {
     return ASCIIgL::BuildAndRegisterMaterial({
         "guiTextMaterial",
         "GUI text",
-        GUITextShaders::GetGUITextVSSource(),
-        GUITextShaders::GetGUITextPSSource(),
+        ASCIIgL::DefaultShaders::GetTextureArrayVertexShaderSource(),
+        ASCIIgL::DefaultShaders::GetTextureArrayPixelShaderSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
-        GUITextShaders::GetGUITextPSUniformLayout(),
-        true,
-        true,
+        ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
+        false,
+        false,
         [](ASCIIgL::Material& material) {
             auto fontTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("defaultFontTextureArray");
             if (!fontTextureArray) {
@@ -506,12 +512,30 @@ bool Game::LoadGUITextMaterial() {
     });
 }
 
+bool Game::LoadFont() {
+    constexpr int kDefaultFontStartingLayer = 33;
+    constexpr const char* kDefaultFontCharacters =
+        R"(!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~)";
+
+    auto guiFont = gui::text::LoadBitmapFont(
+        ASCIIgL::TextureLibrary::GetInst().GetTextureArray("defaultFontTextureArray"),
+        kDefaultFontStartingLayer,
+        kDefaultFontCharacters
+    );
+    if (!guiFont) {
+        ASCIIgL::Logger::Error("Failed to load default GUI bitmap font");
+        return false;
+    }
+
+    registry.ctx().emplace<std::shared_ptr<gui::text::BitmapFont>>(std::move(guiFont));
+    return true;
+}
+
 void Game::RenderPlaying() {
     // Keep 2D GUI camera in sync with viewport (GPU pipeline uses Screen dimensions; 2D ortho must match)
     GetWorldPtr(registry)->Render();
-
-    guiManager.Render();
     ecsRenderSystem.Render();
+    guiManager.Render();
 }
 
 void Game::InitializeWorld() {
@@ -851,7 +875,12 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterBlockItem(registry, "minecraft:brick_block",      "Bricks");
     itemRegistry.RegisterBlockItem(registry, "minecraft:furnace",          "Furnace");
     itemRegistry.RegisterBlockItem(registry, "minecraft:glass",            "Glass");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:torch",            "Torch");
+    itemRegistry.RegisterBlockItem(
+        registry,
+        "minecraft:torch",
+        "Torch",
+        64,
+        ecs::components::ItemGuiMeshTransform::DefaultTorch());
 
     // === Resources / Materials ===
     itemRegistry.RegisterResourceItem(registry, "minecraft:coal",       "Coal",       itemLayer("minecraft:items/coal"));
