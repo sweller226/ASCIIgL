@@ -32,10 +32,4 @@ const std::array<glm::vec3, VERTS_PER_FACE>& GetUnitFaceVerts(int faceIndex) {
     return kUnitFaceVerts[faceIndex];
 }
 
-std::vector<std::byte> PackVerts(const std::vector<V>& in) {
-    const auto* begin = reinterpret_cast<const std::byte*>(in.data());
-    const auto* end = begin + (in.size() * sizeof(V));
-    return std::vector<std::byte>(begin, end);
-}
-
 } // namespace blockmodels::modelbuilderutil

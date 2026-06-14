@@ -548,7 +548,7 @@ VSOut main(VSIn v) {
 )";
 
 const char* QUANTIZATION_PS_SRC = R"(
-#include "ColorMonochrome.hlsl"
+#include "ColorUtil.hlsl"
 
 Texture2D<float4> g_colorTex : register(t0);
 Texture1D<uint2>  g_lutTex    : register(t1);

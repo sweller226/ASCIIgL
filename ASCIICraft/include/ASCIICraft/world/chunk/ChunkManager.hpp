@@ -64,6 +64,7 @@ public:
 
     // Fog (used in RenderChunks; start/end are tied to render distance)
     void SetFogParams(const ChunkManagerFogParams& p) { fogParams_ = p; }
+    const ChunkManagerFogParams& GetFogParams() const { return fogParams_; }
     /// color: sRGB in [0,1] (shader linearizes before blending)
     void SetFogColor(const glm::vec3& color) { fogParams_.fogColor = color; }
 

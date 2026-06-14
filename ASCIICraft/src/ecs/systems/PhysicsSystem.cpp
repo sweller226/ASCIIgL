@@ -80,7 +80,7 @@ void PhysicsSystem::IntegrateEntities(float dt, const World &world) {
 
         v.ClampSpeed();
 
-        if (col && !col->disabled && stepComp && groundComp) {
+        if (col && !col->disabled) {
             ResolveAABBAgainstWorld(t, *col, v, dt, world, bsr, stepComp, groundComp);
         } else {
             t.setPosition(t.position + v.linear * dt);

@@ -21,7 +21,6 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     auto& t       = registry.emplace<components::Transform>(p_ent);
     registry.emplace<components::PlayerTag>(p_ent);  // Tag component (empty struct)
     auto& vel     = registry.emplace<components::Velocity>(p_ent);
-    auto& body    = registry.emplace<components::PhysicsBody>(p_ent);
     auto& grav    = registry.emplace<components::Gravity>(p_ent);
     auto& step    = registry.emplace<components::StepPhysics>(p_ent);
     auto& ground  = registry.emplace<components::GroundPhysics>(p_ent);

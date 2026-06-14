@@ -6,12 +6,49 @@
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 
+#include <ASCIICraft/world/World.hpp>
+#include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/ecs/components/Transform.hpp>
+
 namespace ecs::systems {
+namespace {
+
+void SyncDroppedItemFogParams(entt::registry& registry) {
+    World* world = GetWorldPtr(registry);
+    if (!world || !world->GetChunkManager()) {
+        return;
+    }
+
+    const ChunkManagerFogParams& fog = world->GetChunkManager()->GetFogParams();
+    const glm::vec4 fogParams(fog.fogStart, fog.fogEnd, 0.0f, 0.0f);
+
+    glm::vec3 cameraPos{0.0f};
+    const entt::entity player = components::GetPlayerEntity(registry);
+    if (player != entt::null) {
+        if (auto [pos, ok] = components::GetPos(player, registry); ok) {
+            cameraPos = pos;
+        }
+    }
+
+    for (const char* materialName : {"droppedItemMaterial", "droppedItemBlockMaterial"}) {
+        auto material = ASCIIgL::MaterialLibrary::GetInst().Get(materialName);
+        if (!material) {
+            continue;
+        }
+        material->SetFloat3("cameraPos", cameraPos);
+        material->SetFloat4("fogParams", fogParams);
+        material->SetFloat3("fogColor", fog.fogColor);
+    }
+}
+
+} // namespace
 
 RenderSystem::RenderSystem(entt::registry& registry)
     : m_registry(registry) {}
 
 void RenderSystem::Render() {
+    SyncDroppedItemFogParams(m_registry);
+
     auto view = m_registry.view<components::Transform, components::Renderable>();
 
     for (auto [ent, t, r] : view.each()) {
@@ -21,7 +58,8 @@ void RenderSystem::Render() {
 
         if (r.renderType == components::RenderType::ELEM_3D) {
             glm::mat4 model = r.billboard
-                ? m_active3DCamera->camera.GetBillboardMatrix(t.renderPosition, t.scale) : t.getRenderModel();
+                ? m_active3DCamera->camera.GetBillboardMatrix(t.renderPosition, t.scale)
+                : t.getRenderModel() * r.localModel;
             if (m_active3DCamera)
                 mvp = m_active3DCamera->camera.proj * m_active3DCamera->camera.view * model;
 

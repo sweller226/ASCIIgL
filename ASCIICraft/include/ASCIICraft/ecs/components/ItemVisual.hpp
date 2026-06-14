@@ -15,6 +15,7 @@ namespace ecs::components {
 /// processed by the render system.
 struct ItemVisual {
     std::shared_ptr<ASCIIgL::Mesh> mesh;
+    std::shared_ptr<ASCIIgL::Mesh> droppedMesh;
     bool is2DIcon = false;
 };
 

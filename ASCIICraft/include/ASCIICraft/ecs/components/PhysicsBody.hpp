@@ -13,18 +13,6 @@
 
 namespace ecs::components {
 
-struct PhysicsBody {
-    float mass{1.0f};
-    float invMass{1.0f};
-    float linearDamping{0.0f};
-    bool enabled{true};
-
-    void SetMass(float m) {
-        mass = m;
-        invMass = (m > 0.0f) ? (1.0f / m) : 0.0f;
-    }
-};
-
 struct Collider {
     glm::vec3 halfExtents{0.3f, 0.9f, 0.3f};
     glm::vec3 localOffset{0.0f};

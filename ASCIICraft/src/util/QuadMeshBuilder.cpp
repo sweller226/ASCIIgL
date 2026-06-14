@@ -1,11 +1,12 @@
 #include <ASCIICraft/util/QuadMeshBuilder.hpp>
+#include <ASCIICraft/util/MeshBuilderUtil.hpp>
 
 #include <ASCIIgL/engine/Mesh.hpp>
 #include <ASCIIgL/engine/Texture.hpp>
 #include <ASCIIgL/engine/TextureArray.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 
-#include <cstddef>
+#include <array>
 #include <vector>
 
 namespace util {
@@ -19,31 +20,64 @@ glm::vec4 PixelRectToUV(float atlasSize, int x, int y, int w, int h) {
     return {minU, topV, maxU, bottomV};
 }
 
-std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVQuad(ASCIIgL::Texture* texture) {
-    if (!texture) return nullptr;
+namespace {
 
-    using V = ASCIIgL::VertStructs::PosUV;
-    std::vector<V> vertices(4);
-    std::vector<int> indices{0, 1, 2, 0, 2, 3};
+using PosUV = ASCIIgL::VertStructs::PosUV;
+using PosUVLayer = ASCIIgL::VertStructs::PosUVLayer;
+using PosColor = ASCIIgL::VertStructs::PosColor;
 
-    // Camera2D is Y-down, so model y=-1 maps to screen-top and y=+1 maps to screen-bottom.
-    // D3D11 texture V=0 is top row.
-    vertices[0].SetXYZ({-1.0f, -1.0f, 0.0f}); vertices[0].SetUV({0.0f, 0.0f});
-    vertices[1].SetXYZ({-1.0f,  1.0f, 0.0f}); vertices[1].SetUV({0.0f, 1.0f});
-    vertices[2].SetXYZ({ 1.0f,  1.0f, 0.0f}); vertices[2].SetUV({1.0f, 1.0f});
-    vertices[3].SetXYZ({ 1.0f, -1.0f, 0.0f}); vertices[3].SetUV({1.0f, 0.0f});
+const std::array<glm::vec3, 4> kUnitQuadPositions = {{
+    {-1.0f, -1.0f, 0.0f},
+    {-1.0f,  1.0f, 0.0f},
+    { 1.0f,  1.0f, 0.0f},
+    { 1.0f, -1.0f, 0.0f},
+}};
 
-    std::vector<std::byte> byteVertices(
-        reinterpret_cast<std::byte*>(vertices.data()),
-        reinterpret_cast<std::byte*>(vertices.data()) + vertices.size() * sizeof(V)
-    );
+// Camera2D is Y-down, so model y=-1 maps to screen-top and y=+1 maps to screen-bottom.
+// D3D11 texture V=0 is top row.
+const std::array<glm::vec2, 4> kFullQuadUVs = {{
+    {0.0f, 0.0f},
+    {0.0f, 1.0f},
+    {1.0f, 1.0f},
+    {1.0f, 0.0f},
+}};
 
+std::shared_ptr<ASCIIgL::Mesh> MakePosUVMesh(
+    std::vector<std::byte> byteVertices,
+    std::vector<int> indices,
+    ASCIIgL::Texture* texture
+) {
     return std::make_shared<ASCIIgL::Mesh>(
         std::move(byteVertices),
         ASCIIgL::VertFormats::PosUV(),
         std::move(indices),
         texture
     );
+}
+
+std::shared_ptr<ASCIIgL::Mesh> MakePosUVLayerMesh(
+    std::vector<std::byte> byteVertices,
+    std::vector<int> indices,
+    ASCIIgL::TextureArray* textureArray
+) {
+    return std::make_shared<ASCIIgL::Mesh>(
+        std::move(byteVertices),
+        ASCIIgL::VertFormats::PosUVLayer(),
+        std::move(indices),
+        textureArray
+    );
+}
+
+} // namespace
+
+std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVQuad(ASCIIgL::Texture* texture) {
+    if (!texture) return nullptr;
+
+    std::vector<PosUV> vertices;
+    std::vector<int> indices;
+    AppendQuadPosUV(vertices, indices, kUnitQuadPositions, kFullQuadUVs);
+
+    return MakePosUVMesh(PackVerts(vertices), std::move(indices), texture);
 }
 
 std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVQuad(const std::shared_ptr<ASCIIgL::Texture>& texture) {
@@ -58,26 +92,18 @@ std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVQuad(ASCIIgL::Texture*
     const float u1 = uvRect.z;
     const float vBottom = uvRect.w;
 
-    using V = ASCIIgL::VertStructs::PosUV;
-    std::vector<V> vertices(4);
-    std::vector<int> indices{0, 1, 2, 0, 2, 3};
+    const std::array<glm::vec2, 4> uvs = {{
+        {u0, vTop},
+        {u0, vBottom},
+        {u1, vBottom},
+        {u1, vTop},
+    }};
 
-    vertices[0].SetXYZ({-1.0f, -1.0f, 0.0f}); vertices[0].SetUV({u0, vTop});
-    vertices[1].SetXYZ({-1.0f,  1.0f, 0.0f}); vertices[1].SetUV({u0, vBottom});
-    vertices[2].SetXYZ({ 1.0f,  1.0f, 0.0f}); vertices[2].SetUV({u1, vBottom});
-    vertices[3].SetXYZ({ 1.0f, -1.0f, 0.0f}); vertices[3].SetUV({u1, vTop});
+    std::vector<PosUV> vertices;
+    std::vector<int> indices;
+    AppendQuadPosUV(vertices, indices, kUnitQuadPositions, uvs);
 
-    std::vector<std::byte> byteVertices(
-        reinterpret_cast<std::byte*>(vertices.data()),
-        reinterpret_cast<std::byte*>(vertices.data()) + vertices.size() * sizeof(V)
-    );
-
-    return std::make_shared<ASCIIgL::Mesh>(
-        std::move(byteVertices),
-        ASCIIgL::VertFormats::PosUV(),
-        std::move(indices),
-        texture
-    );
+    return MakePosUVMesh(PackVerts(vertices), std::move(indices), texture);
 }
 
 std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVQuad(const std::shared_ptr<ASCIIgL::Texture>& texture, const glm::vec4& uvRect) {
@@ -87,26 +113,11 @@ std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVQuad(const std::shared
 std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVLayerQuad(ASCIIgL::TextureArray* textureArray, float layer) {
     if (!textureArray) return nullptr;
 
-    using V = ASCIIgL::VertStructs::PosUVLayer;
-    std::vector<V> vertices(4);
-    std::vector<int> indices{0, 1, 2, 0, 2, 3};
+    std::vector<PosUVLayer> vertices;
+    std::vector<int> indices;
+    AppendQuadPosUVLayer(vertices, indices, kUnitQuadPositions, kFullQuadUVs, layer);
 
-    vertices[0].SetXYZ({-1.0f, -1.0f, 0.0f}); vertices[0].SetUV({0.0f, 0.0f}); vertices[0].SetLayer(layer);
-    vertices[1].SetXYZ({-1.0f,  1.0f, 0.0f}); vertices[1].SetUV({0.0f, 1.0f}); vertices[1].SetLayer(layer);
-    vertices[2].SetXYZ({ 1.0f,  1.0f, 0.0f}); vertices[2].SetUV({1.0f, 1.0f}); vertices[2].SetLayer(layer);
-    vertices[3].SetXYZ({ 1.0f, -1.0f, 0.0f}); vertices[3].SetUV({1.0f, 0.0f}); vertices[3].SetLayer(layer);
-
-    std::vector<std::byte> byteVertices(
-        reinterpret_cast<std::byte*>(vertices.data()),
-        reinterpret_cast<std::byte*>(vertices.data()) + vertices.size() * sizeof(V)
-    );
-
-    return std::make_shared<ASCIIgL::Mesh>(
-        std::move(byteVertices),
-        ASCIIgL::VertFormats::PosUVLayer(),
-        std::move(indices),
-        textureArray
-    );
+    return MakePosUVLayerMesh(PackVerts(vertices), std::move(indices), textureArray);
 }
 
 std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVLayerQuad(const std::shared_ptr<ASCIIgL::TextureArray>& textureArray, float layer) {
@@ -114,22 +125,18 @@ std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosUVLayerQuad(const std::s
 }
 
 std::shared_ptr<ASCIIgL::Mesh> QuadMeshBuilder::BuildPosColorQuad(const glm::vec4& color) {
-    using V = ASCIIgL::VertStructs::PosColor;
-    std::vector<V> vertices(4);
-    std::vector<int> indices{0, 1, 2, 0, 2, 3};
+    std::array<PosColor, 4> corners{};
+    for (int i = 0; i < 4; ++i) {
+        corners[i].SetXYZ(kUnitQuadPositions[i]);
+        corners[i].SetColor(color);
+    }
 
-    vertices[0].SetXYZ({-1.0f, -1.0f, 0.0f}); vertices[0].SetColor(color);
-    vertices[1].SetXYZ({-1.0f,  1.0f, 0.0f}); vertices[1].SetColor(color);
-    vertices[2].SetXYZ({ 1.0f,  1.0f, 0.0f}); vertices[2].SetColor(color);
-    vertices[3].SetXYZ({ 1.0f, -1.0f, 0.0f}); vertices[3].SetColor(color);
-
-    std::vector<std::byte> byteVertices(
-        reinterpret_cast<std::byte*>(vertices.data()),
-        reinterpret_cast<std::byte*>(vertices.data()) + vertices.size() * sizeof(V)
-    );
+    std::vector<PosColor> vertices;
+    std::vector<int> indices;
+    AppendQuad(vertices, indices, corners);
 
     return std::make_shared<ASCIIgL::Mesh>(
-        std::move(byteVertices),
+        PackVerts(vertices),
         ASCIIgL::VertFormats::PosColor(),
         std::move(indices)
     );

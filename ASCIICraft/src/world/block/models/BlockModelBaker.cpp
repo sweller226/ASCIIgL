@@ -1,5 +1,6 @@
 #include <ASCIICraft/world/block/models/BlockModelBaker.hpp>
 #include <ASCIICraft/world/block/models/ModelBuilderUtil.hpp>
+#include <ASCIICraft/util/MeshBuilderUtil.hpp>
 
 #include <ASCIICraft/world/block/FaceCulling.hpp>
 #include <ASCIICraft/world/block/state/FaceDir.hpp>
@@ -324,7 +325,7 @@ jsonutil::LoadResult<blockstate::BlockModel> BakeResolvedModel(
                 packedVerts.push_back(v);
             }
 
-            std::vector<std::byte> vertBytes = modelbuilderutil::PackVerts(packedVerts);
+            std::vector<std::byte> vertBytes = util::PackVerts(packedVerts);
             layer.vertices.insert(layer.vertices.end(), vertBytes.begin(), vertBytes.end());
             for (int i = 0; i < modelbuilderutil::INDICES_PER_FACE; ++i) {
                 // Keep indices face-local (0..3). Append paths rebase with per-face destination base vertex.

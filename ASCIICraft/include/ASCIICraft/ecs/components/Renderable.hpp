@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include <glm/vec3.hpp>
+#include <glm/mat4x4.hpp>
 
 #include <ASCIIgL/renderer/Renderer.hpp>
 
@@ -30,6 +31,9 @@ struct Renderable {
     bool backfaceCulling{true};
     bool transparent{false};
     bool billboard{false};
+
+    /// Mesh-space transform applied after entity TRS (e.g. center 0..1 block item meshes on origin).
+    glm::mat4 localModel{1.0f};
 
     std::vector<ASCIIgL::Renderer::UniformOverride> overrides; // per-draw uniform overrides
 };

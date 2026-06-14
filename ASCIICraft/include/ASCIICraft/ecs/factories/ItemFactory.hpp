@@ -16,14 +16,6 @@ namespace ecs::factories {
 /// Inventory management is handled directly via the Inventory component.
 class ItemFactory {
 public:
-    /// Configuration for dropped item behavior
-    struct DroppedItemConfig {
-        float pickupRadius = 1.5f;      // Distance at which player can pick up
-        float pickupDelay = 0.5f;       // Delay before item can be picked up (seconds)
-        float lifetimeSeconds = 300.0f; // Time until despawn (5 minutes)
-        float spinSpeed = 2.0f;         // Rotation speed (radians/second)
-    };
-
     explicit ItemFactory(entt::registry& registry);
 
     /// Creates a dropped item entity from raw ItemStack data.
@@ -31,8 +23,7 @@ public:
         const ecs::components::ItemStack& itemStack,
         const glm::vec3& position,
         const glm::vec3& velocity = glm::vec3(0.0f),
-        std::shared_ptr<ASCIIgL::Mesh> mesh = nullptr,
-        const DroppedItemConfig& config = {}
+        std::shared_ptr<ASCIIgL::Mesh> mesh = nullptr
     );
 
     /// Creates a dropped item entity by numeric ID.
@@ -41,8 +32,7 @@ public:
         int itemId,
         int count,
         const glm::vec3& position,
-        const glm::vec3& velocity = glm::vec3(0.0f),
-        const DroppedItemConfig& config = {}
+        const glm::vec3& velocity = glm::vec3(0.0f)
     );
 
     /// Creates a dropped item entity by registry name (e.g., "minecraft:coal").
@@ -51,8 +41,7 @@ public:
         const std::string& itemName,
         int count,
         const glm::vec3& position,
-        const glm::vec3& velocity = glm::vec3(0.0f),
-        const DroppedItemConfig& config = {}
+        const glm::vec3& velocity = glm::vec3(0.0f)
     );
 
 private:
@@ -60,5 +49,4 @@ private:
 };
 
 } // namespace ecs::factories
-
 

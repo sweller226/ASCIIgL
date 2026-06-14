@@ -46,6 +46,7 @@
 // shaders
 #include <ASCIIgL/renderer/Shader.hpp>
 #include <ASCIICraft/rendering/TerrainShaders.hpp>
+#include <ASCIICraft/rendering/DroppedItemShaders.hpp>
 
 Game::Game()
     : gameState(GameState::Playing)
@@ -402,6 +403,7 @@ bool Game::LoadResources() {
     ASCIIgL::Logger::Info("Loading game resources...");
 
     if (!LoadTerrainMaterial())      return false;
+    if (!LoadDroppedItemMaterial())  return false;
     if (!LoadGUIMaterial())          return false;
     if (!LoadGUIItemMaterial())      return false;
     if (!LoadGUIBlockMaterial())     return false;
@@ -431,6 +433,45 @@ bool Game::LoadTerrainMaterial() {
             return true;
         }
     });
+}
+
+bool Game::LoadDroppedItemMaterial() {
+    if (!ASCIIgL::BuildAndRegisterMaterial({
+        "droppedItemBlockMaterial",
+        "dropped item block",
+        DroppedItemShaders::GetVSSource(),
+        DroppedItemShaders::GetPSSource(),
+        ASCIIgL::VertFormats::PosUVLayer(),
+        DroppedItemShaders::GetUniformLayout(),
+        true,
+        true,
+        [](ASCIIgL::Material& material) {
+            auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
+            if (!terrainTextureArray) {
+                ASCIIgL::Logger::Error("terrainTextureArray missing for dropped item block material");
+                return false;
+            }
+            material.SetTextureArray(0, terrainTextureArray.get());
+            return true;
+        }
+    })) {
+        return false;
+    }
+
+    auto iconMaterial = ASCIIgL::MaterialLibrary::GetInst().GetOrCreateFromTemplate(
+        "droppedItemBlockMaterial", "droppedItemMaterial");
+    if (!iconMaterial) {
+        ASCIIgL::Logger::Error("Failed to create droppedItemMaterial from template");
+        return false;
+    }
+
+    auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray");
+    if (!itemTextureArray) {
+        ASCIIgL::Logger::Error("itemTextureArray missing for dropped item material");
+        return false;
+    }
+    iconMaterial->SetTextureArray(0, itemTextureArray.get());
+    return true;
 }
 
 bool Game::LoadGUIMaterial() {

@@ -1,4 +1,5 @@
 #include <ASCIICraft/gui/text/TextLabelMeshBuilder.hpp>
+#include <ASCIICraft/util/MeshBuilderUtil.hpp>
 
 #include <ASCIIgL/engine/Mesh.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
@@ -100,8 +101,9 @@ TextLabelMesh TextLabelMeshBuilder::Build(const BitmapFont& font,
         const float spacing = (isSpace ? (font.wordSpacing + style.wordSpacing)
                                        : (font.letterSpacing + style.letterSpacing)) * scale;
 
-        // Clip overflow mode: stop emitting once glyph would exceed bounds.
-        if (pen.x + glyphW > boundsPx.x) break;
+        // Clip overflow mode: vertical clip always; horizontal clip only for left-aligned
+        // text. Right/center align lay out full width first, then shift into bounds.
+        if (style.horizontalAlign == TextHAlign::Left && pen.x + glyphW > boundsPx.x) break;
         if (pen.y + glyphH > boundsPx.y) break;
 
         const float x0 = pen.x;
@@ -117,18 +119,7 @@ TextLabelMesh TextLabelMeshBuilder::Build(const BitmapFont& font,
         V v2{}; v2.SetXYZ({x1, y1, 0.0f}); v2.SetUV({1.0f, 1.0f}); v2.SetLayer(layer);
         V v3{}; v3.SetXYZ({x1, y0, 0.0f}); v3.SetUV({1.0f, 0.0f}); v3.SetLayer(layer);
 
-        const int base = static_cast<int>(vertices.size());
-        vertices.push_back(v0);
-        vertices.push_back(v1);
-        vertices.push_back(v2);
-        vertices.push_back(v3);
-
-        indices.push_back(base + 0);
-        indices.push_back(base + 1);
-        indices.push_back(base + 2);
-        indices.push_back(base + 0);
-        indices.push_back(base + 2);
-        indices.push_back(base + 3);
+        util::AppendQuad(vertices, indices, {v0, v1, v2, v3});
 
         pen.x += (glyph.advance * scale) + spacing;
     }
@@ -148,15 +139,10 @@ TextLabelMesh TextLabelMeshBuilder::Build(const BitmapFont& font,
         }
     }
 
-    std::vector<std::byte> byteVertices(
-        reinterpret_cast<std::byte*>(vertices.data()),
-        reinterpret_cast<std::byte*>(vertices.data()) + vertices.size() * sizeof(V)
-    );
-
     TextLabelMesh result;
     result.contentSizePx = contentSizePx;
     result.mesh = std::make_shared<ASCIIgL::Mesh>(
-        std::move(byteVertices),
+        util::PackVerts(vertices),
         ASCIIgL::VertFormats::PosUVLayer(),
         std::move(indices),
         font.textureArray.get()

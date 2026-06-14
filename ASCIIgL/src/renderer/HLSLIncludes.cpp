@@ -8,7 +8,7 @@ namespace HLSLIncludes {
 
 namespace {
 
-std::string BuildColorMonochromeSource() {
+std::string BuildColorUtilSource() {
     const std::string rec709 = "float3("
         + std::to_string(PaletteUtil::Rec709R) + ", "
         + std::to_string(PaletteUtil::Rec709G) + ", "
@@ -47,17 +47,17 @@ float3 LinearLuminanceToGradientRGB(float luminance, float3 linearStart, float3 
 
 } // namespace
 
-const char* ColorMonochromeFileName() {
-    return "ColorMonochrome.hlsl";
+const char* ColorUtilFileName() {
+    return "ColorUtil.hlsl";
 }
 
-const char* ColorMonochromeSource() {
-    static const std::string source = BuildColorMonochromeSource();
+const char* ColorUtilSource() {
+    static const std::string source = BuildColorUtilSource();
     return source.c_str();
 }
 
 void AddToMap(ShaderIncludeMap& map) {
-    map[ColorMonochromeFileName()] = ColorMonochromeSource();
+    map[ColorUtilFileName()] = ColorUtilSource();
 }
 
 } // namespace HLSLIncludes

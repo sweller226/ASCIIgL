@@ -1,6 +1,7 @@
 #include <ASCIICraft/ecs/data/ItemRegistry.hpp>
 
 #include <ASCIICraft/util/QuadMeshBuilder.hpp>
+#include <ASCIICraft/rendering/items/DroppedItemIconMeshBuilder.hpp>
 #include <ASCIICraft/world/block/models/BlockModelMeshBuilder.hpp>
 #include <ASCIICraft/world/block/models/BlockModelLibrary.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
@@ -40,6 +41,7 @@ entt::entity ItemRegistry::RegisterBlockItem(
     auto& visual = reg.emplace<components::ItemVisual>(e);
     visual.is2DIcon = false;
     visual.mesh = buildBlockItemMesh(reg, e);
+    visual.droppedMesh = visual.mesh;
     reg.emplace<components::ItemGuiMeshTransform>(
         e,
         guiTransform.value_or(components::ItemGuiMeshTransform::DefaultBlockThirdPerson()));
@@ -56,6 +58,7 @@ entt::entity ItemRegistry::RegisterResourceItem(
     components::ItemVisual visual;
     visual.is2DIcon = true;
     visual.mesh = buildIconMesh(iconLayer);
+    visual.droppedMesh = buildDroppedIconMesh(iconLayer);
     reg.emplace<components::ItemDefinitionTag>(e);
     reg.emplace<components::ItemId>(e, id, name, display);
     reg.emplace<components::Stackable>(e, maxStack);
@@ -74,6 +77,7 @@ entt::entity ItemRegistry::RegisterToolItem(
     components::ItemVisual visual;
     visual.is2DIcon = true;
     visual.mesh = buildIconMesh(iconLayer);
+    visual.droppedMesh = buildDroppedIconMesh(iconLayer);
     reg.emplace<components::ItemDefinitionTag>(e);
     reg.emplace<components::ItemId>(e, id, name, display);
     reg.emplace<components::ItemVisual>(e, std::move(visual));
@@ -158,6 +162,14 @@ std::shared_ptr<ASCIIgL::Mesh> ItemRegistry::buildIconMesh(float iconLayer) cons
         return nullptr;
     }
     return util::QuadMeshBuilder::BuildPosUVLayerQuad(itemArray, iconLayer);
+}
+
+std::shared_ptr<ASCIIgL::Mesh> ItemRegistry::buildDroppedIconMesh(float iconLayer) const {
+    auto itemArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray");
+    if (!itemArray) {
+        return nullptr;
+    }
+    return rendering::items::DroppedItemIconMeshBuilder::Build(iconLayer, itemArray);
 }
 
 std::shared_ptr<ASCIIgL::Mesh> ItemRegistry::buildBlockItemMesh(

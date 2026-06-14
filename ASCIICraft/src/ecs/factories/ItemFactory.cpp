@@ -16,7 +16,14 @@
 #include <ASCIICraft/ecs/components/Stackable.hpp>
 #include <ASCIICraft/ecs/components/ItemId.hpp>
 
+#include <ASCIIgL/renderer/Material.hpp>
+
+#include <glm/gtc/matrix_transform.hpp>
+
 namespace ecs::factories {
+
+static constexpr float kDroppedItemIconScale = 0.45f;
+static constexpr float kDroppedItemBlockScale = 0.35f;
 
 ItemFactory::ItemFactory(entt::registry& registry) : registry(registry) {}
 
@@ -24,62 +31,78 @@ entt::entity ItemFactory::createDroppedItem(
     const ecs::components::ItemStack& itemStack,
     const glm::vec3& position,
     const glm::vec3& velocity,
-    std::shared_ptr<ASCIIgL::Mesh> mesh,
-    const DroppedItemConfig& config
+    std::shared_ptr<ASCIIgL::Mesh> mesh
 ) {
     using namespace ecs::components;
 
     entt::entity entity = registry.create();
 
-    // Position and movement
-    auto& transform = registry.emplace<Transform>(entity);
-    transform.setPosition(position);
-
     auto& vel = registry.emplace<Velocity>(entity);
     vel.linear = velocity;
 
-    // Physics
-    auto& body = registry.emplace<PhysicsBody>(entity);
-    body.SetMass(0.5f); // Light item
+    // Resolve prototype visual before transform/physics/render setup
+    std::shared_ptr<ASCIIgL::Mesh> resolvedMesh = mesh;
+    bool is2DIcon = false;
+
+    auto& itemRegistry = registry.ctx().get<data::ItemRegistry>();
+    const entt::entity proto = itemRegistry.Resolve(itemStack.itemId);
+
+    if (!resolvedMesh && proto != entt::null) {
+        if (auto* visual = registry.try_get<components::ItemVisual>(proto)) {
+            resolvedMesh = visual->droppedMesh ? visual->droppedMesh : visual->mesh;
+            is2DIcon = visual->is2DIcon;
+        }
+    } else if (proto != entt::null) {
+        if (auto* visual = registry.try_get<components::ItemVisual>(proto)) {
+            is2DIcon = visual->is2DIcon;
+        }
+    }
+
+    const float droppedScale = is2DIcon ? kDroppedItemIconScale : kDroppedItemBlockScale;
+
+    auto& transform = registry.emplace<Transform>(entity);
+    transform.setPosition(position);
+    transform.setScale(glm::vec3(droppedScale));
+
+    // Physics — collider feet aligned to mesh bottom (entity origin = visual center)
+    constexpr float kColliderHalf = 0.125f;
+    // Icon dropped meshes span -0.5..0.5 in Y (ModelUnitsToBlockCentered); blocks ditto after localModel pivot.
+    const float meshHalfHeight = 0.5f;
 
     auto& collider = registry.emplace<Collider>(entity);
-    collider.halfExtents = glm::vec3(0.125f); // Small cube collider
-    collider.localOffset = glm::vec3(0.0f);
+    collider.halfExtents = glm::vec3(kColliderHalf);
+    collider.localOffset = glm::vec3(
+        0.0f,
+        -meshHalfHeight * transform.scale.y + kColliderHalf,
+        0.0f
+    );
 
     registry.emplace<Gravity>(entity);
     registry.emplace<GroundPhysics>(entity);
 
-    // Rendering - try prototype entity mesh if none provided
-    std::shared_ptr<ASCIIgL::Mesh> resolvedMesh = mesh;
-
-    if (!resolvedMesh) {
-        auto& itemRegistry = registry.ctx().get<data::ItemRegistry>();
-        auto proto = itemRegistry.Resolve(itemStack.itemId);
-        if (proto != entt::null) {
-            if (auto* visual = registry.try_get<components::ItemVisual>(proto)) {
-                resolvedMesh = visual->mesh;
-            }
-        }
-    }
-
+    // Rendering
     if (resolvedMesh) {
+        const char* materialName = is2DIcon ? "droppedItemMaterial" : "droppedItemBlockMaterial";
+        auto material = ASCIIgL::MaterialLibrary::GetInst().Get(materialName);
+
         auto& renderable = registry.emplace<Renderable>(entity);
         renderable.renderType = RenderType::ELEM_3D;
         renderable.mesh = std::move(resolvedMesh);
+        renderable.material = material;
+        renderable.backfaceCulling = false;
+        if (!is2DIcon) {
+            // Block item meshes span 0..1 with origin at a corner; pivot to center for spin.
+            renderable.localModel = glm::translate(glm::mat4(1.0f), glm::vec3(-0.5f, -0.5f, -0.5f));
+        }
     }
 
     // Dropped item tag for system queries
     registry.emplace<DroppedItemTag>(entity);
 
-    // Pickup behavior
-    auto& pickup = registry.emplace<Pickup>(entity);
-    pickup.pickupRadius = config.pickupRadius;
-    pickup.pickupDelay = config.pickupDelay;
+    registry.emplace<Pickup>(entity);
 
-    // Lifetime for despawning
     auto& lifetime = registry.emplace<Lifetime>(entity);
-    lifetime.ageSeconds = 0.0f;
-    lifetime.maxLifetimeSeconds = config.lifetimeSeconds;
+    lifetime.maxLifetimeSeconds = 300.0f;
 
     // Store the item data on the entity for transfer on pickup
     registry.emplace<ItemStack>(entity, itemStack);
@@ -91,8 +114,7 @@ entt::entity ItemFactory::createDroppedItemById(
     int itemId,
     int count,
     const glm::vec3& position,
-    const glm::vec3& velocity,
-    const DroppedItemConfig& config
+    const glm::vec3& velocity
 ) {
     // Look up item in ItemRegistry
     auto& itemRegistry = registry.ctx().get<data::ItemRegistry>();
@@ -109,16 +131,18 @@ entt::entity ItemFactory::createDroppedItemById(
     stack.maxStackSize = stackable ? stackable->maxStackSize : 1;
 
     auto* visual = registry.try_get<components::ItemVisual>(proto);
-    std::shared_ptr<ASCIIgL::Mesh> defMesh = (visual && visual->mesh) ? visual->mesh : nullptr;
-    return createDroppedItem(stack, position, velocity, defMesh, config);
+    std::shared_ptr<ASCIIgL::Mesh> defMesh = nullptr;
+    if (visual) {
+        defMesh = visual->droppedMesh ? visual->droppedMesh : visual->mesh;
+    }
+    return createDroppedItem(stack, position, velocity, defMesh);
 }
 
 entt::entity ItemFactory::createDroppedItemByName(
     const std::string& itemName,
     int count,
     const glm::vec3& position,
-    const glm::vec3& velocity,
-    const DroppedItemConfig& config
+    const glm::vec3& velocity
 ) {
     // Look up item by name
     auto& itemRegistry = registry.ctx().get<data::ItemRegistry>();
@@ -134,7 +158,7 @@ entt::entity ItemFactory::createDroppedItemByName(
     }
 
     // Delegate to ID-based creation
-    return createDroppedItemById(itemIdComp->numericId, count, position, velocity, config);
+    return createDroppedItemById(itemIdComp->numericId, count, position, velocity);
 }
 
 } // namespace ecs::factories

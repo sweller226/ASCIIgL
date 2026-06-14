@@ -112,7 +112,7 @@ void GUIManager::BuildCursorSurface() {
         m_cursorSurface = {};
         return;
     }
-    m_cursorSurface = GUISurface::FromTexture(cursorTexture);
+    m_cursorSurface = GUISurface::FromTexture(cursorTexture, "guiMaterial.cursor");
 }
 
 void GUIManager::SetBaseScreen(GUIScreen* screen) {

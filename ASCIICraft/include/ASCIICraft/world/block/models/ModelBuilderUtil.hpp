@@ -21,6 +21,4 @@ const std::array<glm::vec2, VERTS_PER_FACE>& GetFaceUVs();
 const std::array<int, INDICES_PER_FACE>& GetFaceIndices();
 const std::array<glm::vec3, VERTS_PER_FACE>& GetUnitFaceVerts(int faceIndex);
 
-std::vector<std::byte> PackVerts(const std::vector<V>& in);
-
 } // namespace blockmodels::modelbuilderutil

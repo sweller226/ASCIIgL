@@ -1,5 +1,6 @@
 #include <ASCIICraft/world/block/models/CubeModelBuilder.hpp>
 #include <ASCIICraft/world/block/models/ModelBuilderUtil.hpp>
+#include <ASCIICraft/util/MeshBuilderUtil.hpp>
 
 #include <vector>
 
@@ -73,11 +74,10 @@ inline void AppendFace(
     const int sourceFaceIndex = SourceFaceForWorldFace(worldFaceIndex, spec.facing);
     const int layer = spec.faceLayers[sourceFaceIndex];
 
-    const int startIndex = static_cast<int>(verts.size());
     const auto& unitFaceVerts = modelbuilderutil::GetUnitFaceVerts(worldFaceIndex);
     const auto& faceUVs = modelbuilderutil::GetFaceUVs();
-    const auto& faceIndices = modelbuilderutil::GetFaceIndices();
 
+    std::array<V, modelbuilderutil::VERTS_PER_FACE> corners{};
     for (int vi = 0; vi < modelbuilderutil::VERTS_PER_FACE; ++vi) {
         const glm::vec3 pos = unitFaceVerts[vi];
 
@@ -90,16 +90,12 @@ inline void AppendFace(
         const float u = uv.x;
         const float v = 1.0f - uv.y;
 
-        V vert{};
-        vert.SetXYZ(pos);
-        vert.SetUV(glm::vec2(u, v));
-        vert.SetLayer(static_cast<float>(layer));
-        verts.push_back(vert);
+        corners[vi].SetXYZ(pos);
+        corners[vi].SetUV(glm::vec2(u, v));
+        corners[vi].SetLayer(static_cast<float>(layer));
     }
 
-    for (int i = 0; i < modelbuilderutil::INDICES_PER_FACE; ++i) {
-        indices.push_back(startIndex + faceIndices[i]);
-    }
+    util::AppendQuad(verts, indices, corners);
 }
 
 } // namespace
@@ -125,7 +121,7 @@ blockstate::BlockModel BuildCubeModel(const CubeSpec& spec) {
         f.idxOffset      = static_cast<int>(layer.indices.size());
         f.cardinalFace   = static_cast<uint8_t>(face);
 
-        std::vector<std::byte> packed = modelbuilderutil::PackVerts(verts);
+        std::vector<std::byte> packed = util::PackVerts(verts);
         f.vertByteCount = static_cast<int>(packed.size());
         f.idxCount      = static_cast<int>(indices.size());
 

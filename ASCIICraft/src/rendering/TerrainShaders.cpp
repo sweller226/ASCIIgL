@@ -52,7 +52,7 @@ const char* GetTerrainPSSource() {
         );
         
         return std::string(R"(
-#include "ColorMonochrome.hlsl"
+#include "ColorUtil.hlsl"
 
 Texture2DArray blockTextures : register(t0);
 SamplerState samplerState : register(s0);

@@ -70,7 +70,8 @@ InventoryScreen::InventoryScreen(entt::registry& registry,
                 kInventoryContainerX,
                 kInventoryContainerY,
                 kInventoryContainerW,
-                kInventoryContainerH
+                kInventoryContainerH,
+                "guiMaterial.inventory"
             );
         });
 

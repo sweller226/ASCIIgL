@@ -44,7 +44,9 @@ PlayHUDScreen::PlayHUDScreen(entt::registry& registry,
     auto widgetsTexture = ASCIIgL::TextureLibrary::GetInst().GetTexture("widgetsTexture");
     if (widgetsTexture) {
         m_hotbarBgSurface = surfaceLibrary.GetOrCreate("widgets.hotbar.bg", [&]() {
-            return GUISurface::FromAtlasRegion(widgetsTexture, kWidgetsAtlasSize, kHotbarBgX, kHotbarBgY, kHotbarBgW, kHotbarBgH);
+            return GUISurface::FromAtlasRegion(
+                widgetsTexture, kWidgetsAtlasSize, kHotbarBgX, kHotbarBgY, kHotbarBgW, kHotbarBgH,
+                "guiMaterial.widgets");
         });
 
         m_hotbarSelectionSurface = surfaceLibrary.GetOrCreate("widgets.hotbar.selection", [&]() {
@@ -54,7 +56,8 @@ PlayHUDScreen::PlayHUDScreen(entt::registry& registry,
                 kHotbarSelectionX,
                 kHotbarSelectionY,
                 kHotbarSelectionW,
-                kHotbarSelectionH
+                kHotbarSelectionH,
+                "guiMaterial.widgets"
             );
         });
     }

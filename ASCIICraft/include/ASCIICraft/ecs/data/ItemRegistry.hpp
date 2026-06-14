@@ -80,6 +80,7 @@ public:
 
 private:
     std::shared_ptr<ASCIIgL::Mesh> buildIconMesh(float iconLayer) const;
+    std::shared_ptr<ASCIIgL::Mesh> buildDroppedIconMesh(float iconLayer) const;
     std::shared_ptr<ASCIIgL::Mesh> buildBlockItemMesh(
         entt::registry& reg,
         entt::entity definitionEntity

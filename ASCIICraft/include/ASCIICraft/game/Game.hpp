@@ -121,6 +121,7 @@ private:
     // Loading
     bool LoadResources();
     bool LoadTerrainMaterial();
+    bool LoadDroppedItemMaterial();
     bool LoadGUIMaterial();
     bool LoadGUIItemMaterial();
     bool LoadGUIBlockMaterial();

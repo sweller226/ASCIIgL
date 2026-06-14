@@ -1,7 +1,10 @@
-#include <ASCIICraft/rendering/items/DropItemIconMeshBuilder.hpp>
+#include <ASCIICraft/rendering/items/DroppedItemIconMeshBuilder.hpp>
+
+#include <ASCIICraft/rendering/items/ItemModelSpace.hpp>
+#include <ASCIICraft/util/MeshBuilderUtil.hpp>
 
 #include <ASCIIgL/engine/Mesh.hpp>
-#include <ASCIIgL/engine/Texture.hpp>
+#include <ASCIIgL/engine/TextureArray.hpp>
 #include <ASCIIgL/renderer/VertFormat.hpp>
 
 #include <glm/vec2.hpp>
@@ -16,11 +19,7 @@
 namespace rendering::items {
 namespace {
 
-constexpr float kModelUnits = 16.0f;
-constexpr float kMinZ = 7.5f;
-constexpr float kMaxZ = 8.5f;
 constexpr float kUvShrink = 0.001f;
-constexpr float kToBlock = 1.0f / kModelUnits;
 constexpr int kAlphaThreshold = 1;
 
 enum class SideDirection { Up, Down, Left, Right };
@@ -36,12 +35,12 @@ bool IsHorizontal(SideDirection facing) {
     return facing == SideDirection::Up || facing == SideDirection::Down;
 }
 
-bool IsPixelTransparent(const ASCIIgL::Texture& texture, int x, int y) {
-    if (x < 0 || y < 0 || x >= texture.GetWidth() || y >= texture.GetHeight()) {
+bool IsPixelTransparent(const uint8_t* rgba, int width, int height, int x, int y) {
+    if (!rgba || x < 0 || y < 0 || x >= width || y >= height) {
         return true;
     }
-    const uint8_t* rgba = texture.GetPixelRGBAPtr(x, y);
-    return rgba[3] < kAlphaThreshold;
+    const int index = (y * width + x) * 4;
+    return rgba[index + 3] < kAlphaThreshold;
 }
 
 int NeighborX(SideDirection facing) {
@@ -109,13 +108,15 @@ void InsertOrMergeFace(std::set<SideFace, SideFaceLess>& sideFaces, SideFace fac
 void TryInsertFace(
     SideDirection facing,
     std::set<SideFace, SideFaceLess>& sideFaces,
-    const ASCIIgL::Texture& texture,
+    const uint8_t* rgba,
+    int width,
+    int height,
     int pixelX,
     int pixelY
 ) {
     const int neighborX = pixelX + NeighborX(facing);
     const int neighborY = pixelY + NeighborY(facing);
-    if (!IsPixelTransparent(texture, neighborX, neighborY)) {
+    if (!IsPixelTransparent(rgba, width, height, neighborX, neighborY)) {
         return;
     }
 
@@ -125,89 +126,61 @@ void TryInsertFace(
     InsertOrMergeFace(sideFaces, seed);
 }
 
-std::set<SideFace, SideFaceLess> BuildSideFaces(const ASCIIgL::Texture& texture) {
-    const int width = texture.GetWidth();
-    const int height = texture.GetHeight();
+std::set<SideFace, SideFaceLess> BuildSideFaces(const uint8_t* rgba, int width, int height) {
     std::set<SideFace, SideFaceLess> sideFaces;
 
     for (int pixelY = 0; pixelY < height; ++pixelY) {
         for (int pixelX = 0; pixelX < width; ++pixelX) {
-            if (IsPixelTransparent(texture, pixelX, pixelY)) {
+            if (IsPixelTransparent(rgba, width, height, pixelX, pixelY)) {
                 continue;
             }
 
-            TryInsertFace(SideDirection::Up, sideFaces, texture, pixelX, pixelY);
-            TryInsertFace(SideDirection::Down, sideFaces, texture, pixelX, pixelY);
-            TryInsertFace(SideDirection::Left, sideFaces, texture, pixelX, pixelY);
-            TryInsertFace(SideDirection::Right, sideFaces, texture, pixelX, pixelY);
+            TryInsertFace(SideDirection::Up, sideFaces, rgba, width, height, pixelX, pixelY);
+            TryInsertFace(SideDirection::Down, sideFaces, rgba, width, height, pixelX, pixelY);
+            TryInsertFace(SideDirection::Left, sideFaces, rgba, width, height, pixelX, pixelY);
+            TryInsertFace(SideDirection::Right, sideFaces, rgba, width, height, pixelX, pixelY);
         }
     }
 
     return sideFaces;
 }
 
-glm::vec3 ModelToWorld(float x, float y, float z) {
-    return glm::vec3(
-        x * kToBlock - 0.5f,
-        y * kToBlock - 0.5f,
-        z * kToBlock - 0.5f
-    );
-}
-
-using V = ASCIIgL::VertStructs::PosUV;
-
-void AppendQuad(
-    std::vector<V>& vertices,
-    std::vector<int>& indices,
-    const std::array<glm::vec3, 4>& positions,
-    const std::array<glm::vec2, 4>& uvs
-) {
-    const int base = static_cast<int>(vertices.size());
-    for (int i = 0; i < 4; ++i) {
-        V vertex;
-        vertex.SetXYZ(positions[i]);
-        vertex.SetUV(uvs[i]);
-        vertices.push_back(vertex);
-    }
-    indices.push_back(base + 0);
-    indices.push_back(base + 1);
-    indices.push_back(base + 2);
-    indices.push_back(base + 0);
-    indices.push_back(base + 2);
-    indices.push_back(base + 3);
-}
+using V = ASCIIgL::VertStructs::PosUVLayer;
 
 void AppendPlateFaces(
     std::vector<V>& vertices,
-    std::vector<int>& indices
+    std::vector<int>& indices,
+    float layer
 ) {
-    const float z0 = kMinZ;
-    const float z1 = kMaxZ;
+    const float z0 = kItemPlateMinZ;
+    const float z1 = kItemPlateMaxZ;
 
-    const glm::vec3 p000 = ModelToWorld(0.0f, 0.0f, z0);
-    const glm::vec3 p100 = ModelToWorld(kModelUnits, 0.0f, z0);
-    const glm::vec3 p110 = ModelToWorld(kModelUnits, kModelUnits, z0);
-    const glm::vec3 p010 = ModelToWorld(0.0f, kModelUnits, z0);
+    const glm::vec3 p000 = ModelUnitsToBlockCentered(0.0f, 0.0f, z0);
+    const glm::vec3 p100 = ModelUnitsToBlockCentered(kItemModelUnitsPerBlock, 0.0f, z0);
+    const glm::vec3 p110 = ModelUnitsToBlockCentered(kItemModelUnitsPerBlock, kItemModelUnitsPerBlock, z0);
+    const glm::vec3 p010 = ModelUnitsToBlockCentered(0.0f, kItemModelUnitsPerBlock, z0);
 
-    const glm::vec3 p001 = ModelToWorld(0.0f, 0.0f, z1);
-    const glm::vec3 p101 = ModelToWorld(kModelUnits, 0.0f, z1);
-    const glm::vec3 p111 = ModelToWorld(kModelUnits, kModelUnits, z1);
-    const glm::vec3 p011 = ModelToWorld(0.0f, kModelUnits, z1);
+    const glm::vec3 p001 = ModelUnitsToBlockCentered(0.0f, 0.0f, z1);
+    const glm::vec3 p101 = ModelUnitsToBlockCentered(kItemModelUnitsPerBlock, 0.0f, z1);
+    const glm::vec3 p111 = ModelUnitsToBlockCentered(kItemModelUnitsPerBlock, kItemModelUnitsPerBlock, z1);
+    const glm::vec3 p011 = ModelUnitsToBlockCentered(0.0f, kItemModelUnitsPerBlock, z1);
 
     // South (+Z): full layer0 texture.
-    AppendQuad(
+    util::AppendQuadPosUVLayer(
         vertices,
         indices,
         {p001, p101, p111, p011},
-        {glm::vec2(0.0f, 1.0f), glm::vec2(1.0f, 1.0f), glm::vec2(1.0f, 0.0f), glm::vec2(0.0f, 0.0f)}
+        {glm::vec2(0.0f, 1.0f), glm::vec2(1.0f, 1.0f), glm::vec2(1.0f, 0.0f), glm::vec2(0.0f, 0.0f)},
+        layer
     );
 
-    // North (-Z): mirrored for outward-facing winding.
-    AppendQuad(
+    // North (-Z): match south UV-to-corner mapping when viewed from outside.
+    util::AppendQuadPosUVLayer(
         vertices,
         indices,
-        {p100, p000, p010, p110},
-        {glm::vec2(0.0f, 1.0f), glm::vec2(1.0f, 1.0f), glm::vec2(1.0f, 0.0f), glm::vec2(0.0f, 0.0f)}
+        {p000, p100, p110, p010},
+        {glm::vec2(0.0f, 1.0f), glm::vec2(1.0f, 1.0f), glm::vec2(1.0f, 0.0f), glm::vec2(0.0f, 0.0f)},
+        layer
     );
 }
 
@@ -216,10 +189,11 @@ void AppendSideFace(
     std::vector<int>& indices,
     const SideFace& face,
     int spriteWidth,
-    int spriteHeight
+    int spriteHeight,
+    float layer
 ) {
-    const float xScale = kModelUnits / static_cast<float>(spriteWidth);
-    const float yScale = kModelUnits / static_cast<float>(spriteHeight);
+    const float xScale = kItemModelUnitsPerBlock / static_cast<float>(spriteWidth);
+    const float yScale = kItemModelUnitsPerBlock / static_cast<float>(spriteHeight);
     const bool horizontal = IsHorizontal(face.facing);
 
     const float minCoord = static_cast<float>(face.min);
@@ -276,8 +250,8 @@ void AppendSideFace(
     toX *= xScale;
     toY *= yScale;
 
-    fromY = kModelUnits - fromY;
-    toY = kModelUnits - toY;
+    fromY = kItemModelUnitsPerBlock - fromY;
+    toY = kItemModelUnitsPerBlock - toY;
 
     switch (face.facing) {
         case SideDirection::Right:
@@ -294,26 +268,28 @@ void AppendSideFace(
             break;
     }
 
-    const float tu0 = u0 * xScale;
-    const float tv0 = v0 * yScale;
-    const float tu1 = u1 * xScale;
-    const float tv1 = v1 * yScale;
+    const float invSpriteWidth = 1.0f / static_cast<float>(spriteWidth);
+    const float invSpriteHeight = 1.0f / static_cast<float>(spriteHeight);
+    const float tu0 = u0 * invSpriteWidth;
+    const float tv0 = v0 * invSpriteHeight;
+    const float tu1 = u1 * invSpriteWidth;
+    const float tv1 = v1 * invSpriteHeight;
 
     const float bx0 = std::min(fromX, toX);
     const float bx1 = std::max(fromX, toX);
     const float by0 = std::min(fromY, toY);
     const float by1 = std::max(fromY, toY);
-    const float bz0 = kMinZ;
-    const float bz1 = kMaxZ;
+    const float bz0 = kItemPlateMinZ;
+    const float bz1 = kItemPlateMaxZ;
 
-    const glm::vec3 p000 = ModelToWorld(bx0, by0, bz0);
-    const glm::vec3 p100 = ModelToWorld(bx1, by0, bz0);
-    const glm::vec3 p110 = ModelToWorld(bx1, by1, bz0);
-    const glm::vec3 p010 = ModelToWorld(bx0, by1, bz0);
-    const glm::vec3 p001 = ModelToWorld(bx0, by0, bz1);
-    const glm::vec3 p101 = ModelToWorld(bx1, by0, bz1);
-    const glm::vec3 p111 = ModelToWorld(bx1, by1, bz1);
-    const glm::vec3 p011 = ModelToWorld(bx0, by1, bz1);
+    const glm::vec3 p000 = ModelUnitsToBlockCentered(bx0, by0, bz0);
+    const glm::vec3 p100 = ModelUnitsToBlockCentered(bx1, by0, bz0);
+    const glm::vec3 p110 = ModelUnitsToBlockCentered(bx1, by1, bz0);
+    const glm::vec3 p010 = ModelUnitsToBlockCentered(bx0, by1, bz0);
+    const glm::vec3 p001 = ModelUnitsToBlockCentered(bx0, by0, bz1);
+    const glm::vec3 p101 = ModelUnitsToBlockCentered(bx1, by0, bz1);
+    const glm::vec3 p111 = ModelUnitsToBlockCentered(bx1, by1, bz1);
+    const glm::vec3 p011 = ModelUnitsToBlockCentered(bx0, by1, bz1);
 
     const glm::vec2 uv00(tu0, tv1);
     const glm::vec2 uv10(tu1, tv1);
@@ -322,26 +298,39 @@ void AppendSideFace(
 
     switch (face.facing) {
         case SideDirection::Up:
-            AppendQuad(vertices, indices, {p010, p110, p111, p011}, {uv00, uv10, uv11, uv01});
+            util::AppendQuadPosUVLayer(vertices, indices, {p010, p110, p111, p011}, {uv00, uv10, uv11, uv01}, layer);
             break;
         case SideDirection::Down:
-            AppendQuad(vertices, indices, {p100, p000, p001, p101}, {uv00, uv10, uv11, uv01});
+            util::AppendQuadPosUVLayer(vertices, indices, {p100, p000, p001, p101}, {uv00, uv10, uv11, uv01}, layer);
             break;
         case SideDirection::Left:
-            AppendQuad(vertices, indices, {p000, p010, p011, p001}, {uv00, uv10, uv11, uv01});
+            util::AppendQuadPosUVLayer(vertices, indices, {p000, p010, p011, p001}, {uv00, uv10, uv11, uv01}, layer);
             break;
         case SideDirection::Right:
-            AppendQuad(vertices, indices, {p110, p100, p101, p111}, {uv00, uv10, uv11, uv01});
+            util::AppendQuadPosUVLayer(vertices, indices, {p110, p100, p101, p111}, {uv00, uv10, uv11, uv01}, layer);
             break;
     }
 }
 
 } // namespace
 
-std::shared_ptr<ASCIIgL::Mesh> DropItemIconMeshBuilder::Build(
-    const std::shared_ptr<ASCIIgL::Texture>& texture
+std::shared_ptr<ASCIIgL::Mesh> DroppedItemIconMeshBuilder::Build(
+    float iconLayer,
+    const std::shared_ptr<ASCIIgL::TextureArray>& textureArray
 ) {
-    if (!texture || texture->GetWidth() <= 0 || texture->GetHeight() <= 0) {
+    if (!textureArray || !textureArray->IsValid()) {
+        return nullptr;
+    }
+
+    const int layer = static_cast<int>(iconLayer);
+    if (layer < 0 || layer >= textureArray->GetLayerCount()) {
+        return nullptr;
+    }
+
+    const int width = textureArray->GetMipWidth(0);
+    const int height = textureArray->GetMipHeight(0);
+    const uint8_t* rgba = textureArray->GetLayerData(layer, 0);
+    if (!rgba || width <= 0 || height <= 0) {
         return nullptr;
     }
 
@@ -350,27 +339,22 @@ std::shared_ptr<ASCIIgL::Mesh> DropItemIconMeshBuilder::Build(
     vertices.reserve(256);
     indices.reserve(384);
 
-    AppendPlateFaces(vertices, indices);
+    AppendPlateFaces(vertices, indices, iconLayer);
 
-    const std::set<SideFace, SideFaceLess> sideFaces = BuildSideFaces(*texture);
+    const std::set<SideFace, SideFaceLess> sideFaces = BuildSideFaces(rgba, width, height);
     for (const SideFace& face : sideFaces) {
-        AppendSideFace(vertices, indices, face, texture->GetWidth(), texture->GetHeight());
+        AppendSideFace(vertices, indices, face, width, height, iconLayer);
     }
 
     if (vertices.empty() || indices.empty()) {
         return nullptr;
     }
 
-    std::vector<std::byte> byteVertices(
-        reinterpret_cast<std::byte*>(vertices.data()),
-        reinterpret_cast<std::byte*>(vertices.data()) + vertices.size() * sizeof(V)
-    );
-
     return std::make_shared<ASCIIgL::Mesh>(
-        std::move(byteVertices),
-        ASCIIgL::VertFormats::PosUV(),
+        util::PackVerts(vertices),
+        ASCIIgL::VertFormats::PosUVLayer(),
         std::move(indices),
-        texture.get()
+        textureArray.get()
     );
 }
 
