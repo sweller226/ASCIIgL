@@ -47,6 +47,7 @@
 #include <ASCIIgL/renderer/Shader.hpp>
 #include <ASCIICraft/rendering/TerrainShaders.hpp>
 #include <ASCIICraft/rendering/DroppedItemShaders.hpp>
+#include <ASCIICraft/rendering/BlockTargetOutlineShaders.hpp>
 
 Game::Game()
     : gameState(GameState::Playing)
@@ -54,6 +55,7 @@ Game::Game()
     , gameplayInputFilter(inputSystem)
     , movementSystem(registry, gameplayInputFilter, eventBus)
     , physicsSystem(registry)
+    , blockTargetSystem(registry)
     , ecsRenderSystem(registry)
     , cameraSystem(registry, gameplayInputFilter)
     , guiManager(registry, eventBus, inputSystem)
@@ -231,15 +233,18 @@ void Game::Update() {
 
             hotbarSystem.Update();
 
-            miningSystem.Update();
-            placingSystem.Update();
-            blockUpdateSystem.Update();
-            
-            particleSystem.Update();
-
             movementSystem.Update();
             cameraSystem.Update();
             physicsSystem.Update();
+
+            blockTargetSystem.SetGameplayActive(!guiBlocking);
+            blockTargetSystem.Update();
+
+            miningSystem.Update();
+            placingSystem.Update();
+            blockUpdateSystem.Update();
+
+            particleSystem.Update();
 
             droppedItemSystem.Update();
             inventorySystem.Update();
@@ -407,7 +412,8 @@ bool Game::LoadResources() {
     if (!LoadGUIMaterial())          return false;
     if (!LoadGUIItemMaterial())      return false;
     if (!LoadGUIBlockMaterial())     return false;
-    if (!LoadGUITextMaterial())      return false;
+    if (!LoadGUITextMaterial())           return false;
+    if (!LoadBlockTargetOutlineMaterial()) return false;
 
     ASCIIgL::Logger::Info("Resources loaded successfully");
     return true;
@@ -416,7 +422,6 @@ bool Game::LoadResources() {
 bool Game::LoadTerrainMaterial() {
     return ASCIIgL::BuildAndRegisterMaterial({
         "blockMaterial",
-        "terrain",
         TerrainShaders::GetTerrainVSSource(),
         TerrainShaders::GetTerrainPSSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
@@ -438,7 +443,6 @@ bool Game::LoadTerrainMaterial() {
 bool Game::LoadDroppedItemMaterial() {
     if (!ASCIIgL::BuildAndRegisterMaterial({
         "droppedItemBlockMaterial",
-        "dropped item block",
         DroppedItemShaders::GetVSSource(),
         DroppedItemShaders::GetPSSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
@@ -477,7 +481,6 @@ bool Game::LoadDroppedItemMaterial() {
 bool Game::LoadGUIMaterial() {
     return ASCIIgL::BuildAndRegisterMaterial({
         "guiMaterial",
-        "GUI",
         ASCIIgL::DefaultShaders::GetDefaultVertexShaderSource(),
         ASCIIgL::DefaultShaders::GetDefaultPixelShaderSource(),
         ASCIIgL::VertFormats::PosUV(),
@@ -490,7 +493,6 @@ bool Game::LoadGUIMaterial() {
 bool Game::LoadGUIItemMaterial() {
     return ASCIIgL::BuildAndRegisterMaterial({
         "guiItemMaterial",
-        "GUI item",
         ASCIIgL::DefaultShaders::GetTextureArrayVertexShaderSource(),
         ASCIIgL::DefaultShaders::GetTextureArrayPixelShaderSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
@@ -512,7 +514,6 @@ bool Game::LoadGUIItemMaterial() {
 bool Game::LoadGUIBlockMaterial() {
     return ASCIIgL::BuildAndRegisterMaterial({
         "guiBlockMaterial",
-        "GUI block",
         ASCIIgL::DefaultShaders::GetTextureArrayVertexShaderSource(),
         ASCIIgL::DefaultShaders::GetTextureArrayPixelShaderSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
@@ -534,7 +535,6 @@ bool Game::LoadGUIBlockMaterial() {
 bool Game::LoadGUITextMaterial() {
     return ASCIIgL::BuildAndRegisterMaterial({
         "guiTextMaterial",
-        "GUI text",
         ASCIIgL::DefaultShaders::GetTextureArrayVertexShaderSource(),
         ASCIIgL::DefaultShaders::GetTextureArrayPixelShaderSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
@@ -550,6 +550,18 @@ bool Game::LoadGUITextMaterial() {
             material.SetTextureArray(0, fontTextureArray.get());
             return true;
         }
+    });
+}
+
+bool Game::LoadBlockTargetOutlineMaterial() {
+    return ASCIIgL::BuildAndRegisterMaterial({
+        "blockTargetOutlineMaterial",
+        BlockTargetOutlineShaders::GetVSSource(),
+        BlockTargetOutlineShaders::GetPSSource(),
+        ASCIIgL::VertFormats::PosColor(),
+        BlockTargetOutlineShaders::GetUniformLayout(),
+        false,
+        false
     });
 }
 
@@ -575,6 +587,7 @@ bool Game::LoadFont() {
 void Game::RenderPlaying() {
     // Keep 2D GUI camera in sync with viewport (GPU pipeline uses Screen dimensions; 2D ortho must match)
     GetWorldPtr(registry)->Render();
+    // blockTargetSystem.Render(); // Outline rendering disabled for now.
     ecsRenderSystem.Render();
     guiManager.Render();
 }

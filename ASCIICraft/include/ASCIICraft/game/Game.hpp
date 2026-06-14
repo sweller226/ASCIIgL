@@ -39,6 +39,7 @@
 #include <ASCIICraft/ecs/systems/InventorySystem.hpp>
 #include <ASCIICraft/ecs/systems/DroppedItemSystem.hpp>
 #include <ASCIICraft/ecs/systems/HotbarSystem.hpp>
+#include <ASCIICraft/ecs/systems/BlockTargetSystem.hpp>
 
 // event systems
 #include <ASCIIgL/util/EventBus.hpp>
@@ -86,6 +87,7 @@ private:
     ecs::systems::MovementSystem movementSystem;
     ecs::systems::CameraSystem cameraSystem;
     ecs::systems::PhysicsSystem physicsSystem;
+    ecs::systems::BlockTargetSystem blockTargetSystem;
     ecs::systems::RenderSystem ecsRenderSystem;
     ecs::systems::LifetimeSystem lifetimeSystem;
     ecs::systems::ParticleSystem particleSystem;
@@ -126,6 +128,7 @@ private:
     bool LoadGUIItemMaterial();
     bool LoadGUIBlockMaterial();
     bool LoadGUITextMaterial();
+    bool LoadBlockTargetOutlineMaterial();
     bool LoadFont();
 
     bool LoadTextures(bool multicolor);

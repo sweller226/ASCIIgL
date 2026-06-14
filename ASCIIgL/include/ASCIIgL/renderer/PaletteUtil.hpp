@@ -37,6 +37,12 @@ namespace PaletteUtil {
     float LinearRGB_Luminance(const glm::vec3& c);
 
     // -------------------------
+    // Oklab (perceptual color space, linear RGB 0–1 input)
+    // -------------------------
+
+    glm::vec3 Linear1ToOklab(const glm::vec3& c);
+
+    // -------------------------
     // Linear → sRGB
     // -------------------------
 

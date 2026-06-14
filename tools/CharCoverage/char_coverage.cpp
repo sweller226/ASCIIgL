@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cmath>
 #include <vector>
 #include <string>
 
@@ -53,6 +54,44 @@ static bool coverageEqual(const std::vector<float>& a, const std::vector<float>&
         if (a[i] != b[i]) return false;
     }
     return true;
+}
+
+// sRGB transfer (0-1), matching ASCIIgL PaletteUtil / renderer LUT linear blending.
+static float linear1ToSrgb1(float c) {
+    if (c <= 0.0031308f) return 12.92f * c;
+    return 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
+}
+
+static float srgb1ToLinear1(float s) {
+    if (s <= 0.04045f) return s / 12.92f;
+    return std::pow((s + 0.055f) / 1.055f, 2.4f);
+}
+
+// Perceptual effective coverage for white-on-black: linear c such that srgb(c) equals
+// mean display brightness of the glyph cell (Method 1 for LUT: c * fg + (1-c) * bg in linear).
+static float perceptualEffectiveCoverageFromAlphaBytes(
+    const BYTE* buffer,
+    int w,
+    int h,
+    size_t bytesPerPixel,
+    double cellArea
+) {
+    double perceptualSum = 0.0;
+    if (bytesPerPixel == 1u) {
+        const size_t count = (size_t)w * (size_t)h;
+        for (size_t i = 0; i < count; ++i)
+            perceptualSum += linear1ToSrgb1(buffer[i] / 255.0f);
+    } else {
+        const size_t pixelCount = (size_t)w * (size_t)h;
+        for (size_t p = 0; p < pixelCount; ++p) {
+            size_t base = p * 3u;
+            float a = (buffer[base] + buffer[base + 1] + buffer[base + 2]) / (3.0f * 255.0f);
+            perceptualSum += linear1ToSrgb1(a);
+        }
+    }
+    // Pixels outside the glyph bounds (rest of the cell) are zero coverage → srgb(0) = 0.
+    const double perceptualMean = perceptualSum / cellArea;
+    return srgb1ToLinear1((float)perceptualMean);
 }
 
 // Cell size in pixels at given point size and DPI. Square cell (line height 1) so X and Y match.
@@ -174,17 +213,13 @@ static float computeCoverage(
         return -1.f;
     }
 
-    double sum = 0.0;
-    for (size_t i = 0; i < bufferSize; ++i)
-        sum += buffer[i];
-
-    // Normalize by fixed square cell (line height 1, cell width 1) so coverage = fraction of cell filled.
-    // With pixelsPerDip 1.0, texture bounds are in pixels where 1 px = 1 DIP; cell = fontEmSizeDIP x fontEmSizeDIP.
+    // Perceptual effective coverage: c = srgb_to_linear(mean(srgb(alpha_p))) over the full cell.
+    // Matches LUT linear blend (c * fg + (1-c) * bg) better than mean linear alpha alone.
     float cellPx = fontEmSizeDIP * pixelsPerDip;
     if (cellPx < 1.0f) cellPx = 1.0f;
     double cellArea = (double)(cellPx * cellPx);
-    double maxSumPerCell = 255.0 * (double)bytesPerPixel * cellArea;
-    float coverage = (float)(sum / maxSumPerCell);
+    float coverage = perceptualEffectiveCoverageFromAlphaBytes(
+        buffer.data(), w, h, bytesPerPixel, cellArea);
     if (coverage > 1.0f) coverage = 1.0f;
     if (coverage < 0.0f) coverage = 0.0f;
     return coverage;

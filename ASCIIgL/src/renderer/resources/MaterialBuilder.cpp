@@ -15,8 +15,6 @@ bool BuildAndRegisterMaterial(const MaterialBuildDesc& desc) {
         return false;
     }
 
-    const std::string label = desc.label ? desc.label : desc.registryName;
-
     auto vs = Shader::CreateFromSource(desc.vsSource, ShaderType::Vertex);
 
     std::unique_ptr<Shader> ps;
@@ -30,12 +28,12 @@ bool BuildAndRegisterMaterial(const MaterialBuildDesc& desc) {
 
     if (!vs || !vs->IsValid()) {
         const std::string err = vs ? vs->GetCompileError() : "allocation failed";
-        Logger::Error("Failed to compile " + label + " vertex shader: " + err);
+        Logger::Error(std::string("Failed to compile ") + desc.registryName + " vertex shader: " + err);
         return false;
     }
     if (!ps || !ps->IsValid()) {
         const std::string err = ps ? ps->GetCompileError() : "allocation failed";
-        Logger::Error("Failed to compile " + label + " pixel shader: " + err);
+        Logger::Error(std::string("Failed to compile ") + desc.registryName + " pixel shader: " + err);
         return false;
     }
 
@@ -45,13 +43,13 @@ bool BuildAndRegisterMaterial(const MaterialBuildDesc& desc) {
         desc.psLayout
     );
     if (!program || !program->IsValid()) {
-        Logger::Error("Failed to create " + label + " shader program");
+        Logger::Error(std::string("Failed to create ") + desc.registryName + " shader program");
         return false;
     }
 
     auto material = Material::Create(std::move(program));
     if (!material) {
-        Logger::Error("Failed to create " + label + " material");
+        Logger::Error(std::string("Failed to create ") + desc.registryName + " material");
         return false;
     }
 

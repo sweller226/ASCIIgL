@@ -409,6 +409,7 @@ void Renderer::PrecomputeMultiColorLUT(Palette& palette) {
                     b * invPaletteDepth
                 );
                 glm::vec3 targetLinear = srgbToLinearVec(targetSRGB);
+                glm::vec3 targetOklab = PaletteUtil::Linear1ToOklab(targetLinear);
 
                 float minError = FLT_MAX;
                 int bestFgIndex = 0, bestBgIndex = 0, bestCharIndex = 0;
@@ -420,8 +421,8 @@ void Renderer::PrecomputeMultiColorLUT(Palette& palette) {
                         for (int charIdx = 0; charIdx < static_cast<int>(impl_->_charRamp.size()); ++charIdx) {
                             float coverage = impl_->_charCoverage[charIdx];
                             glm::vec3 simLinear = coverage * fgLinear + (1.0f - coverage) * bgLinear;
-                            glm::vec3 diff = targetLinear - simLinear;
-                            float error = glm::dot(PaletteUtil::Rec709WeightsVec(), diff * diff);
+                            glm::vec3 diff = targetOklab - PaletteUtil::Linear1ToOklab(simLinear);
+                            float error = glm::dot(diff, diff);
                             if (error < minError) {
                                 minError = error;
                                 bestFgIndex = fgIdx;
