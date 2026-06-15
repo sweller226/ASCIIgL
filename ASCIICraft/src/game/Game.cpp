@@ -114,7 +114,7 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
 
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
-    renderer.SetMonochromeDitherEnabled(!multicolor);
+    renderer.SetDitheringEnabled(false);
     renderer.SetBackgroundCol(glm::ivec3(255, 255, 255));
     renderer.SetWireframe(false);
     renderer.SetBackfaceCulling(true);
@@ -205,6 +205,10 @@ void Game::Update() {
     const auto mode = guiBlocking ? input::InputMode::GUI : input::InputMode::Gameplay;
     inputSystem.SetInputMode(mode);
     inputSystem.Update();
+
+    if (ASCIIgL::InputManager::GetInst().IsKeyDown(ASCIIgL::Key::K)) {
+        ASCIIgL::Renderer::GetInst().SetDitheringEnabled(!ASCIIgL::Renderer::GetInst().GetDitheringEnabled());
+    }
 
     for ([[maybe_unused]] const auto& e : eventBus.view<events::ToggleInventoryEvent>()) {
         if (!inventoryScreen_) continue;

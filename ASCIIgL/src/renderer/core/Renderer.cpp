@@ -628,14 +628,14 @@ ShaderProgram* Renderer::GetBoundShaderProgram() const {
     return impl_ ? impl_->_boundShaderProgram : nullptr;
 }
 
-void Renderer::SetMonochromeDitherEnabled(bool enabled) {
-    if (!impl_ || impl_->_monochromeDitherEnabled == enabled) return;
-    impl_->_monochromeDitherEnabled = enabled;
+void Renderer::SetDitheringEnabled(bool enabled) {
+    if (!impl_ || impl_->_ditheringEnabled == enabled) return;
+    impl_->_ditheringEnabled = enabled;
     impl_->_lutGpuResourcesDirty = true;
 }
 
-bool Renderer::GetMonochromeDitherEnabled() const {
-    return impl_ && impl_->_monochromeDitherEnabled;
+bool Renderer::GetDitheringEnabled() const {
+    return impl_ && impl_->_ditheringEnabled;
 }
 
 } // namespace ASCIIgL

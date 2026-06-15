@@ -207,8 +207,8 @@ public:
 
     /// Enables 4x4 Bayer ordered dithering for the monochrome LUT path.
     /// Default: false.
-    void SetMonochromeDitherEnabled(bool enabled);
-    bool GetMonochromeDitherEnabled() const;
+    void SetDitheringEnabled(bool enabled);
+    bool GetDitheringEnabled() const;
 
     /// Anisotropic filtering level for texture arrays. Valid: 1 (off), 2, 4, 8, 16. Default 16.
     void SetMaxAnisotropy(int level);

@@ -598,11 +598,35 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
         uint idx = (uint)clamp(fIdx, 0.0, 1023.0);
         o.glyph_attr = g_lutTex[idx];
     } else {
-        // LUT is keyed by sRGB-quantized (r/15,g/15,b/15), not linear. Convert scene linear -> sRGB -> 0..15.
         float3 srgb = linearToSRGB(rgb);
-        uint r16 = (uint)(saturate(srgb.r) * 15.0 + 0.5);
-        uint g16 = (uint)(saturate(srgb.g) * 15.0 + 0.5);
-        uint b16 = (uint)(saturate(srgb.b) * 15.0 + 0.5);
+        float3 cont = saturate(srgb) * 15.0;  // continuous [0.0, 15.0] per channel
+
+        uint r16, g16, b16;
+
+        if (ditherEnabled != 0u) {
+            uint px = (uint)pos.x;
+            uint py = (uint)pos.y;
+            float bayerNorm = (float)(BAYER4[(py & 3u) * 4u + (px & 3u)]) / 16.0;
+
+            float3 base = floor(cont);
+            float3 fr   = cont - base;  // per-channel fractional part
+
+            float3 dithered = base + float3(
+                fr.r > bayerNorm ? 1.0 : 0.0,
+                fr.g > bayerNorm ? 1.0 : 0.0,
+                fr.b > bayerNorm ? 1.0 : 0.0
+            );
+
+            r16 = (uint)clamp(dithered.r, 0.0, 15.0);
+            g16 = (uint)clamp(dithered.g, 0.0, 15.0);
+            b16 = (uint)clamp(dithered.b, 0.0, 15.0);
+        } else {
+            // Original: round to nearest
+            r16 = (uint)(cont.r + 0.5);
+            g16 = (uint)(cont.g + 0.5);
+            b16 = (uint)(cont.b + 0.5);
+        }
+
         uint idx = r16 * 256u + g16 * 16u + b16;
         o.glyph_attr = g_lutTex[idx];
     }
@@ -748,7 +772,7 @@ void Renderer::UploadLUTsToGPU() {
     cb.Lmin = impl_->_monochromeLUT.empty() ? 0.f : impl_->_monochromeLUT.front().first;
     cb.Lmax = impl_->_monochromeLUT.empty() ? 1.f : impl_->_monochromeLUT.back().first;
     cb.isMonochrome = (impl_->_colorLUTState == ColorLUTState::Monochrome) ? 1u : 0u;
-    cb.ditherEnabled = impl_->_monochromeDitherEnabled ? 1u : 0u;
+    cb.ditherEnabled = impl_->_ditheringEnabled ? 1u : 0u;
 
     D3D11_BUFFER_DESC cbd = {};
     cbd.ByteWidth = sizeof(LutConstants);

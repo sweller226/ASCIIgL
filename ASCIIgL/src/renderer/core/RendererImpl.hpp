@@ -120,7 +120,7 @@ struct Renderer::Impl {
     static constexpr size_t _monochromeLUTSize = 1024;
     std::array<std::pair<float, ScreenPixel>, _monochromeLUTSize> _monochromeLUT{};
 
-    bool _monochromeDitherEnabled = false;
+    bool _ditheringEnabled = false;
     bool _lutGpuResourcesDirty = true;
 
     std::vector<DrawCall> _opaqueDraws;
