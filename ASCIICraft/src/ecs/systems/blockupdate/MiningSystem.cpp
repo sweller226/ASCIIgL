@@ -1,13 +1,9 @@
 #include <ASCIICraft/ecs/systems/blockupdate/MiningSystem.hpp>
 
+#include <ASCIICraft/ecs/components/BlockTarget.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
-#include <ASCIICraft/ecs/components/Transform.hpp>
-#include <ASCIICraft/ecs/components/Head.hpp>
-#include <ASCIICraft/ecs/components/Reach.hpp>
 #include <ASCIICraft/events/BreakBlockEvent.hpp>
 #include <ASCIICraft/events/InputEvents.hpp>
-#include <ASCIICraft/world/World.hpp>
-#include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 
 namespace ecs::systems {
 
@@ -25,24 +21,15 @@ void MiningSystem::CreativeBreakEvents() {
         entt::entity playerEnt = components::GetPlayerEntity(m_registry);
         if (playerEnt == entt::null) break;
 
-        World* world = GetWorldPtr(m_registry);
-        if (!world) break;
+        const auto* target = m_registry.try_get<components::BlockTarget>(playerEnt);
+        if (!target || !target->active) break;
 
-        auto& head = m_registry.get<components::Head>(playerEnt);
-        auto [position, success] = components::GetPos(playerEnt, m_registry);
-        if (!success) break;
-        auto& reach = m_registry.get<components::Reach>(playerEnt);
-
-        auto rayCast = world->GetChunkManager()->BlockIntersectsView(head.lookDir, head.relativePos + position, reach.reach);
-
-        if (rayCast.first != blockstate::BlockStateRegistry::AIR_STATE_ID) {
-            events::BreakBlockEvent breakEvent;
-            breakEvent.stateId = rayCast.first;
-            breakEvent.position = rayCast.second;
-            m_eventBus.emit(breakEvent);
-        }
+        events::BreakBlockEvent breakEvent;
+        breakEvent.stateId = target->stateId;
+        breakEvent.position = target->blockPos;
+        m_eventBus.emit(breakEvent);
         break;
     }
 }
 
-}
+} // namespace ecs::systems

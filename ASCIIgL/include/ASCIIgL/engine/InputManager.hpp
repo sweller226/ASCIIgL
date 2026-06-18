@@ -65,6 +65,7 @@ enum class Key {
     NUMPAD_0 = 0x60, NUMPAD_1 = 0x61, NUMPAD_2 = 0x62, NUMPAD_3 = 0x63,
     NUMPAD_4 = 0x64, NUMPAD_5 = 0x65, NUMPAD_6 = 0x66, NUMPAD_7 = 0x67,
     NUMPAD_8 = 0x68, NUMPAD_9 = 0x69,
+    
     NUMPAD_MULTIPLY = 0x6A,
     NUMPAD_ADD = 0x6B,
     NUMPAD_SUBTRACT = 0x6D,

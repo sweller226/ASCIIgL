@@ -1,7 +1,8 @@
 #include <ASCIICraft/world/block/models/WaterModelBuilder.hpp>
 #include <ASCIICraft/world/block/models/ModelBuilderUtil.hpp>
+#include <ASCIICraft/util/MeshBuilderUtil.hpp>
 
-#include <ASCIICraft/world/block/textures/BlockTextureCatalog.hpp>
+#include <ASCIICraft/textures/BlockTextureCatalog.hpp>
 #include <ASCIICraft/world/block/FaceCulling.hpp>
 
 #include <vector>
@@ -21,12 +22,14 @@ void AppendFace(
     std::vector<V>& verts,
     std::vector<int>& indices
 ) {
-    const int startIndex = static_cast<int>(verts.size());
-    const float layer = static_cast<float>(blocktextures::GetLayerForTextureId("minecraft:blocks/water_still"));
+    const float layer = static_cast<float>(textures::GetLayerForTextureId(
+        blocktextures::GetBlockTextureCatalog(),
+        "minecraft:blocks/water_still"
+    ));
     const auto& faceVerts = modelbuilderutil::GetUnitFaceVerts(faceIndex);
     const auto& faceUVs = modelbuilderutil::GetFaceUVs();
-    const auto& faceIndices = modelbuilderutil::GetFaceIndices();
 
+    std::array<V, modelbuilderutil::VERTS_PER_FACE> corners{};
     for (int i = 0; i < modelbuilderutil::VERTS_PER_FACE; ++i) {
         glm::vec3 pos = faceVerts[i];
         if (pos.y > 0.5f) {
@@ -34,17 +37,12 @@ void AppendFace(
         }
 
         const glm::vec2 uv = faceUVs[i];
-        V v{};
-        v.SetXYZ(pos);
-        v.SetUV(glm::vec2(uv.x, 1.0f - uv.y));
-        v.SetLayer(layer);
-        v.SetLight(1.0f);
-        verts.push_back(v);
+        corners[i].SetXYZ(pos);
+        corners[i].SetUV(glm::vec2(uv.x, 1.0f - uv.y));
+        corners[i].SetLayer(layer);
     }
 
-    for (int i = 0; i < modelbuilderutil::INDICES_PER_FACE; ++i) {
-        indices.push_back(startIndex + faceIndices[i]);
-    }
+    util::AppendQuad(verts, indices, corners);
 }
 
 } // namespace
@@ -70,7 +68,7 @@ blockstate::BlockModel BuildWaterModel(const WaterSpec& spec) {
         f.idxOffset = static_cast<int>(layer.indices.size());
         f.cardinalFace = static_cast<uint8_t>(face);
 
-        std::vector<std::byte> packed = modelbuilderutil::PackVerts(faceVerts);
+        std::vector<std::byte> packed = util::PackVerts(faceVerts);
         f.vertByteCount = static_cast<int>(packed.size());
         f.idxCount = static_cast<int>(faceIndices.size());
 

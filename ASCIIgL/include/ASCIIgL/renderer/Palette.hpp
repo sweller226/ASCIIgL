@@ -18,16 +18,10 @@ struct PaletteEntry {
     glm::ivec3 rgb16;        // RGB in [0,15] range (for terminal attributes)
     glm::vec3  normalized;   // RGB in [0.0,1.0] range (for shaders)
     float      luminance;    // Perceptual brightness (Rec. 709)
-    unsigned short hex;      // Hex value used in COLOR enum
 
-    // Default constructor
     PaletteEntry();
-
-    // Constructor from 0-255 RGB - computes all cached values
-    PaletteEntry(const glm::ivec3& rgbVal, unsigned short hexVal);
-
-    // Constructor with separate RGB values
-    PaletteEntry(int r, int g, int b, unsigned short hexVal);
+    PaletteEntry(const glm::ivec3& rgbVal);
+    PaletteEntry(int r, int g, int b);
 };
 
 class Palette {
@@ -68,11 +62,6 @@ public:
     unsigned int GetMinLumIdx() const;
     /// Index of the palette entry with largest luminance (brightest).
     unsigned int GetMaxLumIdx() const;
-    
-    // Terminal attribute methods (use hex value for console)
-    unsigned short GetHex(unsigned int idx) const;
-    unsigned short GetFgColor(unsigned int idx) const;
-    unsigned short GetBgColor(unsigned int idx) const;
 
 private:
     void SetDefaultEntries();

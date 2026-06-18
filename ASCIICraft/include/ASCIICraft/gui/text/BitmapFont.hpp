@@ -2,9 +2,10 @@
 
 #include <cstdint>
 #include <memory>
+#include <string_view>
 #include <unordered_map>
 
-namespace ASCIIgL { class Texture; class TextureArray; }
+namespace ASCIIgL { class TextureArray; }
 
 namespace gui::text {
 
@@ -19,15 +20,7 @@ struct GlyphMetrics {
 };
 
 struct BitmapFont {
-    std::shared_ptr<ASCIIgL::Texture> texture;
     std::shared_ptr<ASCIIgL::TextureArray> textureArray;
-
-    int atlasWidth = 0;
-    int atlasHeight = 0;
-    int cellWidth = 0;
-    int cellHeight = 0;
-    int columns = 0;
-    int rows = 0;
 
     float lineHeight = 0.0f;
     float letterSpacing = 0.0f;
@@ -36,5 +29,13 @@ struct BitmapFont {
     char32_t fallbackCodepoint = U'?';
     std::unordered_map<char32_t, GlyphMetrics> glyphs;
 };
+
+/// Builds a monospace BitmapFont by mapping \p characters to consecutive texture-array layers
+/// beginning at \p startingLayer (atlas order: left-to-right, top-to-bottom).
+std::shared_ptr<BitmapFont> LoadBitmapFont(
+    std::shared_ptr<ASCIIgL::TextureArray> textureArray,
+    int startingLayer,
+    std::string_view characters
+);
 
 } // namespace gui::text

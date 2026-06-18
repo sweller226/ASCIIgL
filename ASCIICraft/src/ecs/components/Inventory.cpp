@@ -1,6 +1,6 @@
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 
-#include <ASCIICraft/ecs/data/ItemIndex.hpp>
+#include <ASCIICraft/ecs/data/ItemRegistry.hpp>
 #include <ASCIICraft/ecs/components/Stackable.hpp>
 
 namespace ecs::components {
@@ -8,8 +8,8 @@ namespace ecs::components {
 ItemStack ItemStack::fromRegistry(entt::registry& reg, int id, int count) {
     ItemStack stack;
     
-    auto& itemIndex = reg.ctx().get<ecs::data::ItemIndex>();
-    auto proto = itemIndex.Resolve(id);
+    auto& itemRegistry = reg.ctx().get<ecs::data::ItemRegistry>();
+    auto proto = itemRegistry.Resolve(id);
     if (proto != entt::null) {
         auto* stackable = reg.try_get<Stackable>(proto);
         stack.itemId = id;

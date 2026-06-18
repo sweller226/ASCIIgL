@@ -1,5 +1,4 @@
 #include <ASCIICraft/gui/Widget.hpp>
-#include <ASCIICraft/ecs/systems/RenderSystem.hpp>
 
 namespace gui {
 
@@ -20,8 +19,8 @@ bool Widget::ContainsPoint(glm::vec2 point) const {
            point.y >= screenPosition.y && point.y < screenPosition.y + size.y;
 }
 
-void Widget::Draw(::ecs::systems::RenderSystem& ecsRenderSystem) const {
-    (void)ecsRenderSystem;
+void Widget::Draw(GUIRenderer& renderer) const {
+    (void)renderer;
 }
 
 Widget* Widget::HitTest(glm::vec2 point) {

@@ -5,19 +5,18 @@
 #include <memory>
 
 namespace ASCIIgL { class Mesh; class Texture; }
-namespace ecs::systems { class RenderSystem; }
 namespace ASCIIgL { class EventBus; }
 
 namespace gui {
 
-/// ECS-bound slot: reads Inventory + ItemIndex for draw; emits SlotClickedEvent on click.
+/// ECS-bound slot: reads Inventory + ItemRegistry for draw; emits SlotClickedEvent on click.
 class Slot : public Widget {
 public:
     Slot(entt::registry& registry, ASCIIgL::EventBus& eventBus, entt::entity inventoryOwner, int slotIndex);
 
     void SetSlotBackgroundMesh(std::shared_ptr<ASCIIgL::Mesh> mesh) { m_slotBackgroundMesh = std::move(mesh); }
 
-    void Draw(::ecs::systems::RenderSystem& ecsRenderSystem) const override;
+    void Draw(GUIRenderer& renderer) const override;
 
     /// Called when this slot is clicked (from Screen hit-test). Emits SlotClickedEvent.
     void OnClicked(int mouseButton, bool shift);

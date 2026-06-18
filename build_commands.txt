@@ -12,11 +12,11 @@ ASCIIgL
     .\scripts\create_distribution.ps1
     .\scripts\create_distribution.ps1 -Version 2.0.0
     .\scripts\create_distribution.ps1 -Clean -Version 1.5.0
-
+   
 ASCIICraft
     Run FastDebug Command
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\FastDebug"
-    .\ASCIICraft.exe
+    .\ASCIICraft.exe --color
 
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\FastDebug"
     .\ASCIICraft.exe --window
@@ -28,6 +28,9 @@ ASCIICraft
     To Run the project
     cd "C:\Users\UwU\Documents\minecraft\ASCIIgL\ASCIICraft\build\bin\Release"
     .\ASCIICraft.exe --window 
+
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
+    .\ASCIICraft.exe --color
 
     Build Release
     ./scripts/build_release.ps1

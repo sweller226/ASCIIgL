@@ -158,8 +158,8 @@ void Renderer::SortTransparentDraws() {
 }
 
 void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list) {
-    Material* lastMat = nullptr;
     bool currentCull = GetBackfaceCulling();
+    bool currentDepthTest = true;
 
     for (const auto& dc : list) {
         if (!dc.mesh || !dc.material) continue;
@@ -172,12 +172,23 @@ void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list) {
             impl_->_context->RSSetState(impl_->_rasterizerStates[stateIndex].Get());
         }
 
+        if (dc.depthTest != currentDepthTest) {
+            SetDepthTestEnabled(dc.depthTest);
+            currentDepthTest = dc.depthTest;
+        }
+
         Material* mat = dc.material;
 
-        if (mat != lastMat) {
-            lastMat = mat;
-            BindMaterial(mat);
+        // Meshes may carry the atlas pointer; keep material slot 0 in sync before bind.
+        if (const Texture* meshTexture = dc.mesh->GetTexture()) {
+            if (mat->GetTexture(0) != meshTexture) {
+                mat->SetTexture(0, meshTexture);
+            }
         }
+
+        // Always bind: skipping when lastMat matches left stale t0 SRVs after a failed upload
+        // or when switching between Texture2D / Texture2DArray on the same register.
+        BindMaterial(mat);
 
         for (const auto& ov : dc.overrides) {
             if (!ov.desc) continue;
@@ -236,14 +247,6 @@ void Renderer::EndGpuFrame() {
         impl_->_context->CopyResource(impl_->_resolvedTexture.Get(), impl_->_renderTarget.Get());
     }
     
-    // Present only in FastDebug for RenderDoc support.
-#if defined(ASCIIGL_FASTDEBUG)
-    if (impl_->_debugSwapChain) {
-        PROFILE_SCOPE("Renderer.EndGpuFrame.DebugPresent");
-        impl_->_debugSwapChain->Present(0, 0);
-    }
-#endif
-
     {
         PROFILE_SCOPE("Renderer.EndGpuFrame.QuantizationPass");
         RunQuantizationPass();
@@ -256,6 +259,14 @@ void Renderer::EndGpuFrame() {
         PROFILE_SCOPE("Renderer.EndGpuFrame.AsciiWindowPass");
         RunAsciiWindowPass();
     }
+
+    // Present after all GPU work so RenderDoc captures the full frame (FastDebug only).
+#if defined(ASCIIGL_FASTDEBUG)
+    if (impl_->_debugSwapChain) {
+        PROFILE_SCOPE("Renderer.EndGpuFrame.DebugPresent");
+        impl_->_debugSwapChain->Present(0, 0);
+    }
+#endif
 }
 
 void Renderer::ExecuteTransparentDrawList() {

@@ -6,7 +6,7 @@
 #include <ASCIIgL/renderer/Palette.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
-#include <ASCIIgL/renderer/HLSLIncludes.hpp>
+#include <ASCIIgL/renderer/MaterialBuilder.hpp>
 
 #include <ASCIIgL/engine/TextureLibrary.hpp>
 #include <ASCIIgL/engine/MipFilters.hpp>
@@ -25,12 +25,15 @@
 #include <ASCIICraft/world/block/models/JsonModelLoader.hpp>
 #include <ASCIICraft/world/block/state/JsonBlockStateLoader.hpp>
 #include <ASCIICraft/world/block/state/VariantKey.hpp>
-#include <ASCIICraft/world/block/textures/BlockTextureCatalog.hpp>
+#include <ASCIICraft/textures/BlockTextureCatalog.hpp>
+#include <ASCIICraft/textures/ItemTextureCatalog.hpp>
+#include <ASCIICraft/textures/TextureCatalog.hpp>
 #include <ASCIICraft/world/block/models/WaterModelBuilder.hpp>
-#include <ASCIICraft/ecs/data/ItemIndex.hpp>
+#include <ASCIICraft/ecs/data/ItemRegistry.hpp>
 
 #include <ASCIICraft/gui/screens/PlayHUDScreen.hpp>
 #include <ASCIICraft/gui/screens/InventoryScreen.hpp>
+#include <ASCIICraft/gui/text/BitmapFont.hpp>
 
 // ecs components
 #include <ASCIICraft/ecs/components/Transform.hpp>
@@ -41,8 +44,11 @@
 #include <ASCIICraft/sound/SoundRegistry.hpp>
 
 // shaders
+#include <ASCIIgL/renderer/Shader.hpp>
 #include <ASCIICraft/rendering/TerrainShaders.hpp>
-#include <ASCIICraft/rendering/GUIShaders.hpp>
+#include <ASCIICraft/rendering/DroppedItemShaders.hpp>
+#include <ASCIICraft/rendering/HeldItemShaders.hpp>
+#include <ASCIICraft/rendering/BlockTargetOutlineShaders.hpp>
 
 Game::Game()
     : gameState(GameState::Playing)
@@ -50,17 +56,23 @@ Game::Game()
     , gameplayInputFilter(inputSystem)
     , movementSystem(registry, gameplayInputFilter, eventBus)
     , physicsSystem(registry)
-    , ecsRenderSystem(registry)
+    , blockTargetSystem(registry)
+    , entityRenderSystem(registry)
+    , heldItemRenderSystem(registry)
     , cameraSystem(registry, gameplayInputFilter)
     , guiManager(registry, eventBus, inputSystem)
     , blockUpdateSystem(registry, eventBus)
     , placingSystem(registry, eventBus)
     , miningSystem(registry, eventBus)
+    , inventorySystem(registry, eventBus)
+    , droppedItemSystem(registry, eventBus)
+    , hotbarSystem(registry)
     , lifetimeSystem(registry)
     , particleSystem(registry, eventBus)
     , soundSystem(registry, eventBus)
     , musicSystem(eventBus, soundSystem)
     , stepSfxSystem(registry, eventBus)
+    , viewBobbingSystem(registry)
     , playerFactory(registry)
     , shouldInternalExit(false)
 {
@@ -72,25 +84,25 @@ Game::~Game() {
     Shutdown();
 }
 
-bool Game::Initialize(bool renderToTerminal) {
+bool Game::Initialize(bool renderToTerminal, bool multicolor) {
     ASCIIgL::Logger::Info("Initializing ASCIICraft...");
 
     ASCIIgL::Logger::Debug("Preloading textures for palette generation...");
 
-    LoadTextures();
+    LoadTextures(multicolor);
 
-    std::vector<std::pair<float, std::shared_ptr<ASCIIgL::Texture>>> textureWeights = {
-        {0.0f, ASCIIgL::TextureLibrary::GetInst().GetTexture("inventoryTexture")}
-    };
-
+    std::vector<std::pair<float, std::shared_ptr<ASCIIgL::Texture>>> textureWeights;
     std::vector<std::pair<float, std::shared_ptr<ASCIIgL::TextureArray>>> textureArrayWeights = {
-        {1.0f, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray")}
+        {1.0f, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray")},
+        {0.0f, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray")}
     };
 
-    ASCIIgL::MonochromePalette gamePalette(textureWeights, textureArrayWeights);
+    std::unique_ptr<ASCIIgL::Palette> gamePalette = multicolor
+        ? std::make_unique<ASCIIgL::Palette>(textureWeights, textureArrayWeights)
+        : std::make_unique<ASCIIgL::MonochromePalette>(textureWeights, textureArrayWeights);
 
     ASCIIgL::Logger::Debug("Initializing screen...");
-    if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, gamePalette, renderToTerminal) != 0) {
+    if (ASCIIgL::Screen::GetInst().Initialize(SCREEN_WIDTH, SCREEN_HEIGHT, L"ASCIICraft", FONT_SIZE, *gamePalette, renderToTerminal) != 0) {
         ASCIIgL::Logger::Error("Failed to initialize screen");
         return false;
     }
@@ -101,11 +113,21 @@ bool Game::Initialize(bool renderToTerminal) {
 
     guiCamera = std::make_unique<ASCIIgL::Camera2D>(glm::vec2(0, 0), SCREEN_WIDTH, SCREEN_HEIGHT);
 
+    heldItemViewCamera = std::make_unique<ASCIIgL::Camera3D>(
+        glm::vec3(0.0f),
+        ecs::components::PlayerCamera::FOV,
+        glm::vec2(0.0f, 0.0f),
+        0.01f,
+        ecs::components::PlayerCamera::CAMERA_FAR_PLANE
+    );
+    heldItemViewCamera->setScreenDimensions(SCREEN_WIDTH, SCREEN_HEIGHT);
+    heldItemViewCamera->setCamDir(glm::vec3(0.0f, 0.0f, -1.0f));
+
     ASCIIgL::FPSClock::GetInst().Initialize(static_cast<unsigned int>(TARGET_FPS), 1.0f);
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
 
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
-    renderer.SetMonochromeDitherEnabled(true);
+    renderer.SetDitheringEnabled(false);
     renderer.SetBackgroundCol(glm::ivec3(255, 255, 255));
     renderer.SetWireframe(false);
     renderer.SetBackfaceCulling(true);
@@ -120,11 +142,11 @@ bool Game::Initialize(bool renderToTerminal) {
     ASCIIgL::Logger::Debug("Initializing world...");
     InitializeWorld();
 
-    ASCIIgL::Logger::Debug("Initializing player...");
-    InitializePlayer();
-
     ASCIIgL::Logger::Debug("Initializing item definitions...");
     InitializeItemDefinitions();
+
+    ASCIIgL::Logger::Debug("Initializing player...");
+    InitializePlayer();
 
     ASCIIgL::Logger::Debug("Initializing ECS systems...");
     InitializeSystems();
@@ -135,6 +157,14 @@ bool Game::Initialize(bool renderToTerminal) {
         return false;
     }
 
+    if (!LoadFont()) {
+        ASCIIgL::Logger::Error("Failed to load GUI font");
+        return false;
+    }
+
+    ASCIIgL::Logger::Debug("Initializing GUI...");
+    InitializeGUI();
+
     ASCIIgL::InputManager::GetInst().Initialize();
     ASCIIgL::Logger::Debug("InputManager initialized.");
 
@@ -144,8 +174,8 @@ bool Game::Initialize(bool renderToTerminal) {
     return true;
 }
 
-void Game::Run(std::function<bool()> shouldExternalExit, bool renderToTerminal) {
-    if (!Initialize(renderToTerminal)) {
+void Game::Run(std::function<bool()> shouldExternalExit, bool renderToTerminal, bool multicolor) {
+    if (!Initialize(renderToTerminal, multicolor)) {
         ASCIIgL::Logger::Error("Failed to initialize game");
         return;
     }
@@ -189,8 +219,15 @@ void Game::Update() {
     inputSystem.SetInputMode(mode);
     inputSystem.Update();
 
+    if (ASCIIgL::InputManager::GetInst().IsKeyPressed(ASCIIgL::Key::K)) {
+        ASCIIgL::Renderer::GetInst().SetDitheringEnabled(!ASCIIgL::Renderer::GetInst().GetDitheringEnabled());
+    }
+
     for ([[maybe_unused]] const auto& e : eventBus.view<events::ToggleInventoryEvent>()) {
-        // Temporary behavior: allow close-only; ignore requests that would open inventory.
+        if (!inventoryScreen_) continue;
+
+        // Minecraft-like: hotbar (base HUD) stays visible; inventory overlays on top.
+        guiManager.ToggleScreen(inventoryScreen_.get());
     }
     for ([[maybe_unused]] const auto& e : eventBus.view<events::QuitRequestedEvent>()) {
         ASCIIgL::Logger::Info("Quit action detected. Exiting game...");
@@ -211,15 +248,24 @@ void Game::Update() {
 
             guiManager.Update();
 
-            miningSystem.Update();
-            placingSystem.Update();
-            blockUpdateSystem.Update();
-            
-            particleSystem.Update();
+            hotbarSystem.Update();
 
             movementSystem.Update();
             cameraSystem.Update();
             physicsSystem.Update();
+            viewBobbingSystem.Update();
+
+            blockTargetSystem.SetGameplayActive(!guiBlocking);
+            blockTargetSystem.Update();
+
+            miningSystem.Update();
+            placingSystem.Update();
+            blockUpdateSystem.Update();
+
+            particleSystem.Update();
+
+            droppedItemSystem.Update();
+            inventorySystem.Update();
 
             stepSfxSystem.Update();
             musicSystem.Update();
@@ -245,7 +291,7 @@ void Game::Render() {
         ASCIIgL::Renderer::GetInst().BeginGpuFrame();
     }
 
-    // All GPU draws: 2D must be drawn after 3D so the GUI is on top (see RenderSystem::BatchAndDraw).
+    // All GPU draws: 2D GUI must be drawn after 3D so the HUD is on top.
     switch (gameState) {
         case GameState::Playing:
             {
@@ -297,7 +343,7 @@ void Game::Shutdown() {
     ASCIIgL::Logger::Info("ASCIICraft shutdown complete");
 }
 
-bool Game::LoadTextures() {
+bool Game::LoadTextures(bool multicolor) {
     ASCIIgL::Logger::Info("Loading game textures...");
 
     // Alternative monochrome hue directions (console palette indices 0â€“15 per channel).
@@ -312,7 +358,7 @@ bool Game::LoadTextures() {
 
     // Build monochrome mapping from the current screen palette if possible.
     ASCIIgL::MonochromeMapping monoMap;
-    monoMap.enabled = true;
+    monoMap.enabled = !multicolor;
     monoMap.darkL = darkL;
     monoMap.lightL = lightL;
     monoMap.hueDir = NeutralGrayHue;
@@ -320,7 +366,8 @@ bool Game::LoadTextures() {
     monoMap.contrast = 1.0f;
 
     // Load block textures from central catalog order.
-    std::vector<std::string> blockTexturePaths = blocktextures::BuildBlockTexturePaths();
+    std::vector<std::string> blockTexturePaths =
+        textures::BuildTexturePaths(blocktextures::GetBlockTextureCatalog());
 
     auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(blockTexturePaths, "terrainTextureArray", monoMap);
     if (!blockTextureArray || !blockTextureArray->IsValid()) {
@@ -328,9 +375,35 @@ bool Game::LoadTextures() {
         return false;   
     }
 
-    auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture("res/textures/gui/container/inventory.png", "inventoryTexture", monoMap);
+    std::vector<std::string> itemTexturePaths =
+        textures::BuildTexturePaths(itemtextures::GetItemTextureCatalog());
+    auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(itemTexturePaths, "itemTextureArray", monoMap);
+    if (!itemTextureArray || !itemTextureArray->IsValid()) {
+        ASCIIgL::Logger::Error("Failed to load item texture array");
+        return false;
+    }
+
+    auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture(
+        "res/textures/gui/container/inventory.png", "inventoryTexture", ASCIIgL::MonochromeMapping{}
+    );
     if (!inventoryTexture) {
         ASCIIgL::Logger::Error("Failed to load inventory texture");
+        return false;
+    }
+
+    auto widgetsTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture(
+        "res/textures/gui/widgets.png", "widgetsTexture", ASCIIgL::MonochromeMapping{}
+    );
+    if (!widgetsTexture) {
+        ASCIIgL::Logger::Error("Failed to load widgets texture");
+        return false;
+    }
+
+    auto cursorTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture(
+        "res/textures/gui/cursor.png", "cursorTexture", ASCIIgL::MonochromeMapping{}
+    );
+    if (!cursorTexture) {
+        ASCIIgL::Logger::Error("Failed to load cursor texture");
         return false;
     }
 
@@ -353,141 +426,228 @@ bool Game::LoadResources() {
     ASCIIgL::Logger::Info("Loading game resources...");
 
     if (!LoadTerrainMaterial())      return false;
+    if (!LoadDroppedItemMaterial())  return false;
+    if (!LoadHeldItemMaterial())     return false;
     if (!LoadGUIMaterial())          return false;
     if (!LoadGUIItemMaterial())      return false;
+    if (!LoadGUIBlockMaterial())     return false;
+    if (!LoadGUITextMaterial())           return false;
+    if (!LoadBlockTargetOutlineMaterial()) return false;
 
     ASCIIgL::Logger::Info("Resources loaded successfully");
     return true;
 }
 
 bool Game::LoadTerrainMaterial() {
-    auto terrainVS = ASCIIgL::Shader::CreateFromSource(TerrainShaders::GetTerrainVSSource(), ASCIIgL::ShaderType::Vertex);
+    return ASCIIgL::BuildAndRegisterMaterial({
+        "blockMaterial",
+        TerrainShaders::GetTerrainVSSource(),
+        TerrainShaders::GetTerrainPSSource(),
+        ASCIIgL::VertFormats::PosUVLayer(),
+        TerrainShaders::GetTerrainPSUniformLayout(),
+        true,
+        false,
+        [](ASCIIgL::Material& material) {
+            auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
+            if (!terrainTextureArray) {
+                ASCIIgL::Logger::Error("terrainTextureArray missing for terrain material");
+                return false;
+            }
+            material.SetTextureArray(0, terrainTextureArray.get());
+            return true;
+        }
+    });
+}
 
-    ASCIIgL::ShaderIncludeMap includes;
-    ASCIIgL::HLSLIncludes::AddToMap(includes);
-    auto terrainPS = ASCIIgL::Shader::CreateFromSource(TerrainShaders::GetTerrainPSSource(), ASCIIgL::ShaderType::Pixel, "main", &includes);
-
-    if (!terrainVS || !terrainVS->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile terrain vertex shader: " + terrainVS->GetCompileError());
+bool Game::LoadDroppedItemMaterial() {
+    if (!ASCIIgL::BuildAndRegisterMaterial({
+        "droppedItemBlockMaterial",
+        DroppedItemShaders::GetVSSource(),
+        DroppedItemShaders::GetPSSource(),
+        ASCIIgL::VertFormats::PosUVLayer(),
+        DroppedItemShaders::GetUniformLayout(),
+        true,
+        true,
+        [](ASCIIgL::Material& material) {
+            auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
+            if (!terrainTextureArray) {
+                ASCIIgL::Logger::Error("terrainTextureArray missing for dropped item block material");
+                return false;
+            }
+            material.SetTextureArray(0, terrainTextureArray.get());
+            return true;
+        }
+    })) {
         return false;
     }
-    if (!terrainPS || !terrainPS->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile terrain pixel shader: " + terrainPS->GetCompileError());
+
+    auto iconMaterial = ASCIIgL::MaterialLibrary::GetInst().GetOrCreateFromTemplate(
+        "droppedItemBlockMaterial", "droppedItemMaterial");
+    if (!iconMaterial) {
+        ASCIIgL::Logger::Error("Failed to create droppedItemMaterial from template");
         return false;
     }
 
-    auto program = ASCIIgL::ShaderProgram::Create(
-        std::move(terrainVS), std::move(terrainPS),
-        ASCIIgL::VertFormats::PosUVLayerLight(),
-        TerrainShaders::GetTerrainPSUniformLayout()
-    );
-    if (!program || !program->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to create terrain shader program");
+    auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray");
+    if (!itemTextureArray) {
+        ASCIIgL::Logger::Error("itemTextureArray missing for dropped item material");
+        return false;
+    }
+    iconMaterial->SetTextureArray(0, itemTextureArray.get());
+    return true;
+}
+
+bool Game::LoadHeldItemMaterial() {
+    if (!ASCIIgL::BuildAndRegisterMaterial({
+        "heldItemBlockMaterial",
+        HeldItemShaders::GetVSSource(),
+        HeldItemShaders::GetPSSource(),
+        ASCIIgL::VertFormats::PosUVLayer(),
+        HeldItemShaders::GetUniformLayout(),
+        true,
+        true,
+        [](ASCIIgL::Material& material) {
+            auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
+            if (!terrainTextureArray) {
+                ASCIIgL::Logger::Error("terrainTextureArray missing for held item block material");
+                return false;
+            }
+            material.SetTextureArray(0, terrainTextureArray.get());
+            return true;
+        }
+    })) {
         return false;
     }
 
-    auto material = ASCIIgL::Material::Create(std::move(program));
-    if (!material) {
-        ASCIIgL::Logger::Error("Failed to create terrain material");
+    auto iconMaterial = ASCIIgL::MaterialLibrary::GetInst().GetOrCreateFromTemplate(
+        "heldItemBlockMaterial", "heldItemMaterial");
+    if (!iconMaterial) {
+        ASCIIgL::Logger::Error("Failed to create heldItemMaterial from template");
         return false;
     }
 
-    material->SetTextureArray(0, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray").get());
-
-    auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
-    material->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
-    material->SetFloat4("gradientEnd",   glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
-
-    ASCIIgL::MaterialLibrary::GetInst().Register("blockMaterial", std::move(material));
+    auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray");
+    if (!itemTextureArray) {
+        ASCIIgL::Logger::Error("itemTextureArray missing for held item material");
+        return false;
+    }
+    iconMaterial->SetTextureArray(0, itemTextureArray.get());
     return true;
 }
 
 bool Game::LoadGUIMaterial() {
-    ASCIIgL::ShaderIncludeMap includes;
-    ASCIIgL::HLSLIncludes::AddToMap(includes);
-
-    auto vs = ASCIIgL::Shader::CreateFromSource(GUIShaders::GetGUIVSSource(), ASCIIgL::ShaderType::Vertex);
-    auto ps = ASCIIgL::Shader::CreateFromSource(GUIShaders::GetGUIPSSource(), ASCIIgL::ShaderType::Pixel, "main", &includes);
-
-    if (!vs || !vs->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile GUI vertex shader: " + vs->GetCompileError());
-        return false;
-    }
-    if (!ps || !ps->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile GUI pixel shader: " + ps->GetCompileError());
-        return false;
-    }
-
-    auto program = ASCIIgL::ShaderProgram::Create(
-        std::move(vs), std::move(ps),
+    return ASCIIgL::BuildAndRegisterMaterial({
+        "guiMaterial",
+        ASCIIgL::DefaultShaders::GetDefaultVertexShaderSource(),
+        ASCIIgL::DefaultShaders::GetDefaultPixelShaderSource(),
         ASCIIgL::VertFormats::PosUV(),
-        GUIShaders::GetGUIPSUniformLayout()
-    );
-    if (!program || !program->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to create GUI shader program");
-        return false;
-    }
-
-    auto material = ASCIIgL::Material::Create(std::move(program));
-    if (!material) {
-        ASCIIgL::Logger::Error("Failed to create GUI material");
-        return false;
-    }
-
-    auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
-    material->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
-    material->SetFloat4("gradientEnd",   glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
-
-    ASCIIgL::MaterialLibrary::GetInst().Register("guiMaterial", std::move(material));
-    return true;
+        ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
+        false,
+        false
+    });
 }
 
 bool Game::LoadGUIItemMaterial() {
-    ASCIIgL::ShaderIncludeMap includes;
-    ASCIIgL::HLSLIncludes::AddToMap(includes);
+    return ASCIIgL::BuildAndRegisterMaterial({
+        "guiItemMaterial",
+        ASCIIgL::DefaultShaders::GetTextureArrayVertexShaderSource(),
+        ASCIIgL::DefaultShaders::GetTextureArrayPixelShaderSource(),
+        ASCIIgL::VertFormats::PosUVLayer(),
+        ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
+        false,
+        false,
+        [](ASCIIgL::Material& material) {
+            auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray");
+            if (!itemTextureArray) {
+                ASCIIgL::Logger::Error("itemTextureArray missing for GUI item material");
+                return false;
+            }
+            material.SetTextureArray(0, itemTextureArray.get());
+            return true;
+        }
+    });
+}
 
-    auto vs = ASCIIgL::Shader::CreateFromSource(GUIShaders::GetItemVSSource(), ASCIIgL::ShaderType::Vertex);
-    auto ps = ASCIIgL::Shader::CreateFromSource(GUIShaders::GetItemPSSource(), ASCIIgL::ShaderType::Pixel, "main", &includes);
+bool Game::LoadGUIBlockMaterial() {
+    return ASCIIgL::BuildAndRegisterMaterial({
+        "guiBlockMaterial",
+        ASCIIgL::DefaultShaders::GetTextureArrayVertexShaderSource(),
+        ASCIIgL::DefaultShaders::GetTextureArrayPixelShaderSource(),
+        ASCIIgL::VertFormats::PosUVLayer(),
+        ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
+        false,
+        false,
+        [](ASCIIgL::Material& material) {
+            auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
+            if (!terrainTextureArray) {
+                ASCIIgL::Logger::Error("terrainTextureArray missing for GUI block material");
+                return false;
+            }
+            material.SetTextureArray(0, terrainTextureArray.get());
+            return true;
+        }
+    });
+}
 
-    if (!vs || !vs->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile GUI item vertex shader: " + vs->GetCompileError());
-        return false;
-    }
-    if (!ps || !ps->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to compile GUI item pixel shader: " + ps->GetCompileError());
-        return false;
-    }
+bool Game::LoadGUITextMaterial() {
+    return ASCIIgL::BuildAndRegisterMaterial({
+        "guiTextMaterial",
+        ASCIIgL::DefaultShaders::GetTextureArrayVertexShaderSource(),
+        ASCIIgL::DefaultShaders::GetTextureArrayPixelShaderSource(),
+        ASCIIgL::VertFormats::PosUVLayer(),
+        ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
+        false,
+        false,
+        [](ASCIIgL::Material& material) {
+            auto fontTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("defaultFontTextureArray");
+            if (!fontTextureArray) {
+                ASCIIgL::Logger::Error("defaultFontTextureArray missing for GUI text material");
+                return false;
+            }
+            material.SetTextureArray(0, fontTextureArray.get());
+            return true;
+        }
+    });
+}
 
-    auto program = ASCIIgL::ShaderProgram::Create(
-        std::move(vs), std::move(ps),
-        ASCIIgL::VertFormats::PosUVLayerLight(),
-        GUIShaders::GetItemPSUniformLayout()
+bool Game::LoadBlockTargetOutlineMaterial() {
+    return ASCIIgL::BuildAndRegisterMaterial({
+        "blockTargetOutlineMaterial",
+        BlockTargetOutlineShaders::GetVSSource(),
+        BlockTargetOutlineShaders::GetPSSource(),
+        ASCIIgL::VertFormats::PosColor(),
+        BlockTargetOutlineShaders::GetUniformLayout(),
+        false,
+        false
+    });
+}
+
+bool Game::LoadFont() {
+    constexpr int kDefaultFontStartingLayer = 33;
+    constexpr const char* kDefaultFontCharacters =
+        R"(!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~)";
+
+    auto guiFont = gui::text::LoadBitmapFont(
+        ASCIIgL::TextureLibrary::GetInst().GetTextureArray("defaultFontTextureArray"),
+        kDefaultFontStartingLayer,
+        kDefaultFontCharacters
     );
-    if (!program || !program->IsValid()) {
-        ASCIIgL::Logger::Error("Failed to create GUI item shader program");
+    if (!guiFont) {
+        ASCIIgL::Logger::Error("Failed to load default GUI bitmap font");
         return false;
     }
 
-    auto material = ASCIIgL::Material::Create(std::move(program));
-    if (!material) {
-        ASCIIgL::Logger::Error("Failed to create GUI item material");
-        return false;
-    }
-
-    auto& palette = ASCIIgL::Screen::GetInst().GetPalette();
-    material->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
-    material->SetFloat4("gradientEnd",   glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
-
-    ASCIIgL::MaterialLibrary::GetInst().Register("guiItemMaterial", std::move(material));
+    registry.ctx().emplace<std::shared_ptr<gui::text::BitmapFont>>(std::move(guiFont));
     return true;
 }
 
 void Game::RenderPlaying() {
     // Keep 2D GUI camera in sync with viewport (GPU pipeline uses Screen dimensions; 2D ortho must match)
     GetWorldPtr(registry)->Render();
-
+    // blockTargetSystem.Render(); // Outline rendering disabled for now.
+    entityRenderSystem.Render();
+    heldItemRenderSystem.Render();
     guiManager.Render();
-    ecsRenderSystem.Render();
 }
 
 void Game::InitializeWorld() {
@@ -509,8 +669,11 @@ void Game::InitializeSystems() {
 
     entt::entity player = ecs::components::GetPlayerEntity(registry);
     if (player != entt::null) {
-        ecsRenderSystem.SetActive3DCamera(registry.try_get<ecs::components::PlayerCamera>(player));
+        auto* playerCamera = registry.try_get<ecs::components::PlayerCamera>(player);
+        entityRenderSystem.SetActive3DCamera(playerCamera);
     }
+
+    heldItemRenderSystem.SetViewModelCamera(heldItemViewCamera.get());
 
     guiManager.SetActive2DCamera(guiCamera.get());
 
@@ -520,6 +683,39 @@ void Game::InitializeSystems() {
     sound::RegisterDefaultSounds(soundRegistry);
 
     ASCIIgL::Logger::Debug("Systems initialized.");
+}
+
+void Game::InitializeGUI() {
+    ASCIIgL::Logger::Debug("Initializing GUI screens...");
+    guiManager.BuildCursorSurface();
+
+    const entt::entity player = ecs::components::GetPlayerEntity(registry);
+    if (player == entt::null) {
+        ASCIIgL::Logger::Warning("PlayHUDScreen not created: player entity missing.");
+        return;
+    }
+
+    playHudScreen_ = std::make_unique<gui::PlayHUDScreen>(
+        registry, eventBus, player, guiManager.GetMeshLibrary()
+    );
+    guiManager.SetBaseScreen(playHudScreen_.get());
+    playHudScreen_->Layout(
+        {static_cast<float>(ASCIIgL::Screen::GetInst().GetWidth()),
+         static_cast<float>(ASCIIgL::Screen::GetInst().GetHeight())},
+        nullptr
+    );
+    ASCIIgL::Logger::Debug("GUI initialized: PlayHUDScreen set as base screen.");
+
+    // Create inventory screen but do not push it until E is pressed.
+    inventoryScreen_ = std::make_unique<gui::InventoryScreen>(
+        registry, eventBus, player, guiManager.GetMeshLibrary()
+    );
+    inventoryScreen_->Layout(
+        {static_cast<float>(ASCIIgL::Screen::GetInst().GetWidth()),
+         static_cast<float>(ASCIIgL::Screen::GetInst().GetHeight())},
+        nullptr
+    );
+    ASCIIgL::Logger::Debug("GUI initialized: InventoryScreen created (not pushed).");
 }
 
 void Game::InitializeBlockStates() {
@@ -764,60 +960,64 @@ void Game::InitializeBlockStates() {
 }
 
 void Game::InitializeItemDefinitions() {
-    auto& itemIndex = registry.ctx().emplace<ecs::data::ItemIndex>();
+    auto& itemRegistry = registry.ctx().emplace<ecs::data::ItemRegistry>();
 
-    using IX = ecs::data::ItemIndex;
-    auto& bsr = registry.ctx().get<blockstate::BlockStateRegistry>();
-    // auto blockMesh = [&](const std::string& typeName) {
-    //     return IX::GetBlockMeshFromState(bsr.GetState(bsr.GetDefaultState(typeName)));
-    // };
+    const auto itemLayer = [](const char* textureId) -> float {
+        return static_cast<float>(
+            textures::GetLayerForTextureId(itemtextures::GetItemTextureCatalog(), textureId)
+        );
+    };
 
-    // // === Terrain (restricted to current texture set) ===
-    // itemIndex.RegisterBlockItem(registry, "minecraft:stone",       "Stone",       blockMesh("minecraft:stone"));
-    // itemIndex.RegisterBlockItem(registry, "minecraft:cobblestone", "Cobblestone", blockMesh("minecraft:cobblestone"));
-    // itemIndex.RegisterBlockItem(registry, "minecraft:dirt",        "Dirt",        blockMesh("minecraft:dirt"));
-    // itemIndex.RegisterBlockItem(registry, "minecraft:grass",       "Grass Block", blockMesh("minecraft:grass"));
-    // itemIndex.RegisterBlockItem(registry, "minecraft:bedrock",     "Bedrock",     blockMesh("minecraft:bedrock"));
+    // === Block items (all registered block types except air and water) ===
+    itemRegistry.RegisterBlockItem(registry, "minecraft:bedrock",          "Bedrock");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:stone",            "Stone");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:dandelion",        "Dandelion");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:poppy",            "Poppy");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:tall_grass",       "Tall Grass");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:fern",             "Fern");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:fence",            "Oak Fence");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone",      "Cobblestone");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:stone_stairs",     "Stone Stairs");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone_slab", "Cobblestone Slab");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:dirt",             "Dirt");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:grass",            "Grass Block");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:oak_log",          "Oak Log");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:oak_planks",         "Oak Planks");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:oak_slab",         "Oak Slab");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:oak_leaves",       "Oak Leaves");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:crafting_table",   "Crafting Table");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:bookshelf",        "Bookshelf");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:brick_block",      "Bricks");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:furnace",          "Furnace");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:glass",            "Glass");
+    itemRegistry.RegisterBlockItem(
+        registry,
+        "minecraft:torch",
+        "Torch",
+        64,
+        ecs::components::ItemGuiMeshTransform::DefaultTorch());
 
-    // // === Wood & Plants (subset)
-    // itemIndex.RegisterBlockItem(registry, "minecraft:oak_log",       "Oak Log",       blockMesh("minecraft:oak_log"));
-    // itemIndex.RegisterBlockItem(registry, "minecraft:oak_leaves",    "Oak Leaves",    blockMesh("minecraft:oak_leaves"));
+    // === Resources / Materials ===
+    itemRegistry.RegisterResourceItem(registry, "minecraft:coal",       "Coal",       itemLayer("minecraft:items/coal"));
+    itemRegistry.RegisterResourceItem(registry, "minecraft:iron_ingot", "Iron Ingot", itemLayer("minecraft:items/iron_ingot"));
+    itemRegistry.RegisterResourceItem(registry, "minecraft:gold_ingot", "Gold Ingot", itemLayer("minecraft:items/gold_ingot"));
+    itemRegistry.RegisterResourceItem(registry, "minecraft:stick",      "Stick",      itemLayer("minecraft:items/stick"));
 
-    // // (Other ores, planks, utility, and special blocks are temporarily disabled
-    // //  until their textures are added to the texture array.)
+    // === Swords ===
+    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_sword",  "Wooden Sword",  itemLayer("minecraft:items/wood_sword"),  {2.0f, 1, 60},   {4.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_sword",   "Stone Sword",   itemLayer("minecraft:items/stone_sword"), {4.0f, 2, 132},  {5.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:iron_sword",    "Iron Sword",    itemLayer("minecraft:items/iron_sword"),  {6.0f, 3, 251},  {6.0f, 1.6f});
+    // === Shovels ===
+    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_shovel",  "Wooden Shovel",  itemLayer("minecraft:items/wood_shovel"),  {2.0f, 1, 60},   {1.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_shovel",   "Stone Shovel",   itemLayer("minecraft:items/stone_shovel"), {4.0f, 2, 132},  {2.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:iron_shovel",    "Iron Shovel",    itemLayer("minecraft:items/iron_shovel"),  {6.0f, 3, 251},  {3.0f, 1.6f});
+    // === Pickaxes ===
+    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_pickaxe",  "Wooden Pickaxe",  itemLayer("minecraft:items/wood_pickaxe"),  {2.0f, 1, 60},   {2.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_pickaxe",   "Stone Pickaxe",   itemLayer("minecraft:items/stone_pickaxe"), {4.0f, 2, 132},  {3.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:iron_pickaxe",    "Iron Pickaxe",    itemLayer("minecraft:items/iron_pickaxe"),  {6.0f, 3, 251},  {4.0f, 1.6f});
 
-    // // === Resources / Materials ===
-    // itemIndex.RegisterResourceItem(registry, 263, "minecraft:coal",       "Coal",       IX::GetQuadItemMesh(7, 10));
-    // itemIndex.RegisterResourceItem(registry, 264, "minecraft:diamond",    "Diamond",    IX::GetQuadItemMesh(8, 10));
-    // itemIndex.RegisterResourceItem(registry, 265, "minecraft:iron_ingot", "Iron Ingot", IX::GetQuadItemMesh(9, 10));
-    // itemIndex.RegisterResourceItem(registry, 266, "minecraft:gold_ingot", "Gold Ingot", IX::GetQuadItemMesh(10, 10));
-    // itemIndex.RegisterResourceItem(registry, 280, "minecraft:stick",      "Stick",      IX::GetQuadItemMesh(5, 9));
-
-    // // === Swords ===
-    // itemIndex.RegisterToolItem(registry, 268, "minecraft:wooden_sword",  "Wooden Sword",  IX::GetQuadItemMesh(0, 4), {2.0f, 1, 60},   {4.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 272, "minecraft:stone_sword",   "Stone Sword",   IX::GetQuadItemMesh(1, 4), {4.0f, 2, 132},  {5.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 267, "minecraft:iron_sword",    "Iron Sword",    IX::GetQuadItemMesh(2, 4), {6.0f, 3, 251},  {6.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 276, "minecraft:diamond_sword", "Diamond Sword", IX::GetQuadItemMesh(3, 4), {8.0f, 4, 1562}, {7.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 283, "minecraft:gold_sword",    "Golden Sword",  IX::GetQuadItemMesh(4, 4), {12.0f, 1, 33},  {4.0f, 1.6f});
-
-    // // === Shovels ===
-    // itemIndex.RegisterToolItem(registry, 269, "minecraft:wooden_shovel",  "Wooden Shovel",  IX::GetQuadItemMesh(0, 5), {2.0f, 1, 60},   {1.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 273, "minecraft:stone_shovel",   "Stone Shovel",   IX::GetQuadItemMesh(1, 5), {4.0f, 2, 132},  {2.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 256, "minecraft:iron_shovel",    "Iron Shovel",    IX::GetQuadItemMesh(2, 5), {6.0f, 3, 251},  {3.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 277, "minecraft:diamond_shovel", "Diamond Shovel", IX::GetQuadItemMesh(3, 5), {8.0f, 4, 1562}, {4.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 284, "minecraft:gold_shovel",    "Golden Shovel",  IX::GetQuadItemMesh(4, 5), {12.0f, 1, 33},  {1.0f, 1.6f});
-
-    // // === Pickaxes ===
-    // itemIndex.RegisterToolItem(registry, 270, "minecraft:wooden_pickaxe",  "Wooden Pickaxe",  IX::GetQuadItemMesh(0, 6), {2.0f, 1, 60},   {2.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 274, "minecraft:stone_pickaxe",   "Stone Pickaxe",   IX::GetQuadItemMesh(1, 6), {4.0f, 2, 132},  {3.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 257, "minecraft:iron_pickaxe",    "Iron Pickaxe",    IX::GetQuadItemMesh(2, 6), {6.0f, 3, 251},  {4.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 278, "minecraft:diamond_pickaxe", "Diamond Pickaxe", IX::GetQuadItemMesh(3, 6), {8.0f, 4, 1562}, {5.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 285, "minecraft:gold_pickaxe",    "Golden Pickaxe",  IX::GetQuadItemMesh(4, 6), {12.0f, 1, 33},  {2.0f, 1.6f});
-
-    // // === Axes ===
-    // itemIndex.RegisterToolItem(registry, 271, "minecraft:wooden_axe",  "Wooden Axe",  IX::GetQuadItemMesh(0, 7), {2.0f, 1, 60},   {3.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 275, "minecraft:stone_axe",   "Stone Axe",   IX::GetQuadItemMesh(1, 7), {4.0f, 2, 132},  {4.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 258, "minecraft:iron_axe",    "Iron Axe",    IX::GetQuadItemMesh(2, 7), {6.0f, 3, 251},  {5.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 279, "minecraft:diamond_axe", "Diamond Axe", IX::GetQuadItemMesh(3, 7), {8.0f, 4, 1562}, {6.0f, 1.6f});
-    // itemIndex.RegisterToolItem(registry, 286, "minecraft:gold_axe",    "Golden Axe",  IX::GetQuadItemMesh(4, 7), {12.0f, 1, 33},  {3.0f, 1.6f});
+    // === Axes ===
+    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_axe",  "Wooden Axe",  itemLayer("minecraft:items/wood_axe"),  {2.0f, 1, 60},   {3.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_axe",   "Stone Axe",   itemLayer("minecraft:items/stone_axe"), {4.0f, 2, 132},  {4.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:iron_axe",    "Iron Axe",    itemLayer("minecraft:items/iron_axe"),  {6.0f, 3, 251},  {5.0f, 1.6f});
 }

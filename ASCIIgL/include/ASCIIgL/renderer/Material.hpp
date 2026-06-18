@@ -128,6 +128,10 @@ public:
     // Clone this material (creates a copy with same shader but independent uniforms)
     std::unique_ptr<Material> Clone() const;
 
+    /// Rebuild packed constant-buffer bytes from current base uniforms.
+    /// Useful before applying per-draw overrides to avoid stale values.
+    void ResetConstantBufferData();
+
     void UpdateConstantBufferData();
 
 private:
@@ -165,11 +169,11 @@ public:
     // Get a registered material (returns nullptr if not found)
     std::shared_ptr<Material> Get(const std::string& name) const;
 
-    /// Get or create a material by cloning a registered template and binding a texture.
-    /// Cached by (templateName, texture pointer); same texture returns same material.
-    /// Returns nullptr if the template is not registered.
+    /// Clone a registered template material and register it under \p newName.
+    /// Returns the existing material if \p newName is already registered.
+    /// Returns nullptr if the template is not registered or \p newName is empty.
     std::shared_ptr<Material> GetOrCreateFromTemplate(const std::string& templateName,
-        const Texture* texture, uint32_t textureSlot = 0);
+        const std::string& newName);
     
     // Check if material exists
     bool Has(const std::string& name) const;
@@ -192,7 +196,6 @@ private:
     static constexpr const char* _defaultMaterialName = "default";
 
     std::unordered_map<std::string, std::shared_ptr<Material>> _materials;
-    std::unordered_map<std::string, std::weak_ptr<Material>> _templateTextureCache;
 };
 
 } // namespace ASCIIgL

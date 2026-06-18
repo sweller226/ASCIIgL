@@ -20,7 +20,7 @@ struct MonochromeMapping {
 };
 
 // Apply monochrome mapping in-place to an RGBA8 buffer (width*height*4 bytes).
-// Uses the same luminance/gradient logic as ColorMonochrome.hlsl.
+// Uses the same luminance/gradient logic as ColorUtil.hlsl.
 void ApplyMonochromeMappingRGBA8(uint8_t* rgbaData, int width, int height, const MonochromeMapping& mapping);
 
 } // namespace ASCIIgL

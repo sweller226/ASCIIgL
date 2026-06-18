@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include <ASCIICraft/world/block/textures/BlockTextureCatalog.hpp>
+#include <ASCIICraft/textures/BlockTextureCatalog.hpp>
 
 namespace TerrainShaders {
 
@@ -12,25 +12,21 @@ const char* GetTerrainVSSource() {
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
-    float4 gradientStart;   // Start color of gradient (dark)
-    float4 gradientEnd;     // End color of gradient (bright)
     float3 cameraPos;       // Camera world position for fog calculation
 };
 
 struct VS_INPUT
 {
     float3 position : POSITION;
-    float3 texcoord : TEXCOORD0;  // UV + Layer index
-    float light : LIGHT;           // Per-vertex directional light multiplier
+    float3 texcoord : TEXCOORD0;  // UV.xy + Layer.z
 };
 
 struct PS_INPUT
 {
     float4 position : SV_POSITION;
-    float3 texcoord : TEXCOORD0;  // UV + Layer passed to pixel shader
-    float dist : TEXCOORD1;       // Distance from camera
-    float light : TEXCOORD2;      // Interpolated light multiplier
-    nointerpolation float  waterPhaseOffset : TEXCOORD3; // Per-block random phase offset for water (no interpolation)
+    float3 texcoord : TEXCOORD0;
+    float dist : TEXCOORD1;
+    nointerpolation float waterPhaseOffset : TEXCOORD2;
 };
 
 PS_INPUT main(VS_INPUT input)
@@ -39,9 +35,7 @@ PS_INPUT main(VS_INPUT input)
     output.position = mul(mvp, float4(input.position, 1.0));
     output.texcoord = input.texcoord;
     output.dist = distance(input.position, cameraPos);
-    output.light = input.light;
 
-    // Compute a deterministic per-block phase offset from snapped world XZ position.
     float2 tileCoord = floor(input.position.xz);
     float rand = frac(sin(dot(tileCoord, float2(12.9898, 78.233))) * 43758.5453);
     output.waterPhaseOffset = rand;
@@ -52,10 +46,13 @@ PS_INPUT main(VS_INPUT input)
 
 const char* GetTerrainPSSource() {
     static const std::string source = []() {
-        int waterLayer = blocktextures::GetLayerForTextureId("minecraft:blocks/water_still");
+        int waterLayer = textures::GetLayerForTextureId(
+            blocktextures::GetBlockTextureCatalog(),
+            "minecraft:blocks/water_still"
+        );
         
         return std::string(R"(
-#include "ColorMonochrome.hlsl"
+#include "ColorUtil.hlsl"
 
 Texture2DArray blockTextures : register(t0);
 SamplerState samplerState : register(s0);
@@ -63,8 +60,6 @@ SamplerState samplerState : register(s0);
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
-    float4 gradientStart;   // Start color of gradient (dark), alpha = unused
-    float4 gradientEnd;     // End color of gradient (bright), alpha = unused
     float3 cameraPos;       // Unused in PS but part of CBuffer layout
     float4 fogParams;       // x=start, y=end
     float3 fogColor;        // Color to fade to at distance (matches background)
@@ -74,10 +69,9 @@ cbuffer ConstantBuffer : register(b0)
 struct PS_INPUT
 {
     float4 position : SV_POSITION;
-    float3 texcoord : TEXCOORD0;  // UV.xy + Layer.z
-    float dist : TEXCOORD1;       // Distance from camera
-    float light : TEXCOORD2;      // Per-vertex directional light
-    nointerpolation float waterPhaseOffset : TEXCOORD3; // Per-block phase offset (no interpolation)
+    float3 texcoord : TEXCOORD0;
+    float dist : TEXCOORD1;
+    nointerpolation float waterPhaseOffset : TEXCOORD2;
 };
 
 float4 main(PS_INPUT input) : SV_TARGET
@@ -101,10 +95,8 @@ float4 main(PS_INPUT input) : SV_TARGET
     static const float ALPHA_CUTOFF = 0.5;
     clip(texColor.a - ALPHA_CUTOFF);
     
-    // Per-vertex directional lighting on already-baked monochrome texture color
-    float3 mappedColor = texColor.rgb * input.light;
+    float3 mappedColor = texColor.rgb;
 
-    // Fog (fogColor assumed sRGB; linearize for correct blend in linear space)
     float fogFactor = saturate((input.dist - fogParams.x) / (fogParams.y - fogParams.x));
     float3 fogLinear = sRGBToLinear(fogColor);
     float3 finalColorLinear = lerp(mappedColor, fogLinear, fogFactor);
@@ -120,8 +112,6 @@ float4 main(PS_INPUT input) : SV_TARGET
 ASCIIgL::UniformBufferLayout GetTerrainPSUniformLayout() {
     return ASCIIgL::UniformBufferLayout::Builder()
         .Add("mvp", ASCIIgL::UniformType::Mat4)
-        .Add("gradientStart", ASCIIgL::UniformType::Float4)
-        .Add("gradientEnd", ASCIIgL::UniformType::Float4)
         .Add("cameraPos", ASCIIgL::UniformType::Float3)
         .Add("fogParams", ASCIIgL::UniformType::Float4)
         .Add("fogColor", ASCIIgL::UniformType::Float3)

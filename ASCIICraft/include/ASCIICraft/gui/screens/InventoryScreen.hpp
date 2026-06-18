@@ -2,11 +2,11 @@
 
 #include <ASCIICraft/gui/GUIScreen.hpp>
 #include <ASCIICraft/gui/GUISurfaceLibrary.hpp>
+#include <ASCIICraft/gui/GUISurface.hpp>
 #include <entt/entt.hpp>
 #include <memory>
 
 namespace ASCIIgL { class Texture; }
-namespace ecs::systems { class RenderSystem; }
 namespace ASCIIgL { class EventBus; }
 
 namespace gui {
@@ -16,16 +16,16 @@ class InventoryScreen : public GUIScreen {
 public:
     /// inventoryTexture is the single inventory PNG (Minecraft-style).
     InventoryScreen(entt::registry& registry, ASCIIgL::EventBus& eventBus, entt::entity playerEntity,
-                   GUISurfaceLibrary& meshLibrary,
-                   std::shared_ptr<ASCIIgL::Texture> inventoryTexture = nullptr);
+                   GUISurfaceLibrary& meshLibrary);
 
-    void OnDraw(::ecs::systems::RenderSystem& ecsRenderSystem) const override;
+    void Draw(GUIRenderer& renderer) const override;
     bool OnClick(glm::vec2 position, int button) override;
+    bool TryGetInitialCursorPosition(glm::vec2 screenSize, glm::vec2& out) const override;
 
 private:
     entt::registry* m_registry = nullptr;
     ASCIIgL::EventBus* m_eventBus = nullptr;
-    std::shared_ptr<ASCIIgL::Texture> m_inventoryTexture;
+    GUISurface m_inventoryPanelSurface{};
 };
 
 } // namespace gui

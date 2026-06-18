@@ -156,7 +156,6 @@ const char* GetSemanticName(VertexElementSemantic semantic) {
         case VertexElementSemantic::TexCoord:    return "TEXCOORD";
         case VertexElementSemantic::BoneIndices: return "BLENDINDICES";
         case VertexElementSemantic::BoneWeights: return "BLENDWEIGHT";
-        case VertexElementSemantic::Light:       return "LIGHT";
         case VertexElementSemantic::Custom0:     return "CUSTOM";
         case VertexElementSemantic::Custom1:     return "CUSTOM";
         case VertexElementSemantic::Custom2:     return "CUSTOM";
@@ -233,15 +232,6 @@ const VertFormat& PosUVLayer() {
     static VertFormat format = VertFormat::Builder()
         .AddFloat3(VertexElementSemantic::Position)    // XYZ (12 bytes)
         .AddFloat3(VertexElementSemantic::TexCoord, 0)   // UV + Layer -> TEXCOORD0 (12 bytes)
-        .Build();
-    return format;
-}
-
-const VertFormat& PosUVLayerLight() {
-    static VertFormat format = VertFormat::Builder()
-        .AddFloat3(VertexElementSemantic::Position)   // XYZ (12 bytes)
-        .AddFloat3(VertexElementSemantic::TexCoord, 0)   // UV + Layer -> TEXCOORD0 (12 bytes)
-        .AddFloat(VertexElementSemantic::Light)       // Per-vertex light multiplier (4 bytes)
         .Build();
     return format;
 }

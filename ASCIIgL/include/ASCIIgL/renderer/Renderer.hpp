@@ -52,6 +52,7 @@ public:
         int           layer       = 0;
         bool          transparent = false;     // false = opaque pass, true = transparent pass
         bool          backfaceCulling = true;  // per-draw cull state override
+        bool          depthTest = true;        // false = HUD/overlay draws that must not be depth-occluded
         float         sortKey     = 0.0f;      // used for transparent sorting (e.g. depth or layer)
         std::vector<UniformOverride> overrides; // per-draw uniform overrides
     };
@@ -206,8 +207,8 @@ public:
 
     /// Enables 4x4 Bayer ordered dithering for the monochrome LUT path.
     /// Default: false.
-    void SetMonochromeDitherEnabled(bool enabled);
-    bool GetMonochromeDitherEnabled() const;
+    void SetDitheringEnabled(bool enabled);
+    bool GetDitheringEnabled() const;
 
     /// Anisotropic filtering level for texture arrays. Valid: 1 (off), 2, 4, 8, 16. Default 16.
     void SetMaxAnisotropy(int level);

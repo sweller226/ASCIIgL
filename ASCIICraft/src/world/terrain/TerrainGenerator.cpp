@@ -10,6 +10,7 @@
 #include <ASCIIgL/util/Logger.hpp>
 
 #include <ASCIICraft/world/block/placement/BlockPlacement.hpp>
+#include <ASCIICraft/world/block/state/FaceDir.hpp>
 #include <ASCIICraft/world/Sizes.hpp>
 
 namespace {

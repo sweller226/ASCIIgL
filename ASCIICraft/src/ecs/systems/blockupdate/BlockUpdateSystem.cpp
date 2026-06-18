@@ -8,6 +8,12 @@
 #include <ASCIICraft/world/World.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 #include <ASCIICraft/world/block/placement/FencePlacement.hpp>
+#include <ASCIICraft/world/block/state/FaceDir.hpp>
+
+#include <ASCIICraft/ecs/data/ItemRegistry.hpp>
+#include <ASCIICraft/ecs/factories/ItemFactory.hpp>
+
+#include <glm/vec3.hpp>
 
 namespace {
 
@@ -16,14 +22,8 @@ void RefreshFenceNeighbors(
     ChunkManager& chunkManager,
     const WorldCoord& changedPos
 ) {
-    const WorldCoord neighbors[4] = {
-        WorldCoord(changedPos.x - 1, changedPos.y, changedPos.z),
-        WorldCoord(changedPos.x, changedPos.y, changedPos.z + 1),
-        WorldCoord(changedPos.x, changedPos.y, changedPos.z - 1),
-        WorldCoord(changedPos.x + 1, changedPos.y, changedPos.z),
-    };
-
-    for (const auto& neighborPos : neighbors) {
+    for (FaceDir dir : kHorizontalFaceDirs) {
+        const WorldCoord neighborPos = NeighborCoord(changedPos, dir);
         const uint32_t neighborStateId = chunkManager.GetBlockState(neighborPos);
         if (!bsr.IsValidState(neighborStateId)) continue;
 
@@ -37,6 +37,14 @@ void RefreshFenceNeighbors(
             chunkManager.SetBlockState(neighborPos, finalizedNeighborStateId);
         }
     }
+}
+
+glm::vec3 BlockDropPosition(const WorldCoord& pos) {
+    return glm::vec3(
+        static_cast<float>(pos.x) + 0.5f,
+        static_cast<float>(pos.y) + 0.5f,
+        static_cast<float>(pos.z) + 0.5f
+    );
 }
 
 } // namespace
@@ -56,15 +64,25 @@ namespace ecs::systems {
         auto& events = eventBus.view<events::BreakBlockEvent>();
         World* world = GetWorldPtr(m_registry);
         auto* bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
-        if (!world || !bsr) return;
+        auto* itemRegistry = m_registry.ctx().find<data::ItemRegistry>();
+        if (!world || !bsr || !itemRegistry) return;
         ChunkManager* chunkManager = world->GetChunkManager();
         if (!chunkManager) return;
 
         for (auto& e : events) {
             if (e.stateId == blockstate::BlockStateRegistry::AIR_STATE_ID) { continue; }
+            if (!bsr->IsValidState(e.stateId)) { continue; }
+
+            const uint16_t typeId = bsr->GetTypeIdFromState(e.stateId);
+            const auto& type = bsr->GetType(typeId);
 
             chunkManager->SetBlockState(e.position, blockstate::BlockStateRegistry::AIR_STATE_ID);
             RefreshFenceNeighbors(*bsr, *chunkManager, e.position);
+
+            if (itemRegistry->Resolve(type.name) != entt::null) {
+                factories::ItemFactory itemFactory(m_registry);
+                itemFactory.createDroppedItemByName(type.name, 1, BlockDropPosition(e.position));
+            }
         }
     }
     

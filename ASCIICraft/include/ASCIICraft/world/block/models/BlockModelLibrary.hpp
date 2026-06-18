@@ -13,7 +13,7 @@ namespace blockmodels {
     struct CubeSpec;
 
     // Mesh data already in the engine's expected vertex representation:
-    // - vertices are raw bytes for a specific vertex format (PosUVLayerLight in your current pipeline)
+    // - vertices are raw bytes for PosUVLayer (terrain texture array)
     // - indices reference the local vertex array
 
     // Cache of block-local models keyed by flattened stateId.

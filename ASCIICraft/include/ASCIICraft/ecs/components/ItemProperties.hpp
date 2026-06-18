@@ -11,7 +11,7 @@ namespace ecs::components {
 /// Property for tools (pickaxe, axe, shovel, etc.)
 struct ToolProperty {
     float miningSpeed = 1.0f;    // Speed multiplier
-    int harvestLevel = 0;        // 0=hand, 1=wood, 2=stone, 3=iron, 4=diamond
+    int harvestLevel = 0;        // 0=hand, 1=wood, 2=stone, 3=iron, 4=highest
     int durability = 0;          // Max durability (0 = unbreakable)
 };
 
@@ -38,7 +38,7 @@ struct WeaponProperty {
 
 /// Property for blocks that can be placed
 struct PlaceableProperty {
-    int blockId = -1;            // Which block to place
+    int typeId = -1;            // Which block to place
 };
 
 } // namespace ecs::components

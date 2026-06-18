@@ -77,12 +77,17 @@ file(GLOB_RECURSE ASCIICraft_HEADERS
 )
 
 # ---------------------------------------------------------------------------
+# Tracy (TracyClient.cpp #includes .cpp files from public/common and public/client)
+# ---------------------------------------------------------------------------
+set(ASCIICraft_TRACY_PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgL/vendor/tracy/public")
+
+# ---------------------------------------------------------------------------
 # Game Executable
 # ---------------------------------------------------------------------------
 add_executable(ASCIICraft
     ${ASCIICraft_SOURCES}
     ${ASCIICraft_HEADERS}
-    "${ASCIIgL_ROOT}/vendor/tracy/public/TracyClient.cpp"
+    "${ASCIICraft_TRACY_PUBLIC}/TracyClient.cpp"
 )
 
 # ---------------------------------------------------------------------------
@@ -91,7 +96,7 @@ add_executable(ASCIICraft
 target_include_directories(ASCIICraft PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${OPENAL_ROOT}/include"
-    "${ASCIIgL_ROOT}/vendor/tracy/public"
+    "${ASCIICraft_TRACY_PUBLIC}"
 )
 
 

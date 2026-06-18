@@ -5,7 +5,7 @@
 #include <vector>
 
 namespace ASCIIgL { class Texture; }
-namespace ecs::systems { class RenderSystem; }
+namespace gui { class GUIRenderer; }
 
 namespace gui {
 
@@ -35,7 +35,7 @@ public:
     virtual const Widget* HitTest(glm::vec2 point) const;
 
     virtual void Update(float dt) { (void)dt; }
-    virtual void Draw(::ecs::systems::RenderSystem& ecsRenderSystem) const;
+    virtual void Draw(GUIRenderer& renderer) const;
 
     /// Set parent for layout (used by Panel::AddChild). Protected so only containers set it.
     void SetParent(Widget* p) { parent = p; }

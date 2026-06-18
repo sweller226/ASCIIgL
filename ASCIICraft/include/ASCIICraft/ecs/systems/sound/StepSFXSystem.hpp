@@ -50,12 +50,6 @@ private:
 
     void MapType(const blockstate::BlockStateRegistry& bsr, const char* typeName, const char* soundId);
 
-    static constexpr float MIN_STEP_SPEED       = 0.15f;
-    static constexpr float STEP_COOLDOWN        = 0.10f;
-    static constexpr float WALK_STEP_DISTANCE   = 1.6f;
-    static constexpr float RUN_STEP_DISTANCE    = 1.4f;
-    static constexpr float SNEAK_STEP_DISTANCE  = 2.0f;
-
     static constexpr const char* DEFAULT_STEP_SOUND_ID = "step.stone";
 
     entt::registry&    m_registry;

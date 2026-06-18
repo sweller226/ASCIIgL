@@ -19,7 +19,7 @@ namespace ASCIIgL {
 bool Renderer::InitializeAsciiWindowPass() {
     // Simple passthrough VS (we reuse impl_->_quantizationVS and impl_->_fullscreenQuadVB) and dedicated PS for ASCII->window.
     static const char* ASCII_WINDOW_PS_SRC = R"(
-#include "ColorMonochrome.hlsl"
+#include "ColorUtil.hlsl"
 
 cbuffer AsciiWindowCB : register(b0)
 {

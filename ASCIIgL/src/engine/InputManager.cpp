@@ -97,7 +97,8 @@ void InputManager::Initialize() {
     
     // Common game actions
     BindKey(Key::E, "interact");
-    BindKey(Key::Q, "interact_left");
+    BindKey(Key::Q, "drop_item");
+    BindKey(Key::F, "interact_left");
     BindKey(Key::R, "interact_right");
     BindKey(Key::ESCAPE, "quit");
     BindKey(Key::ENTER, "confirm");

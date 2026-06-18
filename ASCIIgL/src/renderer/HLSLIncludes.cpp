@@ -1,12 +1,21 @@
 #include <ASCIIgL/renderer/HLSLIncludes.hpp>
+#include <ASCIIgL/renderer/PaletteUtil.hpp>
+
+#include <string>
 
 namespace ASCIIgL {
 namespace HLSLIncludes {
 
-// ColorMonochrome.hlsl - sRGB/linear conversion and luminance-based monochrome gradient (matches Renderer LUT).
-// Use direction (linearEnd - linearStart) so gradient aligns with the LUT segment.
-const char* const COLOR_MONOCHROME_SOURCE = R"HLSL(
-static const float3 REC709 = float3(0.2126, 0.7152, 0.0722);
+namespace {
+
+std::string BuildColorUtilSource() {
+    const std::string rec709 = "float3("
+        + std::to_string(PaletteUtil::Rec709R) + ", "
+        + std::to_string(PaletteUtil::Rec709G) + ", "
+        + std::to_string(PaletteUtil::Rec709B) + ")";
+
+    return std::string(R"HLSL(
+static const float3 REC709 = )HLSL") + rec709 + R"HLSL(;
 
 float3 sRGBToLinear(float3 c)
 {
@@ -34,17 +43,21 @@ float3 LinearLuminanceToGradientRGB(float luminance, float3 linearStart, float3 
     return gradientDir * (L_out / lumWeight);
 }
 )HLSL";
-
-const char* ColorMonochromeFileName() {
-    return "ColorMonochrome.hlsl";
 }
 
-const char* ColorMonochromeSource() {
-    return COLOR_MONOCHROME_SOURCE;
+} // namespace
+
+const char* ColorUtilFileName() {
+    return "ColorUtil.hlsl";
+}
+
+const char* ColorUtilSource() {
+    static const std::string source = BuildColorUtilSource();
+    return source.c_str();
 }
 
 void AddToMap(ShaderIncludeMap& map) {
-    map[ColorMonochromeFileName()] = ColorMonochromeSource();
+    map[ColorUtilFileName()] = ColorUtilSource();
 }
 
 } // namespace HLSLIncludes

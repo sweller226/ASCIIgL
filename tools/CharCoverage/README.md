@@ -9,7 +9,7 @@ For a character rendered in a cell (e.g. in Windows Terminal):
 - **Coverage** = fraction of the cell that appears as **foreground** (the glyph ink).
 - So `0.0` = empty (space), `~0.67` = very dense (e.g. @).
 
-With anti-aliasing, coverage is the **mean alpha** of the cell when the glyph is rendered white-on-black (or black-on-white, then use 1 − mean). This tool uses DirectWrite to render each ramp character at your font and size and computes that mean.
+With anti-aliasing, coverage is a **perceptual effective coverage** scalar for white-on-black: `c = srgb_to_linear(mean(srgb(α_p)))` over the full cell, where `α_p` is DirectWrite’s per-pixel coverage. That linear `c` matches the renderer LUT blend `c * fg + (1-c) * bg` in linear space while tracking how dark the glyph looks on screen, not just mean ink area.
 
 ## Why run this
 
@@ -85,7 +85,7 @@ char_coverage.exe [options]
 1. **DirectWrite** loads the font (system or custom) at the given point size (converted to DIPs).
 2. For each character, a **glyph run** (single glyph) is analyzed with `CreateGlyphRunAnalysis` (aliased or ClearType mode per `--cleartype`).
 3. **GetAlphaTextureBounds** + **CreateAlphaTexture** yield the alpha bitmap: **aliased** = 1 byte per pixel; **ClearType** = 3 bytes per pixel (R,G,B subpixel).
-4. **Coverage** = (sum of alpha values) / (255 × byte count). For ClearType this is the average of the three channels, matching the effective antialiased coverage Windows Terminal uses.
+4. **Coverage** = perceptual effective coverage: for each cell pixel, `srgb(α)` (ClearType: mean of R,G,B as α), average over the full square cell, then `srgb_to_linear` of that mean. Pixels outside the glyph bounds count as 0.
 
 So the values match what DirectWrite (and thus Windows Terminal) actually render at that font and size.
 

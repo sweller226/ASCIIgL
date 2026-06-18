@@ -5,11 +5,13 @@
 #include <ASCIIgL/engine/FPSClock.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 
+#include <ASCIICraft/ecs/StepTiming.hpp>
 #include <ASCIICraft/ecs/components/PhysicsBody.hpp>
 #include <ASCIICraft/ecs/components/PlayerController.hpp>
 #include <ASCIICraft/ecs/components/StepSoundState.hpp>
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/components/Velocity.hpp>
+#include <ASCIICraft/ecs/components/ViewBobbing.hpp>
 #include <ASCIICraft/events/SoundEvents.hpp>
 #include <ASCIICraft/sound/SoundRegistry.hpp>
 #include <ASCIICraft/util/RNG.hpp>
@@ -26,26 +28,6 @@ void ConsumeStep(components::StepSoundState& stepState, const glm::vec3& bodyCen
     stepState.distanceAccum = 0.0f;
     stepState.cooldown = cooldown;
     stepState.lastPosition = bodyCenter;
-}
-
-float GetStepDistance(
-    const components::PlayerController* ctrl,
-    float walkStepDistance,
-    float runStepDistance,
-    float sneakStepDistance
-) {
-    if (!ctrl) {
-        return walkStepDistance;
-    }
-
-    switch (ctrl->movementState) {
-        case MovementState::Running:
-            return runStepDistance;
-        case MovementState::Sneaking:
-            return sneakStepDistance;
-        default:
-            return walkStepDistance;
-    }
 }
 
 float GetStepVolume(const components::PlayerController* ctrl) {
@@ -219,13 +201,57 @@ void StepSFXSystem::UpdateStepSounds(float deltaTime) {
         stepState.cooldown = std::max(0.0f, stepState.cooldown - deltaTime);
 
         if (!ground.onGround) {
-            // Keep current step progress, but track the latest air position so
-            // landing does not inherit a large horizontal delta from time aloft.
             stepState.lastPosition = bodyCenter;
             continue;
         }
 
-        if (landedThisFrame && stepState.cooldown <= 0.0f && horizSpeed >= MIN_STEP_SPEED) {
+        if (auto* bob = m_registry.try_get<components::ViewBobbing>(ent)) {
+            if (landedThisFrame && stepState.cooldown <= 0.0f && horizSpeed >= StepTiming::MIN_STEP_SPEED) {
+                if (TryEmitStepSound(
+                    ent,
+                    bodyCenter,
+                    collider.halfExtents,
+                    *world,
+                    *bsr,
+                    *soundRegistry,
+                    rng
+                )) {
+                    ConsumeStep(stepState, bodyCenter, StepTiming::STEP_COOLDOWN);
+                    bob->nextStepDistance = static_cast<int>(bob->distanceWalkedOnStepModified) + 1;
+                }
+            }
+
+            if (stepState.cooldown > 0.0f) {
+                continue;
+            }
+
+            if (horizSpeed < StepTiming::MIN_STEP_SPEED) {
+                stepState.lastPosition = bodyCenter;
+                continue;
+            }
+
+            if (bob->distanceWalkedOnStepModified <= static_cast<float>(bob->nextStepDistance)) {
+                continue;
+            }
+
+            if (!TryEmitStepSound(
+                ent,
+                bodyCenter,
+                collider.halfExtents,
+                *world,
+                *bsr,
+                *soundRegistry,
+                rng
+            )) {
+                continue;
+            }
+
+            bob->nextStepDistance = static_cast<int>(bob->distanceWalkedOnStepModified) + 1;
+            ConsumeStep(stepState, bodyCenter, StepTiming::STEP_COOLDOWN);
+            continue;
+        }
+
+        if (landedThisFrame && stepState.cooldown <= 0.0f && horizSpeed >= StepTiming::MIN_STEP_SPEED) {
             if (TryEmitStepSound(
                 ent,
                 bodyCenter,
@@ -235,7 +261,7 @@ void StepSFXSystem::UpdateStepSounds(float deltaTime) {
                 *soundRegistry,
                 rng
             )) {
-                ConsumeStep(stepState, bodyCenter, STEP_COOLDOWN);
+                ConsumeStep(stepState, bodyCenter, StepTiming::STEP_COOLDOWN);
                 continue;
             }
         }
@@ -244,7 +270,7 @@ void StepSFXSystem::UpdateStepSounds(float deltaTime) {
             continue;
         }
 
-        if (horizSpeed < MIN_STEP_SPEED) {
+        if (horizSpeed < StepTiming::MIN_STEP_SPEED) {
             stepState.distanceAccum = 0.0f;
             stepState.lastPosition = bodyCenter;
             continue;
@@ -254,7 +280,7 @@ void StepSFXSystem::UpdateStepSounds(float deltaTime) {
         stepState.distanceAccum += glm::length(delta);
         stepState.lastPosition = bodyCenter;
 
-        const float stepDistance = GetStepDistance(ctrl, WALK_STEP_DISTANCE, RUN_STEP_DISTANCE, SNEAK_STEP_DISTANCE);
+        const float stepDistance = StepTiming::GetStepDistance(ctrl);
 
         if (stepState.distanceAccum < stepDistance) {
             continue;
@@ -273,7 +299,7 @@ void StepSFXSystem::UpdateStepSounds(float deltaTime) {
             continue;
         }
 
-        ConsumeStep(stepState, bodyCenter, STEP_COOLDOWN);
+        ConsumeStep(stepState, bodyCenter, StepTiming::STEP_COOLDOWN);
     }
 }
 

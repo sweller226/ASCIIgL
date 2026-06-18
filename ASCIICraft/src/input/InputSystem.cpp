@@ -2,6 +2,8 @@
 
 #include <ASCIIgL/util/EventBus.hpp>
 #include <ASCIICraft/events/InputEvents.hpp>
+#include <ASCIICraft/events/ItemEvents.hpp>
+#include <ASCIICraft/events/GUIEvents.hpp>
 #include <ASCIIgL/engine/InputManager.hpp>
 
 namespace input {
@@ -22,6 +24,11 @@ void InputSystem::Update() {
     // Inventory toggle (E) — always emit so GUI can close with E when inventory is open.
     if (input.IsActionPressed("interact")) {
         m_eventBus.emit(events::ToggleInventoryEvent{});
+    }
+
+    // Drop item (Q) — always emit; works in GUI (carried / hovered slot) and gameplay (hotbar).
+    if (input.IsActionPressed("drop_item")) {
+        m_eventBus.emit(events::DropItemPressedEvent{});
     }
 
     // Gameplay events only when in Gameplay mode (e.g. no GUI blocking).

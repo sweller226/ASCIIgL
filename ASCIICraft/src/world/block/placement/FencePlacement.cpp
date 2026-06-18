@@ -1,6 +1,7 @@
 #include <ASCIICraft/world/block/placement/FencePlacement.hpp>
 
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/block/state/FaceDir.hpp>
 #include <ASCIICraft/world/chunk/ChunkManager.hpp>
 
 namespace blockplacement::detail {
@@ -34,23 +35,16 @@ uint32_t FinalizeFencePlacedState(
     uint32_t stateId,
     const WorldCoord& position
 ) {
-    const WorldCoord eastPos(position.x + 1, position.y, position.z);
-    const WorldCoord northPos(position.x, position.y, position.z - 1);
-    const WorldCoord southPos(position.x, position.y, position.z + 1);
-    const WorldCoord westPos(position.x - 1, position.y, position.z);
-
-    const auto isFenceNeighbor = [&](const WorldCoord& p) {
-        const uint32_t neighborStateId = chunkManager.GetBlockState(p);
-        return ShouldFenceConnectToNeighbor(bsr, neighborStateId);
-    };
-
     uint32_t outStateId = stateId;
-    outStateId = bsr.WithProperty(outStateId, "east", isFenceNeighbor(eastPos) ? "true" : "false");
-    outStateId = bsr.WithProperty(outStateId, "north", isFenceNeighbor(northPos) ? "true" : "false");
-    outStateId = bsr.WithProperty(outStateId, "south", isFenceNeighbor(southPos) ? "true" : "false");
-    outStateId = bsr.WithProperty(outStateId, "west", isFenceNeighbor(westPos) ? "true" : "false");
+
+    for (FaceDir dir : kHorizontalFaceDirs) {
+        const WorldCoord neighborPos = NeighborCoord(position, dir);
+        const uint32_t neighborStateId = chunkManager.GetBlockState(neighborPos);
+        const bool connected = ShouldFenceConnectToNeighbor(bsr, neighborStateId);
+        outStateId = bsr.WithProperty(outStateId, FaceDirToString(dir), connected ? "true" : "false");
+    }
+
     return outStateId;
 }
 
 } // namespace blockplacement::detail
-

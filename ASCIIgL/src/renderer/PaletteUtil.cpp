@@ -1,5 +1,7 @@
 #include <ASCIIgL/renderer/PaletteUtil.hpp>
 
+#include <cmath>
+
 namespace ASCIIgL {
 
 namespace PaletteUtil {
@@ -33,9 +35,8 @@ glm::vec3 sRGB255ToLinear1(const glm::ivec3& c) {
     );
 }
 
-// Linear luminance (vec3 only)
 float LinearRGB_Luminance(const glm::vec3& c) {
-    return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+    return glm::dot(c, Rec709WeightsVec());
 }
 
 float sRGB255_Luminance(const glm::ivec3& c) {
@@ -46,6 +47,22 @@ float sRGB255_Luminance(const glm::ivec3& c) {
 float sRGB1_Luminance(const glm::vec3& c) {
     glm::vec3 lin = sRGB1ToLinear1(c);
     return LinearRGB_Luminance(lin);
+}
+
+glm::vec3 Linear1ToOklab(const glm::vec3& c) {
+    const float l = 0.4122214708f * c.r + 0.5363325363f * c.g + 0.0514459929f * c.b;
+    const float m = 0.2119034982f * c.r + 0.6806995451f * c.g + 0.1073969566f * c.b;
+    const float s = 0.0883024619f * c.r + 0.2817188376f * c.g + 0.6299787005f * c.b;
+
+    const float l_ = std::cbrt(l);
+    const float m_ = std::cbrt(m);
+    const float s_ = std::cbrt(s);
+
+    return glm::vec3(
+        0.2104542553f * l_ + 0.7936177850f * m_ - 0.0040720468f * s_,
+        1.9779984951f * l_ - 2.4285922050f * m_ + 0.4505937099f * s_,
+        0.0259040371f * l_ + 0.7827717662f * m_ - 0.8086757660f * s_
+    );
 }
 
 // Linear → sRGB (float 0–1 → 0–255)

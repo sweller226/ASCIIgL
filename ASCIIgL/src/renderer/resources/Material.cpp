@@ -320,6 +320,15 @@ void Material::SetShaderProgram(std::shared_ptr<ShaderProgram> program) {
     _impl->constantBufferInitialized = false;
 }
 
+void Material::ResetConstantBufferData() {
+    if (!_program || !_program->IsValid()) return;
+
+    const auto& layout = _program->GetUniformLayout();
+    _constantBufferData.assign(layout.GetSize(), std::byte{0});
+    _uniformsDirty = true;
+    UpdateConstantBufferData();
+}
+
 // =========================================================================
 // Clone
 // =========================================================================
@@ -352,23 +361,18 @@ std::shared_ptr<Material> MaterialLibrary::Get(const std::string& name) const {
 }
 
 std::shared_ptr<Material> MaterialLibrary::GetOrCreateFromTemplate(const std::string& templateName,
-    const Texture* texture, uint32_t textureSlot) {
-    if (!texture) return nullptr;
+    const std::string& newName) {
+    if (newName.empty()) return nullptr;
 
-    const std::string key = templateName + "@" + std::to_string(reinterpret_cast<uintptr_t>(texture));
-    auto it = _templateTextureCache.find(key);
-    if (it != _templateTextureCache.end()) {
-        if (auto cached = it->second.lock())
-            return cached;
-        _templateTextureCache.erase(it);
+    if (auto existing = Get(newName)) {
+        return existing;
     }
 
     auto base = Get(templateName);
     if (!base) return nullptr;
 
     std::shared_ptr<Material> material(base->Clone().release());
-    material->SetTexture(textureSlot, texture);
-    _templateTextureCache[key] = material;
+    Register(newName, material);
     return material;
 }
 
@@ -382,7 +386,6 @@ void MaterialLibrary::Remove(const std::string& name) {
 
 void MaterialLibrary::Clear() {
     _materials.clear();
-    _templateTextureCache.clear();
 }
 
 std::shared_ptr<Material> MaterialLibrary::GetDefault() {

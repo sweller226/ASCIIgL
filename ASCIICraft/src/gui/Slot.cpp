@@ -1,12 +1,9 @@
 #include <ASCIICraft/gui/Slot.hpp>
-#include <ASCIICraft/ecs/systems/RenderSystem.hpp>
+#include <ASCIICraft/gui/GuiItemIcon.hpp>
+#include <ASCIICraft/gui/GUIRenderer.hpp>
 #include <ASCIICraft/ecs/components/Inventory.hpp>
-#include <ASCIICraft/ecs/components/ItemVisual.hpp>
-#include <ASCIICraft/ecs/data/ItemIndex.hpp>
 #include <ASCIIgL/util/EventBus.hpp>
 #include <ASCIICraft/events/GUIEvents.hpp>
-
-#include <ASCIIgL/renderer/Material.hpp>
 
 namespace gui {
 
@@ -17,33 +14,15 @@ Slot::Slot(entt::registry& registry, ASCIIgL::EventBus& eventBus, entt::entity i
     , m_slotIndex(slotIndex)
 {}
 
-void Slot::Draw(::ecs::systems::RenderSystem& ecsRenderSystem) const {
+void Slot::Draw(GUIRenderer& renderer) const {
     if (!visible) return;
-
-    // Slots don't have background meshes in current design, but if they did, they'd use a material here
-    // if (m_slotBackgroundMesh && m_slotBackgroundMaterial)
-    //     ecsRenderSystem.AddGUIItem(screenPosition, size, layer, m_slotBackgroundMesh, m_slotBackgroundMaterial);
 
     if (m_inventoryOwner == entt::null || !m_registry.valid(m_inventoryOwner)) return;
 
     auto* inv = m_registry.try_get<ecs::components::Inventory>(m_inventoryOwner);
     if (!inv || m_slotIndex < 0 || m_slotIndex >= static_cast<int>(inv->slots.size())) return;
 
-    const auto& stack = inv->slots[m_slotIndex];
-    if (stack.isEmpty()) return;
-
-    auto* itemIndex = m_registry.ctx().find<ecs::data::ItemIndex>();
-    if (!itemIndex) return;
-
-    entt::entity proto = itemIndex->Resolve(stack.itemId);
-    if (proto == entt::null) return;
-
-    auto* visual = m_registry.try_get<ecs::components::ItemVisual>(proto);
-    if (!visual || !visual->mesh) return;
-
-    // Item icons use guiItemMaterial (texture array already set)
-    auto guiItemMat = ASCIIgL::MaterialLibrary::GetInst().Get("guiItemMaterial");
-    // ecsRenderSystem.AddGUIItem(screenPosition, size, layer + 1, visual->mesh, guiItemMat, "guiItemMaterial");
+    DrawItemStackIcon(m_registry, renderer, inv->slots[m_slotIndex], screenPosition, size, layer + 1);
 }
 
 void Slot::OnClicked(int mouseButton, bool shift) {
