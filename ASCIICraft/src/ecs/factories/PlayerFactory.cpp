@@ -5,6 +5,7 @@
 #include <ASCIICraft/ecs/components/HotbarSelection.hpp>
 #include <ASCIICraft/ecs/components/BlockTarget.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
+#include <ASCIICraft/ecs/components/ViewBobbing.hpp>
 #include <ASCIICraft/ecs/data/ItemRegistry.hpp>
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/util/Logger.hpp>
@@ -28,6 +29,7 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     auto& flying  = registry.emplace<components::FlyingPhysics>(p_ent);
     auto& ctrl    = registry.emplace<components::PlayerController>(p_ent);
     auto& stepSoundState = registry.emplace<components::StepSoundState>(p_ent);
+    auto& viewBobbing    = registry.emplace<components::ViewBobbing>(p_ent);
     auto& jump    = registry.emplace<components::Jump>(p_ent);
     auto& cam     = registry.emplace<components::PlayerCamera>(p_ent);
     auto& pmode   = registry.emplace<components::PlayerMode>(p_ent);

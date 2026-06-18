@@ -10,6 +10,11 @@
 #include <ASCIICraft/world/block/placement/FencePlacement.hpp>
 #include <ASCIICraft/world/block/state/FaceDir.hpp>
 
+#include <ASCIICraft/ecs/data/ItemRegistry.hpp>
+#include <ASCIICraft/ecs/factories/ItemFactory.hpp>
+
+#include <glm/vec3.hpp>
+
 namespace {
 
 void RefreshFenceNeighbors(
@@ -34,6 +39,14 @@ void RefreshFenceNeighbors(
     }
 }
 
+glm::vec3 BlockDropPosition(const WorldCoord& pos) {
+    return glm::vec3(
+        static_cast<float>(pos.x) + 0.5f,
+        static_cast<float>(pos.y) + 0.5f,
+        static_cast<float>(pos.z) + 0.5f
+    );
+}
+
 } // namespace
 
 namespace ecs::systems {
@@ -51,15 +64,25 @@ namespace ecs::systems {
         auto& events = eventBus.view<events::BreakBlockEvent>();
         World* world = GetWorldPtr(m_registry);
         auto* bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
-        if (!world || !bsr) return;
+        auto* itemRegistry = m_registry.ctx().find<data::ItemRegistry>();
+        if (!world || !bsr || !itemRegistry) return;
         ChunkManager* chunkManager = world->GetChunkManager();
         if (!chunkManager) return;
 
         for (auto& e : events) {
             if (e.stateId == blockstate::BlockStateRegistry::AIR_STATE_ID) { continue; }
+            if (!bsr->IsValidState(e.stateId)) { continue; }
+
+            const uint16_t typeId = bsr->GetTypeIdFromState(e.stateId);
+            const auto& type = bsr->GetType(typeId);
 
             chunkManager->SetBlockState(e.position, blockstate::BlockStateRegistry::AIR_STATE_ID);
             RefreshFenceNeighbors(*bsr, *chunkManager, e.position);
+
+            if (itemRegistry->Resolve(type.name) != entt::null) {
+                factories::ItemFactory itemFactory(m_registry);
+                itemFactory.createDroppedItemByName(type.name, 1, BlockDropPosition(e.position));
+            }
         }
     }
     

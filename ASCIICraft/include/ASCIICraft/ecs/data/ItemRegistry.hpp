@@ -54,7 +54,8 @@ public:
         entt::registry& reg,
         const std::string& name, const std::string& display,
         int maxStack = 64,
-        std::optional<components::ItemGuiMeshTransform> guiTransform = std::nullopt
+        std::optional<components::ItemGuiMeshTransform> guiTransform = std::nullopt,
+        std::optional<components::ItemHeldMeshTransform> heldTransform = std::nullopt
     );
 
     /// Register a stackable resource/material item (2D icon, auto-incrementing item id).

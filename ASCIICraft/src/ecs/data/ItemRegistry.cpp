@@ -24,7 +24,8 @@ entt::entity ItemRegistry::RegisterBlockItem(
     entt::registry& reg,
     const std::string& name, const std::string& display,
     int maxStack,
-    std::optional<components::ItemGuiMeshTransform> guiTransform
+    std::optional<components::ItemGuiMeshTransform> guiTransform,
+    std::optional<components::ItemHeldMeshTransform> heldTransform
 ) {
     auto e = reg.create();
     int id = RegisterNext(name, e);
@@ -45,6 +46,9 @@ entt::entity ItemRegistry::RegisterBlockItem(
     reg.emplace<components::ItemGuiMeshTransform>(
         e,
         guiTransform.value_or(components::ItemGuiMeshTransform::DefaultBlockThirdPerson()));
+    reg.emplace<components::ItemHeldMeshTransform>(
+        e,
+        heldTransform.value_or(components::ItemHeldMeshTransform::DefaultBlockFirstPerson()));
     return e;
 }
 
@@ -63,6 +67,8 @@ entt::entity ItemRegistry::RegisterResourceItem(
     reg.emplace<components::ItemId>(e, id, name, display);
     reg.emplace<components::Stackable>(e, maxStack);
     reg.emplace<components::ItemVisual>(e, std::move(visual));
+    reg.emplace<components::ItemHeldMeshTransform>(
+        e, components::ItemHeldMeshTransform::DefaultToolFirstPerson());
     return e;
 }
 
@@ -83,6 +89,8 @@ entt::entity ItemRegistry::RegisterToolItem(
     reg.emplace<components::ItemVisual>(e, std::move(visual));
     reg.emplace<components::ToolProperty>(e, tool);
     reg.emplace<components::WeaponProperty>(e, weapon);
+    reg.emplace<components::ItemHeldMeshTransform>(
+        e, components::ItemHeldMeshTransform::DefaultToolFirstPerson());
     return e;
 }
 

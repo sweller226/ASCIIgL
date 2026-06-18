@@ -47,6 +47,7 @@
 #include <ASCIIgL/renderer/Shader.hpp>
 #include <ASCIICraft/rendering/TerrainShaders.hpp>
 #include <ASCIICraft/rendering/DroppedItemShaders.hpp>
+#include <ASCIICraft/rendering/HeldItemShaders.hpp>
 #include <ASCIICraft/rendering/BlockTargetOutlineShaders.hpp>
 
 Game::Game()
@@ -56,7 +57,8 @@ Game::Game()
     , movementSystem(registry, gameplayInputFilter, eventBus)
     , physicsSystem(registry)
     , blockTargetSystem(registry)
-    , ecsRenderSystem(registry)
+    , entityRenderSystem(registry)
+    , heldItemRenderSystem(registry)
     , cameraSystem(registry, gameplayInputFilter)
     , guiManager(registry, eventBus, inputSystem)
     , blockUpdateSystem(registry, eventBus)
@@ -70,6 +72,7 @@ Game::Game()
     , soundSystem(registry, eventBus)
     , musicSystem(eventBus, soundSystem)
     , stepSfxSystem(registry, eventBus)
+    , viewBobbingSystem(registry)
     , playerFactory(registry)
     , shouldInternalExit(false)
 {
@@ -109,6 +112,16 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
     ASCIIgL::Logger::Debug("Screen initialized: " + std::to_string(SCREEN_WIDTH) + "x" + std::to_string(SCREEN_HEIGHT));
 
     guiCamera = std::make_unique<ASCIIgL::Camera2D>(glm::vec2(0, 0), SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    heldItemViewCamera = std::make_unique<ASCIIgL::Camera3D>(
+        glm::vec3(0.0f),
+        ecs::components::PlayerCamera::FOV,
+        glm::vec2(0.0f, 0.0f),
+        0.01f,
+        ecs::components::PlayerCamera::CAMERA_FAR_PLANE
+    );
+    heldItemViewCamera->setScreenDimensions(SCREEN_WIDTH, SCREEN_HEIGHT);
+    heldItemViewCamera->setCamDir(glm::vec3(0.0f, 0.0f, -1.0f));
 
     ASCIIgL::FPSClock::GetInst().Initialize(static_cast<unsigned int>(TARGET_FPS), 1.0f);
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
@@ -206,7 +219,7 @@ void Game::Update() {
     inputSystem.SetInputMode(mode);
     inputSystem.Update();
 
-    if (ASCIIgL::InputManager::GetInst().IsKeyDown(ASCIIgL::Key::K)) {
+    if (ASCIIgL::InputManager::GetInst().IsKeyPressed(ASCIIgL::Key::K)) {
         ASCIIgL::Renderer::GetInst().SetDitheringEnabled(!ASCIIgL::Renderer::GetInst().GetDitheringEnabled());
     }
 
@@ -240,6 +253,7 @@ void Game::Update() {
             movementSystem.Update();
             cameraSystem.Update();
             physicsSystem.Update();
+            viewBobbingSystem.Update();
 
             blockTargetSystem.SetGameplayActive(!guiBlocking);
             blockTargetSystem.Update();
@@ -277,7 +291,7 @@ void Game::Render() {
         ASCIIgL::Renderer::GetInst().BeginGpuFrame();
     }
 
-    // All GPU draws: 2D must be drawn after 3D so the GUI is on top (see RenderSystem::BatchAndDraw).
+    // All GPU draws: 2D GUI must be drawn after 3D so the HUD is on top.
     switch (gameState) {
         case GameState::Playing:
             {
@@ -413,6 +427,7 @@ bool Game::LoadResources() {
 
     if (!LoadTerrainMaterial())      return false;
     if (!LoadDroppedItemMaterial())  return false;
+    if (!LoadHeldItemMaterial())     return false;
     if (!LoadGUIMaterial())          return false;
     if (!LoadGUIItemMaterial())      return false;
     if (!LoadGUIBlockMaterial())     return false;
@@ -476,6 +491,44 @@ bool Game::LoadDroppedItemMaterial() {
     auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray");
     if (!itemTextureArray) {
         ASCIIgL::Logger::Error("itemTextureArray missing for dropped item material");
+        return false;
+    }
+    iconMaterial->SetTextureArray(0, itemTextureArray.get());
+    return true;
+}
+
+bool Game::LoadHeldItemMaterial() {
+    if (!ASCIIgL::BuildAndRegisterMaterial({
+        "heldItemBlockMaterial",
+        HeldItemShaders::GetVSSource(),
+        HeldItemShaders::GetPSSource(),
+        ASCIIgL::VertFormats::PosUVLayer(),
+        HeldItemShaders::GetUniformLayout(),
+        true,
+        true,
+        [](ASCIIgL::Material& material) {
+            auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
+            if (!terrainTextureArray) {
+                ASCIIgL::Logger::Error("terrainTextureArray missing for held item block material");
+                return false;
+            }
+            material.SetTextureArray(0, terrainTextureArray.get());
+            return true;
+        }
+    })) {
+        return false;
+    }
+
+    auto iconMaterial = ASCIIgL::MaterialLibrary::GetInst().GetOrCreateFromTemplate(
+        "heldItemBlockMaterial", "heldItemMaterial");
+    if (!iconMaterial) {
+        ASCIIgL::Logger::Error("Failed to create heldItemMaterial from template");
+        return false;
+    }
+
+    auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray");
+    if (!itemTextureArray) {
+        ASCIIgL::Logger::Error("itemTextureArray missing for held item material");
         return false;
     }
     iconMaterial->SetTextureArray(0, itemTextureArray.get());
@@ -592,7 +645,8 @@ void Game::RenderPlaying() {
     // Keep 2D GUI camera in sync with viewport (GPU pipeline uses Screen dimensions; 2D ortho must match)
     GetWorldPtr(registry)->Render();
     // blockTargetSystem.Render(); // Outline rendering disabled for now.
-    ecsRenderSystem.Render();
+    entityRenderSystem.Render();
+    heldItemRenderSystem.Render();
     guiManager.Render();
 }
 
@@ -615,8 +669,11 @@ void Game::InitializeSystems() {
 
     entt::entity player = ecs::components::GetPlayerEntity(registry);
     if (player != entt::null) {
-        ecsRenderSystem.SetActive3DCamera(registry.try_get<ecs::components::PlayerCamera>(player));
+        auto* playerCamera = registry.try_get<ecs::components::PlayerCamera>(player);
+        entityRenderSystem.SetActive3DCamera(playerCamera);
     }
+
+    heldItemRenderSystem.SetViewModelCamera(heldItemViewCamera.get());
 
     guiManager.SetActive2DCamera(guiCamera.get());
 

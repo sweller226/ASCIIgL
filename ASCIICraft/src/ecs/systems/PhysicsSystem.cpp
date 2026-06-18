@@ -11,6 +11,7 @@
 #include <ASCIICraft/world/query/VoxelOverlap.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
+#include <ASCIICraft/ecs/components/ViewBobbing.hpp>
 
 
 namespace ecs::systems {
@@ -46,6 +47,9 @@ void PhysicsSystem::Update() {
     }
 
     for (auto [ent, cam, t] : m_registry.view<components::PlayerCamera, components::Transform>().each()) {
+        if (m_registry.all_of<components::ViewBobbing>(ent)) {
+            continue;
+        }
         cam.camera.setCamPos(t.renderPosition + glm::vec3(0.0f, cam.PLAYER_EYE_HEIGHT, 0.0f));
     }
 }

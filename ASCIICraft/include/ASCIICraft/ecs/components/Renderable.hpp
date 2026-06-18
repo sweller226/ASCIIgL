@@ -16,7 +16,6 @@ namespace ecs::components {
 enum class RenderType : uint8_t {
     NOT_SET,
     ELEM_3D,
-    ELEM_2D,
 };
     
 struct Renderable {

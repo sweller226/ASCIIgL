@@ -9,6 +9,7 @@
 #include <ASCIIgL/engine/TextureArray.hpp>
 #include <ASCIIgL/engine/InputManager.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
+#include <ASCIIgL/engine/Camera3D.hpp>
 #include <ASCIIgL/renderer/Shader.hpp>
 
 #include <ASCIICraft/world/World.hpp>
@@ -21,13 +22,15 @@
 #include <ASCIICraft/ecs/systems/CameraSystem.hpp>
 #include <ASCIICraft/input/InputSystem.hpp>
 #include <ASCIICraft/input/GameplayInputFilter.hpp>
-#include <ASCIICraft/ecs/systems/RenderSystem.hpp>
+#include <ASCIICraft/ecs/systems/EntityRenderSystem.hpp>
+#include <ASCIICraft/ecs/systems/HeldItemRenderSystem.hpp>
 #include <ASCIICraft/ecs/systems/PhysicsSystem.hpp>
 #include <ASCIICraft/ecs/systems/LifetimeSystem.hpp>
 #include <ASCIICraft/ecs/systems/ParticleSystem.hpp>
 #include <ASCIICraft/ecs/systems/sound/MusicSystem.hpp>
 #include <ASCIICraft/ecs/systems/sound/SoundSystem.hpp>
 #include <ASCIICraft/ecs/systems/sound/StepSFXSystem.hpp>
+#include <ASCIICraft/ecs/systems/ViewBobbingSystem.hpp>
 
 // GUI
 #include <ASCIICraft/gui/GUIManager.hpp>
@@ -88,12 +91,14 @@ private:
     ecs::systems::CameraSystem cameraSystem;
     ecs::systems::PhysicsSystem physicsSystem;
     ecs::systems::BlockTargetSystem blockTargetSystem;
-    ecs::systems::RenderSystem ecsRenderSystem;
+    ecs::systems::EntityRenderSystem entityRenderSystem;
+    ecs::systems::HeldItemRenderSystem heldItemRenderSystem;
     ecs::systems::LifetimeSystem lifetimeSystem;
     ecs::systems::ParticleSystem particleSystem;
     ecs::systems::SoundSystem soundSystem;
     ecs::systems::MusicSystem musicSystem;
     ecs::systems::StepSFXSystem stepSfxSystem;
+    ecs::systems::ViewBobbingSystem viewBobbingSystem;
 
     // GUI screens
     gui::GUIManager guiManager;
@@ -112,6 +117,7 @@ private:
     ecs::factories::PlayerFactory playerFactory;
 
     std::unique_ptr<ASCIIgL::Camera2D> guiCamera;
+    std::unique_ptr<ASCIIgL::Camera3D> heldItemViewCamera;
 
     // Game state
     GameState gameState;
@@ -124,6 +130,7 @@ private:
     bool LoadResources();
     bool LoadTerrainMaterial();
     bool LoadDroppedItemMaterial();
+    bool LoadHeldItemMaterial();
     bool LoadGUIMaterial();
     bool LoadGUIItemMaterial();
     bool LoadGUIBlockMaterial();

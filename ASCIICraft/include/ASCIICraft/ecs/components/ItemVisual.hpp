@@ -58,4 +58,41 @@ struct ItemGuiMeshTransform {
     }
 };
 
+/// Local transform for held-item viewmodel meshes (display.firstperson).
+/// Separate from ItemGuiMeshTransform — GUI third-person pose ≠ first-person pose.
+struct ItemHeldMeshTransform {
+    glm::vec3 location{0.0f, 0.0f, 0.0f};
+    glm::vec3 rotationDegrees{0.0f, 0.0f, 0.0f};
+    glm::vec3 scale{1.0f, 1.0f, 1.0f};
+
+    /// Vanilla block-item first-person pose (display.firstperson default for block parents).
+    static ItemHeldMeshTransform DefaultBlockFirstPerson() {
+        ItemHeldMeshTransform t;
+        t.location = glm::vec3(1.0f, 0.0f, 0.0f);
+        t.rotationDegrees = glm::vec3(0.0f, 45.0f, 0.0f);
+        t.scale = glm::vec3(0.45f);
+        return t;
+    }
+
+    /// iron_sword.json display.firstperson.
+    static ItemHeldMeshTransform DefaultToolFirstPerson() {
+        ItemHeldMeshTransform t;
+        t.location = glm::vec3(0.0f, 1.2f, 2.0f);
+        t.rotationDegrees = glm::vec3(0.0f, 110.0f, 70.0f);
+        t.scale = glm::vec3(0.8f);
+        return t;
+    }
+
+    glm::mat4 getModel() const {
+        constexpr float kDisplayUnitsPerBlock = 16.0f;
+        glm::mat4 m(1.0f);
+        m = glm::scale(m, scale);
+        m = glm::translate(m, location / kDisplayUnitsPerBlock);
+        m = glm::rotate(m, glm::radians(rotationDegrees.x), glm::vec3(1.0f, 0.0f, 0.0f));
+        m = glm::rotate(m, glm::radians(rotationDegrees.y), glm::vec3(0.0f, 1.0f, 0.0f));
+        m = glm::rotate(m, glm::radians(rotationDegrees.z), glm::vec3(0.0f, 0.0f, 1.0f));
+        return m;
+    }
+};
+
 } // namespace ecs::components

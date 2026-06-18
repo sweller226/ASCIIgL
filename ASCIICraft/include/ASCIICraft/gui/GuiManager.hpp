@@ -19,7 +19,7 @@ namespace ASCIIgL { class EventBus; }
 namespace gui {
 
 /// Central OOP GUI: screen stack, cursor, and 2D camera.
-/// Game calls Update(), then Draw(ecsRenderSystem) to add GUI items directly to RenderSystem.
+/// Game calls Update(), then Render() to draw GUI via GUIRenderer (separate from EntityRenderSystem).
 class GUIManager {
 public:
     GUIManager(entt::registry& registry, ASCIIgL::EventBus& eventBus, IInputSource& input);
