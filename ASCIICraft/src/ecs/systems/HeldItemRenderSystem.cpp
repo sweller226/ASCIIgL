@@ -8,7 +8,10 @@
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 #include <ASCIICraft/ecs/components/ItemVisual.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/ecs/components/Transform.hpp>
+#include <ASCIICraft/ecs/components/ViewBobbing.hpp>
 #include <ASCIICraft/ecs/data/ItemRegistry.hpp>
+#include <ASCIICraft/ecs/ViewBobbingMath.hpp>
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -29,6 +32,29 @@ glm::mat4 BuildHandLocalModel(const components::ItemHeldMeshTransform* heldPose,
     return model;
 }
 
+glm::mat4 BuildHeldItemBobMatrix(const components::ViewBobbing* bob,
+                                 const components::Transform* transform) {
+    if (!bob || !transform || !bob->enabled || bob->cameraYaw <= 1e-4f) {
+        return glm::mat4(1.0f);
+    }
+
+    const float renderAlpha = viewbobbing::ComputeRenderAlpha(*transform);
+    const float walkDelta = bob->distanceWalkedModified - bob->prevDistanceWalkedModified;
+    const float walkPhase = -(bob->distanceWalkedModified + walkDelta * renderAlpha);
+
+    const float interpCameraYaw = bob->prevCameraYaw
+        + (bob->cameraYaw - bob->prevCameraYaw) * renderAlpha;
+    const float interpCameraPitch = bob->prevCameraPitch
+        + (bob->cameraPitch - bob->prevCameraPitch) * renderAlpha;
+
+    return viewbobbing::BuildMinecraftBobMatrix(
+        walkPhase,
+        interpCameraYaw,
+        interpCameraPitch,
+        bob->intensity
+    );
+}
+
 } // namespace
 
 HeldItemRenderSystem::HeldItemRenderSystem(entt::registry& registry)
@@ -47,6 +73,8 @@ void HeldItemRenderSystem::Render() {
 
     const auto* inventory = m_registry.try_get<components::Inventory>(player);
     const auto* hotbar = m_registry.try_get<components::HotbarSelection>(player);
+    const auto* bob = m_registry.try_get<components::ViewBobbing>(player);
+    const auto* transform = m_registry.try_get<components::Transform>(player);
     if (!inventory || !hotbar) {
         return;
     }
@@ -83,16 +111,16 @@ void HeldItemRenderSystem::Render() {
 
     const auto* heldPose = m_registry.try_get<components::ItemHeldMeshTransform>(itemDef);
     const glm::mat4 model = BuildHandLocalModel(heldPose, visual->is2DIcon);
-    const glm::mat4 mvp = m_viewModelCamera->proj * m_viewModelCamera->view * model;
+    const glm::mat4 bobMatrix = BuildHeldItemBobMatrix(bob, transform);
+    const glm::mat4 mvp = m_viewModelCamera->proj * bobMatrix * m_viewModelCamera->view * model;
 
     ASCIIgL::Renderer::DrawCall dc;
     dc.mesh = visual->droppedMesh.get();
     dc.material = material.get();
     dc.layer = kHeldItemLayer;
     dc.sortKey = 0.0f;
-    dc.backfaceCulling = false;
+    dc.backfaceCulling = true;
     dc.transparent = true;
-    // Viewmodel camera; depth buffer was filled using the world camera — disable depth test.
     dc.depthTest = false;
 
     if (const ASCIIgL::UniformDescriptor* mvpDesc = material->GetUniformDescriptor("mvp")) {

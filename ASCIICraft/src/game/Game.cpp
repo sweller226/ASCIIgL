@@ -971,10 +971,10 @@ void Game::InitializeItemDefinitions() {
     // === Block items (all registered block types except air and water) ===
     itemRegistry.RegisterBlockItem(registry, "minecraft:bedrock",          "Bedrock");
     itemRegistry.RegisterBlockItem(registry, "minecraft:stone",            "Stone");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:dandelion",        "Dandelion");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:poppy",            "Poppy");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:tall_grass",       "Tall Grass");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:fern",             "Fern");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:dandelion",        "Dandelion", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultTorchFirstPerson());
+    itemRegistry.RegisterBlockItem(registry, "minecraft:poppy",            "Poppy", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultTorchFirstPerson());
+    itemRegistry.RegisterBlockItem(registry, "minecraft:tall_grass",       "Tall Grass", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultTorchFirstPerson());
+    itemRegistry.RegisterBlockItem(registry, "minecraft:fern",             "Fern", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultTorchFirstPerson());
     itemRegistry.RegisterBlockItem(registry, "minecraft:fence",            "Oak Fence");
     itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone",      "Cobblestone");
     itemRegistry.RegisterBlockItem(registry, "minecraft:stone_stairs",     "Stone Stairs");
@@ -995,7 +995,8 @@ void Game::InitializeItemDefinitions() {
         "minecraft:torch",
         "Torch",
         64,
-        ecs::components::ItemGuiMeshTransform::DefaultTorch());
+        ecs::components::ItemGuiMeshTransform::DefaultTorch(),
+        ecs::components::ItemHeldMeshTransform::DefaultTorchFirstPerson());
 
     // === Resources / Materials ===
     itemRegistry.RegisterResourceItem(registry, "minecraft:coal",       "Coal",       itemLayer("minecraft:items/coal"));

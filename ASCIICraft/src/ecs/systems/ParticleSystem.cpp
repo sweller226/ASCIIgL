@@ -5,6 +5,7 @@
 #include <ASCIICraft/ecs/components/Lifetime.hpp>
 #include <ASCIICraft/ecs/components/Velocity.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/ecs/components/ParticleTag.hpp>
 #include <ASCIICraft/ecs/components/Renderable.hpp>
 
 #include <ASCIICraft/util/QuadMeshBuilder.hpp>
@@ -40,9 +41,11 @@ namespace ecs::systems {
 
         constexpr float despawnRadius2 = SPAWN_RADIUS * SPAWN_RADIUS;
 
-        auto view = m_registry.view<components::Velocity, components::Lifetime, components::Transform>();
+        auto view = m_registry.view<components::ParticleTag, components::Lifetime, components::Transform>();
 
-        for (auto [ent, velocity, lifetime, t] : view.each()) {
+        for (auto ent : view) {
+            auto& lifetime = view.get<components::Lifetime>(ent);
+            auto& t = view.get<components::Transform>(ent);
             const glm::vec3 delta = t.position - playerPos;
             const bool tooFar = glm::dot(delta, delta) > despawnRadius2;
 
@@ -106,6 +109,7 @@ namespace ecs::systems {
 
             for (int i = 0; i < e.count; ++i) {
                 entt::entity entity = m_registry.create();
+                m_registry.emplace<components::ParticleTag>(entity);
 
                 auto& t = m_registry.emplace<components::Transform>(entity);
                 t.setPosition(e.origin);

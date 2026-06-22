@@ -25,7 +25,6 @@ ASCIICraft
     cd "C:\Users\UwU\Documents\minecraft\ASCIIgL\ASCIICraft\build\bin\Release"
     .\ASCIICraft.exe
 
-    To Run the project
     cd "C:\Users\UwU\Documents\minecraft\ASCIIgL\ASCIICraft\build\bin\Release"
     .\ASCIICraft.exe --window 
 

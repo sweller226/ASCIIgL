@@ -68,7 +68,7 @@ entt::entity ItemRegistry::RegisterResourceItem(
     reg.emplace<components::Stackable>(e, maxStack);
     reg.emplace<components::ItemVisual>(e, std::move(visual));
     reg.emplace<components::ItemHeldMeshTransform>(
-        e, components::ItemHeldMeshTransform::DefaultToolFirstPerson());
+        e, components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
     return e;
 }
 

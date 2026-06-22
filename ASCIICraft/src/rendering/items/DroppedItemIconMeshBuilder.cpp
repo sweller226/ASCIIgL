@@ -19,7 +19,6 @@
 namespace rendering::items {
 namespace {
 
-constexpr float kUvShrink = 0.001f;
 constexpr int kAlphaThreshold = 1;
 
 enum class SideDirection { Up, Down, Left, Right };
@@ -150,38 +149,63 @@ using V = ASCIIgL::VertStructs::PosUVLayer;
 void AppendPlateFaces(
     std::vector<V>& vertices,
     std::vector<int>& indices,
+    const uint8_t* rgba,
+    int spriteWidth,
+    int spriteHeight,
     float layer
 ) {
     const float z0 = kItemPlateMinZ;
     const float z1 = kItemPlateMaxZ;
+    const float xScale = kItemModelUnitsPerBlock / static_cast<float>(spriteWidth);
+    const float yScale = kItemModelUnitsPerBlock / static_cast<float>(spriteHeight);
+    const float invSpriteWidth = 1.0f / static_cast<float>(spriteWidth);
+    const float invSpriteHeight = 1.0f / static_cast<float>(spriteHeight);
 
-    const glm::vec3 p000 = ModelUnitsToBlockCentered(0.0f, 0.0f, z0);
-    const glm::vec3 p100 = ModelUnitsToBlockCentered(kItemModelUnitsPerBlock, 0.0f, z0);
-    const glm::vec3 p110 = ModelUnitsToBlockCentered(kItemModelUnitsPerBlock, kItemModelUnitsPerBlock, z0);
-    const glm::vec3 p010 = ModelUnitsToBlockCentered(0.0f, kItemModelUnitsPerBlock, z0);
+    for (int pixelY = 0; pixelY < spriteHeight; ++pixelY) {
+        for (int pixelX = 0; pixelX < spriteWidth; ++pixelX) {
+            if (IsPixelTransparent(rgba, spriteWidth, spriteHeight, pixelX, pixelY)) {
+                continue;
+            }
 
-    const glm::vec3 p001 = ModelUnitsToBlockCentered(0.0f, 0.0f, z1);
-    const glm::vec3 p101 = ModelUnitsToBlockCentered(kItemModelUnitsPerBlock, 0.0f, z1);
-    const glm::vec3 p111 = ModelUnitsToBlockCentered(kItemModelUnitsPerBlock, kItemModelUnitsPerBlock, z1);
-    const glm::vec3 p011 = ModelUnitsToBlockCentered(0.0f, kItemModelUnitsPerBlock, z1);
+            const float bx0 = static_cast<float>(pixelX) * xScale;
+            const float bx1 = static_cast<float>(pixelX + 1) * xScale;
+            const float by0 = kItemModelUnitsPerBlock - static_cast<float>(pixelY + 1) * yScale;
+            const float by1 = kItemModelUnitsPerBlock - static_cast<float>(pixelY) * yScale;
 
-    // South (+Z): full layer0 texture.
-    util::AppendQuadPosUVLayer(
-        vertices,
-        indices,
-        {p001, p101, p111, p011},
-        {glm::vec2(0.0f, 1.0f), glm::vec2(1.0f, 1.0f), glm::vec2(1.0f, 0.0f), glm::vec2(0.0f, 0.0f)},
-        layer
-    );
+            const glm::vec3 p000 = ModelUnitsToBlockCentered(bx0, by0, z0);
+            const glm::vec3 p100 = ModelUnitsToBlockCentered(bx1, by0, z0);
+            const glm::vec3 p110 = ModelUnitsToBlockCentered(bx1, by1, z0);
+            const glm::vec3 p010 = ModelUnitsToBlockCentered(bx0, by1, z0);
 
-    // North (-Z): match south UV-to-corner mapping when viewed from outside.
-    util::AppendQuadPosUVLayer(
-        vertices,
-        indices,
-        {p000, p100, p110, p010},
-        {glm::vec2(0.0f, 1.0f), glm::vec2(1.0f, 1.0f), glm::vec2(1.0f, 0.0f), glm::vec2(0.0f, 0.0f)},
-        layer
-    );
+            const glm::vec3 p001 = ModelUnitsToBlockCentered(bx0, by0, z1);
+            const glm::vec3 p101 = ModelUnitsToBlockCentered(bx1, by0, z1);
+            const glm::vec3 p111 = ModelUnitsToBlockCentered(bx1, by1, z1);
+            const glm::vec3 p011 = ModelUnitsToBlockCentered(bx0, by1, z1);
+
+            const glm::vec2 uv(
+                (static_cast<float>(pixelX) + 0.5f) * invSpriteWidth,
+                (static_cast<float>(pixelY) + 0.5f) * invSpriteHeight
+            );
+
+            // South (+Z): per-opaque-pixel front plate.
+            util::AppendQuadPosUVLayer(
+                vertices,
+                indices,
+                {p001, p101, p111, p011},
+                {uv, uv, uv, uv},
+                layer
+            );
+
+            // North (-Z): same pixel, reversed winding for the back plate.
+            util::AppendQuadPosUVLayer(
+                vertices,
+                indices,
+                {p000, p010, p110, p100},
+                {uv, uv, uv, uv},
+                layer
+            );
+        }
+    }
 }
 
 void AppendSideFace(
@@ -210,15 +234,15 @@ void AppendSideFace(
     float v1 = 0.0f;
 
     if (horizontal) {
-        u0 = minX + kUvShrink;
-        v0 = minY + kUvShrink;
-        u1 = minX + length - kUvShrink;
-        v1 = minY + 1.0f - kUvShrink;
+        u0 = minX + 0.5f;
+        v0 = minY + 0.5f;
+        u1 = minX + length - 0.5f;
+        v1 = v0;
     } else {
-        u0 = minX + kUvShrink;
-        v0 = minY + length - kUvShrink;
-        u1 = minX + 1.0f - kUvShrink;
-        v1 = minY + kUvShrink;
+        u0 = minX + 0.5f;
+        v0 = minY + length - 0.5f;
+        u1 = u0;
+        v1 = minY + 0.5f;
     }
 
     float fromX = minX;
@@ -298,16 +322,16 @@ void AppendSideFace(
 
     switch (face.facing) {
         case SideDirection::Up:
-            util::AppendQuadPosUVLayer(vertices, indices, {p010, p110, p111, p011}, {uv00, uv10, uv11, uv01}, layer);
+            util::AppendQuadPosUVLayer(vertices, indices, {p010, p011, p111, p110}, {uv00, uv01, uv11, uv10}, layer);
             break;
         case SideDirection::Down:
-            util::AppendQuadPosUVLayer(vertices, indices, {p100, p000, p001, p101}, {uv00, uv10, uv11, uv01}, layer);
+            util::AppendQuadPosUVLayer(vertices, indices, {p100, p101, p001, p000}, {uv00, uv01, uv11, uv10}, layer);
             break;
         case SideDirection::Left:
-            util::AppendQuadPosUVLayer(vertices, indices, {p000, p010, p011, p001}, {uv00, uv10, uv11, uv01}, layer);
+            util::AppendQuadPosUVLayer(vertices, indices, {p000, p001, p011, p010}, {uv00, uv01, uv11, uv10}, layer);
             break;
         case SideDirection::Right:
-            util::AppendQuadPosUVLayer(vertices, indices, {p110, p100, p101, p111}, {uv00, uv10, uv11, uv01}, layer);
+            util::AppendQuadPosUVLayer(vertices, indices, {p110, p111, p101, p100}, {uv00, uv01, uv11, uv10}, layer);
             break;
     }
 }
@@ -339,7 +363,7 @@ std::shared_ptr<ASCIIgL::Mesh> DroppedItemIconMeshBuilder::Build(
     vertices.reserve(256);
     indices.reserve(384);
 
-    AppendPlateFaces(vertices, indices, iconLayer);
+    AppendPlateFaces(vertices, indices, rgba, width, height, iconLayer);
 
     const std::set<SideFace, SideFaceLess> sideFaces = BuildSideFaces(rgba, width, height);
     for (const SideFace& face : sideFaces) {

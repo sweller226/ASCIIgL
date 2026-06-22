@@ -42,23 +42,63 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     // --- Inventory (36 slots: 0-8 hotbar, 9-35 main) ---
     auto& inv = registry.emplace<components::Inventory>(p_ent, 36);
     if (auto* itemRegistry = registry.ctx().find<ecs::data::ItemRegistry>()) {
-        const auto seedSlot = [&](int slot, const char* itemName, int count) {
+        const char* itemNames[] = {
+            "minecraft:bedrock",
+            "minecraft:stone",
+            "minecraft:dandelion",
+            "minecraft:poppy",
+            "minecraft:tall_grass",
+            "minecraft:fern",
+            "minecraft:fence",
+            "minecraft:cobblestone",
+            "minecraft:stone_stairs",
+            "minecraft:cobblestone_slab",
+            "minecraft:dirt",
+            "minecraft:grass",
+            "minecraft:oak_log",
+            "minecraft:oak_planks",
+            "minecraft:oak_slab",
+            "minecraft:oak_leaves",
+            "minecraft:crafting_table",
+            "minecraft:bookshelf",
+            "minecraft:brick_block",
+            "minecraft:furnace",
+            "minecraft:glass",
+            "minecraft:torch",
+            "minecraft:coal",
+            "minecraft:iron_ingot",
+            "minecraft:gold_ingot",
+            "minecraft:stick",
+            "minecraft:wooden_sword",
+            "minecraft:stone_sword",
+            "minecraft:iron_sword",
+            "minecraft:wooden_shovel",
+            "minecraft:stone_shovel",
+            "minecraft:iron_shovel",
+            "minecraft:wooden_pickaxe",
+            "minecraft:stone_pickaxe",
+            "minecraft:iron_pickaxe",
+            "minecraft:wooden_axe",
+            "minecraft:stone_axe",
+            "minecraft:iron_axe",
+        };
+
+        const auto seedSlot = [&](int slot, const char* itemName) {
             const int id = itemRegistry->GetIdFromName(itemName, registry);
             if (id < 0 || slot < 0 || slot >= inv.capacity) {
                 return;
             }
-            inv.slots[slot] = components::ItemStack::fromRegistry(registry, id, count);
+            components::ItemStack stack = components::ItemStack::fromRegistry(registry, id, 1);
+            if (!stack.isEmpty()) {
+                stack.count = stack.maxStackSize;
+                inv.slots[slot] = stack;
+            }
         };
 
-        seedSlot(0, "minecraft:stone", 64);
-        seedSlot(1, "minecraft:dirt", 64);
-        seedSlot(2, "minecraft:grass", 64);
-        seedSlot(3, "minecraft:oak_log", 16);
-        seedSlot(4, "minecraft:coal", 32);
-        seedSlot(5, "minecraft:wooden_pickaxe", 1);
-        seedSlot(6, "minecraft:iron_sword", 1);
-        seedSlot(7, "minecraft:torch", 16);
-        seedSlot(8, "minecraft:iron_ingot", 8);
+        constexpr int itemCount = static_cast<int>(sizeof(itemNames) / sizeof(itemNames[0]));
+        for (int slot = 0; slot < inv.capacity && slot < itemCount; ++slot) {
+            seedSlot(slot, itemNames[slot]);
+        }
     } else {
         ASCIIgL::Logger::Warning("PlayerFactory: ItemRegistry missing; inventory left empty.");
     }

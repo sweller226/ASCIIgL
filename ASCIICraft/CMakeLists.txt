@@ -12,10 +12,6 @@ if(CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_CONFIGURATION_TYPES "FastDebug;Release" CACHE STRING "Build configurations" FORCE)
 endif()
 
-if(MSVC)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /VERBOSE")
-endif()
-
 # ---------------------------------------------------------------------------
 # Consumer vendor libraries (defines entt, FastNoiseLite, stb, fmt, etc.)
 # ---------------------------------------------------------------------------
@@ -135,20 +131,46 @@ set_target_properties(ASCIICraft PROPERTIES
 )
 
 # ---------------------------------------------------------------------------
-# Post-Build Steps
+# Resource Copy
 # ---------------------------------------------------------------------------
-add_custom_command(TARGET ASCIICraft POST_BUILD
+file(GLOB_RECURSE ASCIICraft_RESOURCE_FILES
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/res/*"
+    "${ASCIIgL_ROOT}/res/*"
+)
+
+set(ASCIICraft_RESOURCE_STAMP "${CMAKE_BINARY_DIR}/resources.stamp")
+
+add_custom_command(
+    OUTPUT "${ASCIICraft_RESOURCE_STAMP}"
     COMMAND ${CMAKE_COMMAND} -E echo "Copying resources to build directories"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/res"
-        "$<TARGET_FILE_DIR:ASCIICraft>/res"
+        "${CMAKE_BINARY_DIR}/bin/FastDebug/res"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/res"
+        "${CMAKE_BINARY_DIR}/bin/Release/res"
     COMMAND ${CMAKE_COMMAND} -E echo "Copying ASCIIgL library resources"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${ASCIIgL_ROOT}/res"
-        "$<TARGET_FILE_DIR:ASCIICraft>/res/ASCIIgL"
+        "${CMAKE_BINARY_DIR}/bin/FastDebug/res/ASCIIgL"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${ASCIIgL_ROOT}/res"
+        "${CMAKE_BINARY_DIR}/bin/Release/res/ASCIIgL"
+    COMMAND ${CMAKE_COMMAND} -E touch "${ASCIICraft_RESOURCE_STAMP}"
+    DEPENDS ${ASCIICraft_RESOURCE_FILES}
     COMMENT "Copying game and library resources"
 )
 
+add_custom_target(ASCIICraftResources
+    DEPENDS "${ASCIICraft_RESOURCE_STAMP}"
+)
+
+add_dependencies(ASCIICraft ASCIICraftResources)
+
+# ---------------------------------------------------------------------------
+# Post-Build Steps
+# ---------------------------------------------------------------------------
 if(WIN32)
     add_custom_command(TARGET ASCIICraft POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "Copying oneTBB DLLs"
