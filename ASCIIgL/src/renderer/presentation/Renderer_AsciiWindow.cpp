@@ -241,6 +241,8 @@ float4 main(float4 svPos : SV_Position, float2 uv : TEXCOORD0) : SV_Target
 }
 
 void Renderer::RunAsciiWindowPass() {
+    InvalidateBoundState();
+
     if (!impl_->_windowSwapChain || !impl_->_windowRTV || !impl_->_asciiWindowPS || !impl_->_asciiWindowCB || !impl_->_charInfoSRV || !impl_->_fontAtlasSRV || !impl_->_paletteSRVWindow || !impl_->_rampLookupSRV) {
         Logger::Warning("[Renderer] RunAsciiWindowPass: required resources not initialized");
         return;
@@ -323,6 +325,7 @@ void Renderer::RunAsciiWindowPass() {
 
     // Present window swap chain
     impl_->_windowSwapChain->Present(0, 0);
+    InvalidateBoundState();
 }
 
 } // namespace ASCIIgL

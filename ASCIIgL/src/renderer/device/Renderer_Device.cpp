@@ -787,6 +787,8 @@ void Renderer::UploadLUTsToGPU() {
 }
 
 void Renderer::RunQuantizationPass() {
+    InvalidateBoundState();
+
     if (impl_->_colorLUTState == ColorLUTState::NotComputed) {
         PrecomputeColorLUT();
     }
@@ -840,6 +842,7 @@ void Renderer::RunQuantizationPass() {
 
     // Restore main render target so next frame draws to the correct RT
     impl_->_context->OMSetRenderTargets(1, impl_->_renderTargetView.GetAddressOf(), impl_->_depthStencilView.Get());
+    InvalidateBoundState();
 }
 
 // Builds the font atlas once using current Screen font size and CoverageJson cell size.

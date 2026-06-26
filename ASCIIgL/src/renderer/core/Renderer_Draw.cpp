@@ -110,19 +110,7 @@ void Renderer::BeginGpuFrame() {
     viewport.MaxDepth = 1.0f;
     impl_->_context->RSSetViewports(1, &viewport);
 
-    // Set depth stencil and blend state (on for both 3D and 2D)
-    impl_->_context->OMSetDepthStencilState(impl_->_depthStencilState.Get(), 0);
-    const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    impl_->_context->OMSetBlendState(impl_->_blendStateAlpha.Get(), blendFactor, 0xFFFFFFFF);
-
-    // Set rasterizer state based on wireframe, backface culling, and CCW modes
-    bool wireframe = GetWireframe();
-    bool backfaceCulling = GetBackfaceCulling();
-    bool ccw = GetCCW();
-    
-    // Calculate index: wireframe(0/1) + cull(0/2) + ccw(0/4)
-    int stateIndex = (wireframe ? 1 : 0) + (backfaceCulling ? 2 : 0) + (ccw ? 4 : 0);
-    impl_->_context->RSSetState(impl_->_rasterizerStates[stateIndex].Get());
+    InvalidateBoundState();
 
     // Bind sampler
     impl_->_context->PSSetSamplers(0, 1, impl_->_samplerLinear.GetAddressOf());
@@ -157,25 +145,14 @@ void Renderer::SortTransparentDraws() {
               });
 }
 
-void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list) {
-    bool currentCull = GetBackfaceCulling();
-    bool currentDepthTest = true;
-
+void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list, const Renderer::DrawGpuState& passState) {
     for (const auto& dc : list) {
         if (!dc.mesh || !dc.material) continue;
 
-        if (dc.backfaceCulling != currentCull) {
-            currentCull = dc.backfaceCulling;
-            const bool wireframe = GetWireframe();
-            const bool ccw = GetCCW();
-            const int stateIndex = (wireframe ? 1 : 0) + (currentCull ? 2 : 0) + (ccw ? 4 : 0);
-            impl_->_context->RSSetState(impl_->_rasterizerStates[stateIndex].Get());
-        }
-
-        if (dc.depthTest != currentDepthTest) {
-            SetDepthTestEnabled(dc.depthTest);
-            currentDepthTest = dc.depthTest;
-        }
+        Renderer::DrawGpuState drawState = passState;
+        drawState.backfaceCulling = dc.backfaceCulling;
+        drawState.depthTest = dc.depthTest;
+        ApplyDrawState(drawState);
 
         Material* mat = dc.material;
 
@@ -207,21 +184,21 @@ void Renderer::FlushDraws() {
     // Ensure we're drawing to the main RT (quantization reads from it after resolve)
     impl_->_context->OMSetRenderTargets(1, impl_->_renderTargetView.GetAddressOf(), impl_->_depthStencilView.Get());
 
-    // 1) Opaque pass: depth write ON, blending OFF
-    SetDepthTestEnabled(true);
-    SetDepthWriteEnabled(true);
-    SetBlendEnabled(false);
+    Renderer::DrawGpuState opaquePass;
+    opaquePass.depthTest = true;
+    opaquePass.depthWrite = true;
+    opaquePass.blend = false;
 
     SortOpaqueDraws();
-    ExecuteDrawList(impl_->_opaqueDraws);
+    ExecuteDrawList(impl_->_opaqueDraws, opaquePass);
 
-    // 2) Transparent pass: depth write OFF, blending ON
-    SetDepthTestEnabled(true);
-    SetDepthWriteEnabled(false);
-    SetBlendEnabled(true);
+    Renderer::DrawGpuState transparentPass;
+    transparentPass.depthTest = true;
+    transparentPass.depthWrite = false;
+    transparentPass.blend = true;
 
     SortTransparentDraws();
-    ExecuteDrawList(impl_->_transparentDraws);
+    ExecuteDrawList(impl_->_transparentDraws, transparentPass);
 }
 
 void Renderer::EndGpuFrame() {
@@ -267,16 +244,6 @@ void Renderer::EndGpuFrame() {
         impl_->_debugSwapChain->Present(0, 0);
     }
 #endif
-}
-
-void Renderer::ExecuteTransparentDrawList() {
-    SortTransparentDraws();
-    ExecuteDrawList(impl_->_transparentDraws);
-}
-
-void Renderer::ExecuteOpaqueDrawList() {
-    SortOpaqueDraws();
-    ExecuteDrawList(impl_->_opaqueDraws);
 }
 
 } // namespace ASCIIgL

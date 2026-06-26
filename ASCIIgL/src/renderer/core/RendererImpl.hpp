@@ -97,6 +97,7 @@ struct Renderer::Impl {
 
     ShaderProgram* _boundShaderProgram = nullptr;
     Material* _boundMaterial = nullptr;
+    BoundState _boundState;
 
     bool _wireframe = false;
     bool _backface_culling = true;

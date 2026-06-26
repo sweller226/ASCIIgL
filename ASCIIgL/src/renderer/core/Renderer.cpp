@@ -468,6 +468,7 @@ ScreenPixel Renderer::GetCharInfo(const glm::ivec3& rgb) {
 
 void Renderer::SetWireframe(bool wireframe) {
     impl_->_wireframe = wireframe;
+    InvalidateBoundState();
 }
 
 bool Renderer::GetWireframe() const {
@@ -476,6 +477,7 @@ bool Renderer::GetWireframe() const {
 
 void Renderer::SetBackfaceCulling(bool backfaceCulling) {
     impl_->_backface_culling = backfaceCulling;
+    InvalidateBoundState();
 }
 
 bool Renderer::GetBackfaceCulling() const {
@@ -484,6 +486,7 @@ bool Renderer::GetBackfaceCulling() const {
 
 void Renderer::SetCCW(bool ccw) {
     impl_->_ccw = ccw;
+    InvalidateBoundState();
 }
 
 bool Renderer::GetCCW() const {

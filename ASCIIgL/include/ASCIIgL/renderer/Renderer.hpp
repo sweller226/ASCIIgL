@@ -63,6 +63,18 @@ public:
     struct Impl;
 
 private:
+    struct DrawGpuState {
+        bool backfaceCulling = true;
+        bool depthTest = true;
+        bool depthWrite = true;
+        bool blend = false;
+    };
+
+    struct BoundState {
+        bool valid = false;
+        DrawGpuState state{};
+    };
+
     std::unique_ptr<Impl> impl_;
 
     // =========================================================================
@@ -137,7 +149,9 @@ private:
     // =========================================================================
     void SortOpaqueDraws();
     void SortTransparentDraws();
-    void ExecuteDrawList(const std::vector<DrawCall>& list);
+    void ExecuteDrawList(const std::vector<DrawCall>& list, const DrawGpuState& passState);
+    void ApplyDrawState(const DrawGpuState& desired);
+    void InvalidateBoundState();
 
 #ifdef _WIN32
     /// D3D device for shader compilation; nullptr if not initialized.
@@ -237,9 +251,6 @@ public:
     // End the GPU render pass for this frame (resolve + download).
     void EndGpuFrame();
 
-    void ExecuteTransparentDrawList();
-    void ExecuteOpaqueDrawList();
-
 private:
     // Bind a custom shader program (nullptr to use default)
     void BindShaderProgram(ShaderProgram* program);
@@ -266,6 +277,9 @@ private:
     
     /// Set depth write on/off. Use false for transparent/2D so they don't occlude geometry behind.
     void SetDepthWriteEnabled(bool enabled);
+
+    /// Set depth test/write together because D3D binds them as one depth-stencil state.
+    void SetDepthState(bool testEnabled, bool writeEnabled);
     
     /// Set alpha blending on/off. Use true for 2D GUI so transparent PNG regions blend correctly.
     void SetBlendEnabled(bool enabled);
