@@ -272,12 +272,6 @@ private:
     void UnbindTexture(int slot = 0);
     void UnbindTextureArray(int slot = 0);
     
-    /// Set depth test on/off. Use false for 2D overlay (GUI) so it is not clipped by 3D depth buffer.
-    void SetDepthTestEnabled(bool enabled);
-    
-    /// Set depth write on/off. Use false for transparent/2D so they don't occlude geometry behind.
-    void SetDepthWriteEnabled(bool enabled);
-
     /// Set depth test/write together because D3D binds them as one depth-stencil state.
     void SetDepthState(bool testEnabled, bool writeEnabled);
     

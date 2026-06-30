@@ -38,18 +38,6 @@ void Renderer::ApplyDrawState(const Renderer::DrawGpuState& desired) {
     impl_->_boundState.valid = true;
 }
 
-void Renderer::SetDepthTestEnabled(bool enabled) {
-    if (!impl_->_initialized) return;
-    ID3D11DepthStencilState* state = enabled ? impl_->_depthStencilState.Get() : impl_->_depthStencilStateNoTest.Get();
-    impl_->_context->OMSetDepthStencilState(state, 0);
-}
-
-void Renderer::SetDepthWriteEnabled(bool enabled) {
-    if (!impl_->_initialized) return;
-    ID3D11DepthStencilState* state = enabled ? impl_->_depthStencilState.Get() : impl_->_depthStencilStateNoWrite.Get();
-    impl_->_context->OMSetDepthStencilState(state, 0);
-}
-
 void Renderer::SetDepthState(bool testEnabled, bool writeEnabled) {
     if (!impl_->_initialized) return;
 

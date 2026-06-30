@@ -15,12 +15,15 @@ struct PlayerCamera {
     {}
     
     ASCIIgL::Camera3D camera;
+    float playerEyeHeight = PLAYER_EYE_HEIGHT;
 
     static constexpr float CAMERA_NEAR_PLANE = 0.02f;
     static constexpr float CAMERA_FAR_PLANE = 1000.0f;
     static constexpr float FOV = 80.0f;                      // Field of view in degrees
 
     static constexpr float PLAYER_EYE_HEIGHT = 1.62f;        // Blocks from feet to eyes
+    static constexpr float SHIFTING_PLAYER_EYE_HEIGHT = 1.27f;
+    static constexpr float PLAYER_EYE_HEIGHT_LERP_SPEED = 10.0f;
 };
 
 inline ASCIIgL::Camera3D* GetPlayerCamera(entt::entity ent, entt::registry& registry) {

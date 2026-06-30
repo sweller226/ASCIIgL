@@ -50,7 +50,7 @@ void PhysicsSystem::Update() {
         if (m_registry.all_of<components::ViewBobbing>(ent)) {
             continue;
         }
-        cam.camera.setCamPos(t.renderPosition + glm::vec3(0.0f, cam.PLAYER_EYE_HEIGHT, 0.0f));
+        cam.camera.setCamPos(t.renderPosition + glm::vec3(0.0f, cam.playerEyeHeight, 0.0f));
     }
 }
 

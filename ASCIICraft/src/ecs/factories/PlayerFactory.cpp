@@ -117,7 +117,7 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     stepSoundState.lastPosition = position;
 
     // --- Camera ---
-    glm::vec3 eyePos = position + glm::vec3(0, cam.PLAYER_EYE_HEIGHT, 0);
+    glm::vec3 eyePos = position + glm::vec3(0, cam.playerEyeHeight, 0);
     glm::vec3 lookDir = glm::vec3(0.0f, 0.0f, -1.0f);
     const unsigned screenW = ASCIIgL::Screen::GetInst().GetWidth();
     const unsigned screenH = ASCIIgL::Screen::GetInst().GetHeight();
@@ -129,7 +129,7 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
 
     // --- Head ---
     head.lookDir = lookDir;
-    head.relativePos = glm::vec3(0, cam.PLAYER_EYE_HEIGHT, 0);
+    head.relativePos = glm::vec3(0, cam.playerEyeHeight, 0);
 
     // --- Reach ---
     reach.reach = 5.0f;

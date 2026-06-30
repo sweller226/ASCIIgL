@@ -21,7 +21,7 @@ const std::vector<CatalogEntry>& GetBlockTextureCatalog() {
         {"minecraft:blocks/crafting_table_side","res/textures/blocks/crafting_table_side.png"},
         {"minecraft:blocks/crafting_table_top","res/textures/blocks/crafting_table_top.png"},
         {"minecraft:blocks/furnace_front_off", "res/textures/blocks/furnace_front_off.png"},
-        {"minecraft:blocks/furnace_front_on",  "res/textures/blocks/furnace_front_on.png"}, // modified json for lit furnace
+        // {"minecraft:blocks/furnace_front_on",  "res/textures/blocks/furnace_front_on.png"}, // modified json for lit furnace
         {"minecraft:blocks/furnace_side",      "res/textures/blocks/furnace_side.png"},
         {"minecraft:blocks/furnace_top",       "res/textures/blocks/furnace_top.png"},
         {"minecraft:blocks/glass",             "res/textures/blocks/glass.png"},

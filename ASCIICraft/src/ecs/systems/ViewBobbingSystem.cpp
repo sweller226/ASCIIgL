@@ -32,7 +32,7 @@ void ViewBobbingSystem::Update() {
 
     for (auto [ent, bob, cam, transform, vel, ground] : view.each()) {
         const glm::vec3 baseEyePos = transform.renderPosition
-            + glm::vec3(0.0f, cam.PLAYER_EYE_HEIGHT, 0.0f);
+            + glm::vec3(0.0f, cam.playerEyeHeight, 0.0f);
         cam.camera.setCamPos(baseEyePos);
 
         bob.prevDistanceWalkedModified = bob.distanceWalkedModified;
