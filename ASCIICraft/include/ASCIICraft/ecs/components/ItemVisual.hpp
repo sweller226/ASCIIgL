@@ -77,7 +77,7 @@ struct ItemHeldMeshTransform {
     static ItemHeldMeshTransform DefaultGeneratedFirstPerson() {
         ItemHeldMeshTransform t;
         t.location = glm::vec3(-0.5f, 3.0f, 1.0f);
-        t.rotationDegrees = glm::vec3(-10.0f, -65.0f, 10.0f);
+        t.rotationDegrees = glm::vec3(-10.0f, 288.0f, 10.0f);
         t.scale = glm::vec3(0.6f);
         return t;
     }
@@ -85,8 +85,8 @@ struct ItemHeldMeshTransform {
     /// iron_sword.json display.firstperson.
     static ItemHeldMeshTransform DefaultToolFirstPerson() {
         ItemHeldMeshTransform t;
-        t.location = glm::vec3(-1.0f, 2.3f, 1.0f);
-        t.rotationDegrees = glm::vec3(0.0f, 108.0f, 65.0f);
+        t.location = glm::vec3(0.0f, 2.3f, 1.0f);
+        t.rotationDegrees = glm::vec3(0.0f, 288.0f, 20.0f);
         t.scale = glm::vec3(0.7f);
         return t;
     }

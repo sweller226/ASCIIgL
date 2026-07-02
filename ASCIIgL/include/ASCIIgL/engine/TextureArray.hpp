@@ -20,11 +20,13 @@ public:
     // tileSize: size of each tile (e.g., 16 for 16x16 tiles)
     // Optional monochrome mapping can bake tiles to a gradient on load.
     TextureArray(const std::string& atlasPath, int tileSize,
-                 const MonochromeMapping& mono = MonochromeMapping{});
-    
+                 const MonochromeMapping& mono = MonochromeMapping{},
+                 const std::vector<MonochromeMapping>& perTileMono = {});
+
     // Load from individual tile files
     TextureArray(const std::vector<std::string>& tilePaths,
-                 const MonochromeMapping& mono = MonochromeMapping{});
+                 const MonochromeMapping& mono = MonochromeMapping{},
+                 const std::vector<MonochromeMapping>& perTileMono = {});
     
     ~TextureArray();
     

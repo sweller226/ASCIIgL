@@ -204,23 +204,8 @@ void Renderer::FlushDraws() {
 void Renderer::EndGpuFrame() {
     if (!impl_->_initialized) return;
 
-    // Resolve MSAA render target to non-MSAA texture for CPU download
-    D3D11_TEXTURE2D_DESC rtDesc;
-    impl_->_renderTarget->GetDesc(&rtDesc);
-    
-    if (rtDesc.SampleDesc.Count > 1) {
-        PROFILE_SCOPE("Renderer.EndGpuFrame.ResolveMSAA");
-        // MSAA is enabled - resolve to non-MSAA texture (format must match source)
-        impl_->_context->ResolveSubresource(
-            impl_->_resolvedTexture.Get(),     // Destination (non-MSAA)
-            0,                           // Dest subresource
-            impl_->_renderTarget.Get(),         // Source (MSAA)
-            0,                           // Source subresource
-            rtDesc.Format                // Match render target (R8G8B8A8_UNORM_SRGB)
-        );
-    } else {
+    {
         PROFILE_SCOPE("Renderer.EndGpuFrame.CopyResolved");
-        // No MSAA - just copy render target to resolved texture
         impl_->_context->CopyResource(impl_->_resolvedTexture.Get(), impl_->_renderTarget.Get());
     }
     

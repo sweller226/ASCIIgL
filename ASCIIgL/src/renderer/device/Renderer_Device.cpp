@@ -30,10 +30,7 @@ Renderer::~Renderer() {
     Shutdown();
 }
 
-void Renderer::Initialize(bool antialiasing, int antialiasing_samples, const wchar_t* charRamp, int charRampCount) {
-    impl_->_antialiasing = antialiasing;
-    impl_->_antialiasing_samples = antialiasing_samples;
-    
+void Renderer::Initialize(const wchar_t* charRamp, int charRampCount) {
     if (!impl_->_initialized) {
         Logger::Info("Initializing Renderer...");
     } else {
@@ -175,38 +172,14 @@ bool Renderer::InitializeDevice() {
 }
 
 bool Renderer::InitializeRenderTarget() {
-    // Get MSAA settings
-    bool useMSAA = GetAntialiasing();
-    int msaaSamples = GetAntialiasingsamples();
-    
-    UINT sampleCount = 1;
-    UINT qualityLevel = 0;
-    
-    if (useMSAA) {
-        sampleCount = std::clamp(msaaSamples, 1, 8);  // Clamp to 1-8 samples
-        
-        // Check MSAA quality support
-        UINT numQualityLevels = 0;
-        impl_->_device->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, sampleCount, &numQualityLevels);
-        if (numQualityLevels > 0) {
-            qualityLevel = 0; 
-        } else {
-            Logger::Warning("[Renderer] " + std::to_string(sampleCount) + " x MSAA not supported, falling back to 1x");
-            sampleCount = 1;
-        }
-    }
-    
-    Logger::Debug("[Renderer] Creating render target with " + std::to_string(sampleCount) + "x MSAA");
-    
-    // Create MSAA render target texture
     D3D11_TEXTURE2D_DESC texDesc = {};
     texDesc.Width = Screen::GetInst().GetWidth();
     texDesc.Height = Screen::GetInst().GetHeight();
     texDesc.MipLevels = 1;
     texDesc.ArraySize = 1;
     texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-    texDesc.SampleDesc.Count = sampleCount;
-    texDesc.SampleDesc.Quality = qualityLevel;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.SampleDesc.Quality = 0;
     texDesc.Usage = D3D11_USAGE_DEFAULT;
     texDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
     texDesc.CPUAccessFlags = 0;
@@ -219,7 +192,6 @@ bool Renderer::InitializeRenderTarget() {
         return false;
     }
 
-    // Create render target view
     hr = impl_->_device->CreateRenderTargetView(impl_->_renderTarget.Get(), nullptr, &impl_->_renderTargetView);
     if (FAILED(hr)) {
         std::ostringstream ss;
@@ -227,12 +199,11 @@ bool Renderer::InitializeRenderTarget() {
         Logger::Error("[Renderer] Failed to create render target view: 0x" + ss.str());
         return false;
     }
-    
-    // Create resolved (non-MSAA) texture for quantization pass input (needs SRV)
-    texDesc.SampleDesc.Count = 1;
-    texDesc.SampleDesc.Quality = 0;
+
     texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
+    impl_->_resolvedTexture.Reset();
+    impl_->_resolvedTextureSRV.Reset();
     hr = impl_->_device->CreateTexture2D(&texDesc, nullptr, &impl_->_resolvedTexture);
     if (FAILED(hr)) {
         std::ostringstream ss;
@@ -252,37 +223,27 @@ bool Renderer::InitializeRenderTarget() {
         return false;
     }
 
-    std::string msg = "[Renderer] Render target initialized: " + 
-        std::to_string(Screen::GetInst().GetWidth()) + "x" + 
-        std::to_string(Screen::GetInst().GetHeight()) + 
-        (useMSAA ? (" with " + std::to_string(sampleCount) + "x MSAA") : " without MSAA");
-    Logger::Info(msg);
+    Logger::Info("[Renderer] Render target initialized: " +
+        std::to_string(Screen::GetInst().GetWidth()) + "x" +
+        std::to_string(Screen::GetInst().GetHeight()));
 
     return true;
 }
 
 bool Renderer::InitializeDepthStencil() {
-    // Get MSAA settings (must match render target)
-    bool useMSAA = GetAntialiasing();
-    int msaaSamples = GetAntialiasingsamples();
-    
-    UINT sampleCount = 1;
-    if (useMSAA) {
-        sampleCount = std::clamp(msaaSamples, 1, 8);
-    }
-    
-    // Create depth stencil texture (must match render target MSAA settings)
     D3D11_TEXTURE2D_DESC depthDesc = {};
     depthDesc.Width = Screen::GetInst().GetWidth();
     depthDesc.Height = Screen::GetInst().GetHeight();
     depthDesc.MipLevels = 1;
     depthDesc.ArraySize = 1;
     depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-    depthDesc.SampleDesc.Count = sampleCount;
+    depthDesc.SampleDesc.Count = 1;
     depthDesc.SampleDesc.Quality = 0;
     depthDesc.Usage = D3D11_USAGE_DEFAULT;
     depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
 
+    impl_->_depthStencilView.Reset();
+    impl_->_depthStencilBuffer.Reset();
     HRESULT hr = impl_->_device->CreateTexture2D(&depthDesc, nullptr, &impl_->_depthStencilBuffer);
     if (FAILED(hr)) {
         std::ostringstream ss;
@@ -291,7 +252,6 @@ bool Renderer::InitializeDepthStencil() {
         return false;
     }
 
-    // Create depth stencil view
     hr = impl_->_device->CreateDepthStencilView(impl_->_depthStencilBuffer.Get(), nullptr, &impl_->_depthStencilView);
     if (FAILED(hr)) {
         std::ostringstream ss;
@@ -568,7 +528,7 @@ struct PSOut {
 };
 
 PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
-    float3 rgb = g_colorTex.Sample(g_sam, uv).rgb;
+    float3 rgb = g_colorTex.Load(int3((int)pos.x, (int)pos.y, 0)).rgb;
     PSOut o;
     o.glyph_attr = uint2(0, 0);
 

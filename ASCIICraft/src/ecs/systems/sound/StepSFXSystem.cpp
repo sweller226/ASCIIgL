@@ -68,7 +68,6 @@ void StepSFXSystem::RebuildStepSoundMap(const blockstate::BlockStateRegistry& bs
     MapType(bsr, "minecraft:stone", "step.stone");
     MapType(bsr, "minecraft:cobblestone", "step.stone");
     MapType(bsr, "minecraft:bedrock", "step.stone");
-    MapType(bsr, "minecraft:brick_block", "step.stone");
     MapType(bsr, "minecraft:stone_stairs", "step.stone");
     MapType(bsr, "minecraft:cobblestone_slab", "step.stone");
     MapType(bsr, "minecraft:glass", "step.stone");

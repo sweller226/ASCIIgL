@@ -17,10 +17,16 @@ public:
         return inst;
     }
     // Load a TextureArray from a single atlas image.
-    std::shared_ptr<TextureArray> LoadTextureArray(const std::string& path, int tileSize, const std::string& savedName, const MonochromeMapping& mono=MonochromeMapping{});
+    std::shared_ptr<TextureArray> LoadTextureArray(
+        const std::string& path, int tileSize, const std::string& savedName,
+        const MonochromeMapping& mono = MonochromeMapping{},
+        const std::vector<MonochromeMapping>& perTileMono = {});
 
     // Load a TextureArray from a list of individual tile image paths.
-    std::shared_ptr<TextureArray> LoadTextureArray(const std::vector<std::string>& tilePaths, const std::string& savedName, const MonochromeMapping& mono=MonochromeMapping{});
+    std::shared_ptr<TextureArray> LoadTextureArray(
+        const std::vector<std::string>& tilePaths, const std::string& savedName,
+        const MonochromeMapping& mono = MonochromeMapping{},
+        const std::vector<MonochromeMapping>& perTileMono = {});
     std::shared_ptr<Texture> LoadTexture(const std::string& path, const std::string& savedName, const MonochromeMapping& mono=MonochromeMapping{});
 
     std::shared_ptr<TextureArray> GetTextureArray(const std::string& savedName) const;

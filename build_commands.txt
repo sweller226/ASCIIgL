@@ -22,10 +22,7 @@ ASCIICraft
     .\ASCIICraft.exe --window
 
     Run Release Command
-    cd "C:\Users\UwU\Documents\minecraft\ASCIIgL\ASCIICraft\build\bin\Release"
-    .\ASCIICraft.exe
-
-    cd "C:\Users\UwU\Documents\minecraft\ASCIIgL\ASCIICraft\build\bin\Release"
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
     .\ASCIICraft.exe --window 
 
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"

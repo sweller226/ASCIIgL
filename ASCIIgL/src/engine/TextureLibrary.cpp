@@ -4,7 +4,9 @@
 
 namespace ASCIIgL {
 
-std::shared_ptr<TextureArray> TextureLibrary::LoadTextureArray(const std::string& path, int tileSize, const std::string& savedName, const MonochromeMapping& mono)
+std::shared_ptr<TextureArray> TextureLibrary::LoadTextureArray(
+    const std::string& path, int tileSize, const std::string& savedName, const MonochromeMapping& mono,
+    const std::vector<MonochromeMapping>& perTileMono)
 {
     // Already loaded?
     std::string nameToSave = savedName.empty() ? path : savedName;
@@ -13,7 +15,7 @@ std::shared_ptr<TextureArray> TextureLibrary::LoadTextureArray(const std::string
     if (it != _textureArrays.end())
         return it->second;
 
-    auto texArray = std::make_shared<TextureArray>(path, tileSize, mono);
+    auto texArray = std::make_shared<TextureArray>(path, tileSize, mono, perTileMono);
     if (!texArray || !texArray->IsValid()) {
         Logger::Error("[TextureLibrary] Failed to load TextureArray: " + path);
         return nullptr;
@@ -24,7 +26,9 @@ std::shared_ptr<TextureArray> TextureLibrary::LoadTextureArray(const std::string
 }
 
 // Load from individual tile image files.
-std::shared_ptr<TextureArray> TextureLibrary::LoadTextureArray(const std::vector<std::string>& tilePaths, const std::string& savedName, const MonochromeMapping& mono)
+std::shared_ptr<TextureArray> TextureLibrary::LoadTextureArray(
+    const std::vector<std::string>& tilePaths, const std::string& savedName, const MonochromeMapping& mono,
+    const std::vector<MonochromeMapping>& perTileMono)
 {
     // Already loaded?
     std::string nameToSave = savedName.empty() ? (tilePaths.empty() ? std::string() : tilePaths.front()) : savedName;
@@ -35,7 +39,7 @@ std::shared_ptr<TextureArray> TextureLibrary::LoadTextureArray(const std::vector
             return it->second;
     }
 
-    auto texArray = std::make_shared<TextureArray>(tilePaths, mono);
+    auto texArray = std::make_shared<TextureArray>(tilePaths, mono, perTileMono);
     if (!texArray || !texArray->IsValid()) {
         Logger::Error("[TextureLibrary] Failed to load TextureArray from file list (count=" + std::to_string(tilePaths.size()) + ")");
         return nullptr;

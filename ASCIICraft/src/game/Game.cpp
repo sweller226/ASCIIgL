@@ -134,7 +134,11 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
     renderer.SetCCW(true);
 
     ASCIIgL::Logger::Debug("Initializing renderer...");
-    renderer.Initialize(true, 4, nullptr, 10);
+    renderer.Initialize(nullptr, 10);
+    if (!renderer.IsInitialized()) {
+        ASCIIgL::Logger::Error("Failed to initialize renderer");
+        return false;
+    }
 
     ASCIIgL::Logger::Debug("Initializing block states...");
     InitializeBlockStates();
@@ -366,10 +370,13 @@ bool Game::LoadTextures(bool multicolor) {
     monoMap.contrast = 1.0f;
 
     // Load block textures from central catalog order.
-    std::vector<std::string> blockTexturePaths =
-        textures::BuildTexturePaths(blocktextures::GetBlockTextureCatalog());
+    const auto& blockCatalog = blocktextures::GetBlockTextureCatalog();
+    std::vector<std::string> blockTexturePaths = textures::BuildTexturePaths(blockCatalog);
+    std::vector<ASCIIgL::MonochromeMapping> blockPerTileMono =
+        textures::BuildPerTileMonochromeMappings(blockCatalog, monoMap);
 
-    auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(blockTexturePaths, "terrainTextureArray", monoMap);
+    auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(
+        blockTexturePaths, "terrainTextureArray", monoMap, blockPerTileMono);
     if (!blockTextureArray || !blockTextureArray->IsValid()) {
         ASCIIgL::Logger::Error("Failed to load block texture array");
         return false;   
@@ -898,7 +905,6 @@ void Game::InitializeBlockStates() {
     // === Utility / decor blocks present in current texture array ===
     registerOpaqueJsonBacked("minecraft:crafting_table");
     registerOpaqueJsonBacked("minecraft:bookshelf");
-    registerOpaqueJsonBacked("minecraft:brick_block");
 
     bsr.RegisterType("minecraft:furnace", {
         blockstate::BlockProperty{ "facing", { "north", "south", "west", "east" } },
@@ -987,7 +993,6 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_leaves",       "Oak Leaves");
     itemRegistry.RegisterBlockItem(registry, "minecraft:crafting_table",   "Crafting Table");
     itemRegistry.RegisterBlockItem(registry, "minecraft:bookshelf",        "Bookshelf");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:brick_block",      "Bricks");
     itemRegistry.RegisterBlockItem(registry, "minecraft:furnace",          "Furnace");
     itemRegistry.RegisterBlockItem(registry, "minecraft:glass",            "Glass");
     itemRegistry.RegisterBlockItem(

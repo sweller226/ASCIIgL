@@ -11,6 +11,7 @@
 #include <ASCIICraft/util/QuadMeshBuilder.hpp>
 
 #include <ASCIIgL/renderer/Material.hpp>
+#include <ASCIIgL/renderer/HLSLIncludes.hpp>
 #include <ASCIIgL/renderer/Shader.hpp>
 
 #include <ASCIICraft/rendering/LeafParticleShaders.hpp>
@@ -138,7 +139,11 @@ namespace ecs::systems {
 
     bool ParticleSystem::InitLeafMaterial() {
         auto leafVS = ASCIIgL::Shader::CreateFromSource(LeafParticleShaders::GetVSSource(), ASCIIgL::ShaderType::Vertex);
-        auto leafPS = ASCIIgL::Shader::CreateFromSource(LeafParticleShaders::GetPSSource(), ASCIIgL::ShaderType::Pixel);
+
+        ASCIIgL::ShaderIncludeMap includes;
+        ASCIIgL::HLSLIncludes::AddToMap(includes);
+        auto leafPS = ASCIIgL::Shader::CreateFromSource(
+            LeafParticleShaders::GetPSSource(), ASCIIgL::ShaderType::Pixel, "main", &includes);
 
         if (!leafVS || !leafVS->IsValid()) {
             ASCIIgL::Logger::Error("Failed to compile leaf particle vertex shader: " + leafVS->GetCompileError());

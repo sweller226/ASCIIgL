@@ -25,6 +25,20 @@ namespace {
         return degrees == 0 || degrees == 90 || degrees == 180 || degrees == 270;
     }
 
+    bool IsCutoutOverlayTexture(const std::string& texturePath) {
+        return texturePath.find("_overlay") != std::string::npos;
+    }
+
+    blockstate::RenderLayer& PickRenderLayer(
+        blockstate::BlockModel& model,
+        const std::string& texturePath)
+    {
+        if (IsCutoutOverlayTexture(texturePath)) {
+            return model.transparent;
+        }
+        return model.opaque;
+    }
+
     bool TryFaceIndex(const std::string& faceName, int& outFaceIndex) {
         if (faceName == "up") { outFaceIndex = static_cast<int>(FaceDir::Top); return true; }
         if (faceName == "down") { outFaceIndex = static_cast<int>(FaceDir::Bottom); return true; }
@@ -277,8 +291,8 @@ jsonutil::LoadResult<blockstate::BlockModel> BakeResolvedModel(
     out.opaqueNoCull = resolved.opaqueNoCull;
     out.computeVisibleFaces = out.isFullBlock ? faceculling::ComputeVisibleFacesFullBlock : nullptr;
 
-    blockstate::RenderLayer& layer = out.opaque; // JSON path defaults to opaque for now.
-    layer.faces.reserve(resolved.elements.size() * modelbuilderutil::FACE_COUNT);
+    out.opaque.faces.reserve(resolved.elements.size() * modelbuilderutil::FACE_COUNT);
+    out.transparent.faces.reserve(resolved.elements.size());
 
     const auto& faceIndices = modelbuilderutil::GetFaceIndices();
     for (const auto& elem : resolved.elements) {
@@ -297,6 +311,8 @@ jsonutil::LoadResult<blockstate::BlockModel> BakeResolvedModel(
                     "BakeResolvedModel: missing texture catalog entry for '" + face.texture + "'"
                 );
             }
+
+            blockstate::RenderLayer& layer = PickRenderLayer(out, face.texture);
 
             const float texLayer = static_cast<float>(layerIdx);
             auto vertsPosModel = BuildElementFaceVertsModelSpace(faceIndex, elem);

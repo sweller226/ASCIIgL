@@ -146,12 +146,12 @@ void TerrainGenerator::GenerateChunkInto(ChunkCoord coord, uint32_t* blocks, Ter
     };
 
     runGrassPatches(BiomeType::FlowerForest, 3, 16, 5, 1, 0.30f);
-    runGrassPatches(BiomeType::Forest, 1, 10, 4, 1, 0.14f);
     for (const auto& pos : grassPlacementPositions) {
         occupied.insert(blockKey(pos.x, pos.y, pos.z));
     }
 
-    auto runFernPatches = [&](BiomeType biome, int patchCount, int triesPerPatch, int xzSpread, float placeChance) {
+    auto runFernPatches = [&](BiomeType biome, int patchCount, int triesPerPatch, int xzSpread, float placeChance,
+                              float tallGrassMix = 0.0f) {
         for (int patch = 0; patch < patchCount; ++patch) {
             const int startLocalX = static_cast<int>(RandomFloat(coord.x * 1237 + patch * 53, coord.z * 809 + 23) * sizes::CHUNK_SIZE);
             const int startLocalZ = static_cast<int>(RandomFloat(coord.x * 557 + patch * 61, coord.z * 1103 + 31) * sizes::CHUNK_SIZE);
@@ -189,12 +189,21 @@ void TerrainGenerator::GenerateChunkInto(ChunkCoord coord, uint32_t* blocks, Ter
                 if (RandomFloat(wx + patch * 17 + attempt * 9, wz - patch * 7 + attempt * 13) > placeChance * placementWeight) continue;
                 if (!canPlaceGrassAt(wx, surfaceY, wz)) continue;
 
-                fernPlacementPositions.push_back(glm::ivec3(wx, surfaceY + 1, wz));
+                const glm::ivec3 placePos(wx, surfaceY + 1, wz);
+                const bool useTallGrass =
+                    tallGrassMix > 0.0f &&
+                    RandomFloat(wx - patch * 3 + attempt * 5, wz + patch * 7 - attempt * 11) < tallGrassMix;
+                if (useTallGrass) {
+                    grassPlacementPositions.push_back(placePos);
+                } else {
+                    fernPlacementPositions.push_back(placePos);
+                }
+                occupied.insert(blockKey(placePos.x, placePos.y, placePos.z));
             }
         }
     };
 
-    runFernPatches(BiomeType::Forest, 8, 20, 5, 0.62f);
+    runFernPatches(BiomeType::Forest, 8, 20, 5, 0.62f, 0.5f);
     runFernPatches(BiomeType::FlowerForest, 2, 10, 4, 0.20f);
 
     const uint32_t tallGrassId = bsr->GetDefaultState("minecraft:tall_grass");

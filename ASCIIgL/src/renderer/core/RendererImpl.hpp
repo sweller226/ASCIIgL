@@ -105,9 +105,6 @@ struct Renderer::Impl {
 
     glm::ivec3 _background_col = glm::ivec3(0, 0, 0);
 
-    int _antialiasing_samples = 4;
-    bool _antialiasing = false;
-
     int _maxAnisotropy = 16;
 
     std::vector<wchar_t> _charRamp;

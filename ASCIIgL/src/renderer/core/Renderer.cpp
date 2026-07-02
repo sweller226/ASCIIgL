@@ -501,18 +501,6 @@ glm::ivec3 Renderer::GetBackgroundCol() const {
     return impl_->_background_col;
 }
 
-// =============================================================================
-// RENDER SETTINGS - ANTIALIASING
-// =============================================================================
-
-bool Renderer::GetAntialiasing() const {
-    return impl_->_antialiasing;
-}
-
-int Renderer::GetAntialiasingsamples() const {
-    return impl_->_antialiasing_samples;
-}
-
 void Renderer::SetMaxAnisotropy(int level) {
     if (level <= 1) level = 1;
     else if (level <= 2) level = 2;

@@ -11,6 +11,23 @@ std::vector<std::string> BuildTexturePaths(const std::vector<CatalogEntry>& cata
     return out;
 }
 
+std::vector<ASCIIgL::MonochromeMapping> BuildPerTileMonochromeMappings(
+    const std::vector<CatalogEntry>& catalog,
+    const ASCIIgL::MonochromeMapping& defaultMono)
+{
+    std::vector<ASCIIgL::MonochromeMapping> out;
+    out.reserve(catalog.size());
+    for (const auto& entry : catalog) {
+        ASCIIgL::MonochromeMapping tileMono = defaultMono;
+        if (entry.monoHueOverride != nullptr) {
+            tileMono.hueDir = *entry.monoHueOverride;
+            tileMono.enabled = true;
+        }
+        out.push_back(tileMono);
+    }
+    return out;
+}
+
 std::unordered_map<std::string, int> BuildTextureIdToLayerMap(const std::vector<CatalogEntry>& catalog) {
     std::unordered_map<std::string, int> out;
     out.reserve(catalog.size());

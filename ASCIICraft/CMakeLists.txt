@@ -173,6 +173,16 @@ add_dependencies(ASCIICraft ASCIICraftResources)
 # ---------------------------------------------------------------------------
 if(WIN32)
     add_custom_command(TARGET ASCIICraft POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/res"
+            "$<TARGET_FILE_DIR:ASCIICraft>/res"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${ASCIIgL_ROOT}/res"
+            "$<TARGET_FILE_DIR:ASCIICraft>/res/ASCIIgL"
+        COMMENT "Copying game and library resources"
+    )
+
+    add_custom_command(TARGET ASCIICraft POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "Copying oneTBB DLLs"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${TBB_ROOT}/redist/intel64/vc14/tbb12.dll"

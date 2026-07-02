@@ -61,7 +61,6 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
             "minecraft:oak_leaves",
             "minecraft:crafting_table",
             "minecraft:bookshelf",
-            "minecraft:brick_block",
             "minecraft:furnace",
             "minecraft:glass",
             "minecraft:torch",
