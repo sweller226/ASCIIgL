@@ -23,7 +23,7 @@ ASCIICraft
 
     Run Release Command
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
-    .\ASCIICraft.exe --window 
+    .\ASCIICraft.exe --window
 
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
     .\ASCIICraft.exe --color
