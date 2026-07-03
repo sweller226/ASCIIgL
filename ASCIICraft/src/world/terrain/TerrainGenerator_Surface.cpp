@@ -20,12 +20,12 @@ uint32_t TerrainGenerator::GetBlockStateAt(int worldX, int worldY, int worldZ, c
                                           const blockstate::BlockStateRegistry* bsrOverride, BiomeType biomeType) {
     const blockstate::BlockStateRegistry* bsr = bsrOverride ? bsrOverride : m_bsr;
     if (!bsr) return 0u;
-    uint32_t bedrockId = bsr->GetDefaultState("minecraft:bedrock");
+    uint32_t dirtId = bsr->GetDefaultState("minecraft:dirt");
     uint32_t airId = bsr->GetDefaultState("minecraft:air");
 
-    // Bedrock layer at world bottom
+    // Solid dirt layer at world bottom
     if (worldY == 0) {
-        return bedrockId;
+        return dirtId;
     }
 
     // Air above terrain
@@ -50,8 +50,6 @@ uint32_t TerrainGenerator::DetermineBlockState(int worldX, int worldY, int world
     if (!bsr) return 0u;
     uint32_t grassId = bsr->GetDefaultState("minecraft:grass");
     uint32_t dirtId = bsr->GetDefaultState("minecraft:dirt");
-    uint32_t stoneId = bsr->GetDefaultState("minecraft:stone");
-    uint32_t cobblestoneId = bsr->GetDefaultState("minecraft:cobblestone");
     const int baseDirtDepth = params.DIRT_DEPTH;
     const BiomeWeights weights = ComputeBiomeWeights(
         SampleBiomeTemperature(worldX, worldZ),
@@ -72,26 +70,20 @@ uint32_t TerrainGenerator::DetermineBlockState(int worldX, int worldY, int world
         baseDirtDepth + static_cast<int>(std::round(biomeDepthOffset)) +
         depthFromNoise - slopeDepthPenalty + valleyDepthBonus
     );
-    const float screeNoise = (surfaceDepthNoise->GetNoise(
-        static_cast<float>(worldX) * 0.43f,
-        static_cast<float>(worldZ) * 0.43f) + 1.0f) * 0.5f;
     const bool highAltitude = elevationAboveSea > 52;
     const bool sheerSlope = slope > 7.0f;
     const bool rockySurface = highAltitude && sheerSlope;
-    const bool cobbleScree =
-        rockySurface &&
-        (screeNoise > 0.66f || (slope > 10.0f && screeNoise > 0.48f));
 
     if (depthFromSurface == 0) {
         if (worldY < params.SEA_LEVEL) {
             if (rockySurface || slope > 5.0f) {
-                return cobbleScree ? cobblestoneId : stoneId;
+                return dirtId;
             }
             return dirtId;
         }
 
         if (rockySurface) {
-            return cobbleScree ? cobblestoneId : stoneId;
+            return dirtId;
         }
 
         if (sample) {
@@ -118,11 +110,11 @@ uint32_t TerrainGenerator::DetermineBlockState(int worldX, int worldY, int world
             *bsr, grassId, worldX, worldY, worldZ, blockplacement::PlacementContext::TerrainGeneration
         );
     } else if (rockySurface && depthFromSurface < 3) {
-        return cobbleScree && depthFromSurface == 1 ? cobblestoneId : stoneId;
+        return dirtId;
     } else if (depthFromSurface < biomeDirtDepth) {
         return dirtId;
     } else {
-        return stoneId;
+        return dirtId;
     }
 }
 

@@ -68,11 +68,15 @@ public:
     // =========================================================================
     // Initialization
     // =========================================================================
+    /// supersample2x: when true, 3D renders at 2x resolution and box-filters down before quantization.
     /// charRamp: custom chars for coverage; nullptr or empty = use default ramp.
     /// charRampCount: when using default ramp, subsample to this many chars with evenly
     /// spaced coverage (default 10); ignored if charRamp is set.
-    void Initialize(const wchar_t* charRamp = nullptr, int charRampCount = 10);
+    void Initialize(bool supersample2x = false,
+                    const wchar_t* charRamp = nullptr,
+                    int charRampCount = 10);
     bool IsInitialized() const;
+    bool GetSupersample2x() const;
 
     // =========================================================================
     // GPU frame lifecycle
@@ -188,6 +192,8 @@ private:
     bool InitializeFontAtlas();
     bool InitializeCharInfoTarget();
     bool InitializeQuantizationShaders();
+    bool InitializeDownsampleShader();
+    void RunDownsamplePass();
 
 #ifdef _WIN32
     /// D3D device for shader compilation; nullptr if not initialized.

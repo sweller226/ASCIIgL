@@ -36,12 +36,17 @@ struct Renderer::GPUMeshCache {
 
 struct Renderer::Impl {
     bool _initialized = false;
+    bool _supersample2x = false;
+    int _renderTargetWidth = 0;
+    int _renderTargetHeight = 0;
 
     ComPtr<ID3D11Device> _device;
     ComPtr<ID3D11DeviceContext> _context;
     ComPtr<ID3D11Texture2D> _renderTarget;
     ComPtr<ID3D11RenderTargetView> _renderTargetView;
+    ComPtr<ID3D11ShaderResourceView> _renderTargetSRV;
     ComPtr<ID3D11Texture2D> _resolvedTexture;
+    ComPtr<ID3D11RenderTargetView> _resolvedTextureRTV;
     ComPtr<ID3D11Texture2D> _depthStencilBuffer;
     ComPtr<ID3D11DepthStencilView> _depthStencilView;
     ComPtr<ID3D11DepthStencilState> _depthStencilState;
@@ -78,6 +83,7 @@ struct Renderer::Impl {
     ComPtr<ID3D11Buffer> _lutConstantsCB;
     ComPtr<ID3D11VertexShader> _quantizationVS;
     ComPtr<ID3D11PixelShader> _quantizationPS;
+    ComPtr<ID3D11PixelShader> _downsamplePS;
     ComPtr<ID3D11InputLayout> _quantizationInputLayout;
     ComPtr<ID3D11Buffer> _fullscreenQuadVB;
 

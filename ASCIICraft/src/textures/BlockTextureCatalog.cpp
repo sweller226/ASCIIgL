@@ -13,9 +13,6 @@ const glm::ivec3 kGrassTintHue(131, 178, 83);
 
 const std::vector<CatalogEntry>& GetBlockTextureCatalog() {
     static const std::vector<CatalogEntry> kCatalog = {
-        {"minecraft:blocks/stone",             "res/textures/blocks/stone.png"},
-        {"minecraft:blocks/cobblestone",       "res/textures/blocks/cobblestone.png"},
-        {"minecraft:blocks/bedrock",           "res/textures/blocks/bedrock.png"},
         {"minecraft:blocks/dirt",              "res/textures/blocks/dirt.png"},
         {"minecraft:blocks/log_oak",           "res/textures/blocks/log_oak.png"},
         {"minecraft:blocks/log_oak_top",       "res/textures/blocks/log_oak_top.png"},

@@ -102,10 +102,10 @@ void Renderer::BeginGpuFrame() {
     // Bind render targets
     impl_->_context->OMSetRenderTargets(1, impl_->_renderTargetView.GetAddressOf(), impl_->_depthStencilView.Get());
 
-    // Set viewport
+    // Set viewport to render-target size (2x when SSAA is enabled)
     D3D11_VIEWPORT viewport = {};
-    viewport.Width = static_cast<float>(Screen::GetInst().GetWidth());
-    viewport.Height = static_cast<float>(Screen::GetInst().GetHeight());
+    viewport.Width = static_cast<float>(impl_->_renderTargetWidth);
+    viewport.Height = static_cast<float>(impl_->_renderTargetHeight);
     viewport.MinDepth = 0.0f;
     viewport.MaxDepth = 1.0f;
     impl_->_context->RSSetViewports(1, &viewport);
@@ -206,7 +206,11 @@ void Renderer::EndGpuFrame() {
 
     {
         PROFILE_SCOPE("Renderer.EndGpuFrame.CopyResolved");
-        impl_->_context->CopyResource(impl_->_resolvedTexture.Get(), impl_->_renderTarget.Get());
+        if (impl_->_supersample2x) {
+            RunDownsamplePass();
+        } else {
+            impl_->_context->CopyResource(impl_->_resolvedTexture.Get(), impl_->_renderTarget.Get());
+        }
     }
     
     {

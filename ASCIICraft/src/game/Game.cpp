@@ -134,7 +134,7 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
     renderer.SetCCW(true);
 
     ASCIIgL::Logger::Debug("Initializing renderer...");
-    renderer.Initialize(nullptr, 10);
+    renderer.Initialize(SUPERSAMPLE_2X, nullptr, 10);
     if (!renderer.IsInitialized()) {
         ASCIIgL::Logger::Error("Failed to initialize renderer");
         return false;
@@ -374,6 +374,35 @@ bool Game::LoadTextures(bool multicolor) {
     std::vector<std::string> blockTexturePaths = textures::BuildTexturePaths(blockCatalog);
     std::vector<ASCIIgL::MonochromeMapping> blockPerTileMono =
         textures::BuildPerTileMonochromeMappings(blockCatalog, monoMap);
+    const int grass_side_overlay_layer = textures::GetLayerForTextureId(
+        blockCatalog, "minecraft:blocks/grass_side_overlay");
+    if (grass_side_overlay_layer >= 0) {
+        blockPerTileMono[static_cast<size_t>(grass_side_overlay_layer)].brightness = 0.95f;
+    }
+
+    const int grassTopLayer = textures::GetLayerForTextureId(
+        blockCatalog, "minecraft:blocks/grass_top");
+    if (grassTopLayer >= 0) {
+        blockPerTileMono[static_cast<size_t>(grassTopLayer)].brightness = 1.2f;
+    }
+
+    const int tallgrassLayer = textures::GetLayerForTextureId(
+        blockCatalog, "minecraft:blocks/tallgrass");
+    if (tallgrassLayer >= 0) {
+        blockPerTileMono[static_cast<size_t>(tallgrassLayer)].brightness = 1.3f;
+    }
+
+    const int fernLayer = textures::GetLayerForTextureId(
+        blockCatalog, "minecraft:blocks/fern");
+    if (fernLayer >= 0) {
+        blockPerTileMono[static_cast<size_t>(fernLayer)].brightness = 1.3f;
+    }
+
+    const int leavesOakLayer = textures::GetLayerForTextureId(
+        blockCatalog, "minecraft:blocks/leaves_oak");
+    if (leavesOakLayer >= 0) {
+        blockPerTileMono[static_cast<size_t>(fernLayer)].brightness = 1.3f;
+    }
 
     auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(
         blockTexturePaths, "terrainTextureArray", monoMap, blockPerTileMono);
@@ -768,10 +797,6 @@ void Game::InitializeBlockStates() {
     };
 
     // === Terrain & plants (vanilla blockstate + block models under res/blockstates and res/models) ===
-    registerOpaqueJsonBacked("minecraft:bedrock");
-
-    registerOpaqueJsonBacked("minecraft:stone");
-
     bsr.RegisterType("minecraft:dandelion", {});
     const uint16_t dandelionType = bsr.GetTypeId("minecraft:dandelion");
     bsr.SetDerivedData(dandelionType, [&](blockstate::BlockState& s) {
@@ -833,29 +858,16 @@ void Game::InitializeBlockStates() {
     });
     registerJsonBackedOrLog("minecraft:fence");
 
-    registerOpaqueJsonBacked("minecraft:cobblestone");
-
-    // 1.8.9 cobblestone stairs are represented by block id `stone_stairs`.
-    bsr.RegisterType("minecraft:stone_stairs", {
+    bsr.RegisterType("minecraft:oak_stairs", {
         blockstate::BlockProperty{ "facing", { "east", "west", "south", "north" } },
         blockstate::BlockProperty{ "half", { "bottom", "top" } },
         blockstate::BlockProperty{ "shape", { "straight", "outer_right", "outer_left", "inner_right", "inner_left" } },
     });
-    const uint16_t stoneStairsType = bsr.GetTypeId("minecraft:stone_stairs");
-    bsr.SetDerivedData(stoneStairsType, [](blockstate::BlockState& s) {
+    const uint16_t oakStairsType = bsr.GetTypeId("minecraft:oak_stairs");
+    bsr.SetDerivedData(oakStairsType, [](blockstate::BlockState& s) {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
-    registerJsonBackedOrLog("minecraft:stone_stairs");
-
-    bsr.RegisterType("minecraft:cobblestone_slab", {
-        blockstate::BlockProperty{ "half", { "bottom", "top" } },
-    });
-    const uint16_t cobblestoneSlabType = bsr.GetTypeId("minecraft:cobblestone_slab");
-    bsr.SetDerivedData(cobblestoneSlabType, [](blockstate::BlockState& s) {
-        s.renderMode = blockstate::RenderMode::Opaque;
-        s.isFullBlock = false;
-    });
-    registerJsonBackedOrLog("minecraft:cobblestone_slab");
+    registerJsonBackedOrLog("minecraft:oak_stairs");
 
     registerOpaqueJsonBacked("minecraft:dirt");
 
@@ -975,16 +987,12 @@ void Game::InitializeItemDefinitions() {
     };
 
     // === Block items (all registered block types except air and water) ===
-    itemRegistry.RegisterBlockItem(registry, "minecraft:bedrock",          "Bedrock");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:stone",            "Stone");
     itemRegistry.RegisterBlockItem(registry, "minecraft:dandelion",        "Dandelion", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultTorchFirstPerson());
     itemRegistry.RegisterBlockItem(registry, "minecraft:poppy",            "Poppy", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultTorchFirstPerson());
     itemRegistry.RegisterBlockItem(registry, "minecraft:tall_grass",       "Tall Grass", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultTorchFirstPerson());
     itemRegistry.RegisterBlockItem(registry, "minecraft:fern",             "Fern", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultTorchFirstPerson());
     itemRegistry.RegisterBlockItem(registry, "minecraft:fence",            "Oak Fence");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone",      "Cobblestone");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:stone_stairs",     "Stone Stairs");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone_slab", "Cobblestone Slab");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:oak_stairs",       "Oak Stairs");
     itemRegistry.RegisterBlockItem(registry, "minecraft:dirt",             "Dirt");
     itemRegistry.RegisterBlockItem(registry, "minecraft:grass",            "Grass Block");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_log",          "Oak Log");
@@ -1008,22 +1016,21 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterResourceItem(registry, "minecraft:iron_ingot", "Iron Ingot", itemLayer("minecraft:items/iron_ingot"));
     itemRegistry.RegisterResourceItem(registry, "minecraft:gold_ingot", "Gold Ingot", itemLayer("minecraft:items/gold_ingot"));
     itemRegistry.RegisterResourceItem(registry, "minecraft:stick",      "Stick",      itemLayer("minecraft:items/stick"));
+    itemRegistry.RegisterResourceItem(registry, "minecraft:bread", "Bread", itemLayer("minecraft:items/bread"), 64);
 
     // === Swords ===
     itemRegistry.RegisterToolItem(registry, "minecraft:wooden_sword",  "Wooden Sword",  itemLayer("minecraft:items/wood_sword"),  {2.0f, 1, 60},   {4.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:stone_sword",   "Stone Sword",   itemLayer("minecraft:items/stone_sword"), {4.0f, 2, 132},  {5.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_sword",   "Stone Sword",   itemLayer("minecraft:items/stone_sword"), {3.0f, 2, 131},  {5.0f, 1.6f});
     itemRegistry.RegisterToolItem(registry, "minecraft:iron_sword",    "Iron Sword",    itemLayer("minecraft:items/iron_sword"),  {6.0f, 3, 251},  {6.0f, 1.6f});
     // === Shovels ===
     itemRegistry.RegisterToolItem(registry, "minecraft:wooden_shovel",  "Wooden Shovel",  itemLayer("minecraft:items/wood_shovel"),  {2.0f, 1, 60},   {1.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:stone_shovel",   "Stone Shovel",   itemLayer("minecraft:items/stone_shovel"), {4.0f, 2, 132},  {2.0f, 1.6f});
     itemRegistry.RegisterToolItem(registry, "minecraft:iron_shovel",    "Iron Shovel",    itemLayer("minecraft:items/iron_shovel"),  {6.0f, 3, 251},  {3.0f, 1.6f});
     // === Pickaxes ===
     itemRegistry.RegisterToolItem(registry, "minecraft:wooden_pickaxe",  "Wooden Pickaxe",  itemLayer("minecraft:items/wood_pickaxe"),  {2.0f, 1, 60},   {2.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:stone_pickaxe",   "Stone Pickaxe",   itemLayer("minecraft:items/stone_pickaxe"), {4.0f, 2, 132},  {3.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_pickaxe",   "Stone Pickaxe",   itemLayer("minecraft:items/stone_pickaxe"), {3.0f, 2, 131},  {3.0f, 1.6f});
     itemRegistry.RegisterToolItem(registry, "minecraft:iron_pickaxe",    "Iron Pickaxe",    itemLayer("minecraft:items/iron_pickaxe"),  {6.0f, 3, 251},  {4.0f, 1.6f});
 
     // === Axes ===
     itemRegistry.RegisterToolItem(registry, "minecraft:wooden_axe",  "Wooden Axe",  itemLayer("minecraft:items/wood_axe"),  {2.0f, 1, 60},   {3.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:stone_axe",   "Stone Axe",   itemLayer("minecraft:items/stone_axe"), {4.0f, 2, 132},  {4.0f, 1.6f});
     itemRegistry.RegisterToolItem(registry, "minecraft:iron_axe",    "Iron Axe",    itemLayer("minecraft:items/iron_axe"),  {6.0f, 3, 251},  {5.0f, 1.6f});
 }

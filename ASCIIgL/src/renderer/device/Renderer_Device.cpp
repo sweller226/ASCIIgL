@@ -30,7 +30,7 @@ Renderer::~Renderer() {
     Shutdown();
 }
 
-void Renderer::Initialize(const wchar_t* charRamp, int charRampCount) {
+void Renderer::Initialize(bool supersample2x, const wchar_t* charRamp, int charRampCount) {
     if (!impl_->_initialized) {
         Logger::Info("Initializing Renderer...");
     } else {
@@ -42,6 +42,14 @@ void Renderer::Initialize(const wchar_t* charRamp, int charRampCount) {
         Logger::Error("Renderer: Screen must be initialized before creating Renderer.");
         throw std::runtime_error("Renderer: Screen must be initialized before creating Renderer.");
     }
+
+    impl_->_supersample2x = supersample2x;
+    const int screenW = Screen::GetInst().GetWidth();
+    const int screenH = Screen::GetInst().GetHeight();
+    const int scale = supersample2x ? 2 : 1;
+    impl_->_renderTargetWidth = screenW * scale;
+    impl_->_renderTargetHeight = screenH * scale;
+
     LoadCharCoverageFromJson(charRamp, charRampCount);
 
     Logger::Info("[Renderer] Initializing DirectX 11...");
@@ -93,6 +101,13 @@ void Renderer::Initialize(const wchar_t* charRamp, int charRampCount) {
         return;
     }
 
+    if (impl_->_supersample2x) {
+        if (!InitializeDownsampleShader()) {
+            Logger::Error("[Renderer] Failed to initialize downsample shader");
+            return;
+        }
+    }
+
     if (!InitializeDebugSwapChain()) {
         Logger::Error("[Renderer] Failed to initialize debug swap chain (non-fatal)");
         // Non-fatal - continue without swap chain
@@ -123,6 +138,10 @@ void Renderer::Initialize(const wchar_t* charRamp, int charRampCount) {
 
 bool Renderer::IsInitialized() const {
     return impl_->_initialized;
+}
+
+bool Renderer::GetSupersample2x() const {
+    return impl_->_supersample2x;
 }
 
 ID3D11Device* Renderer::GetD3D11Device() const {
@@ -172,17 +191,28 @@ bool Renderer::InitializeDevice() {
 }
 
 bool Renderer::InitializeRenderTarget() {
+    const int screenW = Screen::GetInst().GetWidth();
+    const int screenH = Screen::GetInst().GetHeight();
+    const int rtW = impl_->_renderTargetWidth;
+    const int rtH = impl_->_renderTargetHeight;
+
     D3D11_TEXTURE2D_DESC texDesc = {};
-    texDesc.Width = Screen::GetInst().GetWidth();
-    texDesc.Height = Screen::GetInst().GetHeight();
+    texDesc.Width = rtW;
+    texDesc.Height = rtH;
     texDesc.MipLevels = 1;
     texDesc.ArraySize = 1;
     texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     texDesc.SampleDesc.Count = 1;
     texDesc.SampleDesc.Quality = 0;
     texDesc.Usage = D3D11_USAGE_DEFAULT;
-    texDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+    texDesc.BindFlags = impl_->_supersample2x
+        ? (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE)
+        : D3D11_BIND_RENDER_TARGET;
     texDesc.CPUAccessFlags = 0;
+
+    impl_->_renderTarget.Reset();
+    impl_->_renderTargetView.Reset();
+    impl_->_renderTargetSRV.Reset();
 
     HRESULT hr = impl_->_device->CreateTexture2D(&texDesc, nullptr, &impl_->_renderTarget);
     if (FAILED(hr)) {
@@ -200,16 +230,42 @@ bool Renderer::InitializeRenderTarget() {
         return false;
     }
 
-    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    if (impl_->_supersample2x) {
+        D3D11_SHADER_RESOURCE_VIEW_DESC rtSrvDesc = {};
+        rtSrvDesc.Format = texDesc.Format;
+        rtSrvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        rtSrvDesc.Texture2D.MipLevels = 1;
+        rtSrvDesc.Texture2D.MostDetailedMip = 0;
+        hr = impl_->_device->CreateShaderResourceView(impl_->_renderTarget.Get(), &rtSrvDesc, &impl_->_renderTargetSRV);
+        if (FAILED(hr)) {
+            Logger::Error("[Renderer] Failed to create render target SRV");
+            return false;
+        }
+    }
+
+    texDesc.Width = screenW;
+    texDesc.Height = screenH;
+    texDesc.BindFlags = impl_->_supersample2x
+        ? (D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET)
+        : D3D11_BIND_SHADER_RESOURCE;
 
     impl_->_resolvedTexture.Reset();
     impl_->_resolvedTextureSRV.Reset();
+    impl_->_resolvedTextureRTV.Reset();
     hr = impl_->_device->CreateTexture2D(&texDesc, nullptr, &impl_->_resolvedTexture);
     if (FAILED(hr)) {
         std::ostringstream ss;
         ss << std::hex << hr;
         Logger::Error("[Renderer] Failed to create resolved texture: 0x" + ss.str());
         return false;
+    }
+
+    if (impl_->_supersample2x) {
+        hr = impl_->_device->CreateRenderTargetView(impl_->_resolvedTexture.Get(), nullptr, &impl_->_resolvedTextureRTV);
+        if (FAILED(hr)) {
+            Logger::Error("[Renderer] Failed to create resolved texture RTV");
+            return false;
+        }
     }
 
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -223,17 +279,22 @@ bool Renderer::InitializeRenderTarget() {
         return false;
     }
 
-    Logger::Info("[Renderer] Render target initialized: " +
-        std::to_string(Screen::GetInst().GetWidth()) + "x" +
-        std::to_string(Screen::GetInst().GetHeight()));
+    if (impl_->_supersample2x) {
+        Logger::Info("[Renderer] Render target initialized: " +
+            std::to_string(screenW) + "x" + std::to_string(screenH) +
+            " (2x SSAA -> " + std::to_string(rtW) + "x" + std::to_string(rtH) + ")");
+    } else {
+        Logger::Info("[Renderer] Render target initialized: " +
+            std::to_string(screenW) + "x" + std::to_string(screenH) + " (SSAA off)");
+    }
 
     return true;
 }
 
 bool Renderer::InitializeDepthStencil() {
     D3D11_TEXTURE2D_DESC depthDesc = {};
-    depthDesc.Width = Screen::GetInst().GetWidth();
-    depthDesc.Height = Screen::GetInst().GetHeight();
+    depthDesc.Width = impl_->_renderTargetWidth;
+    depthDesc.Height = impl_->_renderTargetHeight;
     depthDesc.MipLevels = 1;
     depthDesc.ArraySize = 1;
     depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
@@ -594,6 +655,22 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
 }
 )";
 
+const char* DOWNSAMPLE_PS_SRC = R"(
+Texture2D<float4> g_source : register(t0);
+
+float4 main(float4 pos : SV_Position) : SV_Target {
+    int x = (int)pos.x;
+    int y = (int)pos.y;
+    int hx = x * 2;
+    int hy = y * 2;
+    float4 c00 = g_source.Load(int3(hx,     hy,     0));
+    float4 c10 = g_source.Load(int3(hx + 1, hy,     0));
+    float4 c01 = g_source.Load(int3(hx,     hy + 1, 0));
+    float4 c11 = g_source.Load(int3(hx + 1, hy + 1, 0));
+    return (c00 + c10 + c01 + c11) * 0.25;
+}
+)";
+
 } // namespace
 
 bool Renderer::InitializeQuantizationShaders() {
@@ -664,6 +741,34 @@ bool Renderer::InitializeQuantizationShaders() {
     hr = impl_->_device->CreateBuffer(&bd, &init, &impl_->_fullscreenQuadVB);
     if (FAILED(hr)) {
         Logger::Error("[Renderer] Failed to create fullscreen quad VB");
+        return false;
+    }
+
+    return true;
+}
+
+bool Renderer::InitializeDownsampleShader() {
+    ID3DBlob* psBlob = nullptr;
+    ID3DBlob* errBlob = nullptr;
+    UINT flags = D3DCOMPILE_ENABLE_STRICTNESS;
+#ifdef _DEBUG
+    flags |= D3DCOMPILE_DEBUG;
+#endif
+    HRESULT hr = D3DCompile(DOWNSAMPLE_PS_SRC, strlen(DOWNSAMPLE_PS_SRC), nullptr, nullptr, nullptr,
+                           "main", "ps_5_0", flags, 0, &psBlob, &errBlob);
+    if (FAILED(hr)) {
+        if (errBlob) {
+            Logger::Error("[Renderer] Downsample PS compile: " + std::string(static_cast<const char*>(errBlob->GetBufferPointer())));
+            errBlob->Release();
+        }
+        return false;
+    }
+    if (errBlob) errBlob->Release();
+
+    hr = impl_->_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &impl_->_downsamplePS);
+    psBlob->Release();
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] Failed to create downsample PS");
         return false;
     }
 
@@ -744,6 +849,49 @@ void Renderer::UploadLUTsToGPU() {
     cbInit.pSysMem = &cb;
     impl_->_device->CreateBuffer(&cbd, &cbInit, &impl_->_lutConstantsCB);
     impl_->_lutGpuResourcesDirty = false;
+}
+
+void Renderer::RunDownsamplePass() {
+    if (!impl_->_renderTargetSRV || !impl_->_resolvedTextureRTV || !impl_->_downsamplePS) {
+        Logger::Warning("[Renderer] RunDownsamplePass skipped: SSAA resources missing.");
+        return;
+    }
+
+    InvalidateBoundState();
+
+    const int w = Screen::GetInst().GetWidth();
+    const int h = Screen::GetInst().GetHeight();
+
+    impl_->_context->OMSetRenderTargets(1, impl_->_resolvedTextureRTV.GetAddressOf(), nullptr);
+    impl_->_context->OMSetDepthStencilState(impl_->_depthStencilStateNoTest.Get(), 0);
+    impl_->_context->RSSetState(impl_->_rasterizerStates[0].Get());
+    const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    impl_->_context->OMSetBlendState(impl_->_blendStateOpaque.Get(), blendFactor, 0xFFFFFFFF);
+
+    D3D11_VIEWPORT vp = {};
+    vp.Width = static_cast<float>(w);
+    vp.Height = static_cast<float>(h);
+    vp.MinDepth = 0.f;
+    vp.MaxDepth = 1.f;
+    impl_->_context->RSSetViewports(1, &vp);
+
+    ID3D11ShaderResourceView* srvs[] = { impl_->_renderTargetSRV.Get() };
+    impl_->_context->PSSetShaderResources(0, 1, srvs);
+    impl_->_context->VSSetShader(impl_->_quantizationVS.Get(), nullptr, 0);
+    impl_->_context->PSSetShader(impl_->_downsamplePS.Get(), nullptr, 0);
+    impl_->_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    impl_->_context->IASetInputLayout(impl_->_quantizationInputLayout.Get());
+    UINT stride = 2 * sizeof(float);
+    UINT offset = 0;
+    impl_->_context->IASetVertexBuffers(0, 1, impl_->_fullscreenQuadVB.GetAddressOf(), &stride, &offset);
+
+    impl_->_context->Draw(6, 0);
+
+    ID3D11ShaderResourceView* nullSRV = nullptr;
+    impl_->_context->PSSetShaderResources(0, 1, &nullSRV);
+
+    impl_->_context->OMSetRenderTargets(1, impl_->_renderTargetView.GetAddressOf(), impl_->_depthStencilView.Get());
+    InvalidateBoundState();
 }
 
 void Renderer::RunQuantizationPass() {
@@ -1083,6 +1231,7 @@ void Renderer::Shutdown()
     impl_->_currentTextureSRV.Reset();
     impl_->_fullscreenQuadVB.Reset();
     impl_->_quantizationInputLayout.Reset();
+    impl_->_downsamplePS.Reset();
     impl_->_quantizationPS.Reset();
     impl_->_quantizationVS.Reset();
     impl_->_lutConstantsCB.Reset();
@@ -1091,6 +1240,7 @@ void Renderer::Shutdown()
     impl_->_monochromeLUTTexture.Reset();
     impl_->_colorLUTTexture.Reset();
     impl_->_resolvedTextureSRV.Reset();
+    impl_->_resolvedTextureRTV.Reset();
     impl_->_charInfoRTV.Reset();
     impl_->_charInfoSRV.Reset();
     impl_->_charInfoTexture.Reset();
@@ -1126,6 +1276,7 @@ void Renderer::Shutdown()
     impl_->_depthStencilView.Reset();
     impl_->_depthStencilBuffer.Reset();
     impl_->_renderTargetView.Reset();
+    impl_->_renderTargetSRV.Reset();
     impl_->_resolvedTexture.Reset();
     impl_->_renderTarget.Reset();
     impl_->_context.Reset();

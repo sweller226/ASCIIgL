@@ -16,6 +16,9 @@ struct CatalogEntry {
     const glm::ivec3* monoHueOverride = nullptr; // nullptr = use global default hue
 };
 
+/// Catalog vector index becomes the texture-array layer baked into block model vertices.
+/// Do not remove or reorder entries once shipped; only append new textures at the end.
+
 std::vector<std::string> BuildTexturePaths(const std::vector<CatalogEntry>& catalog);
 
 std::vector<ASCIIgL::MonochromeMapping> BuildPerTileMonochromeMappings(

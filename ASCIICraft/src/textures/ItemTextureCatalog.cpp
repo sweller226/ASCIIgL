@@ -25,6 +25,7 @@ const std::vector<CatalogEntry>& GetItemTextureCatalog() {
         {"minecraft:items/wood_axe",  "res/textures/items/wood_axe.png"},
         {"minecraft:items/stone_axe", "res/textures/items/stone_axe.png"},
         {"minecraft:items/iron_axe",  "res/textures/items/iron_axe.png"},
+        {"minecraft:items/bread", "res/textures/items/bread.png"},
     };
     return kCatalog;
 }

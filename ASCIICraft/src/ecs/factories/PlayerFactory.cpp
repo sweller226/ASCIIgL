@@ -1,5 +1,6 @@
 #include <ASCIICraft/ecs/factories/PlayerFactory.hpp>
 
+#include <algorithm>
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 #include <ASCIICraft/ecs/components/ItemCarried.hpp>
 #include <ASCIICraft/ecs/components/HotbarSelection.hpp>
@@ -42,17 +43,25 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     // --- Inventory (36 slots: 0-8 hotbar, 9-35 main) ---
     auto& inv = registry.emplace<components::Inventory>(p_ent, 36);
     if (auto* itemRegistry = registry.ctx().find<ecs::data::ItemRegistry>()) {
-        const char* itemNames[] = {
-            "minecraft:bedrock",
-            "minecraft:stone",
+        const char* hotbarItems[] = {
+            "minecraft:wooden_sword",
+            "minecraft:wooden_pickaxe",
+            "minecraft:wooden_axe",
+            "minecraft:wooden_shovel",
+            "minecraft:bread",
+            "minecraft:stone_sword",
+            "minecraft:stone_pickaxe",
+            "minecraft:oak_planks",
+        };
+        const int hotbarCounts[] = {1, 1, 1, 1, 64, 1, 1, 64};
+
+        const char* blockItems[] = {
             "minecraft:dandelion",
             "minecraft:poppy",
             "minecraft:tall_grass",
             "minecraft:fern",
             "minecraft:fence",
-            "minecraft:cobblestone",
-            "minecraft:stone_stairs",
-            "minecraft:cobblestone_slab",
+            "minecraft:oak_stairs",
             "minecraft:dirt",
             "minecraft:grass",
             "minecraft:oak_log",
@@ -64,39 +73,33 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
             "minecraft:furnace",
             "minecraft:glass",
             "minecraft:torch",
-            "minecraft:coal",
-            "minecraft:iron_ingot",
-            "minecraft:gold_ingot",
-            "minecraft:stick",
-            "minecraft:wooden_sword",
-            "minecraft:stone_sword",
-            "minecraft:iron_sword",
-            "minecraft:wooden_shovel",
-            "minecraft:stone_shovel",
-            "minecraft:iron_shovel",
-            "minecraft:wooden_pickaxe",
-            "minecraft:stone_pickaxe",
-            "minecraft:iron_pickaxe",
-            "minecraft:wooden_axe",
-            "minecraft:stone_axe",
-            "minecraft:iron_axe",
         };
 
-        const auto seedSlot = [&](int slot, const char* itemName) {
+        const auto seedSlot = [&](int slot, const char* itemName, int count = -1) {
             const int id = itemRegistry->GetIdFromName(itemName, registry);
             if (id < 0 || slot < 0 || slot >= inv.capacity) {
                 return;
             }
             components::ItemStack stack = components::ItemStack::fromRegistry(registry, id, 1);
             if (!stack.isEmpty()) {
-                stack.count = stack.maxStackSize;
+                stack.count = (count < 0) ? stack.maxStackSize : std::min(count, stack.maxStackSize);
                 inv.slots[slot] = stack;
             }
         };
 
-        constexpr int itemCount = static_cast<int>(sizeof(itemNames) / sizeof(itemNames[0]));
-        for (int slot = 0; slot < inv.capacity && slot < itemCount; ++slot) {
-            seedSlot(slot, itemNames[slot]);
+        constexpr int hotbarItemCount = static_cast<int>(sizeof(hotbarItems) / sizeof(hotbarItems[0]));
+        for (int i = 0; i < hotbarItemCount; ++i) {
+            seedSlot(i, hotbarItems[i], hotbarCounts[i]);
+        }
+
+        constexpr int mainInventoryStart = 9;
+        constexpr int blockItemCount = static_cast<int>(sizeof(blockItems) / sizeof(blockItems[0]));
+        for (int i = 0; i < blockItemCount; ++i) {
+            const int slot = mainInventoryStart + i;
+            if (slot >= inv.capacity) {
+                break;
+            }
+            seedSlot(slot, blockItems[i]);
         }
     } else {
         ASCIIgL::Logger::Warning("PlayerFactory: ItemRegistry missing; inventory left empty.");
