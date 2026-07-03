@@ -78,7 +78,7 @@ struct Renderer::Impl {
     ComPtr<ID3D11ShaderResourceView> _resolvedTextureSRV;
     ComPtr<ID3D11ShaderResourceView> _colorLUTSRV;
     ComPtr<ID3D11ShaderResourceView> _monochromeLUTSRV;
-    ComPtr<ID3D11Texture1D> _colorLUTTexture;
+    ComPtr<ID3D11Texture3D> _colorLUTTexture;
     ComPtr<ID3D11Texture1D> _monochromeLUTTexture;
     ComPtr<ID3D11Buffer> _lutConstantsCB;
     ComPtr<ID3D11VertexShader> _quantizationVS;
@@ -118,7 +118,8 @@ struct Renderer::Impl {
 
     enum class ColorLUTState { NotComputed, Monochrome, MultiColor };
     ColorLUTState _colorLUTState = ColorLUTState::NotComputed;
-    static constexpr unsigned int _rgbLUTDepth = 16;
+    static constexpr unsigned int _rgbLUTDepth = 64;
+    static constexpr unsigned int _rgbLUTMaxIndex = _rgbLUTDepth - 1;
     std::array<ScreenPixel, _rgbLUTDepth * _rgbLUTDepth * _rgbLUTDepth> _colorLUT{};
 
     static constexpr size_t _monochromeLUTSize = 1024;

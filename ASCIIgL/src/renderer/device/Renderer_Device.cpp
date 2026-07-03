@@ -572,7 +572,8 @@ const char* QUANTIZATION_PS_SRC = R"(
 #include "ColorUtil.hlsl"
 
 Texture2D<float4> g_colorTex : register(t0);
-Texture1D<uint2>  g_lutTex    : register(t1);
+Texture1D<uint2>  g_monoLutTex  : register(t1);
+Texture3D<uint2>  g_multiLutTex : register(t2);
 SamplerState      g_sam       : register(s0);
 
 cbuffer LUTConstants : register(b0) {
@@ -580,6 +581,10 @@ cbuffer LUTConstants : register(b0) {
     float  Lmax;
     uint   isMonochrome;
     uint   ditherEnabled;
+    uint   rgbLutMaxIndex;
+    uint   _pad0;
+    uint   _pad1;
+    uint   _pad2;
 };
 
 static const uint BAYER4[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
@@ -617,12 +622,13 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
             }
         }
         uint idx = (uint)clamp(fIdx, 0.0, 1023.0);
-        o.glyph_attr = g_lutTex[idx];
+        o.glyph_attr = g_monoLutTex[idx];
     } else {
         float3 srgb = linearToSRGB(rgb);
-        float3 cont = saturate(srgb) * 15.0;  // continuous [0.0, 15.0] per channel
+        float maxIdx = (float)rgbLutMaxIndex;
+        float3 cont = saturate(srgb) * maxIdx;
 
-        uint r16, g16, b16;
+        uint rIdx, gIdx, bIdx;
 
         if (ditherEnabled != 0u) {
             uint px = (uint)pos.x;
@@ -630,7 +636,7 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
             float bayerNorm = (float)(BAYER4[(py & 3u) * 4u + (px & 3u)]) / 16.0;
 
             float3 base = floor(cont);
-            float3 fr   = cont - base;  // per-channel fractional part
+            float3 fr   = cont - base;
 
             float3 dithered = base + float3(
                 fr.r > bayerNorm ? 1.0 : 0.0,
@@ -638,18 +644,16 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
                 fr.b > bayerNorm ? 1.0 : 0.0
             );
 
-            r16 = (uint)clamp(dithered.r, 0.0, 15.0);
-            g16 = (uint)clamp(dithered.g, 0.0, 15.0);
-            b16 = (uint)clamp(dithered.b, 0.0, 15.0);
+            rIdx = (uint)clamp(dithered.r, 0.0, maxIdx);
+            gIdx = (uint)clamp(dithered.g, 0.0, maxIdx);
+            bIdx = (uint)clamp(dithered.b, 0.0, maxIdx);
         } else {
-            // Original: round to nearest
-            r16 = (uint)(cont.r + 0.5);
-            g16 = (uint)(cont.g + 0.5);
-            b16 = (uint)(cont.b + 0.5);
+            rIdx = (uint)clamp(cont.r + 0.5, 0.0, maxIdx);
+            gIdx = (uint)clamp(cont.g + 0.5, 0.0, maxIdx);
+            bIdx = (uint)clamp(cont.b + 0.5, 0.0, maxIdx);
         }
 
-        uint idx = r16 * 256u + g16 * 16u + b16;
-        o.glyph_attr = g_lutTex[idx];
+        o.glyph_attr = g_multiLutTex.Load(int4(rIdx, gIdx, bIdx, 0));
     }
     return o;
 }
@@ -787,33 +791,45 @@ bool Renderer::EnsureQuantizationResources() {
 
 void Renderer::UploadLUTsToGPU() {
     if (impl_->_colorLUTState == ColorLUTState::NotComputed) return;
-    const UINT multiSize = Renderer::Impl::_rgbLUTDepth * Renderer::Impl::_rgbLUTDepth * Renderer::Impl::_rgbLUTDepth;
+    const UINT depth = Renderer::Impl::_rgbLUTDepth;
+    const UINT multiSize = depth * depth * depth;
     const UINT monoSize = static_cast<UINT>(Renderer::Impl::_monochromeLUTSize);
 
     std::vector<uint16_t> multiData(multiSize * 2);
-    for (UINT i = 0; i < multiSize; ++i) {
-        const ScreenPixel& c = impl_->_colorLUT[i];
-        multiData[i * 2 + 0] = static_cast<uint16_t>(c.glyph & 0xFFFF);
-        multiData[i * 2 + 1] = static_cast<uint16_t>(c.attributes & 0xFFFF);
+    for (UINT r = 0; r < depth; ++r) {
+        for (UINT g = 0; g < depth; ++g) {
+            for (UINT b = 0; b < depth; ++b) {
+                const UINT cpuIdx = r * depth * depth + g * depth + b;
+                const UINT gpuIdx = b * depth * depth + g * depth + r;
+                const ScreenPixel& c = impl_->_colorLUT[cpuIdx];
+                multiData[gpuIdx * 2 + 0] = static_cast<uint16_t>(c.glyph & 0xFFFF);
+                multiData[gpuIdx * 2 + 1] = static_cast<uint16_t>(c.attributes & 0xFFFF);
+            }
+        }
     }
-    D3D11_TEXTURE1D_DESC tex1d = {};
-    tex1d.Width = multiSize;
-    tex1d.MipLevels = 1;
-    tex1d.ArraySize = 1;
-    tex1d.Format = DXGI_FORMAT_R16G16_UINT;
-    tex1d.Usage = D3D11_USAGE_DEFAULT;
-    tex1d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-    D3D11_SUBRESOURCE_DATA srd = {};
-    srd.pSysMem = multiData.data();
+
+    D3D11_TEXTURE3D_DESC tex3d = {};
+    tex3d.Width = depth;
+    tex3d.Height = depth;
+    tex3d.Depth = depth;
+    tex3d.MipLevels = 1;
+    tex3d.Format = DXGI_FORMAT_R16G16_UINT;
+    tex3d.Usage = D3D11_USAGE_DEFAULT;
+    tex3d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    D3D11_SUBRESOURCE_DATA srd3d = {};
+    srd3d.pSysMem = multiData.data();
+    srd3d.SysMemPitch = depth * sizeof(uint32_t);
+    srd3d.SysMemSlicePitch = depth * depth * sizeof(uint32_t);
     impl_->_colorLUTTexture.Reset();
-    HRESULT hr = impl_->_device->CreateTexture1D(&tex1d, &srd, &impl_->_colorLUTTexture);
+    HRESULT hr = impl_->_device->CreateTexture3D(&tex3d, &srd3d, &impl_->_colorLUTTexture);
     if (FAILED(hr)) { Logger::Error("[Renderer] Failed to create color LUT texture"); return; }
-    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-    srvDesc.Format = DXGI_FORMAT_R16G16_UINT;
-    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE1D;
-    srvDesc.Texture1D.MipLevels = 1;
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc3d = {};
+    srvDesc3d.Format = DXGI_FORMAT_R16G16_UINT;
+    srvDesc3d.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+    srvDesc3d.Texture3D.MipLevels = 1;
     impl_->_colorLUTSRV.Reset();
-    impl_->_device->CreateShaderResourceView(impl_->_colorLUTTexture.Get(), &srvDesc, &impl_->_colorLUTSRV);
+    hr = impl_->_device->CreateShaderResourceView(impl_->_colorLUTTexture.Get(), &srvDesc3d, &impl_->_colorLUTSRV);
+    if (FAILED(hr)) { Logger::Error("[Renderer] Failed to create color LUT SRV"); return; }
 
     std::vector<uint16_t> monoData(monoSize * 2);
     for (UINT i = 0; i < monoSize; ++i) {
@@ -821,23 +837,38 @@ void Renderer::UploadLUTsToGPU() {
         monoData[i * 2 + 0] = static_cast<uint16_t>(c.glyph & 0xFFFF);
         monoData[i * 2 + 1] = static_cast<uint16_t>(c.attributes & 0xFFFF);
     }
+    D3D11_TEXTURE1D_DESC tex1d = {};
     tex1d.Width = monoSize;
+    tex1d.MipLevels = 1;
+    tex1d.ArraySize = 1;
+    tex1d.Format = DXGI_FORMAT_R16G16_UINT;
+    tex1d.Usage = D3D11_USAGE_DEFAULT;
+    tex1d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    D3D11_SUBRESOURCE_DATA srd = {};
     srd.pSysMem = monoData.data();
     impl_->_monochromeLUTTexture.Reset();
     hr = impl_->_device->CreateTexture1D(&tex1d, &srd, &impl_->_monochromeLUTTexture);
     if (FAILED(hr)) { Logger::Error("[Renderer] Failed to create monochrome LUT texture"); return; }
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = DXGI_FORMAT_R16G16_UINT;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE1D;
+    srvDesc.Texture1D.MipLevels = 1;
     impl_->_monochromeLUTSRV.Reset();
     impl_->_device->CreateShaderResourceView(impl_->_monochromeLUTTexture.Get(), &srvDesc, &impl_->_monochromeLUTSRV);
 
     struct LutConstants {
         float Lmin, Lmax;
         uint32_t isMonochrome, ditherEnabled;
+        uint32_t rgbLutMaxIndex, _pad0;
+        uint32_t _pad1, _pad2;
     };
+    static_assert(sizeof(LutConstants) % 16 == 0, "D3D11 constant buffers must be 16-byte aligned");
     LutConstants cb = {};
     cb.Lmin = impl_->_monochromeLUT.empty() ? 0.f : impl_->_monochromeLUT.front().first;
     cb.Lmax = impl_->_monochromeLUT.empty() ? 1.f : impl_->_monochromeLUT.back().first;
     cb.isMonochrome = (impl_->_colorLUTState == ColorLUTState::Monochrome) ? 1u : 0u;
     cb.ditherEnabled = impl_->_ditheringEnabled ? 1u : 0u;
+    cb.rgbLutMaxIndex = Renderer::Impl::_rgbLUTMaxIndex;
 
     D3D11_BUFFER_DESC cbd = {};
     cbd.ByteWidth = sizeof(LutConstants);
@@ -847,7 +878,8 @@ void Renderer::UploadLUTsToGPU() {
     impl_->_lutConstantsCB.Reset();
     D3D11_SUBRESOURCE_DATA cbInit = {};
     cbInit.pSysMem = &cb;
-    impl_->_device->CreateBuffer(&cbd, &cbInit, &impl_->_lutConstantsCB);
+    hr = impl_->_device->CreateBuffer(&cbd, &cbInit, &impl_->_lutConstantsCB);
+    if (FAILED(hr)) { Logger::Error("[Renderer] Failed to create LUT constants buffer"); return; }
     impl_->_lutGpuResourcesDirty = false;
 }
 
@@ -902,7 +934,7 @@ void Renderer::RunQuantizationPass() {
     }
     if (impl_->_colorLUTState == ColorLUTState::NotComputed) return;
     EnsureQuantizationResources();
-    if (!impl_->_resolvedTextureSRV || (!impl_->_colorLUTSRV && !impl_->_monochromeLUTSRV)) {
+    if (!impl_->_resolvedTextureSRV || !impl_->_monochromeLUTSRV || !impl_->_colorLUTSRV) {
         Logger::Warning("[Renderer] RunQuantizationPass skipped: resolved SRV or LUT SRVs missing.");
         return;
     }
@@ -929,9 +961,12 @@ void Renderer::RunQuantizationPass() {
     vp.MaxDepth = 1.f;
     impl_->_context->RSSetViewports(1, &vp);
 
-    ID3D11ShaderResourceView* srvs[] = { impl_->_resolvedTextureSRV.Get(),
-        (impl_->_colorLUTState == ColorLUTState::Monochrome) ? impl_->_monochromeLUTSRV.Get() : impl_->_colorLUTSRV.Get() };
-    impl_->_context->PSSetShaderResources(0, 2, srvs);
+    ID3D11ShaderResourceView* srvs[] = {
+        impl_->_resolvedTextureSRV.Get(),
+        impl_->_monochromeLUTSRV.Get(),
+        impl_->_colorLUTSRV.Get()
+    };
+    impl_->_context->PSSetShaderResources(0, 3, srvs);
     impl_->_context->PSSetSamplers(0, 1, impl_->_samplerLinear.GetAddressOf());
     impl_->_context->VSSetShader(impl_->_quantizationVS.Get(), nullptr, 0);
     impl_->_context->PSSetShader(impl_->_quantizationPS.Get(), nullptr, 0);
@@ -945,8 +980,8 @@ void Renderer::RunQuantizationPass() {
 
     impl_->_context->Draw(6, 0);
 
-    ID3D11ShaderResourceView* nullSRVs[] = { nullptr, nullptr };
-    impl_->_context->PSSetShaderResources(0, 2, nullSRVs);
+    ID3D11ShaderResourceView* nullSRVs[] = { nullptr, nullptr, nullptr };
+    impl_->_context->PSSetShaderResources(0, 3, nullSRVs);
 
     // Restore main render target so next frame draws to the correct RT
     impl_->_context->OMSetRenderTargets(1, impl_->_renderTargetView.GetAddressOf(), impl_->_depthStencilView.Get());

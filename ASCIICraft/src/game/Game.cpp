@@ -482,7 +482,6 @@ bool Game::LoadTerrainMaterial() {
         ASCIIgL::VertFormats::PosUVLayer(),
         TerrainShaders::GetTerrainPSUniformLayout(),
         true,
-        false,
         [](ASCIIgL::Material& material) {
             auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
             if (!terrainTextureArray) {
@@ -502,7 +501,6 @@ bool Game::LoadDroppedItemMaterial() {
         DroppedItemShaders::GetPSSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
         DroppedItemShaders::GetUniformLayout(),
-        true,
         true,
         [](ASCIIgL::Material& material) {
             auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
@@ -541,7 +539,6 @@ bool Game::LoadHeldItemMaterial() {
         ASCIIgL::VertFormats::PosUVLayer(),
         HeldItemShaders::GetUniformLayout(),
         true,
-        true,
         [](ASCIIgL::Material& material) {
             auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
             if (!terrainTextureArray) {
@@ -578,7 +575,6 @@ bool Game::LoadGUIMaterial() {
         ASCIIgL::DefaultShaders::GetDefaultPixelShaderSource(),
         ASCIIgL::VertFormats::PosUV(),
         ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
-        false,
         false
     });
 }
@@ -590,7 +586,6 @@ bool Game::LoadGUIItemMaterial() {
         ASCIIgL::DefaultShaders::GetTextureArrayPixelShaderSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
         ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
-        false,
         false,
         [](ASCIIgL::Material& material) {
             auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray");
@@ -612,7 +607,6 @@ bool Game::LoadGUIBlockMaterial() {
         ASCIIgL::VertFormats::PosUVLayer(),
         ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
         false,
-        false,
         [](ASCIIgL::Material& material) {
             auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
             if (!terrainTextureArray) {
@@ -633,7 +627,6 @@ bool Game::LoadGUITextMaterial() {
         ASCIIgL::VertFormats::PosUVLayer(),
         ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
         false,
-        false,
         [](ASCIIgL::Material& material) {
             auto fontTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("defaultFontTextureArray");
             if (!fontTextureArray) {
@@ -653,7 +646,6 @@ bool Game::LoadBlockTargetOutlineMaterial() {
         BlockTargetOutlineShaders::GetPSSource(),
         ASCIIgL::VertFormats::PosColor(),
         BlockTargetOutlineShaders::GetUniformLayout(),
-        false,
         false
     });
 }

@@ -391,8 +391,8 @@ void Renderer::PrecomputeMultiColorLUT(Palette& palette) {
     Logger::Info("[Renderer] Precomputing multi-color color LUT...");
 
     impl_->_colorLUTState = ColorLUTState::MultiColor;
-    // ===== MULTICOLOR: full 16×16×16 RGB cube =====
-    const float invPaletteDepth = 1.0f / 15.0f;
+    // ===== MULTICOLOR: full 64×64×64 RGB cube =====
+    const float invPaletteDepth = 1.0f / static_cast<float>(Renderer::Impl::_rgbLUTMaxIndex);
     auto srgbToLinear = [](float s) {
         return s <= 0.04045f ? s / 12.92f : std::pow((s + 0.055f) / 1.055f, 2.4f);
     };
@@ -456,8 +456,10 @@ ScreenPixel Renderer::GetCharInfo(const glm::ivec3& rgb) {
         return impl_->_monochromeLUT[idx].second;
     }
 
-    auto to16 = [](int v) { return (v * 15 + 127) / 255; };
-    const int r = to16(rgb.r), g = to16(rgb.g), b = to16(rgb.b);
+    auto toBucket = [](int v) {
+        return (v * static_cast<int>(Renderer::Impl::_rgbLUTMaxIndex) + 127) / 255;
+    };
+    const int r = toBucket(rgb.r), g = toBucket(rgb.g), b = toBucket(rgb.b);
     const int index = (r * Renderer::Impl::_rgbLUTDepth * Renderer::Impl::_rgbLUTDepth) + (g * Renderer::Impl::_rgbLUTDepth) + b;
     return impl_->_colorLUT[index];
 }
