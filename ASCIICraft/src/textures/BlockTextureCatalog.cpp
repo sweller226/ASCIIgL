@@ -21,13 +21,11 @@ const std::vector<CatalogEntry>& GetBlockTextureCatalog() {
         {"minecraft:blocks/grass_top",         "res/textures/blocks/grass_top.png", &kGrassTintHue},
         {"minecraft:blocks/grass_side",        "res/textures/blocks/grass_side.png"},
         {"minecraft:blocks/grass_side_overlay", "res/textures/blocks/grass_side_overlay.png", &kGrassTintHue},
-        // {"minecraft:blocks/grass_side_snowed",   "res/textures/blocks/grass_side_snowed.png"},  // modifed json for snow
         {"minecraft:blocks/water_still",       "res/textures/blocks/water_still.png"},
         {"minecraft:blocks/crafting_table_front","res/textures/blocks/crafting_table_front.png"},
         {"minecraft:blocks/crafting_table_side","res/textures/blocks/crafting_table_side.png"},
         {"minecraft:blocks/crafting_table_top","res/textures/blocks/crafting_table_top.png"},
         {"minecraft:blocks/furnace_front_off", "res/textures/blocks/furnace_front_off.png"},
-        // {"minecraft:blocks/furnace_front_on",  "res/textures/blocks/furnace_front_on.png"}, // modified json for lit furnace
         {"minecraft:blocks/furnace_side",      "res/textures/blocks/furnace_side.png"},
         {"minecraft:blocks/furnace_top",       "res/textures/blocks/furnace_top.png"},
         {"minecraft:blocks/glass",             "res/textures/blocks/glass.png"},
