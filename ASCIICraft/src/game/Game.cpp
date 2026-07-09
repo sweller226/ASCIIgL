@@ -132,7 +132,7 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
 
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
-    renderer.SetDitheringEnabled(false);
+    renderer.SetDitheringEnabled(true);
     renderer.SetBackgroundCol(glm::ivec3(255, 255, 255));
     renderer.SetWireframe(false);
     renderer.SetBackfaceCulling(true);
