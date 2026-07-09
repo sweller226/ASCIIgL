@@ -49,11 +49,9 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
             "minecraft:wooden_axe",
             "minecraft:wooden_shovel",
             "minecraft:bread",
-            "minecraft:stone_sword",
-            "minecraft:stone_pickaxe",
             "minecraft:oak_planks",
         };
-        const int hotbarCounts[] = {1, 1, 1, 1, 64, 1, 1, 64};
+        const int hotbarCounts[] = {1, 1, 1, 1, 64, 64};
 
         const char* blockItems[] = {
             "minecraft:dandelion",
@@ -62,17 +60,21 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
             "minecraft:fern",
             "minecraft:fence",
             "minecraft:oak_stairs",
+            "minecraft:cobblestone",
+            "minecraft:stone_stairs",
             "minecraft:dirt",
             "minecraft:grass",
             "minecraft:oak_log",
             "minecraft:oak_planks",
             "minecraft:oak_slab",
+            "minecraft:cobblestone_slab",
             "minecraft:oak_leaves",
             "minecraft:crafting_table",
             "minecraft:bookshelf",
             "minecraft:furnace",
             "minecraft:glass",
-            "minecraft:torch",
+            "minecraft:blue_wool",
+            "minecraft:green_wool",
         };
 
         const auto seedSlot = [&](int slot, const char* itemName, int count = -1) {

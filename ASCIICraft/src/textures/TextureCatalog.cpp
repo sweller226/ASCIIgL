@@ -28,6 +28,15 @@ std::vector<ASCIIgL::MonochromeMapping> BuildPerTileMonochromeMappings(
     return out;
 }
 
+std::vector<float> BuildPaletteLayerWeights(const std::vector<CatalogEntry>& catalog) {
+    std::vector<float> out;
+    out.reserve(catalog.size());
+    for (const auto& entry : catalog) {
+        out.push_back(entry.paletteWeight);
+    }
+    return out;
+}
+
 std::unordered_map<std::string, int> BuildTextureIdToLayerMap(const std::vector<CatalogEntry>& catalog) {
     std::unordered_map<std::string, int> out;
     out.reserve(catalog.size());

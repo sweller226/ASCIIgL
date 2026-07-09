@@ -86,7 +86,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     if ((int)layer == WATER_BASE_LAYER) {
         texColor = blockTextures.Sample(samplerState, input.texcoord);
         // Make water more transparent.
-        texColor.a = 0.7f;
+        texColor.a = 0.75f;
     } else {
         texColor = blockTextures.Sample(samplerState, input.texcoord);
     }

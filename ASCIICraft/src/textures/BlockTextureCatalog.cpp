@@ -14,6 +14,7 @@ const glm::ivec3 kGrassTintHue(131, 178, 83);
 const std::vector<CatalogEntry>& GetBlockTextureCatalog() {
     static const std::vector<CatalogEntry> kCatalog = {
         {"minecraft:blocks/dirt",              "res/textures/blocks/dirt.png"},
+        {"minecraft:blocks/cobblestone",       "res/textures/blocks/cobblestone.png", nullptr, 0.0f},
         {"minecraft:blocks/log_oak",           "res/textures/blocks/log_oak.png"},
         {"minecraft:blocks/log_oak_top",       "res/textures/blocks/log_oak_top.png"},
         {"minecraft:blocks/leaves_oak",        "res/textures/blocks/leaves_oak.png", &kGrassTintHue},
@@ -22,19 +23,20 @@ const std::vector<CatalogEntry>& GetBlockTextureCatalog() {
         {"minecraft:blocks/grass_side",        "res/textures/blocks/grass_side.png"},
         {"minecraft:blocks/grass_side_overlay", "res/textures/blocks/grass_side_overlay.png", &kGrassTintHue},
         {"minecraft:blocks/water_still",       "res/textures/blocks/water_still.png"},
-        {"minecraft:blocks/crafting_table_front","res/textures/blocks/crafting_table_front.png"},
-        {"minecraft:blocks/crafting_table_side","res/textures/blocks/crafting_table_side.png"},
-        {"minecraft:blocks/crafting_table_top","res/textures/blocks/crafting_table_top.png"},
+        {"minecraft:blocks/crafting_table_front","res/textures/blocks/crafting_table_front.png", nullptr, 1.0f},
+        {"minecraft:blocks/crafting_table_side","res/textures/blocks/crafting_table_side.png", nullptr, 1.0f},
+        {"minecraft:blocks/crafting_table_top","res/textures/blocks/crafting_table_top.png", nullptr, 0.0f},
         {"minecraft:blocks/furnace_front_off", "res/textures/blocks/furnace_front_off.png"},
-        {"minecraft:blocks/furnace_side",      "res/textures/blocks/furnace_side.png"},
-        {"minecraft:blocks/furnace_top",       "res/textures/blocks/furnace_top.png"},
+        {"minecraft:blocks/furnace_side",      "res/textures/blocks/furnace_side.png",      nullptr, 1.0f},
+        {"minecraft:blocks/furnace_top",       "res/textures/blocks/furnace_top.png",       nullptr, 0.0f},
         {"minecraft:blocks/glass",             "res/textures/blocks/glass.png"},
         {"minecraft:blocks/bookshelf",         "res/textures/blocks/bookshelf.png"},
-        {"minecraft:blocks/torch_on",          "res/textures/blocks/torch_on.png"},
         {"minecraft:blocks/flower_dandelion",  "res/textures/blocks/flower_dandelion.png"},
         {"minecraft:blocks/flower_rose",       "res/textures/blocks/flower_rose.png"},
         {"minecraft:blocks/fern",              "res/textures/blocks/fern.png", &kGrassTintHue},
         {"minecraft:blocks/tallgrass",         "res/textures/blocks/tallgrass.png", &kGrassTintHue},
+        {"minecraft:blocks/wool_colored_blue", "res/textures/blocks/blue_wool.png", nullptr, 0.0f},
+        {"minecraft:blocks/wool_colored_green", "res/textures/blocks/green_wool.png", nullptr, 0.0f},
     };
     return kCatalog;
 }

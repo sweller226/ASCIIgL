@@ -36,14 +36,6 @@ struct ItemGuiMeshTransform {
         return t;
     }
 
-    /// Upright torch icon — thin model reads small at the default isometric pose.
-    static ItemGuiMeshTransform DefaultTorch() {
-        ItemGuiMeshTransform t;
-        t.rotationDegrees = glm::vec3(0.0f);
-        t.scale = glm::vec3(0.85f);
-        return t;
-    }
-
     glm::mat4 getModel() const {
         constexpr float kDisplayUnitsPerBlock = 16.0f;
         // Minecraft display order: translation, rotation (X→Y→Z), scale.
@@ -88,14 +80,6 @@ struct ItemHeldMeshTransform {
         t.location = glm::vec3(0.0f, 2.3f, 1.0f);
         t.rotationDegrees = glm::vec3(0.0f, 288.0f, 20.0f);
         t.scale = glm::vec3(0.7f);
-        return t;
-    }
-
-    static ItemHeldMeshTransform DefaultTorchFirstPerson() {
-        ItemHeldMeshTransform t;
-        t.location = glm::vec3(-0.5f, 3.0f, 0.0f);
-        t.rotationDegrees = glm::vec3(0.0f, 45.0f, 0.0f);
-        t.scale = glm::vec3(0.8f);
         return t;
     }
 

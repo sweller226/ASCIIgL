@@ -263,7 +263,7 @@ namespace {
 
         // Better uvlock rule than previous heuristic:
         // counter-rotate yaw for all faces, and add pitch compensation for east/west-facing sides.
-        // This aligns common fence/stair/torch variant behavior with world-facing texture orientation.
+        // This aligns common fence/stair variant behavior with world-facing texture orientation.
         int correction = (360 - variantY) % 360;
         if (transformedFace == static_cast<int>(FaceDir::East) || transformedFace == static_cast<int>(FaceDir::West)) {
             correction = (correction + (360 - variantX) % 360) % 360;

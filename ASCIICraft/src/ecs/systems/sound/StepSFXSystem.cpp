@@ -66,6 +66,9 @@ void StepSFXSystem::RebuildStepSoundMap(const blockstate::BlockStateRegistry& bs
     MapType(bsr, "minecraft:poppy", "step.grass");
 
     MapType(bsr, "minecraft:oak_stairs", "step.wood");
+    MapType(bsr, "minecraft:stone_stairs", "step.stone");
+    MapType(bsr, "minecraft:cobblestone", "step.stone");
+    MapType(bsr, "minecraft:cobblestone_slab", "step.stone");
     MapType(bsr, "minecraft:glass", "step.stone");
 
     MapType(bsr, "minecraft:oak_log", "step.wood");
