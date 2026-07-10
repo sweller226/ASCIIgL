@@ -65,6 +65,22 @@ glm::vec3 Linear1ToOklab(const glm::vec3& c) {
     );
 }
 
+glm::vec3 OklabToLinear1(const glm::vec3& c) {
+    const float l_ = c.x + 0.3963377774f * c.y + 0.2158037573f * c.z;
+    const float m_ = c.x - 0.1055613458f * c.y - 0.0638541728f * c.z;
+    const float s_ = c.x - 0.0894841775f * c.y - 1.2914855480f * c.z;
+
+    const float l = l_ * l_ * l_;
+    const float m = m_ * m_ * m_;
+    const float s = s_ * s_ * s_;
+
+    return glm::vec3(
+        +4.0767416621f * l - 3.3077115913f * m + 0.2309699292f * s,
+        -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s,
+        -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s
+    );
+}
+
 // Linear → sRGB (float 0–1 → 0–255)
 float Linear1ToSrgb255(float c) {
     float s = (c <= 0.0031308f)

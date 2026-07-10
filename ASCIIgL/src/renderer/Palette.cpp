@@ -63,7 +63,7 @@ Palette::Palette(
     const std::vector<WeightedTextureArray>& textureArrays,
     bool sortByLuminance)
 {
-    // Collect color samples from given textures/arrays, using the float as a weight.
+    // Collect Oklab samples from given textures/arrays, using the float as a weight.
     std::vector<glm::vec3> samples;
     samples.reserve(4096);
 
@@ -93,7 +93,7 @@ Palette::Palette(
                 uint8_t a = px[3];
                 if (a < ALPHA_THRESHOLD) continue;
                 glm::ivec3 rgb(px[0], px[1], px[2]);
-                samples.push_back(PaletteUtil::sRGB255ToLinear1(rgb));
+                samples.push_back(PaletteUtil::Linear1ToOklab(PaletteUtil::sRGB255ToLinear1(rgb)));
             }
         }
     };
@@ -134,7 +134,7 @@ Palette::Palette(
                     uint8_t a = px[3];
                     if (a < ALPHA_THRESHOLD) continue;
                     glm::ivec3 rgb(px[0], px[1], px[2]);
-                    samples.push_back(PaletteUtil::sRGB255ToLinear1(rgb));
+                    samples.push_back(PaletteUtil::Linear1ToOklab(PaletteUtil::sRGB255ToLinear1(rgb)));
                 }
             }
         }
@@ -207,7 +207,9 @@ Palette::Palette(
         }
 
         for (int k = 0; k < K; ++k) {
-            glm::ivec3 rgb = PaletteUtil::Linear1ToSrgb255(centers[k]);
+            glm::vec3 linear = PaletteUtil::OklabToLinear1(centers[k]);
+            linear = glm::clamp(linear, glm::vec3(0.0f), glm::vec3(1.0f));
+            glm::ivec3 rgb = PaletteUtil::Linear1ToSrgb255(linear);
             entries[k] = PaletteEntry(rgb);
         }
     } else {
