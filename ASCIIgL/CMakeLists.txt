@@ -85,6 +85,7 @@ target_include_directories(ASCIIgL PRIVATE
 # Public dependencies (exposed to consumers)
 # Use the namespaced glm target provided by vendor/CMakeLists.txt (or system glm)
 target_link_libraries(ASCIIgL PUBLIC glm::glm)
+target_link_libraries(ASCIIgL PUBLIC TBB::tbb)
 
 # Private dependencies (internal use only - hidden from consumers)
 # tinyobjloader is compiled directly into ASCIIgL.lib - no external linking needed

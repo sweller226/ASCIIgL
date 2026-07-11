@@ -54,6 +54,54 @@ if (-not (Test-Path "build/lib/Release/ASCIIgL.lib")) {
 # Distribution Function
 # ============================================================================
 
+function Copy-TbbBuildArtifacts {
+    param([string]$OutputDir)
+
+    New-Item -Path "$OutputDir/lib" -ItemType Directory -Force | Out-Null
+    New-Item -Path "$OutputDir/bin" -ItemType Directory -Force | Out-Null
+
+    $releaseLib = Get-ChildItem -Path "build" -Recurse -Filter "tbb12.lib" -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match "release" -and $_.FullName -notmatch "fastdebug" } |
+        Select-Object -First 1
+    $releaseDll = Get-ChildItem -Path "build" -Recurse -Filter "tbb12.dll" -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match "release" -and $_.FullName -notmatch "fastdebug" } |
+        Select-Object -First 1
+    $fastDebugLib = Get-ChildItem -Path "build" -Recurse -Filter "tbb12.lib" -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match "fastdebug" } |
+        Select-Object -First 1
+    $fastDebugDll = Get-ChildItem -Path "build" -Recurse -Filter "tbb12.dll" -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match "fastdebug" } |
+        Select-Object -First 1
+
+    if ($releaseLib) {
+        Copy-Item $releaseLib.FullName "$OutputDir/lib/tbb12.lib" -Force
+        Write-Success "Copied Release oneTBB import library"
+    } else {
+        Write-Warning "Release oneTBB import library not found in build output"
+    }
+
+    if ($releaseDll) {
+        Copy-Item $releaseDll.FullName "$OutputDir/bin/tbb12.dll" -Force
+        Write-Success "Copied Release oneTBB runtime DLL"
+    } else {
+        Write-Warning "Release oneTBB runtime DLL not found in build output"
+    }
+
+    if ($fastDebugLib) {
+        Copy-Item $fastDebugLib.FullName "$OutputDir/lib/tbb12_debug.lib" -Force
+        Write-Success "Copied FastDebug oneTBB import library"
+    } else {
+        Write-Warning "FastDebug oneTBB import library not found in build output"
+    }
+
+    if ($fastDebugDll) {
+        Copy-Item $fastDebugDll.FullName "$OutputDir/bin/tbb12_debug.dll" -Force
+        Write-Success "Copied FastDebug oneTBB runtime DLL"
+    } else {
+        Write-Warning "FastDebug oneTBB runtime DLL not found in build output"
+    }
+}
+
 function New-Distribution {
     param([string]$OutputDir)
     
@@ -101,6 +149,8 @@ function New-Distribution {
     New-Item -Path "$OutputDir/cmake" -ItemType Directory -Force | Out-Null
     Copy-Item "cmake/ASCIIgLConfig.cmake" "$OutputDir/cmake/" -Force
     Write-Success "Copied CMake config"
+
+    Copy-TbbBuildArtifacts $OutputDir
         
     # Copy resources (fonts, etc.)
     if (Test-Path "res") {

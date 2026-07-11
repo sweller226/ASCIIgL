@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <vector>
 
-#include <FastNoiseLite/FastNoiseLite.h>
+#include <FastNoiseLite.h>
 
 #include <ASCIICraft/world/block/placement/BlockPlacement.hpp>
 

@@ -1,0 +1,72 @@
+<p><strong>ASCIICraft</strong> is a block-based sandbox where the entire 3D world is drawn as live ASCII art. Explore procedurally generated terrain, break and place blocks, manage an inventory, and watch the world update — all through glyphs and terminal colors.</p>
+
+<p>Built on <strong>ASCIIgL</strong>, a custom rendering engine that converts a full voxel scene into character cells with foreground/background colors matched to the scene.</p>
+
+<h2>What makes it different</h2>
+
+<p>Most “ASCII games” fake the look in a normal graphics window. ASCIICraft actually renders through an ASCII pipeline: each cell is a character, and colors are chosen to approximate the 3D image. The game builds its <strong>16-color palette from its own block and item textures</strong> using perceptual color clustering, so the palette fits the world instead of a fixed retro scheme.</p>
+
+<h2>Features</h2>
+
+<ul>
+  <li>Procedural terrain with trees, grass, water, and varied biomes</li>
+  <li>Block breaking and placement</li>
+  <li>Inventory, hotbar, and item drops</li>
+  <li>First-person movement — walk, sprint, sneak, and fly</li>
+  <li>Sound and music</li>
+  <li>Two render modes:
+    <ul>
+      <li><strong>Terminal mode</strong> (default) — runs in Windows Terminal; applies a custom color scheme on launch</li>
+      <li><strong>Window mode</strong> — native DirectX window with the same ASCII output</li>
+    </ul>
+  </li>
+</ul>
+
+<h2>Controls</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Input</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>W A S D</strong></td><td>Move</td></tr>
+    <tr><td><strong>Space</strong></td><td>Jump</td></tr>
+    <tr><td><strong>Ctrl</strong></td><td>Sprint</td></tr>
+    <tr><td><strong>Shift</strong></td><td>Sneak</td></tr>
+    <tr><td><strong>Arrow keys</strong></td><td>Look around</td></tr>
+    <tr><td><strong>F</strong></td><td>Break / mine block</td></tr>
+    <tr><td><strong>R</strong></td><td>Place block</td></tr>
+    <tr><td><strong>E</strong></td><td>Open / close inventory</td></tr>
+    <tr><td><strong>Q</strong></td><td>Drop item</td></tr>
+    <tr><td><strong>1–9</strong></td><td>Select hotbar slot</td></tr>
+    <tr><td><strong>P</strong></td><td>Toggle flying</td></tr>
+    <tr><td><strong>K</strong></td><td>Toggle dithering</td></tr>
+    <tr><td><strong>Esc</strong></td><td>Quit</td></tr>
+  </tbody>
+</table>
+
+<h2>Launch options</h2>
+
+<pre><code>ASCIICraft.exe                    Terminal mode, monochrome (default)
+ASCIICraft.exe --window           Window mode
+ASCIICraft.exe --color            16-color palette
+ASCIICraft.exe --window --color   Full color in a window</code></pre>
+
+<h2>Requirements</h2>
+
+<ul>
+  <li><strong>Windows 10 or 11</strong> (64-bit)</li>
+  <li><strong>Windows Terminal</strong> recommended for terminal mode</li>
+  <li>GPU with <strong>DirectX 11</strong> support</li>
+</ul>
+
+<h2>Terminal tips</h2>
+
+<ul>
+  <li>The game tries to install the <strong>Square Modern</strong> font from bundled resources on first run</li>
+  <li>Set <strong>line height to 1.0</strong> in Windows Terminal</li>
+  <li><strong>Aliased</strong> rendering gives a sharper retro look; <strong>ClearType</strong> is easier to read</li>
+</ul>

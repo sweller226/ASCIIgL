@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include <FastNoiseLite/FastNoiseLite.h>
+#include <FastNoiseLite.h>
 
 #include <ASCIICraft/world/Sizes.hpp>
 

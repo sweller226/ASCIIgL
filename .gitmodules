@@ -13,3 +13,18 @@
 [submodule "ASCIIgL/vendor/tracy"]
 	path = ASCIIgL/vendor/tracy
 	url = https://github.com/wolfpld/tracy.git
+[submodule "ASCIIgL/vendor/oneTBB"]
+	path = ASCIIgL/vendor/oneTBB
+	url = https://github.com/uxlfoundation/oneTBB.git
+[submodule "ASCIICraft/vendor/openal-soft"]
+	path = ASCIICraft/vendor/openal-soft
+	url = https://github.com/kcat/openal-soft.git
+[submodule "ASCIICraft/vendor/FastNoiseLite"]
+	path = ASCIICraft/vendor/FastNoiseLite
+	url = https://github.com/Auburn/FastNoiseLite.git
+[submodule "ASCIICraft/vendor/stb"]
+	path = ASCIICraft/vendor/stb
+	url = https://github.com/nothings/stb.git
+[submodule "ASCIICraft/vendor/entt"]
+	path = ASCIICraft/vendor/entt
+	url = https://github.com/skypjack/entt.git

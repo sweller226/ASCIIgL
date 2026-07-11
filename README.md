@@ -1,4 +1,32 @@
-# ASCIIgL / ASCIICraft Developer Setup
+# ASCIIgL / ASCIICraft
+
+**ASCIIgL** is a C++ rendering engine that draws real-time 3D scenes as ASCII art. Instead of shading pixels, it quantizes each frame into a grid of characters with foreground and background colors chosen to match the source image.
+
+**ASCIICraft** is a voxel sandbox game built on ASCIIgL — explore procedural terrain, break and place blocks, and manage an inventory, with the entire world rendered through the ASCII pipeline.
+
+## How it works
+
+1. **Render the scene in 3D** — DirectX 11 draws block meshes, items, particles, and UI into an off-screen color buffer at full RGB precision.
+2. **Build a palette** — On startup, the engine samples block and item textures and clusters them into 16 colors (Oklab k-means) so the palette matches the game's art.
+3. **Quantize to ASCII** — A precomputed lookup table maps each target color to the best foreground/background glyph pair, scored in perceptual (Oklab) space using character coverage data.
+4. **Present the frame** — Output goes to a Windows Terminal console (default) or a native window (`--window`). Terminal mode applies a custom 16-color scheme derived from the palette; `--color` enables the full clustered palette instead of monochrome.
+
+## Core operations
+
+| Task | Location | Command |
+|------|----------|---------|
+| Build engine | `ASCIIgL/` | `./scripts/build_debug.ps1` or `build_release.ps1` |
+| Build game | `ASCIICraft/` | `./scripts/build_fastdebug.ps1` or `build_release.ps1` |
+| Build engine + deploy to game | repo root | `./scripts/build_ASCIIgL_ASCIICraft.ps1` |
+| Run (terminal) | `ASCIICraft/build/bin/Release/` | `./ASCIICraft.exe` |
+| Run (window) | same | `./ASCIICraft.exe --window` |
+| Run (16-color) | same | `./ASCIICraft.exe --color` or `--window --color` |
+
+Platform: **Windows 10/11**, DirectX 11, Windows Terminal recommended for console output.
+
+---
+
+## Developer Setup
 
 This guide is for contributors who want to clone, build, run, and profile the project with minimal trial-and-error.
 
@@ -25,9 +53,12 @@ This guide is for contributors who want to clone, build, run, and profile the pr
   - `stb`
   - `tinyobjloader`
   - `tracy`
-- oneTBB is required by ASCIICraft and is not committed to git.
-  - Expected folder: `ASCIICraft/lib/oneTBB/oneapi-tbb-2022.3.0-win/oneapi-tbb-2022.3.0`
-  - Expected runtime libs include `tbb12.dll` and `tbb12_debug.dll`
+  - `oneTBB` (built from source by CMake; shared by ASCIIgL and ASCIICraft)
+- Game vendor dependencies are Git submodules under `ASCIICraft/vendor/`:
+  - `entt` (pinned to `v3.13.2` for C++17 compatibility)
+  - `FastNoiseLite`
+  - `stb`
+  - `openal-soft` (built from source by CMake)
 - Tracy viewer tools are local binaries (not built by default from source in this repo).
   - Suggested location: `tools/Tracy/`
   - Current local bundle in this repo is under `tools/Tracy/windows-0.13.1`
@@ -38,11 +69,9 @@ This guide is for contributors who want to clone, build, run, and profile the pr
    - `git clone --recurse-submodules <repo-url>`
 2. If already cloned without submodules:
    - `git submodule update --init --recursive`
-3. Verify submodules:
+3. Verify submodules (including `ASCIIgL/vendor/oneTBB` and all `ASCIICraft/vendor/*` deps):
    - `git submodule status`
-4. Place oneTBB at the expected path:
-   - `ASCIICraft/lib/oneTBB/oneapi-tbb-2022.3.0-win/oneapi-tbb-2022.3.0`
-5. Put Tracy executables under `tools/Tracy/` (already scripted via `scripts/run_tracy.ps1`).
+4. Put Tracy executables under `tools/Tracy/` (already scripted via `scripts/run_tracy.ps1`).
 
 ## Build Commands
 
@@ -103,20 +132,21 @@ This script builds engine artifacts, creates a distribution, and deploys it into
 ## Terminal/Font Notes (ASCII output quality)
 
 If terminal rendering does not look correct:
-
+- Download Square Modern font manually from ASCIIgL res folder for now
 - Use Square Modern font from engine resources
 - Set terminal palette expected by the program
-- Set line height to `1.0`
+- Set line height to `1.2`
 - Windows Terminal antialiasing:
   - `cleartype` for readability
-  - `aliased` for stricter ASCII art look
 
 ## Common Setup Failures
 
 - Submodule headers missing:
   - Run `git submodule update --init --recursive`
 - CMake cannot find oneTBB:
-  - Check exact oneTBB path under `ASCIICraft/lib/oneTBB/...`
+  - Run `git submodule update --init --recursive` and verify `ASCIIgL/vendor/oneTBB` exists
+- CMake cannot find openal-soft:
+  - Run `git submodule update --init --recursive` and verify `ASCIICraft/vendor/openal-soft` exists
 - Missing Tracy viewer executable:
   - Place Tracy binaries under `tools/Tracy/` and use `scripts/run_tracy.ps1`
 - Generator error for Visual Studio 18:
@@ -124,8 +154,7 @@ If terminal rendering does not look correct:
 
 ## Quick Checklist
 
-- Submodules initialized
-- oneTBB folder present at expected path
+- Submodules initialized (including `ASCIIgL/vendor/oneTBB` and `ASCIICraft/vendor/{entt,FastNoiseLite,stb,openal-soft}`)
 - Tracy binaries present under `tools/Tracy`
 - `ASCIIgL` builds FastDebug/Release
 - `ASCIICraft` builds FastDebug/Release

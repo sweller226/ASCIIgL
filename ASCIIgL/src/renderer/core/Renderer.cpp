@@ -1,8 +1,8 @@
 #include <ASCIIgL/renderer/Renderer.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
-#include <execution>
 #include <limits>
 #include <numeric>
 #include <sstream>
@@ -13,6 +13,9 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <Windows.h>
+
+#include <oneapi/tbb/blocked_range.h>
+#include <oneapi/tbb/parallel_for.h>
 
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/util/CoverageJson.hpp>
@@ -391,56 +394,88 @@ void Renderer::PrecomputeMultiColorLUT(Palette& palette) {
     Logger::Info("[Renderer] Precomputing multi-color color LUT...");
 
     impl_->_colorLUTState = ColorLUTState::MultiColor;
-    // ===== MULTICOLOR: full 64×64×64 RGB cube =====
-    const float invPaletteDepth = 1.0f / static_cast<float>(Renderer::Impl::_rgbLUTMaxIndex);
-    auto srgbToLinear = [](float s) {
-        return s <= 0.04045f ? s / 12.92f : std::pow((s + 0.055f) / 1.055f, 2.4f);
+
+    struct LutCandidate {
+        glm::vec3 oklab;
+        uint8_t fgIndex;
+        uint8_t bgIndex;
+        uint8_t charIndex;
     };
-    auto srgbToLinearVec = [&srgbToLinear](const glm::vec3& c) {
-        return glm::vec3(srgbToLinear(c.r), srgbToLinear(c.g), srgbToLinear(c.b));
-    };
 
-    for (int r = 0; r < static_cast<int>(Renderer::Impl::_rgbLUTDepth); ++r) {
-        for (int g = 0; g < static_cast<int>(Renderer::Impl::_rgbLUTDepth); ++g) {
-            for (int b = 0; b < static_cast<int>(Renderer::Impl::_rgbLUTDepth); ++b) {
-                glm::vec3 targetSRGB(
-                    r * invPaletteDepth,
-                    g * invPaletteDepth,
-                    b * invPaletteDepth
-                );
-                glm::vec3 targetLinear = srgbToLinearVec(targetSRGB);
-                glm::vec3 targetOklab = PaletteUtil::Linear1ToOklab(targetLinear);
+    const int colorCount = static_cast<int>(palette.COLOR_COUNT);
+    const int charCount = static_cast<int>(impl_->_charRamp.size());
 
-                float minError = FLT_MAX;
-                int bestFgIndex = 0, bestBgIndex = 0, bestCharIndex = 0;
+    std::array<glm::vec3, Palette::COLOR_COUNT> paletteLinear{};
+    for (int i = 0; i < colorCount; ++i) {
+        paletteLinear[static_cast<size_t>(i)] = PaletteUtil::sRGB1ToLinear1(palette.GetRGBNormalized(i));
+    }
 
-                for (int fgIdx = 0; fgIdx < static_cast<int>(palette.COLOR_COUNT); ++fgIdx) {
-                    glm::vec3 fgLinear = srgbToLinearVec(palette.GetRGBNormalized(fgIdx));
-                    for (int bgIdx = 0; bgIdx < static_cast<int>(palette.COLOR_COUNT); ++bgIdx) {
-                        glm::vec3 bgLinear = srgbToLinearVec(palette.GetRGBNormalized(bgIdx));
-                        for (int charIdx = 0; charIdx < static_cast<int>(impl_->_charRamp.size()); ++charIdx) {
-                            float coverage = impl_->_charCoverage[charIdx];
-                            glm::vec3 simLinear = coverage * fgLinear + (1.0f - coverage) * bgLinear;
-                            glm::vec3 diff = targetOklab - PaletteUtil::Linear1ToOklab(simLinear);
-                            float error = glm::dot(diff, diff);
-                            if (error < minError) {
-                                minError = error;
-                                bestFgIndex = fgIdx;
-                                bestBgIndex = bgIdx;
-                                bestCharIndex = charIdx;
-                            }
-                        }
-                    }
-                }
-
-                int index = (r * Renderer::Impl::_rgbLUTDepth * Renderer::Impl::_rgbLUTDepth) + (g * Renderer::Impl::_rgbLUTDepth) + b;
-                wchar_t glyph = impl_->_charRamp[bestCharIndex];
-                const unsigned short combinedColor = static_cast<unsigned short>(
-                    ((bestBgIndex & 0xF) << 4) | (bestFgIndex & 0xF));
-                impl_->_colorLUT[index] = {glyph, combinedColor};
+    std::vector<LutCandidate> candidates;
+    candidates.reserve(static_cast<size_t>(colorCount) * static_cast<size_t>(colorCount) * static_cast<size_t>(charCount));
+    for (int fgIdx = 0; fgIdx < colorCount; ++fgIdx) {
+        const glm::vec3& fgLinear = paletteLinear[static_cast<size_t>(fgIdx)];
+        for (int bgIdx = 0; bgIdx < colorCount; ++bgIdx) {
+            const glm::vec3& bgLinear = paletteLinear[static_cast<size_t>(bgIdx)];
+            for (int charIdx = 0; charIdx < charCount; ++charIdx) {
+                const float coverage = impl_->_charCoverage[static_cast<size_t>(charIdx)];
+                const glm::vec3 simLinear = coverage * fgLinear + (1.0f - coverage) * bgLinear;
+                candidates.push_back({
+                    PaletteUtil::Linear1ToOklab(simLinear),
+                    static_cast<uint8_t>(fgIdx),
+                    static_cast<uint8_t>(bgIdx),
+                    static_cast<uint8_t>(charIdx),
+                });
             }
         }
     }
+
+    const int depth = static_cast<int>(Renderer::Impl::_rgbLUTDepth);
+    const int depthSq = depth * depth;
+    const int totalVoxels = depth * depthSq;
+    const float invPaletteDepth = 1.0f / static_cast<float>(Renderer::Impl::_rgbLUTMaxIndex);
+    const LutCandidate* const candidatesData = candidates.data();
+    const size_t candidateCount = candidates.size();
+
+    oneapi::tbb::parallel_for(
+        oneapi::tbb::blocked_range<int>(0, totalVoxels),
+        [&](const oneapi::tbb::blocked_range<int>& range) {
+            for (int index = range.begin(); index != range.end(); ++index) {
+                const int r = index / depthSq;
+                const int rem = index % depthSq;
+                const int g = rem / depth;
+                const int b = rem % depth;
+
+                const glm::vec3 targetSRGB(
+                    r * invPaletteDepth,
+                    g * invPaletteDepth,
+                    b * invPaletteDepth);
+                const glm::vec3 targetOklab = PaletteUtil::Linear1ToOklab(
+                    PaletteUtil::sRGB1ToLinear1(targetSRGB));
+
+                float minError = FLT_MAX;
+                int bestFgIndex = 0;
+                int bestBgIndex = 0;
+                int bestCharIndex = 0;
+
+                for (size_t ci = 0; ci < candidateCount; ++ci) {
+                    const LutCandidate& cand = candidatesData[ci];
+                    const glm::vec3 diff = targetOklab - cand.oklab;
+                    const float error = glm::dot(diff, diff);
+                    if (error < minError) {
+                        minError = error;
+                        bestFgIndex = cand.fgIndex;
+                        bestBgIndex = cand.bgIndex;
+                        bestCharIndex = cand.charIndex;
+                    }
+                }
+
+                const wchar_t glyph = impl_->_charRamp[static_cast<size_t>(bestCharIndex)];
+                const unsigned short combinedColor = static_cast<unsigned short>(
+                    ((bestBgIndex & 0xF) << 4) | (bestFgIndex & 0xF));
+                impl_->_colorLUT[static_cast<size_t>(index)] = {glyph, combinedColor};
+            }
+        });
+
     impl_->_lutGpuResourcesDirty = true;
     Logger::Info("[Renderer] Multi-color color LUT precompute complete.");
 }

@@ -9,10 +9,5 @@
 # Distribution in different projects
 **/lib/ASCIIgL-*
 
-# Libs (vendor / oneTBB - do not commit)
-**/lib/oneTBB/
-
-**/lib/OpenAL-Soft/
-
 # Local Tracy tool binaries (do not commit)
 tools/Tracy/

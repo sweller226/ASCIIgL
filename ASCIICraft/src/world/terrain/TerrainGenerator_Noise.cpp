@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <mutex>
 
-#include <FastNoiseLite/FastNoiseLite.h>
+#include <FastNoiseLite.h>
 
 using namespace terrain_generator_internal;
 

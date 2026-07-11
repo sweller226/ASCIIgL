@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include <FastNoiseLite/FastNoiseLite.h>
+#include <FastNoiseLite.h>
 
 #include <ASCIIgL/util/Logger.hpp>
 

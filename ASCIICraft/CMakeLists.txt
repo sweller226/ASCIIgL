@@ -17,8 +17,11 @@ endif()
 # ---------------------------------------------------------------------------
 add_subdirectory(vendor)
 
+# Sibling ASCIIgL source vendor tree (nlohmann, tracy, oneTBB submodule, etc.)
+set(ASCIIgL_SOURCE_VENDOR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgL/vendor")
+
 # nlohmann/json (header-only, shipped in sibling ASCIIgL project vendor/)
-set(ASCIIgL_NLOHMANN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgL/vendor/nlohmann/include")
+set(ASCIIgL_NLOHMANN_DIR "${ASCIIgL_SOURCE_VENDOR_DIR}/nlohmann/include")
 if(NOT TARGET nlohmann_json)
     add_library(nlohmann_json INTERFACE)
     target_include_directories(nlohmann_json INTERFACE
@@ -27,11 +30,19 @@ if(NOT TARGET nlohmann_json)
 endif()
 
 # ---------------------------------------------------------------------------
-# oneTBB (job queue for chunk generation / meshing)
+# oneTBB (shared submodule with ASCIIgL; job queue + engine LUT precompute)
 # ---------------------------------------------------------------------------
-set(TBB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/lib/oneTBB/oneapi-tbb-2022.3.0-win/oneapi-tbb-2022.3.0")
-list(APPEND CMAKE_PREFIX_PATH "${TBB_ROOT}")
-find_package(TBB CONFIG REQUIRED COMPONENTS tbb)
+if(NOT TARGET TBB::tbb)
+    if(NOT EXISTS "${ASCIIgL_SOURCE_VENDOR_DIR}/oneTBB/CMakeLists.txt")
+        message(FATAL_ERROR
+            "ASCIIgL oneTBB submodule not found at ${ASCIIgL_SOURCE_VENDOR_DIR}/oneTBB. "
+            "Run: git submodule update --init --recursive")
+    endif()
+    set(TBB_TEST OFF CACHE BOOL "" FORCE)
+    set(TBB_STRICT OFF CACHE BOOL "" FORCE)
+    set(TBB_BUILD_TBBMALLOC OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${ASCIIgL_SOURCE_VENDOR_DIR}/oneTBB" "${CMAKE_BINARY_DIR}/oneTBB" EXCLUDE_FROM_ALL)
+endif()
 
 # ---------------------------------------------------------------------------
 # ASCIIgL Engine (using distributed library + CMake config)
@@ -41,25 +52,23 @@ list(APPEND CMAKE_PREFIX_PATH "${ASCIIgL_ROOT}/cmake")
 find_package(ASCIIgL REQUIRED)
 
 # ---------------------------------------------------------------------------
-# stb (header-only, in vendor/stb)
+# OpenAL Soft (shared submodule; built from source)
 # ---------------------------------------------------------------------------
-if(NOT TARGET stb)
-    add_library(stb INTERFACE)
-    target_include_directories(stb INTERFACE
-        "${CMAKE_CURRENT_SOURCE_DIR}/vendor/stb"
-    )
+if(NOT TARGET OpenAL::OpenAL)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/openal-soft/CMakeLists.txt")
+        message(FATAL_ERROR
+            "openal-soft submodule not found at ASCIICraft/vendor/openal-soft. "
+            "Run: git submodule update --init --recursive")
+    endif()
+    set(LIBTYPE SHARED CACHE STRING "" FORCE)
+    set(ALSOFT_UTILS OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_TESTS OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_INSTALL OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_UPDATE_BUILD_VERSION OFF CACHE BOOL "" FORCE)
+    set(ALSOFT_ENABLE_MODULES OFF CACHE BOOL "" FORCE)
+    add_subdirectory(vendor/openal-soft "${CMAKE_BINARY_DIR}/openal-soft" EXCLUDE_FROM_ALL)
 endif()
-
-# ---------------------------------------------------------------------------
-# OpenAL Soft
-# ---------------------------------------------------------------------------
-set(OPENAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/lib/OpenAL-Soft/openal-soft-1.25.1-bin")
-find_library(OPENAL_LIB
-    NAMES OpenAL32 openal
-    PATHS "${OPENAL_ROOT}/libs/Win64"
-    NO_DEFAULT_PATH
-    REQUIRED
-)
 
 # ---------------------------------------------------------------------------
 # Source Files
@@ -75,7 +84,7 @@ file(GLOB_RECURSE ASCIICraft_HEADERS
 # ---------------------------------------------------------------------------
 # Tracy (TracyClient.cpp #includes .cpp files from public/common and public/client)
 # ---------------------------------------------------------------------------
-set(ASCIICraft_TRACY_PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../ASCIIgL/vendor/tracy/public")
+set(ASCIICraft_TRACY_PUBLIC "${ASCIIgL_SOURCE_VENDOR_DIR}/tracy/public")
 
 # ---------------------------------------------------------------------------
 # Game Executable
@@ -91,7 +100,6 @@ add_executable(ASCIICraft
 # ---------------------------------------------------------------------------
 target_include_directories(ASCIICraft PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${OPENAL_ROOT}/include"
     "${ASCIICraft_TRACY_PUBLIC}"
 )
 
@@ -101,7 +109,7 @@ target_include_directories(ASCIICraft PRIVATE
 # ---------------------------------------------------------------------------
 target_link_libraries(ASCIICraft PRIVATE ASCIIgL::ASCIIgL)
 target_link_libraries(ASCIICraft PRIVATE TBB::tbb)
-target_link_libraries(ASCIICraft PRIVATE ${OPENAL_LIB})
+target_link_libraries(ASCIICraft PRIVATE OpenAL::OpenAL)
 target_link_libraries(ASCIICraft PRIVATE stb)
 
 if(TARGET entt)
@@ -183,19 +191,15 @@ if(WIN32)
     )
 
     add_custom_command(TARGET ASCIICraft POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "Copying oneTBB DLLs"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${TBB_ROOT}/redist/intel64/vc14/tbb12.dll"
-            "$<TARGET_FILE_DIR:ASCIICraft>/tbb12.dll"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${TBB_ROOT}/redist/intel64/vc14/tbb12_debug.dll"
-            "$<TARGET_FILE_DIR:ASCIICraft>/tbb12_debug.dll"
-        COMMENT "Copying oneTBB runtime DLLs"
+            "$<TARGET_FILE:tbb>"
+            "$<TARGET_FILE_DIR:ASCIICraft>"
+        COMMENT "Copying oneTBB runtime DLL"
     )
 
     add_custom_command(TARGET ASCIICraft POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${OPENAL_ROOT}/bin/Win64/soft_oal.dll"
+            "$<TARGET_FILE:OpenAL::OpenAL>"
             "$<TARGET_FILE_DIR:ASCIICraft>/OpenAL32.dll"
         COMMENT "Copying OpenAL32.dll"
     )

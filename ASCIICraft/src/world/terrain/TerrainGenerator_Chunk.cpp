@@ -7,7 +7,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include <FastNoiseLite/FastNoiseLite.h>
+#include <FastNoiseLite.h>
 
 #include <ASCIICraft/world/Sizes.hpp>
 
