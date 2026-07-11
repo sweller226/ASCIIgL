@@ -1,8 +1,11 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
+
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/block/state/FaceDir.hpp>
 
 class ChunkManager;
 
@@ -23,7 +26,8 @@ uint32_t FinalizePlacedState(
     uint32_t stateId,
     const WorldCoord& position,
     PlacementContext context = PlacementContext::TerrainGeneration,
-    const bool keepStateId = false
+    const bool keepStateId = false,
+    std::optional<FaceDir> faceDir = std::nullopt
 );
 
 /// Overload for individual coordinates.
@@ -33,7 +37,8 @@ uint32_t FinalizePlacedState(
     uint32_t stateId,
     int x, int y, int z,
     PlacementContext context = PlacementContext::TerrainGeneration,
-    const bool keepStateId = false
+    const bool keepStateId = false,
+    std::optional<FaceDir> faceDir = std::nullopt
 );
 
 /// Applies placement-time logic that does not require neighbor queries.
@@ -42,7 +47,8 @@ uint32_t FinalizePlacedStateBasic(
     uint32_t stateId,
     const WorldCoord& position,
     PlacementContext context = PlacementContext::TerrainGeneration,
-    const bool keepStateId = false
+    const bool keepStateId = false,
+    std::optional<FaceDir> faceDir = std::nullopt
 );
 
 /// Overload for individual coordinates.
@@ -51,7 +57,8 @@ uint32_t FinalizePlacedStateBasic(
     uint32_t stateId,
     int x, int y, int z,
     PlacementContext context = PlacementContext::TerrainGeneration,
-    const bool keepStateId = false
+    const bool keepStateId = false,
+    std::optional<FaceDir> faceDir = std::nullopt
 );
 
 }

@@ -12,6 +12,12 @@ namespace ASCIIgL {
 class Texture;
 class TextureArray;
 
+struct WeightedTextureArray {
+    float arrayWeight = 1.0f;
+    std::shared_ptr<TextureArray> array;
+    const std::vector<float>* perLayerWeights = nullptr; // parallel to array layers; nullptr = uniform
+};
+
 // A palette entry with cached color representations
 struct PaletteEntry {
     glm::ivec3 rgb;          // RGB in [0,255] range
@@ -35,7 +41,7 @@ public:
     // Build palette from explicit textures and texture arrays with weights.
     Palette(
         const std::vector<std::pair<float, std::shared_ptr<Texture>>>& textures,
-        const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays,
+        const std::vector<WeightedTextureArray>& textureArrays,
         bool sortByLuminance = true
     );
 
@@ -77,7 +83,7 @@ public:
     MonochromePalette(std::array<PaletteEntry, 16> customEntries);
     MonochromePalette(
         const std::vector<std::pair<float, std::shared_ptr<Texture>>>& textures,
-        const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays
+        const std::vector<WeightedTextureArray>& textureArrays
     );
 
     float GetDarkL() const { return _darkL; }

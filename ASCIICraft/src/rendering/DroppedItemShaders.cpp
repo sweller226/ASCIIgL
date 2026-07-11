@@ -7,6 +7,7 @@ const char* GetVSSource() {
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
+    float3 worldPos;
     float3 cameraPos;
 };
 
@@ -28,7 +29,7 @@ PS_INPUT main(VS_INPUT input)
     PS_INPUT output;
     output.position = mul(mvp, float4(input.position, 1.0));
     output.texcoord = input.texcoord;
-    output.dist = distance(input.position, cameraPos);
+    output.dist = distance(worldPos, cameraPos);
     return output;
 }
 )";
@@ -44,6 +45,7 @@ SamplerState samplerState : register(s0);
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 mvp;
+    float3 worldPos;
     float3 cameraPos;
     float4 fogParams;
     float3 fogColor;
@@ -75,6 +77,7 @@ float4 main(PS_INPUT input) : SV_TARGET
 ASCIIgL::UniformBufferLayout GetUniformLayout() {
     return ASCIIgL::UniformBufferLayout::Builder()
         .Add("mvp", ASCIIgL::UniformType::Mat4)
+        .Add("worldPos", ASCIIgL::UniformType::Float3)
         .Add("cameraPos", ASCIIgL::UniformType::Float3)
         .Add("fogParams", ASCIIgL::UniformType::Float4)
         .Add("fogColor", ASCIIgL::UniformType::Float3)

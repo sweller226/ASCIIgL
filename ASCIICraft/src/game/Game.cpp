@@ -91,10 +91,15 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
 
     LoadTextures(multicolor);
 
+    const std::vector<float> blockPaletteWeights =
+        textures::BuildPaletteLayerWeights(blocktextures::GetBlockTextureCatalog());
+    const std::vector<float> itemPaletteWeights =
+        textures::BuildPaletteLayerWeights(itemtextures::GetItemTextureCatalog());
+
     std::vector<std::pair<float, std::shared_ptr<ASCIIgL::Texture>>> textureWeights;
-    std::vector<std::pair<float, std::shared_ptr<ASCIIgL::TextureArray>>> textureArrayWeights = {
-        {1.0f, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray")},
-        {0.0f, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray")}
+    std::vector<ASCIIgL::WeightedTextureArray> textureArrayWeights = {
+        {1.0f, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray"), &blockPaletteWeights},
+        {1.0f, ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray"), &itemPaletteWeights},
     };
 
     std::unique_ptr<ASCIIgL::Palette> gamePalette = multicolor
@@ -127,14 +132,18 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
 
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
-    renderer.SetDitheringEnabled(false);
+    renderer.SetDitheringEnabled(true);
     renderer.SetBackgroundCol(glm::ivec3(255, 255, 255));
     renderer.SetWireframe(false);
     renderer.SetBackfaceCulling(true);
     renderer.SetCCW(true);
 
     ASCIIgL::Logger::Debug("Initializing renderer...");
-    renderer.Initialize(true, 4, nullptr, 10);
+    renderer.Initialize(SUPERSAMPLE_2X, nullptr, 10);
+    if (!renderer.IsInitialized()) {
+        ASCIIgL::Logger::Error("Failed to initialize renderer");
+        return false;
+    }
 
     ASCIIgL::Logger::Debug("Initializing block states...");
     InitializeBlockStates();
@@ -366,10 +375,42 @@ bool Game::LoadTextures(bool multicolor) {
     monoMap.contrast = 1.0f;
 
     // Load block textures from central catalog order.
-    std::vector<std::string> blockTexturePaths =
-        textures::BuildTexturePaths(blocktextures::GetBlockTextureCatalog());
+    const auto& blockCatalog = blocktextures::GetBlockTextureCatalog();
+    std::vector<std::string> blockTexturePaths = textures::BuildTexturePaths(blockCatalog);
+    std::vector<ASCIIgL::MonochromeMapping> blockPerTileMono =
+        textures::BuildPerTileMonochromeMappings(blockCatalog, monoMap);
+    const int grass_side_overlay_layer = textures::GetLayerForTextureId(
+        blockCatalog, "minecraft:blocks/grass_side_overlay");
+    if (grass_side_overlay_layer >= 0) {
+        blockPerTileMono[static_cast<size_t>(grass_side_overlay_layer)].brightness = 0.95f;
+    }
 
-    auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(blockTexturePaths, "terrainTextureArray", monoMap);
+    const int grassTopLayer = textures::GetLayerForTextureId(
+        blockCatalog, "minecraft:blocks/grass_top");
+    if (grassTopLayer >= 0) {
+        blockPerTileMono[static_cast<size_t>(grassTopLayer)].brightness = 1.2f;
+    }
+
+    const int tallgrassLayer = textures::GetLayerForTextureId(
+        blockCatalog, "minecraft:blocks/tallgrass");
+    if (tallgrassLayer >= 0) {
+        blockPerTileMono[static_cast<size_t>(tallgrassLayer)].brightness = 1.3f;
+    }
+
+    const int fernLayer = textures::GetLayerForTextureId(
+        blockCatalog, "minecraft:blocks/fern");
+    if (fernLayer >= 0) {
+        blockPerTileMono[static_cast<size_t>(fernLayer)].brightness = 1.3f;
+    }
+
+    const int leavesOakLayer = textures::GetLayerForTextureId(
+        blockCatalog, "minecraft:blocks/leaves_oak");
+    if (leavesOakLayer >= 0) {
+        blockPerTileMono[static_cast<size_t>(fernLayer)].brightness = 1.3f;
+    }
+
+    auto blockTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(
+        blockTexturePaths, "terrainTextureArray", monoMap, blockPerTileMono);
     if (!blockTextureArray || !blockTextureArray->IsValid()) {
         ASCIIgL::Logger::Error("Failed to load block texture array");
         return false;   
@@ -446,7 +487,6 @@ bool Game::LoadTerrainMaterial() {
         ASCIIgL::VertFormats::PosUVLayer(),
         TerrainShaders::GetTerrainPSUniformLayout(),
         true,
-        false,
         [](ASCIIgL::Material& material) {
             auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
             if (!terrainTextureArray) {
@@ -466,7 +506,6 @@ bool Game::LoadDroppedItemMaterial() {
         DroppedItemShaders::GetPSSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
         DroppedItemShaders::GetUniformLayout(),
-        true,
         true,
         [](ASCIIgL::Material& material) {
             auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
@@ -505,7 +544,6 @@ bool Game::LoadHeldItemMaterial() {
         ASCIIgL::VertFormats::PosUVLayer(),
         HeldItemShaders::GetUniformLayout(),
         true,
-        true,
         [](ASCIIgL::Material& material) {
             auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
             if (!terrainTextureArray) {
@@ -542,7 +580,6 @@ bool Game::LoadGUIMaterial() {
         ASCIIgL::DefaultShaders::GetDefaultPixelShaderSource(),
         ASCIIgL::VertFormats::PosUV(),
         ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
-        false,
         false
     });
 }
@@ -554,7 +591,6 @@ bool Game::LoadGUIItemMaterial() {
         ASCIIgL::DefaultShaders::GetTextureArrayPixelShaderSource(),
         ASCIIgL::VertFormats::PosUVLayer(),
         ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
-        false,
         false,
         [](ASCIIgL::Material& material) {
             auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("itemTextureArray");
@@ -576,7 +612,6 @@ bool Game::LoadGUIBlockMaterial() {
         ASCIIgL::VertFormats::PosUVLayer(),
         ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
         false,
-        false,
         [](ASCIIgL::Material& material) {
             auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
             if (!terrainTextureArray) {
@@ -597,7 +632,6 @@ bool Game::LoadGUITextMaterial() {
         ASCIIgL::VertFormats::PosUVLayer(),
         ASCIIgL::DefaultShaders::GetDefaultUniformLayout(),
         false,
-        false,
         [](ASCIIgL::Material& material) {
             auto fontTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("defaultFontTextureArray");
             if (!fontTextureArray) {
@@ -617,7 +651,6 @@ bool Game::LoadBlockTargetOutlineMaterial() {
         BlockTargetOutlineShaders::GetPSSource(),
         ASCIIgL::VertFormats::PosColor(),
         BlockTargetOutlineShaders::GetUniformLayout(),
-        false,
         false
     });
 }
@@ -761,10 +794,6 @@ void Game::InitializeBlockStates() {
     };
 
     // === Terrain & plants (vanilla blockstate + block models under res/blockstates and res/models) ===
-    registerOpaqueJsonBacked("minecraft:bedrock");
-
-    registerOpaqueJsonBacked("minecraft:stone");
-
     bsr.RegisterType("minecraft:dandelion", {});
     const uint16_t dandelionType = bsr.GetTypeId("minecraft:dandelion");
     bsr.SetDerivedData(dandelionType, [&](blockstate::BlockState& s) {
@@ -826,9 +855,19 @@ void Game::InitializeBlockStates() {
     });
     registerJsonBackedOrLog("minecraft:fence");
 
+    bsr.RegisterType("minecraft:oak_stairs", {
+        blockstate::BlockProperty{ "facing", { "east", "west", "south", "north" } },
+        blockstate::BlockProperty{ "half", { "bottom", "top" } },
+        blockstate::BlockProperty{ "shape", { "straight", "outer_right", "outer_left", "inner_right", "inner_left" } },
+    });
+    const uint16_t oakStairsType = bsr.GetTypeId("minecraft:oak_stairs");
+    bsr.SetDerivedData(oakStairsType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
+    registerJsonBackedOrLog("minecraft:oak_stairs");
+
     registerOpaqueJsonBacked("minecraft:cobblestone");
 
-    // 1.8.9 cobblestone stairs are represented by block id `stone_stairs`.
     bsr.RegisterType("minecraft:stone_stairs", {
         blockstate::BlockProperty{ "facing", { "east", "west", "south", "north" } },
         blockstate::BlockProperty{ "half", { "bottom", "top" } },
@@ -839,16 +878,6 @@ void Game::InitializeBlockStates() {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
     registerJsonBackedOrLog("minecraft:stone_stairs");
-
-    bsr.RegisterType("minecraft:cobblestone_slab", {
-        blockstate::BlockProperty{ "half", { "bottom", "top" } },
-    });
-    const uint16_t cobblestoneSlabType = bsr.GetTypeId("minecraft:cobblestone_slab");
-    bsr.SetDerivedData(cobblestoneSlabType, [](blockstate::BlockState& s) {
-        s.renderMode = blockstate::RenderMode::Opaque;
-        s.isFullBlock = false;
-    });
-    registerJsonBackedOrLog("minecraft:cobblestone_slab");
 
     registerOpaqueJsonBacked("minecraft:dirt");
 
@@ -885,6 +914,16 @@ void Game::InitializeBlockStates() {
     });
     registerJsonBackedOrLog("minecraft:oak_slab");
 
+    bsr.RegisterType("minecraft:cobblestone_slab", {
+        blockstate::BlockProperty{ "half", { "bottom", "top" } },
+    });
+    const uint16_t cobblestoneSlabType = bsr.GetTypeId("minecraft:cobblestone_slab");
+    bsr.SetDerivedData(cobblestoneSlabType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+        s.isFullBlock = false;
+    });
+    registerJsonBackedOrLog("minecraft:cobblestone_slab");
+
     bsr.RegisterType("minecraft:oak_leaves", {});
     const uint16_t leavesType = bsr.GetTypeId("minecraft:oak_leaves");
     bsr.SetDerivedData(leavesType, [&](blockstate::BlockState& s) {
@@ -898,7 +937,6 @@ void Game::InitializeBlockStates() {
     // === Utility / decor blocks present in current texture array ===
     registerOpaqueJsonBacked("minecraft:crafting_table");
     registerOpaqueJsonBacked("minecraft:bookshelf");
-    registerOpaqueJsonBacked("minecraft:brick_block");
 
     bsr.RegisterType("minecraft:furnace", {
         blockstate::BlockProperty{ "facing", { "north", "south", "west", "east" } },
@@ -918,17 +956,8 @@ void Game::InitializeBlockStates() {
     });
     registerJsonBackedOrLog("minecraft:glass");
 
-    bsr.RegisterType("minecraft:torch", {
-        blockstate::BlockProperty{ "facing", { "up", "east", "south", "west", "north" } },
-    });
-    const uint16_t torchType = bsr.GetTypeId("minecraft:torch");
-    bsr.SetDerivedData(torchType, [&](blockstate::BlockState& s) {
-        s.isRenderable = true;
-        s.renderMode = blockstate::RenderMode::Cutout;
-        s.isFullBlock = false;
-        s.cullSameType = false;
-    });
-    registerJsonBackedOrLog("minecraft:torch");
+    registerOpaqueJsonBacked("minecraft:blue_wool");
+    registerOpaqueJsonBacked("minecraft:green_wool");
 
     // === Water ===
     bsr.RegisterType("minecraft:water", {
@@ -969,55 +998,48 @@ void Game::InitializeItemDefinitions() {
     };
 
     // === Block items (all registered block types except air and water) ===
-    itemRegistry.RegisterBlockItem(registry, "minecraft:bedrock",          "Bedrock");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:stone",            "Stone");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:dandelion",        "Dandelion");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:poppy",            "Poppy");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:tall_grass",       "Tall Grass");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:fern",             "Fern");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:dandelion",        "Dandelion", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
+    itemRegistry.RegisterBlockItem(registry, "minecraft:poppy",            "Poppy", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
+    itemRegistry.RegisterBlockItem(registry, "minecraft:tall_grass",       "Tall Grass", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
+    itemRegistry.RegisterBlockItem(registry, "minecraft:fern",             "Fern", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
     itemRegistry.RegisterBlockItem(registry, "minecraft:fence",            "Oak Fence");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone",      "Cobblestone");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:stone_stairs",     "Stone Stairs");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone_slab", "Cobblestone Slab");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:oak_stairs",       "Oak Stairs");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone",    "Cobblestone");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:stone_stairs",   "Cobblestone Stairs");
     itemRegistry.RegisterBlockItem(registry, "minecraft:dirt",             "Dirt");
     itemRegistry.RegisterBlockItem(registry, "minecraft:grass",            "Grass Block");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_log",          "Oak Log");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_planks",         "Oak Planks");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_slab",         "Oak Slab");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone_slab", "Cobblestone Slab");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_leaves",       "Oak Leaves");
     itemRegistry.RegisterBlockItem(registry, "minecraft:crafting_table",   "Crafting Table");
     itemRegistry.RegisterBlockItem(registry, "minecraft:bookshelf",        "Bookshelf");
-    itemRegistry.RegisterBlockItem(registry, "minecraft:brick_block",      "Bricks");
     itemRegistry.RegisterBlockItem(registry, "minecraft:furnace",          "Furnace");
     itemRegistry.RegisterBlockItem(registry, "minecraft:glass",            "Glass");
-    itemRegistry.RegisterBlockItem(
-        registry,
-        "minecraft:torch",
-        "Torch",
-        64,
-        ecs::components::ItemGuiMeshTransform::DefaultTorch());
+    itemRegistry.RegisterBlockItem(registry, "minecraft:blue_wool",        "Blue Wool");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:green_wool",       "Green Wool");
 
     // === Resources / Materials ===
     itemRegistry.RegisterResourceItem(registry, "minecraft:coal",       "Coal",       itemLayer("minecraft:items/coal"));
     itemRegistry.RegisterResourceItem(registry, "minecraft:iron_ingot", "Iron Ingot", itemLayer("minecraft:items/iron_ingot"));
     itemRegistry.RegisterResourceItem(registry, "minecraft:gold_ingot", "Gold Ingot", itemLayer("minecraft:items/gold_ingot"));
     itemRegistry.RegisterResourceItem(registry, "minecraft:stick",      "Stick",      itemLayer("minecraft:items/stick"));
+    itemRegistry.RegisterResourceItem(registry, "minecraft:bread", "Bread", itemLayer("minecraft:items/bread"), 64);
 
     // === Swords ===
     itemRegistry.RegisterToolItem(registry, "minecraft:wooden_sword",  "Wooden Sword",  itemLayer("minecraft:items/wood_sword"),  {2.0f, 1, 60},   {4.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:stone_sword",   "Stone Sword",   itemLayer("minecraft:items/stone_sword"), {4.0f, 2, 132},  {5.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_sword",   "Stone Sword",   itemLayer("minecraft:items/stone_sword"), {3.0f, 2, 131},  {5.0f, 1.6f});
     itemRegistry.RegisterToolItem(registry, "minecraft:iron_sword",    "Iron Sword",    itemLayer("minecraft:items/iron_sword"),  {6.0f, 3, 251},  {6.0f, 1.6f});
     // === Shovels ===
     itemRegistry.RegisterToolItem(registry, "minecraft:wooden_shovel",  "Wooden Shovel",  itemLayer("minecraft:items/wood_shovel"),  {2.0f, 1, 60},   {1.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:stone_shovel",   "Stone Shovel",   itemLayer("minecraft:items/stone_shovel"), {4.0f, 2, 132},  {2.0f, 1.6f});
     itemRegistry.RegisterToolItem(registry, "minecraft:iron_shovel",    "Iron Shovel",    itemLayer("minecraft:items/iron_shovel"),  {6.0f, 3, 251},  {3.0f, 1.6f});
     // === Pickaxes ===
     itemRegistry.RegisterToolItem(registry, "minecraft:wooden_pickaxe",  "Wooden Pickaxe",  itemLayer("minecraft:items/wood_pickaxe"),  {2.0f, 1, 60},   {2.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:stone_pickaxe",   "Stone Pickaxe",   itemLayer("minecraft:items/stone_pickaxe"), {4.0f, 2, 132},  {3.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_pickaxe",   "Stone Pickaxe",   itemLayer("minecraft:items/stone_pickaxe"), {3.0f, 2, 131},  {3.0f, 1.6f});
     itemRegistry.RegisterToolItem(registry, "minecraft:iron_pickaxe",    "Iron Pickaxe",    itemLayer("minecraft:items/iron_pickaxe"),  {6.0f, 3, 251},  {4.0f, 1.6f});
 
     // === Axes ===
     itemRegistry.RegisterToolItem(registry, "minecraft:wooden_axe",  "Wooden Axe",  itemLayer("minecraft:items/wood_axe"),  {2.0f, 1, 60},   {3.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:stone_axe",   "Stone Axe",   itemLayer("minecraft:items/stone_axe"), {4.0f, 2, 132},  {4.0f, 1.6f});
     itemRegistry.RegisterToolItem(registry, "minecraft:iron_axe",    "Iron Axe",    itemLayer("minecraft:items/iron_axe"),  {6.0f, 3, 251},  {5.0f, 1.6f});
 }

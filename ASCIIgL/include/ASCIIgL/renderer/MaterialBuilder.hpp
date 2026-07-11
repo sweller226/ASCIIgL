@@ -15,7 +15,6 @@ struct MaterialBuildDesc {
     const VertFormat& vertFormat;
     UniformBufferLayout psLayout;
     bool useHLSLIncludes = true;
-    bool applyScreenGradient = true;
     std::function<bool(Material&)> bindResources;
 };
 

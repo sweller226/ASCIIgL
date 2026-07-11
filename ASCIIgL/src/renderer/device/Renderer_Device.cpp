@@ -30,10 +30,7 @@ Renderer::~Renderer() {
     Shutdown();
 }
 
-void Renderer::Initialize(bool antialiasing, int antialiasing_samples, const wchar_t* charRamp, int charRampCount) {
-    impl_->_antialiasing = antialiasing;
-    impl_->_antialiasing_samples = antialiasing_samples;
-    
+void Renderer::Initialize(bool supersample2x, const wchar_t* charRamp, int charRampCount) {
     if (!impl_->_initialized) {
         Logger::Info("Initializing Renderer...");
     } else {
@@ -45,6 +42,14 @@ void Renderer::Initialize(bool antialiasing, int antialiasing_samples, const wch
         Logger::Error("Renderer: Screen must be initialized before creating Renderer.");
         throw std::runtime_error("Renderer: Screen must be initialized before creating Renderer.");
     }
+
+    impl_->_supersample2x = supersample2x;
+    const int screenW = Screen::GetInst().GetWidth();
+    const int screenH = Screen::GetInst().GetHeight();
+    const int scale = supersample2x ? 2 : 1;
+    impl_->_renderTargetWidth = screenW * scale;
+    impl_->_renderTargetHeight = screenH * scale;
+
     LoadCharCoverageFromJson(charRamp, charRampCount);
 
     Logger::Info("[Renderer] Initializing DirectX 11...");
@@ -96,6 +101,13 @@ void Renderer::Initialize(bool antialiasing, int antialiasing_samples, const wch
         return;
     }
 
+    if (impl_->_supersample2x) {
+        if (!InitializeDownsampleShader()) {
+            Logger::Error("[Renderer] Failed to initialize downsample shader");
+            return;
+        }
+    }
+
     if (!InitializeDebugSwapChain()) {
         Logger::Error("[Renderer] Failed to initialize debug swap chain (non-fatal)");
         // Non-fatal - continue without swap chain
@@ -126,6 +138,10 @@ void Renderer::Initialize(bool antialiasing, int antialiasing_samples, const wch
 
 bool Renderer::IsInitialized() const {
     return impl_->_initialized;
+}
+
+bool Renderer::GetSupersample2x() const {
+    return impl_->_supersample2x;
 }
 
 ID3D11Device* Renderer::GetD3D11Device() const {
@@ -175,41 +191,28 @@ bool Renderer::InitializeDevice() {
 }
 
 bool Renderer::InitializeRenderTarget() {
-    // Get MSAA settings
-    bool useMSAA = GetAntialiasing();
-    int msaaSamples = GetAntialiasingsamples();
-    
-    UINT sampleCount = 1;
-    UINT qualityLevel = 0;
-    
-    if (useMSAA) {
-        sampleCount = std::clamp(msaaSamples, 1, 8);  // Clamp to 1-8 samples
-        
-        // Check MSAA quality support
-        UINT numQualityLevels = 0;
-        impl_->_device->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, sampleCount, &numQualityLevels);
-        if (numQualityLevels > 0) {
-            qualityLevel = 0; 
-        } else {
-            Logger::Warning("[Renderer] " + std::to_string(sampleCount) + " x MSAA not supported, falling back to 1x");
-            sampleCount = 1;
-        }
-    }
-    
-    Logger::Debug("[Renderer] Creating render target with " + std::to_string(sampleCount) + "x MSAA");
-    
-    // Create MSAA render target texture
+    const int screenW = Screen::GetInst().GetWidth();
+    const int screenH = Screen::GetInst().GetHeight();
+    const int rtW = impl_->_renderTargetWidth;
+    const int rtH = impl_->_renderTargetHeight;
+
     D3D11_TEXTURE2D_DESC texDesc = {};
-    texDesc.Width = Screen::GetInst().GetWidth();
-    texDesc.Height = Screen::GetInst().GetHeight();
+    texDesc.Width = rtW;
+    texDesc.Height = rtH;
     texDesc.MipLevels = 1;
     texDesc.ArraySize = 1;
     texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-    texDesc.SampleDesc.Count = sampleCount;
-    texDesc.SampleDesc.Quality = qualityLevel;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.SampleDesc.Quality = 0;
     texDesc.Usage = D3D11_USAGE_DEFAULT;
-    texDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+    texDesc.BindFlags = impl_->_supersample2x
+        ? (D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE)
+        : D3D11_BIND_RENDER_TARGET;
     texDesc.CPUAccessFlags = 0;
+
+    impl_->_renderTarget.Reset();
+    impl_->_renderTargetView.Reset();
+    impl_->_renderTargetSRV.Reset();
 
     HRESULT hr = impl_->_device->CreateTexture2D(&texDesc, nullptr, &impl_->_renderTarget);
     if (FAILED(hr)) {
@@ -219,7 +222,6 @@ bool Renderer::InitializeRenderTarget() {
         return false;
     }
 
-    // Create render target view
     hr = impl_->_device->CreateRenderTargetView(impl_->_renderTarget.Get(), nullptr, &impl_->_renderTargetView);
     if (FAILED(hr)) {
         std::ostringstream ss;
@@ -227,18 +229,43 @@ bool Renderer::InitializeRenderTarget() {
         Logger::Error("[Renderer] Failed to create render target view: 0x" + ss.str());
         return false;
     }
-    
-    // Create resolved (non-MSAA) texture for quantization pass input (needs SRV)
-    texDesc.SampleDesc.Count = 1;
-    texDesc.SampleDesc.Quality = 0;
-    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
+    if (impl_->_supersample2x) {
+        D3D11_SHADER_RESOURCE_VIEW_DESC rtSrvDesc = {};
+        rtSrvDesc.Format = texDesc.Format;
+        rtSrvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        rtSrvDesc.Texture2D.MipLevels = 1;
+        rtSrvDesc.Texture2D.MostDetailedMip = 0;
+        hr = impl_->_device->CreateShaderResourceView(impl_->_renderTarget.Get(), &rtSrvDesc, &impl_->_renderTargetSRV);
+        if (FAILED(hr)) {
+            Logger::Error("[Renderer] Failed to create render target SRV");
+            return false;
+        }
+    }
+
+    texDesc.Width = screenW;
+    texDesc.Height = screenH;
+    texDesc.BindFlags = impl_->_supersample2x
+        ? (D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET)
+        : D3D11_BIND_SHADER_RESOURCE;
+
+    impl_->_resolvedTexture.Reset();
+    impl_->_resolvedTextureSRV.Reset();
+    impl_->_resolvedTextureRTV.Reset();
     hr = impl_->_device->CreateTexture2D(&texDesc, nullptr, &impl_->_resolvedTexture);
     if (FAILED(hr)) {
         std::ostringstream ss;
         ss << std::hex << hr;
         Logger::Error("[Renderer] Failed to create resolved texture: 0x" + ss.str());
         return false;
+    }
+
+    if (impl_->_supersample2x) {
+        hr = impl_->_device->CreateRenderTargetView(impl_->_resolvedTexture.Get(), nullptr, &impl_->_resolvedTextureRTV);
+        if (FAILED(hr)) {
+            Logger::Error("[Renderer] Failed to create resolved texture RTV");
+            return false;
+        }
     }
 
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -252,37 +279,32 @@ bool Renderer::InitializeRenderTarget() {
         return false;
     }
 
-    std::string msg = "[Renderer] Render target initialized: " + 
-        std::to_string(Screen::GetInst().GetWidth()) + "x" + 
-        std::to_string(Screen::GetInst().GetHeight()) + 
-        (useMSAA ? (" with " + std::to_string(sampleCount) + "x MSAA") : " without MSAA");
-    Logger::Info(msg);
+    if (impl_->_supersample2x) {
+        Logger::Info("[Renderer] Render target initialized: " +
+            std::to_string(screenW) + "x" + std::to_string(screenH) +
+            " (2x SSAA -> " + std::to_string(rtW) + "x" + std::to_string(rtH) + ")");
+    } else {
+        Logger::Info("[Renderer] Render target initialized: " +
+            std::to_string(screenW) + "x" + std::to_string(screenH) + " (SSAA off)");
+    }
 
     return true;
 }
 
 bool Renderer::InitializeDepthStencil() {
-    // Get MSAA settings (must match render target)
-    bool useMSAA = GetAntialiasing();
-    int msaaSamples = GetAntialiasingsamples();
-    
-    UINT sampleCount = 1;
-    if (useMSAA) {
-        sampleCount = std::clamp(msaaSamples, 1, 8);
-    }
-    
-    // Create depth stencil texture (must match render target MSAA settings)
     D3D11_TEXTURE2D_DESC depthDesc = {};
-    depthDesc.Width = Screen::GetInst().GetWidth();
-    depthDesc.Height = Screen::GetInst().GetHeight();
+    depthDesc.Width = impl_->_renderTargetWidth;
+    depthDesc.Height = impl_->_renderTargetHeight;
     depthDesc.MipLevels = 1;
     depthDesc.ArraySize = 1;
     depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-    depthDesc.SampleDesc.Count = sampleCount;
+    depthDesc.SampleDesc.Count = 1;
     depthDesc.SampleDesc.Quality = 0;
     depthDesc.Usage = D3D11_USAGE_DEFAULT;
     depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
 
+    impl_->_depthStencilView.Reset();
+    impl_->_depthStencilBuffer.Reset();
     HRESULT hr = impl_->_device->CreateTexture2D(&depthDesc, nullptr, &impl_->_depthStencilBuffer);
     if (FAILED(hr)) {
         std::ostringstream ss;
@@ -291,7 +313,6 @@ bool Renderer::InitializeDepthStencil() {
         return false;
     }
 
-    // Create depth stencil view
     hr = impl_->_device->CreateDepthStencilView(impl_->_depthStencilBuffer.Get(), nullptr, &impl_->_depthStencilView);
     if (FAILED(hr)) {
         std::ostringstream ss;
@@ -551,7 +572,8 @@ const char* QUANTIZATION_PS_SRC = R"(
 #include "ColorUtil.hlsl"
 
 Texture2D<float4> g_colorTex : register(t0);
-Texture1D<uint2>  g_lutTex    : register(t1);
+Texture1D<uint2>  g_monoLutTex  : register(t1);
+Texture3D<uint2>  g_multiLutTex : register(t2);
 SamplerState      g_sam       : register(s0);
 
 cbuffer LUTConstants : register(b0) {
@@ -559,6 +581,10 @@ cbuffer LUTConstants : register(b0) {
     float  Lmax;
     uint   isMonochrome;
     uint   ditherEnabled;
+    uint   rgbLutMaxIndex;
+    uint   _pad0;
+    uint   _pad1;
+    uint   _pad2;
 };
 
 static const uint BAYER4[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
@@ -568,7 +594,7 @@ struct PSOut {
 };
 
 PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
-    float3 rgb = g_colorTex.Sample(g_sam, uv).rgb;
+    float3 rgb = g_colorTex.Load(int3((int)pos.x, (int)pos.y, 0)).rgb;
     PSOut o;
     o.glyph_attr = uint2(0, 0);
 
@@ -596,12 +622,13 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
             }
         }
         uint idx = (uint)clamp(fIdx, 0.0, 1023.0);
-        o.glyph_attr = g_lutTex[idx];
+        o.glyph_attr = g_monoLutTex[idx];
     } else {
         float3 srgb = linearToSRGB(rgb);
-        float3 cont = saturate(srgb) * 15.0;  // continuous [0.0, 15.0] per channel
+        float maxIdx = (float)rgbLutMaxIndex;
+        float3 cont = saturate(srgb) * maxIdx;
 
-        uint r16, g16, b16;
+        uint rIdx, gIdx, bIdx;
 
         if (ditherEnabled != 0u) {
             uint px = (uint)pos.x;
@@ -609,7 +636,7 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
             float bayerNorm = (float)(BAYER4[(py & 3u) * 4u + (px & 3u)]) / 16.0;
 
             float3 base = floor(cont);
-            float3 fr   = cont - base;  // per-channel fractional part
+            float3 fr   = cont - base;
 
             float3 dithered = base + float3(
                 fr.r > bayerNorm ? 1.0 : 0.0,
@@ -617,20 +644,34 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
                 fr.b > bayerNorm ? 1.0 : 0.0
             );
 
-            r16 = (uint)clamp(dithered.r, 0.0, 15.0);
-            g16 = (uint)clamp(dithered.g, 0.0, 15.0);
-            b16 = (uint)clamp(dithered.b, 0.0, 15.0);
+            rIdx = (uint)clamp(dithered.r, 0.0, maxIdx);
+            gIdx = (uint)clamp(dithered.g, 0.0, maxIdx);
+            bIdx = (uint)clamp(dithered.b, 0.0, maxIdx);
         } else {
-            // Original: round to nearest
-            r16 = (uint)(cont.r + 0.5);
-            g16 = (uint)(cont.g + 0.5);
-            b16 = (uint)(cont.b + 0.5);
+            rIdx = (uint)clamp(cont.r + 0.5, 0.0, maxIdx);
+            gIdx = (uint)clamp(cont.g + 0.5, 0.0, maxIdx);
+            bIdx = (uint)clamp(cont.b + 0.5, 0.0, maxIdx);
         }
 
-        uint idx = r16 * 256u + g16 * 16u + b16;
-        o.glyph_attr = g_lutTex[idx];
+        o.glyph_attr = g_multiLutTex.Load(int4(rIdx, gIdx, bIdx, 0));
     }
     return o;
+}
+)";
+
+const char* DOWNSAMPLE_PS_SRC = R"(
+Texture2D<float4> g_source : register(t0);
+
+float4 main(float4 pos : SV_Position) : SV_Target {
+    int x = (int)pos.x;
+    int y = (int)pos.y;
+    int hx = x * 2;
+    int hy = y * 2;
+    float4 c00 = g_source.Load(int3(hx,     hy,     0));
+    float4 c10 = g_source.Load(int3(hx + 1, hy,     0));
+    float4 c01 = g_source.Load(int3(hx,     hy + 1, 0));
+    float4 c11 = g_source.Load(int3(hx + 1, hy + 1, 0));
+    return (c00 + c10 + c01 + c11) * 0.25;
 }
 )";
 
@@ -710,6 +751,34 @@ bool Renderer::InitializeQuantizationShaders() {
     return true;
 }
 
+bool Renderer::InitializeDownsampleShader() {
+    ID3DBlob* psBlob = nullptr;
+    ID3DBlob* errBlob = nullptr;
+    UINT flags = D3DCOMPILE_ENABLE_STRICTNESS;
+#ifdef _DEBUG
+    flags |= D3DCOMPILE_DEBUG;
+#endif
+    HRESULT hr = D3DCompile(DOWNSAMPLE_PS_SRC, strlen(DOWNSAMPLE_PS_SRC), nullptr, nullptr, nullptr,
+                           "main", "ps_5_0", flags, 0, &psBlob, &errBlob);
+    if (FAILED(hr)) {
+        if (errBlob) {
+            Logger::Error("[Renderer] Downsample PS compile: " + std::string(static_cast<const char*>(errBlob->GetBufferPointer())));
+            errBlob->Release();
+        }
+        return false;
+    }
+    if (errBlob) errBlob->Release();
+
+    hr = impl_->_device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &impl_->_downsamplePS);
+    psBlob->Release();
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] Failed to create downsample PS");
+        return false;
+    }
+
+    return true;
+}
+
 bool Renderer::EnsureQuantizationResources() {
     if (impl_->_colorLUTState == ColorLUTState::NotComputed) return false;
     if (impl_->_lutGpuResourcesDirty || !impl_->_lutConstantsCB ||
@@ -722,33 +791,45 @@ bool Renderer::EnsureQuantizationResources() {
 
 void Renderer::UploadLUTsToGPU() {
     if (impl_->_colorLUTState == ColorLUTState::NotComputed) return;
-    const UINT multiSize = Renderer::Impl::_rgbLUTDepth * Renderer::Impl::_rgbLUTDepth * Renderer::Impl::_rgbLUTDepth;
+    const UINT depth = Renderer::Impl::_rgbLUTDepth;
+    const UINT multiSize = depth * depth * depth;
     const UINT monoSize = static_cast<UINT>(Renderer::Impl::_monochromeLUTSize);
 
     std::vector<uint16_t> multiData(multiSize * 2);
-    for (UINT i = 0; i < multiSize; ++i) {
-        const ScreenPixel& c = impl_->_colorLUT[i];
-        multiData[i * 2 + 0] = static_cast<uint16_t>(c.glyph & 0xFFFF);
-        multiData[i * 2 + 1] = static_cast<uint16_t>(c.attributes & 0xFFFF);
+    for (UINT r = 0; r < depth; ++r) {
+        for (UINT g = 0; g < depth; ++g) {
+            for (UINT b = 0; b < depth; ++b) {
+                const UINT cpuIdx = r * depth * depth + g * depth + b;
+                const UINT gpuIdx = b * depth * depth + g * depth + r;
+                const ScreenPixel& c = impl_->_colorLUT[cpuIdx];
+                multiData[gpuIdx * 2 + 0] = static_cast<uint16_t>(c.glyph & 0xFFFF);
+                multiData[gpuIdx * 2 + 1] = static_cast<uint16_t>(c.attributes & 0xFFFF);
+            }
+        }
     }
-    D3D11_TEXTURE1D_DESC tex1d = {};
-    tex1d.Width = multiSize;
-    tex1d.MipLevels = 1;
-    tex1d.ArraySize = 1;
-    tex1d.Format = DXGI_FORMAT_R16G16_UINT;
-    tex1d.Usage = D3D11_USAGE_DEFAULT;
-    tex1d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-    D3D11_SUBRESOURCE_DATA srd = {};
-    srd.pSysMem = multiData.data();
+
+    D3D11_TEXTURE3D_DESC tex3d = {};
+    tex3d.Width = depth;
+    tex3d.Height = depth;
+    tex3d.Depth = depth;
+    tex3d.MipLevels = 1;
+    tex3d.Format = DXGI_FORMAT_R16G16_UINT;
+    tex3d.Usage = D3D11_USAGE_DEFAULT;
+    tex3d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    D3D11_SUBRESOURCE_DATA srd3d = {};
+    srd3d.pSysMem = multiData.data();
+    srd3d.SysMemPitch = depth * sizeof(uint32_t);
+    srd3d.SysMemSlicePitch = depth * depth * sizeof(uint32_t);
     impl_->_colorLUTTexture.Reset();
-    HRESULT hr = impl_->_device->CreateTexture1D(&tex1d, &srd, &impl_->_colorLUTTexture);
+    HRESULT hr = impl_->_device->CreateTexture3D(&tex3d, &srd3d, &impl_->_colorLUTTexture);
     if (FAILED(hr)) { Logger::Error("[Renderer] Failed to create color LUT texture"); return; }
-    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-    srvDesc.Format = DXGI_FORMAT_R16G16_UINT;
-    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE1D;
-    srvDesc.Texture1D.MipLevels = 1;
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc3d = {};
+    srvDesc3d.Format = DXGI_FORMAT_R16G16_UINT;
+    srvDesc3d.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+    srvDesc3d.Texture3D.MipLevels = 1;
     impl_->_colorLUTSRV.Reset();
-    impl_->_device->CreateShaderResourceView(impl_->_colorLUTTexture.Get(), &srvDesc, &impl_->_colorLUTSRV);
+    hr = impl_->_device->CreateShaderResourceView(impl_->_colorLUTTexture.Get(), &srvDesc3d, &impl_->_colorLUTSRV);
+    if (FAILED(hr)) { Logger::Error("[Renderer] Failed to create color LUT SRV"); return; }
 
     std::vector<uint16_t> monoData(monoSize * 2);
     for (UINT i = 0; i < monoSize; ++i) {
@@ -756,23 +837,38 @@ void Renderer::UploadLUTsToGPU() {
         monoData[i * 2 + 0] = static_cast<uint16_t>(c.glyph & 0xFFFF);
         monoData[i * 2 + 1] = static_cast<uint16_t>(c.attributes & 0xFFFF);
     }
+    D3D11_TEXTURE1D_DESC tex1d = {};
     tex1d.Width = monoSize;
+    tex1d.MipLevels = 1;
+    tex1d.ArraySize = 1;
+    tex1d.Format = DXGI_FORMAT_R16G16_UINT;
+    tex1d.Usage = D3D11_USAGE_DEFAULT;
+    tex1d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    D3D11_SUBRESOURCE_DATA srd = {};
     srd.pSysMem = monoData.data();
     impl_->_monochromeLUTTexture.Reset();
     hr = impl_->_device->CreateTexture1D(&tex1d, &srd, &impl_->_monochromeLUTTexture);
     if (FAILED(hr)) { Logger::Error("[Renderer] Failed to create monochrome LUT texture"); return; }
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = DXGI_FORMAT_R16G16_UINT;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE1D;
+    srvDesc.Texture1D.MipLevels = 1;
     impl_->_monochromeLUTSRV.Reset();
     impl_->_device->CreateShaderResourceView(impl_->_monochromeLUTTexture.Get(), &srvDesc, &impl_->_monochromeLUTSRV);
 
     struct LutConstants {
         float Lmin, Lmax;
         uint32_t isMonochrome, ditherEnabled;
+        uint32_t rgbLutMaxIndex, _pad0;
+        uint32_t _pad1, _pad2;
     };
+    static_assert(sizeof(LutConstants) % 16 == 0, "D3D11 constant buffers must be 16-byte aligned");
     LutConstants cb = {};
     cb.Lmin = impl_->_monochromeLUT.empty() ? 0.f : impl_->_monochromeLUT.front().first;
     cb.Lmax = impl_->_monochromeLUT.empty() ? 1.f : impl_->_monochromeLUT.back().first;
     cb.isMonochrome = (impl_->_colorLUTState == ColorLUTState::Monochrome) ? 1u : 0u;
     cb.ditherEnabled = impl_->_ditheringEnabled ? 1u : 0u;
+    cb.rgbLutMaxIndex = Renderer::Impl::_rgbLUTMaxIndex;
 
     D3D11_BUFFER_DESC cbd = {};
     cbd.ByteWidth = sizeof(LutConstants);
@@ -782,17 +878,63 @@ void Renderer::UploadLUTsToGPU() {
     impl_->_lutConstantsCB.Reset();
     D3D11_SUBRESOURCE_DATA cbInit = {};
     cbInit.pSysMem = &cb;
-    impl_->_device->CreateBuffer(&cbd, &cbInit, &impl_->_lutConstantsCB);
+    hr = impl_->_device->CreateBuffer(&cbd, &cbInit, &impl_->_lutConstantsCB);
+    if (FAILED(hr)) { Logger::Error("[Renderer] Failed to create LUT constants buffer"); return; }
     impl_->_lutGpuResourcesDirty = false;
 }
 
+void Renderer::RunDownsamplePass() {
+    if (!impl_->_renderTargetSRV || !impl_->_resolvedTextureRTV || !impl_->_downsamplePS) {
+        Logger::Warning("[Renderer] RunDownsamplePass skipped: SSAA resources missing.");
+        return;
+    }
+
+    InvalidateBoundState();
+
+    const int w = Screen::GetInst().GetWidth();
+    const int h = Screen::GetInst().GetHeight();
+
+    impl_->_context->OMSetRenderTargets(1, impl_->_resolvedTextureRTV.GetAddressOf(), nullptr);
+    impl_->_context->OMSetDepthStencilState(impl_->_depthStencilStateNoTest.Get(), 0);
+    impl_->_context->RSSetState(impl_->_rasterizerStates[0].Get());
+    const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    impl_->_context->OMSetBlendState(impl_->_blendStateOpaque.Get(), blendFactor, 0xFFFFFFFF);
+
+    D3D11_VIEWPORT vp = {};
+    vp.Width = static_cast<float>(w);
+    vp.Height = static_cast<float>(h);
+    vp.MinDepth = 0.f;
+    vp.MaxDepth = 1.f;
+    impl_->_context->RSSetViewports(1, &vp);
+
+    ID3D11ShaderResourceView* srvs[] = { impl_->_renderTargetSRV.Get() };
+    impl_->_context->PSSetShaderResources(0, 1, srvs);
+    impl_->_context->VSSetShader(impl_->_quantizationVS.Get(), nullptr, 0);
+    impl_->_context->PSSetShader(impl_->_downsamplePS.Get(), nullptr, 0);
+    impl_->_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    impl_->_context->IASetInputLayout(impl_->_quantizationInputLayout.Get());
+    UINT stride = 2 * sizeof(float);
+    UINT offset = 0;
+    impl_->_context->IASetVertexBuffers(0, 1, impl_->_fullscreenQuadVB.GetAddressOf(), &stride, &offset);
+
+    impl_->_context->Draw(6, 0);
+
+    ID3D11ShaderResourceView* nullSRV = nullptr;
+    impl_->_context->PSSetShaderResources(0, 1, &nullSRV);
+
+    impl_->_context->OMSetRenderTargets(1, impl_->_renderTargetView.GetAddressOf(), impl_->_depthStencilView.Get());
+    InvalidateBoundState();
+}
+
 void Renderer::RunQuantizationPass() {
+    InvalidateBoundState();
+
     if (impl_->_colorLUTState == ColorLUTState::NotComputed) {
         PrecomputeColorLUT();
     }
     if (impl_->_colorLUTState == ColorLUTState::NotComputed) return;
     EnsureQuantizationResources();
-    if (!impl_->_resolvedTextureSRV || (!impl_->_colorLUTSRV && !impl_->_monochromeLUTSRV)) {
+    if (!impl_->_resolvedTextureSRV || !impl_->_monochromeLUTSRV || !impl_->_colorLUTSRV) {
         Logger::Warning("[Renderer] RunQuantizationPass skipped: resolved SRV or LUT SRVs missing.");
         return;
     }
@@ -819,9 +961,12 @@ void Renderer::RunQuantizationPass() {
     vp.MaxDepth = 1.f;
     impl_->_context->RSSetViewports(1, &vp);
 
-    ID3D11ShaderResourceView* srvs[] = { impl_->_resolvedTextureSRV.Get(),
-        (impl_->_colorLUTState == ColorLUTState::Monochrome) ? impl_->_monochromeLUTSRV.Get() : impl_->_colorLUTSRV.Get() };
-    impl_->_context->PSSetShaderResources(0, 2, srvs);
+    ID3D11ShaderResourceView* srvs[] = {
+        impl_->_resolvedTextureSRV.Get(),
+        impl_->_monochromeLUTSRV.Get(),
+        impl_->_colorLUTSRV.Get()
+    };
+    impl_->_context->PSSetShaderResources(0, 3, srvs);
     impl_->_context->PSSetSamplers(0, 1, impl_->_samplerLinear.GetAddressOf());
     impl_->_context->VSSetShader(impl_->_quantizationVS.Get(), nullptr, 0);
     impl_->_context->PSSetShader(impl_->_quantizationPS.Get(), nullptr, 0);
@@ -835,11 +980,12 @@ void Renderer::RunQuantizationPass() {
 
     impl_->_context->Draw(6, 0);
 
-    ID3D11ShaderResourceView* nullSRVs[] = { nullptr, nullptr };
-    impl_->_context->PSSetShaderResources(0, 2, nullSRVs);
+    ID3D11ShaderResourceView* nullSRVs[] = { nullptr, nullptr, nullptr };
+    impl_->_context->PSSetShaderResources(0, 3, nullSRVs);
 
     // Restore main render target so next frame draws to the correct RT
     impl_->_context->OMSetRenderTargets(1, impl_->_renderTargetView.GetAddressOf(), impl_->_depthStencilView.Get());
+    InvalidateBoundState();
 }
 
 // Builds the font atlas once using current Screen font size and CoverageJson cell size.
@@ -1120,6 +1266,7 @@ void Renderer::Shutdown()
     impl_->_currentTextureSRV.Reset();
     impl_->_fullscreenQuadVB.Reset();
     impl_->_quantizationInputLayout.Reset();
+    impl_->_downsamplePS.Reset();
     impl_->_quantizationPS.Reset();
     impl_->_quantizationVS.Reset();
     impl_->_lutConstantsCB.Reset();
@@ -1128,6 +1275,7 @@ void Renderer::Shutdown()
     impl_->_monochromeLUTTexture.Reset();
     impl_->_colorLUTTexture.Reset();
     impl_->_resolvedTextureSRV.Reset();
+    impl_->_resolvedTextureRTV.Reset();
     impl_->_charInfoRTV.Reset();
     impl_->_charInfoSRV.Reset();
     impl_->_charInfoTexture.Reset();
@@ -1163,6 +1311,7 @@ void Renderer::Shutdown()
     impl_->_depthStencilView.Reset();
     impl_->_depthStencilBuffer.Reset();
     impl_->_renderTargetView.Reset();
+    impl_->_renderTargetSRV.Reset();
     impl_->_resolvedTexture.Reset();
     impl_->_renderTarget.Reset();
     impl_->_context.Reset();

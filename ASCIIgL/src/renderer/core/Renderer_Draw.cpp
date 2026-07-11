@@ -102,27 +102,15 @@ void Renderer::BeginGpuFrame() {
     // Bind render targets
     impl_->_context->OMSetRenderTargets(1, impl_->_renderTargetView.GetAddressOf(), impl_->_depthStencilView.Get());
 
-    // Set viewport
+    // Set viewport to render-target size (2x when SSAA is enabled)
     D3D11_VIEWPORT viewport = {};
-    viewport.Width = static_cast<float>(Screen::GetInst().GetWidth());
-    viewport.Height = static_cast<float>(Screen::GetInst().GetHeight());
+    viewport.Width = static_cast<float>(impl_->_renderTargetWidth);
+    viewport.Height = static_cast<float>(impl_->_renderTargetHeight);
     viewport.MinDepth = 0.0f;
     viewport.MaxDepth = 1.0f;
     impl_->_context->RSSetViewports(1, &viewport);
 
-    // Set depth stencil and blend state (on for both 3D and 2D)
-    impl_->_context->OMSetDepthStencilState(impl_->_depthStencilState.Get(), 0);
-    const float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    impl_->_context->OMSetBlendState(impl_->_blendStateAlpha.Get(), blendFactor, 0xFFFFFFFF);
-
-    // Set rasterizer state based on wireframe, backface culling, and CCW modes
-    bool wireframe = GetWireframe();
-    bool backfaceCulling = GetBackfaceCulling();
-    bool ccw = GetCCW();
-    
-    // Calculate index: wireframe(0/1) + cull(0/2) + ccw(0/4)
-    int stateIndex = (wireframe ? 1 : 0) + (backfaceCulling ? 2 : 0) + (ccw ? 4 : 0);
-    impl_->_context->RSSetState(impl_->_rasterizerStates[stateIndex].Get());
+    InvalidateBoundState();
 
     // Bind sampler
     impl_->_context->PSSetSamplers(0, 1, impl_->_samplerLinear.GetAddressOf());
@@ -157,25 +145,14 @@ void Renderer::SortTransparentDraws() {
               });
 }
 
-void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list) {
-    bool currentCull = GetBackfaceCulling();
-    bool currentDepthTest = true;
-
+void Renderer::ExecuteDrawList(const std::vector<DrawCall>& list, const Renderer::DrawGpuState& passState) {
     for (const auto& dc : list) {
         if (!dc.mesh || !dc.material) continue;
 
-        if (dc.backfaceCulling != currentCull) {
-            currentCull = dc.backfaceCulling;
-            const bool wireframe = GetWireframe();
-            const bool ccw = GetCCW();
-            const int stateIndex = (wireframe ? 1 : 0) + (currentCull ? 2 : 0) + (ccw ? 4 : 0);
-            impl_->_context->RSSetState(impl_->_rasterizerStates[stateIndex].Get());
-        }
-
-        if (dc.depthTest != currentDepthTest) {
-            SetDepthTestEnabled(dc.depthTest);
-            currentDepthTest = dc.depthTest;
-        }
+        Renderer::DrawGpuState drawState = passState;
+        drawState.backfaceCulling = dc.backfaceCulling;
+        drawState.depthTest = dc.depthTest;
+        ApplyDrawState(drawState);
 
         Material* mat = dc.material;
 
@@ -207,44 +184,33 @@ void Renderer::FlushDraws() {
     // Ensure we're drawing to the main RT (quantization reads from it after resolve)
     impl_->_context->OMSetRenderTargets(1, impl_->_renderTargetView.GetAddressOf(), impl_->_depthStencilView.Get());
 
-    // 1) Opaque pass: depth write ON, blending OFF
-    SetDepthTestEnabled(true);
-    SetDepthWriteEnabled(true);
-    SetBlendEnabled(false);
+    Renderer::DrawGpuState opaquePass;
+    opaquePass.depthTest = true;
+    opaquePass.depthWrite = true;
+    opaquePass.blend = false;
 
     SortOpaqueDraws();
-    ExecuteDrawList(impl_->_opaqueDraws);
+    ExecuteDrawList(impl_->_opaqueDraws, opaquePass);
 
-    // 2) Transparent pass: depth write OFF, blending ON
-    SetDepthTestEnabled(true);
-    SetDepthWriteEnabled(false);
-    SetBlendEnabled(true);
+    Renderer::DrawGpuState transparentPass;
+    transparentPass.depthTest = true;
+    transparentPass.depthWrite = false;
+    transparentPass.blend = true;
 
     SortTransparentDraws();
-    ExecuteDrawList(impl_->_transparentDraws);
+    ExecuteDrawList(impl_->_transparentDraws, transparentPass);
 }
 
 void Renderer::EndGpuFrame() {
     if (!impl_->_initialized) return;
 
-    // Resolve MSAA render target to non-MSAA texture for CPU download
-    D3D11_TEXTURE2D_DESC rtDesc;
-    impl_->_renderTarget->GetDesc(&rtDesc);
-    
-    if (rtDesc.SampleDesc.Count > 1) {
-        PROFILE_SCOPE("Renderer.EndGpuFrame.ResolveMSAA");
-        // MSAA is enabled - resolve to non-MSAA texture (format must match source)
-        impl_->_context->ResolveSubresource(
-            impl_->_resolvedTexture.Get(),     // Destination (non-MSAA)
-            0,                           // Dest subresource
-            impl_->_renderTarget.Get(),         // Source (MSAA)
-            0,                           // Source subresource
-            rtDesc.Format                // Match render target (R8G8B8A8_UNORM_SRGB)
-        );
-    } else {
+    {
         PROFILE_SCOPE("Renderer.EndGpuFrame.CopyResolved");
-        // No MSAA - just copy render target to resolved texture
-        impl_->_context->CopyResource(impl_->_resolvedTexture.Get(), impl_->_renderTarget.Get());
+        if (impl_->_supersample2x) {
+            RunDownsamplePass();
+        } else {
+            impl_->_context->CopyResource(impl_->_resolvedTexture.Get(), impl_->_renderTarget.Get());
+        }
     }
     
     {
@@ -267,16 +233,6 @@ void Renderer::EndGpuFrame() {
         impl_->_debugSwapChain->Present(0, 0);
     }
 #endif
-}
-
-void Renderer::ExecuteTransparentDrawList() {
-    SortTransparentDraws();
-    ExecuteDrawList(impl_->_transparentDraws);
-}
-
-void Renderer::ExecuteOpaqueDrawList() {
-    SortOpaqueDraws();
-    ExecuteDrawList(impl_->_opaqueDraws);
 }
 
 } // namespace ASCIIgL

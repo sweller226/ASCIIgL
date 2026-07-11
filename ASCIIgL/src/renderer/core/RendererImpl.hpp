@@ -36,12 +36,17 @@ struct Renderer::GPUMeshCache {
 
 struct Renderer::Impl {
     bool _initialized = false;
+    bool _supersample2x = false;
+    int _renderTargetWidth = 0;
+    int _renderTargetHeight = 0;
 
     ComPtr<ID3D11Device> _device;
     ComPtr<ID3D11DeviceContext> _context;
     ComPtr<ID3D11Texture2D> _renderTarget;
     ComPtr<ID3D11RenderTargetView> _renderTargetView;
+    ComPtr<ID3D11ShaderResourceView> _renderTargetSRV;
     ComPtr<ID3D11Texture2D> _resolvedTexture;
+    ComPtr<ID3D11RenderTargetView> _resolvedTextureRTV;
     ComPtr<ID3D11Texture2D> _depthStencilBuffer;
     ComPtr<ID3D11DepthStencilView> _depthStencilView;
     ComPtr<ID3D11DepthStencilState> _depthStencilState;
@@ -73,11 +78,12 @@ struct Renderer::Impl {
     ComPtr<ID3D11ShaderResourceView> _resolvedTextureSRV;
     ComPtr<ID3D11ShaderResourceView> _colorLUTSRV;
     ComPtr<ID3D11ShaderResourceView> _monochromeLUTSRV;
-    ComPtr<ID3D11Texture1D> _colorLUTTexture;
+    ComPtr<ID3D11Texture3D> _colorLUTTexture;
     ComPtr<ID3D11Texture1D> _monochromeLUTTexture;
     ComPtr<ID3D11Buffer> _lutConstantsCB;
     ComPtr<ID3D11VertexShader> _quantizationVS;
     ComPtr<ID3D11PixelShader> _quantizationPS;
+    ComPtr<ID3D11PixelShader> _downsamplePS;
     ComPtr<ID3D11InputLayout> _quantizationInputLayout;
     ComPtr<ID3D11Buffer> _fullscreenQuadVB;
 
@@ -97,15 +103,13 @@ struct Renderer::Impl {
 
     ShaderProgram* _boundShaderProgram = nullptr;
     Material* _boundMaterial = nullptr;
+    BoundState _boundState;
 
     bool _wireframe = false;
     bool _backface_culling = true;
     bool _ccw = false;
 
     glm::ivec3 _background_col = glm::ivec3(0, 0, 0);
-
-    int _antialiasing_samples = 4;
-    bool _antialiasing = false;
 
     int _maxAnisotropy = 16;
 
@@ -114,7 +118,8 @@ struct Renderer::Impl {
 
     enum class ColorLUTState { NotComputed, Monochrome, MultiColor };
     ColorLUTState _colorLUTState = ColorLUTState::NotComputed;
-    static constexpr unsigned int _rgbLUTDepth = 16;
+    static constexpr unsigned int _rgbLUTDepth = 64;
+    static constexpr unsigned int _rgbLUTMaxIndex = _rgbLUTDepth - 1;
     std::array<ScreenPixel, _rgbLUTDepth * _rgbLUTDepth * _rgbLUTDepth> _colorLUT{};
 
     static constexpr size_t _monochromeLUTSize = 1024;

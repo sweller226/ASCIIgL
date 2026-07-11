@@ -27,7 +27,7 @@ struct ItemGuiMeshTransform {
     glm::vec3 rotationDegrees{0.0f, 0.0f, 0.0f};
     glm::vec3 scale{1.0f, 1.0f, 1.0f};
 
-    /// Dominant block item pose from models/item/*.json display.thirdperson.
+    /// Dominant block item pose
     static ItemGuiMeshTransform DefaultBlockThirdPerson() {
         ItemGuiMeshTransform t;
         t.location = glm::vec3(0.0f, 0.0f, -5.0f);
@@ -36,24 +36,15 @@ struct ItemGuiMeshTransform {
         return t;
     }
 
-    /// Upright torch icon — thin model reads small at the default isometric pose.
-    static ItemGuiMeshTransform DefaultTorch() {
-        ItemGuiMeshTransform t;
-        t.rotationDegrees = glm::vec3(0.0f);
-        t.scale = glm::vec3(0.85f);
-        return t;
-    }
-
     glm::mat4 getModel() const {
         constexpr float kDisplayUnitsPerBlock = 16.0f;
         // Minecraft display order: translation, rotation (X→Y→Z), scale.
-        // GLM gtc transforms post-multiply, so build scale → rotate → translate.
         glm::mat4 m(1.0f);
-        m = glm::scale(m, scale);
         m = glm::translate(m, location / kDisplayUnitsPerBlock);
         m = glm::rotate(m, glm::radians(rotationDegrees.x), glm::vec3(1.0f, 0.0f, 0.0f));
         m = glm::rotate(m, glm::radians(rotationDegrees.y), glm::vec3(0.0f, 1.0f, 0.0f));
         m = glm::rotate(m, glm::radians(rotationDegrees.z), glm::vec3(0.0f, 0.0f, 1.0f));
+        m = glm::scale(m, scale);
         return m;
     }
 };
@@ -68,29 +59,38 @@ struct ItemHeldMeshTransform {
     /// Vanilla block-item first-person pose (display.firstperson default for block parents).
     static ItemHeldMeshTransform DefaultBlockFirstPerson() {
         ItemHeldMeshTransform t;
-        t.location = glm::vec3(1.0f, 0.0f, 0.0f);
+        t.location = glm::vec3(1.0f, 1.0f, 0.0f);
         t.rotationDegrees = glm::vec3(0.0f, 45.0f, 0.0f);
         t.scale = glm::vec3(0.45f);
+        return t;
+    }
+
+    /// Generated flat-item pose from models/item/*.json display.firstperson.
+    static ItemHeldMeshTransform DefaultGeneratedFirstPerson() {
+        ItemHeldMeshTransform t;
+        t.location = glm::vec3(-0.5f, 3.0f, 1.0f);
+        t.rotationDegrees = glm::vec3(-10.0f, 288.0f, 10.0f);
+        t.scale = glm::vec3(0.6f);
         return t;
     }
 
     /// iron_sword.json display.firstperson.
     static ItemHeldMeshTransform DefaultToolFirstPerson() {
         ItemHeldMeshTransform t;
-        t.location = glm::vec3(0.0f, 1.2f, 2.0f);
-        t.rotationDegrees = glm::vec3(0.0f, 110.0f, 70.0f);
-        t.scale = glm::vec3(0.8f);
+        t.location = glm::vec3(0.0f, 2.3f, 1.0f);
+        t.rotationDegrees = glm::vec3(0.0f, 288.0f, 20.0f);
+        t.scale = glm::vec3(0.7f);
         return t;
     }
 
     glm::mat4 getModel() const {
         constexpr float kDisplayUnitsPerBlock = 16.0f;
         glm::mat4 m(1.0f);
-        m = glm::scale(m, scale);
         m = glm::translate(m, location / kDisplayUnitsPerBlock);
         m = glm::rotate(m, glm::radians(rotationDegrees.x), glm::vec3(1.0f, 0.0f, 0.0f));
         m = glm::rotate(m, glm::radians(rotationDegrees.y), glm::vec3(0.0f, 1.0f, 0.0f));
         m = glm::rotate(m, glm::radians(rotationDegrees.z), glm::vec3(0.0f, 0.0f, 1.0f));
+        m = glm::scale(m, scale);
         return m;
     }
 };

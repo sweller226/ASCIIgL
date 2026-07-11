@@ -5,11 +5,13 @@
 #include <ASCIICraft/ecs/components/Lifetime.hpp>
 #include <ASCIICraft/ecs/components/Velocity.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/ecs/components/ParticleTag.hpp>
 #include <ASCIICraft/ecs/components/Renderable.hpp>
 
 #include <ASCIICraft/util/QuadMeshBuilder.hpp>
 
 #include <ASCIIgL/renderer/Material.hpp>
+#include <ASCIIgL/renderer/HLSLIncludes.hpp>
 #include <ASCIIgL/renderer/Shader.hpp>
 
 #include <ASCIICraft/rendering/LeafParticleShaders.hpp>
@@ -40,9 +42,11 @@ namespace ecs::systems {
 
         constexpr float despawnRadius2 = SPAWN_RADIUS * SPAWN_RADIUS;
 
-        auto view = m_registry.view<components::Velocity, components::Lifetime, components::Transform>();
+        auto view = m_registry.view<components::ParticleTag, components::Lifetime, components::Transform>();
 
-        for (auto [ent, velocity, lifetime, t] : view.each()) {
+        for (auto ent : view) {
+            auto& lifetime = view.get<components::Lifetime>(ent);
+            auto& t = view.get<components::Transform>(ent);
             const glm::vec3 delta = t.position - playerPos;
             const bool tooFar = glm::dot(delta, delta) > despawnRadius2;
 
@@ -106,6 +110,7 @@ namespace ecs::systems {
 
             for (int i = 0; i < e.count; ++i) {
                 entt::entity entity = m_registry.create();
+                m_registry.emplace<components::ParticleTag>(entity);
 
                 auto& t = m_registry.emplace<components::Transform>(entity);
                 t.setPosition(e.origin);
@@ -134,7 +139,11 @@ namespace ecs::systems {
 
     bool ParticleSystem::InitLeafMaterial() {
         auto leafVS = ASCIIgL::Shader::CreateFromSource(LeafParticleShaders::GetVSSource(), ASCIIgL::ShaderType::Vertex);
-        auto leafPS = ASCIIgL::Shader::CreateFromSource(LeafParticleShaders::GetPSSource(), ASCIIgL::ShaderType::Pixel);
+
+        ASCIIgL::ShaderIncludeMap includes;
+        ASCIIgL::HLSLIncludes::AddToMap(includes);
+        auto leafPS = ASCIIgL::Shader::CreateFromSource(
+            LeafParticleShaders::GetPSSource(), ASCIIgL::ShaderType::Pixel, "main", &includes);
 
         if (!leafVS || !leafVS->IsValid()) {
             ASCIIgL::Logger::Error("Failed to compile leaf particle vertex shader: " + leafVS->GetCompileError());

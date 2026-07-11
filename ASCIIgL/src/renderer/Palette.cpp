@@ -60,10 +60,10 @@ Palette::Palette() {
 
 Palette::Palette(
     const std::vector<std::pair<float, std::shared_ptr<Texture>>>& textures,
-    const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays,
+    const std::vector<WeightedTextureArray>& textureArrays,
     bool sortByLuminance)
 {
-    // Collect color samples from given textures/arrays, using the float as a weight.
+    // Collect Oklab samples from given textures/arrays, using the float as a weight.
     std::vector<glm::vec3> samples;
     samples.reserve(4096);
 
@@ -93,28 +93,40 @@ Palette::Palette(
                 uint8_t a = px[3];
                 if (a < ALPHA_THRESHOLD) continue;
                 glm::ivec3 rgb(px[0], px[1], px[2]);
-                samples.push_back(PaletteUtil::sRGB255ToLinear1(rgb));
+                samples.push_back(PaletteUtil::Linear1ToOklab(PaletteUtil::sRGB255ToLinear1(rgb)));
             }
         }
     };
 
-    auto sampleTextureArray = [&](float weight, const std::shared_ptr<TextureArray>& arr) {
-        if (!arr || weight <= 0.0f || !arr->IsValid()) return;
+    auto sampleTextureArray = [&](const WeightedTextureArray& src) {
+        const float arrayWeight = src.arrayWeight;
+        const std::shared_ptr<TextureArray>& arr = src.array;
+        if (!arr || arrayWeight <= 0.0f || !arr->IsValid()) return;
         int tileSize = arr->GetTileSize();
         int layers   = arr->GetLayerCount();
         if (tileSize <= 0 || layers <= 0) return;
 
         const int area = tileSize * tileSize;
-        int targetSamples = std::max(1, static_cast<int>(BASE_SAMPLES_PER_RESOURCE * weight));
-        int stride = 1;
-        if (area > targetSamples) {
-            float s = std::sqrt(static_cast<float>(area) / targetSamples);
-            stride = std::max(1, static_cast<int>(s));
-        }
 
         for (int layer = 0; layer < layers; ++layer) {
+            float layerWeight = arrayWeight;
+            if (src.perLayerWeights) {
+                if (layer >= static_cast<int>(src.perLayerWeights->size())) {
+                    continue;
+                }
+                layerWeight *= (*src.perLayerWeights)[static_cast<size_t>(layer)];
+            }
+            if (layerWeight <= 0.0f) continue;
+
             const uint8_t* data = arr->GetLayerData(layer, 0);
             if (!data) continue;
+
+            int targetSamples = std::max(1, static_cast<int>(BASE_SAMPLES_PER_RESOURCE * layerWeight));
+            int stride = 1;
+            if (area > targetSamples) {
+                float s = std::sqrt(static_cast<float>(area) / targetSamples);
+                stride = std::max(1, static_cast<int>(s));
+            }
 
             for (int y = 0; y < tileSize; y += stride) {
                 for (int x = 0; x < tileSize; x += stride) {
@@ -122,7 +134,7 @@ Palette::Palette(
                     uint8_t a = px[3];
                     if (a < ALPHA_THRESHOLD) continue;
                     glm::ivec3 rgb(px[0], px[1], px[2]);
-                    samples.push_back(PaletteUtil::sRGB255ToLinear1(rgb));
+                    samples.push_back(PaletteUtil::Linear1ToOklab(PaletteUtil::sRGB255ToLinear1(rgb)));
                 }
             }
         }
@@ -131,8 +143,8 @@ Palette::Palette(
     for (auto& entry : textures) {
         sampleTexture(entry.first, entry.second);
     }
-    for (auto& entry : textureArrays) {
-        sampleTextureArray(entry.first, entry.second);
+    for (const auto& entry : textureArrays) {
+        sampleTextureArray(entry);
     }
 
     constexpr int K = 16;
@@ -195,7 +207,9 @@ Palette::Palette(
         }
 
         for (int k = 0; k < K; ++k) {
-            glm::ivec3 rgb = PaletteUtil::Linear1ToSrgb255(centers[k]);
+            glm::vec3 linear = PaletteUtil::OklabToLinear1(centers[k]);
+            linear = glm::clamp(linear, glm::vec3(0.0f), glm::vec3(1.0f));
+            glm::ivec3 rgb = PaletteUtil::Linear1ToSrgb255(linear);
             entries[k] = PaletteEntry(rgb);
         }
     } else {
@@ -319,7 +333,7 @@ MonochromePalette::MonochromePalette(std::array<PaletteEntry, 16> customEntries)
 
 MonochromePalette::MonochromePalette(
     const std::vector<std::pair<float, std::shared_ptr<Texture>>>& textures,
-    const std::vector<std::pair<float, std::shared_ptr<TextureArray>>>& textureArrays)
+    const std::vector<WeightedTextureArray>& textureArrays)
     : Palette(textures, textureArrays, true)
 {
     InferParamsFromEntries();

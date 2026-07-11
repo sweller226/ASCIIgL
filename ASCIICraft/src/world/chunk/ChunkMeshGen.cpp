@@ -69,14 +69,21 @@ ChunkMeshData BuildChunkMeshData(
                     model->computeVisibleFaces(x, y, z, state, chunkBlocks, neighborBlocks, *bsr, visibleFaces);
                 }
 
-                auto& dstVerts = blockIsTranslucent
-                    ? out.transparentVertices
-                    : (model->opaqueNoCull ? out.opaqueNoCullVertices : out.opaqueVertices);
-                auto& dstIndices = blockIsTranslucent
-                    ? out.transparentIndices
-                    : (model->opaqueNoCull ? out.opaqueNoCullIndices : out.opaqueIndices);
-                const blockstate::RenderLayer& layer = blockIsTranslucent ? model->transparent : model->opaque;
-                blockmodels::AppendRenderLayer(dstVerts, dstIndices, layer, worldOffset, visibleFaces);
+                if (blockIsTranslucent) {
+                    blockmodels::AppendRenderLayer(
+                        out.transparentVertices, out.transparentIndices,
+                        model->transparent, worldOffset, visibleFaces);
+                } else {
+                    auto& opaqueVerts = model->opaqueNoCull ? out.opaqueNoCullVertices : out.opaqueVertices;
+                    auto& opaqueIndices = model->opaqueNoCull ? out.opaqueNoCullIndices : out.opaqueIndices;
+                    blockmodels::AppendRenderLayer(
+                        opaqueVerts, opaqueIndices, model->opaque, worldOffset, visibleFaces);
+
+                    if (!model->transparent.faces.empty()) {
+                        blockmodels::AppendRenderLayer(
+                            opaqueVerts, opaqueIndices, model->transparent, worldOffset, visibleFaces);
+                    }
+                }
             }
         }
     }

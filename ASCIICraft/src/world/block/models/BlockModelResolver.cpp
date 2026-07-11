@@ -183,7 +183,7 @@ jsonutil::LoadResult<ResolvedBlockModelDefinition> ResolveBlockModel(JsonModelLo
 
     ResolvedBlockModelDefinition out;
     out.isFullBlock = hasCubeAllInParentChain || hasCubeColumnInParentChain || IsGeometryFullBlock(elementsSource);
-    // Cross and torch-like quads should render in the opaque-no-cull bucket.
+    // Cross-like quads should render in the opaque-no-cull bucket.
     out.opaqueNoCull = false;
 
     // Validate merged texture map can fully resolve # chains.

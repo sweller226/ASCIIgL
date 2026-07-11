@@ -2,10 +2,7 @@
 
 #include <ASCIIgL/renderer/HLSLIncludes.hpp>
 #include <ASCIIgL/renderer/Shader.hpp>
-#include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/util/Logger.hpp>
-
-#include <glm/glm.hpp>
 
 namespace ASCIIgL {
 
@@ -51,12 +48,6 @@ bool BuildAndRegisterMaterial(const MaterialBuildDesc& desc) {
     if (!material) {
         Logger::Error(std::string("Failed to create ") + desc.registryName + " material");
         return false;
-    }
-
-    if (desc.applyScreenGradient) {
-        auto& palette = Screen::GetInst().GetPalette();
-        material->SetFloat4("gradientStart", glm::vec4(palette.GetRGBNormalized(palette.GetMinLumIdx()), 1.0f));
-        material->SetFloat4("gradientEnd", glm::vec4(palette.GetRGBNormalized(palette.GetMaxLumIdx()), 1.0f));
     }
 
     if (desc.bindResources && !desc.bindResources(*material)) {

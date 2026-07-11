@@ -34,16 +34,34 @@ public:
     std::vector<Layer> layers;
     
     // Load from atlas image
-    bool LoadFromAtlas(const std::string& atlasPath, int tileSize, const MonochromeMapping& mono);
-    
+    bool LoadFromAtlas(const std::string& atlasPath, int tileSize, const MonochromeMapping& mono,
+                       const std::vector<MonochromeMapping>& perTileMono);
+
     // Load from individual files
-    bool LoadFromFiles(const std::vector<std::string>& tilePaths, const MonochromeMapping& mono);
+    bool LoadFromFiles(const std::vector<std::string>& tilePaths, const MonochromeMapping& mono,
+                       const std::vector<MonochromeMapping>& perTileMono);
     
     // Generate mipmaps for all layers
     void GenerateMipmapsCPU(int maxLevels, MipFilters::MipFilterFn filter);
 };
 
-bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileSize, const MonochromeMapping& mono) {
+namespace {
+
+const MonochromeMapping& ResolveTileMonochrome(
+    int layerIndex,
+    const MonochromeMapping& defaultMono,
+    const std::vector<MonochromeMapping>& perTileMono)
+{
+    if (layerIndex >= 0 && layerIndex < static_cast<int>(perTileMono.size())) {
+        return perTileMono[static_cast<size_t>(layerIndex)];
+    }
+    return defaultMono;
+}
+
+} // namespace
+
+bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileSize, const MonochromeMapping& mono,
+                                       const std::vector<MonochromeMapping>& perTileMono) {
     Logger::Info("TEXTURE_ARRAY: Loading from atlas: " + atlasPath);
     
     stbi_set_flip_vertically_on_load(0);
@@ -90,8 +108,9 @@ bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileS
             }
 
             // Optional: bake tile to monochrome gradient on load.
-            if (monoMapping.enabled) {
-                ApplyMonochromeMappingRGBA8(mip0.data.data(), tileSize, tileSize, monoMapping);
+            const MonochromeMapping& tileMono = ResolveTileMonochrome(layerIdx, mono, perTileMono);
+            if (tileMono.enabled) {
+                ApplyMonochromeMappingRGBA8(mip0.data.data(), tileSize, tileSize, tileMono);
             }
         }
     }
@@ -103,7 +122,8 @@ bool TextureArray::Impl::LoadFromAtlas(const std::string& atlasPath, int inTileS
     return true;
 }
 
-bool TextureArray::Impl::LoadFromFiles(const std::vector<std::string>& tilePaths, const MonochromeMapping& mono) {
+bool TextureArray::Impl::LoadFromFiles(const std::vector<std::string>& tilePaths, const MonochromeMapping& mono,
+                                       const std::vector<MonochromeMapping>& perTileMono) {
     if (tilePaths.empty()) {
         Logger::Error("TEXTURE_ARRAY: No tile paths provided");
         return false;
@@ -130,13 +150,15 @@ bool TextureArray::Impl::LoadFromFiles(const std::vector<std::string>& tilePaths
         if (tileSize == 0) {
             tileSize = w;
             if (w != h) {
-                Logger::Error("TEXTURE_ARRAY: Tiles must be square, got " + std::to_string(w) + "x" + std::to_string(h));
+                Logger::Error("TEXTURE_ARRAY: Tile must be square: " + tilePaths[i] +
+                              " (" + std::to_string(w) + "x" + std::to_string(h) + ")");
                 stbi_image_free(data);
                 return false;
             }
         } else if (w != tileSize || h != tileSize) {
-            Logger::Error("TEXTURE_ARRAY: All tiles must be same size. Expected " + 
-                          std::to_string(tileSize) + ", got " + std::to_string(w));
+            Logger::Error("TEXTURE_ARRAY: All tiles must be same size. Mismatch in " + tilePaths[i] +
+                          ": expected " + std::to_string(tileSize) + "x" + std::to_string(tileSize) +
+                          ", got " + std::to_string(w) + "x" + std::to_string(h));
             stbi_image_free(data);
             return false;
         }
@@ -149,8 +171,9 @@ bool TextureArray::Impl::LoadFromFiles(const std::vector<std::string>& tilePaths
         mip0.data.resize(tileSize * tileSize * 4);
         std::memcpy(mip0.data.data(), data, tileSize * tileSize * 4);
 
-        if (monoMapping.enabled) {
-            ApplyMonochromeMappingRGBA8(mip0.data.data(), tileSize, tileSize, monoMapping);
+        const MonochromeMapping& tileMono = ResolveTileMonochrome(i, mono, perTileMono);
+        if (tileMono.enabled) {
+            ApplyMonochromeMappingRGBA8(mip0.data.data(), tileSize, tileSize, tileMono);
         }
         
         stbi_image_free(data);
@@ -195,16 +218,18 @@ void TextureArray::Impl::GenerateMipmapsCPU(int maxLevels, MipFilters::MipFilter
 
 // TextureArray public interface
 
-TextureArray::TextureArray(const std::string& atlasPath, int tileSize, const MonochromeMapping& mono)
+TextureArray::TextureArray(const std::string& atlasPath, int tileSize, const MonochromeMapping& mono,
+                           const std::vector<MonochromeMapping>& perTileMono)
     : pImpl(std::make_unique<Impl>())
 {
-    pImpl->LoadFromAtlas(atlasPath, tileSize, mono);
+    pImpl->LoadFromAtlas(atlasPath, tileSize, mono, perTileMono);
 }
 
-TextureArray::TextureArray(const std::vector<std::string>& tilePaths, const MonochromeMapping& mono)
+TextureArray::TextureArray(const std::vector<std::string>& tilePaths, const MonochromeMapping& mono,
+                           const std::vector<MonochromeMapping>& perTileMono)
     : pImpl(std::make_unique<Impl>())
 {
-    pImpl->LoadFromFiles(tilePaths, mono);
+    pImpl->LoadFromFiles(tilePaths, mono, perTileMono);
 }
 
 TextureArray::~TextureArray() = default;

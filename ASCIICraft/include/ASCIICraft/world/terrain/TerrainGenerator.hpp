@@ -15,7 +15,6 @@
 class FastNoiseLite;
 
 enum class BiomeType {
-    Plains,
     FlowerForest,
     Forest
 };
@@ -43,6 +42,15 @@ private:
         int SEA_LEVEL;
     };
 
+    struct TerrainColumnSample {
+        BiomeType dominantBiome;
+        int terrainHeight;
+        float flowerForestWeight;
+        float forestWeight;
+        float valleyFactor;
+        float slope;
+    };
+
     std::unique_ptr<FastNoiseLite> terrainNoise;
     std::unique_ptr<FastNoiseLite> treeNoise;
     std::unique_ptr<FastNoiseLite> forestDensityNoise;
@@ -50,6 +58,8 @@ private:
     std::unique_ptr<FastNoiseLite> biomeTemperatureNoise;
     std::unique_ptr<FastNoiseLite> biomeHumidityNoise;
     std::unique_ptr<FastNoiseLite> surfaceDepthNoise;
+    std::unique_ptr<FastNoiseLite> terrainWarpNoise;
+    std::unique_ptr<FastNoiseLite> valleyNoise;
 
     std::once_flag noiseInitFlag;
 
@@ -59,10 +69,13 @@ private:
     BiomeType GetBiomeType(int worldX, int worldZ);
     float SampleBiomeTemperature(int worldX, int worldZ) const;
     float SampleBiomeHumidity(int worldX, int worldZ) const;
+    float SampleValleyFactor(int worldX, int worldZ) const;
+    float EstimateTerrainSlope(int worldX, int worldZ, const TerrainParams& params) const;
+    TerrainColumnSample SampleTerrainColumn(int worldX, int worldZ, const TerrainParams& params) const;
     float CalculateTerrainHeightChunksForBiome(int worldX, int worldZ, const TerrainParams& params, BiomeType biomeType) const;
 
     glm::ivec3 LocalToWorldCoord(const ChunkCoord& coord, int localX, int localZ) const;
-    uint32_t GetBlockStateAt(int worldX, int worldY, int worldZ, int terrainHeight,
+    uint32_t GetBlockStateAt(int worldX, int worldY, int worldZ, const TerrainColumnSample& sample,
                             const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions,
                             std::vector<glm::ivec3>& flowerPlacementPositions,
                             const blockstate::BlockStateRegistry* bsrOverride = nullptr,
@@ -73,8 +86,10 @@ private:
                                  const TerrainParams& params, std::vector<glm::ivec3>& treePlacementPositions,
                                  std::vector<glm::ivec3>& flowerPlacementPositions,
                                  const blockstate::BlockStateRegistry* bsrOverride = nullptr,
-                                 BiomeType biomeType = BiomeType::Forest);
+                                 BiomeType biomeType = BiomeType::Forest,
+                                 const TerrainColumnSample* sample = nullptr);
     void CheckTreePlacement(int worldX, int worldY, int worldZ, const TerrainParams& params, BiomeType biomeType,
+                            const TerrainColumnSample& sample,
                             std::vector<glm::ivec3>& treePlacementPositions) const;
 
     void GenerateTreeInto(int worldX, int worldY, int worldZ, const blockstate::BlockStateRegistry* bsr,

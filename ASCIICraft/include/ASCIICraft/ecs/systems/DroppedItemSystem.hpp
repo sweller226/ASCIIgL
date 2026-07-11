@@ -17,7 +17,6 @@ private:
     entt::registry& registry;
     ASCIIgL::EventBus &eventBus;
 
-    void DespawnItems(const float dt);
     void SpinItems(const float dt);
     void PickupItems(const float dt);
 };

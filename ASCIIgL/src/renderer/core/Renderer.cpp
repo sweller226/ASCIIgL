@@ -391,8 +391,8 @@ void Renderer::PrecomputeMultiColorLUT(Palette& palette) {
     Logger::Info("[Renderer] Precomputing multi-color color LUT...");
 
     impl_->_colorLUTState = ColorLUTState::MultiColor;
-    // ===== MULTICOLOR: full 16×16×16 RGB cube =====
-    const float invPaletteDepth = 1.0f / 15.0f;
+    // ===== MULTICOLOR: full 64×64×64 RGB cube =====
+    const float invPaletteDepth = 1.0f / static_cast<float>(Renderer::Impl::_rgbLUTMaxIndex);
     auto srgbToLinear = [](float s) {
         return s <= 0.04045f ? s / 12.92f : std::pow((s + 0.055f) / 1.055f, 2.4f);
     };
@@ -456,8 +456,10 @@ ScreenPixel Renderer::GetCharInfo(const glm::ivec3& rgb) {
         return impl_->_monochromeLUT[idx].second;
     }
 
-    auto to16 = [](int v) { return (v * 15 + 127) / 255; };
-    const int r = to16(rgb.r), g = to16(rgb.g), b = to16(rgb.b);
+    auto toBucket = [](int v) {
+        return (v * static_cast<int>(Renderer::Impl::_rgbLUTMaxIndex) + 127) / 255;
+    };
+    const int r = toBucket(rgb.r), g = toBucket(rgb.g), b = toBucket(rgb.b);
     const int index = (r * Renderer::Impl::_rgbLUTDepth * Renderer::Impl::_rgbLUTDepth) + (g * Renderer::Impl::_rgbLUTDepth) + b;
     return impl_->_colorLUT[index];
 }
@@ -468,6 +470,7 @@ ScreenPixel Renderer::GetCharInfo(const glm::ivec3& rgb) {
 
 void Renderer::SetWireframe(bool wireframe) {
     impl_->_wireframe = wireframe;
+    InvalidateBoundState();
 }
 
 bool Renderer::GetWireframe() const {
@@ -476,6 +479,7 @@ bool Renderer::GetWireframe() const {
 
 void Renderer::SetBackfaceCulling(bool backfaceCulling) {
     impl_->_backface_culling = backfaceCulling;
+    InvalidateBoundState();
 }
 
 bool Renderer::GetBackfaceCulling() const {
@@ -484,6 +488,7 @@ bool Renderer::GetBackfaceCulling() const {
 
 void Renderer::SetCCW(bool ccw) {
     impl_->_ccw = ccw;
+    InvalidateBoundState();
 }
 
 bool Renderer::GetCCW() const {
@@ -496,18 +501,6 @@ void Renderer::SetBackgroundCol(const glm::ivec3& col) {
 
 glm::ivec3 Renderer::GetBackgroundCol() const {
     return impl_->_background_col;
-}
-
-// =============================================================================
-// RENDER SETTINGS - ANTIALIASING
-// =============================================================================
-
-bool Renderer::GetAntialiasing() const {
-    return impl_->_antialiasing;
-}
-
-int Renderer::GetAntialiasingsamples() const {
-    return impl_->_antialiasing_samples;
 }
 
 void Renderer::SetMaxAnisotropy(int level) {

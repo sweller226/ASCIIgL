@@ -6,6 +6,8 @@
 
 #include <ASCIIgL/engine/FPSClock.hpp>
 
+#include <algorithm>
+
 namespace ecs::systems {
 
 CameraSystem::CameraSystem(entt::registry& registry, IInputSource& input)
@@ -17,7 +19,7 @@ void CameraSystem::Update() {
     entt::entity p_ent = components::GetPlayerEntity(m_registry);
     if (p_ent == entt::null || !m_registry.valid(p_ent)) return;
 
-    if (!m_registry.all_of<components::PlayerCamera, components::PlayerController>(p_ent)) return;
+    if (!m_registry.all_of<components::PlayerCamera, components::PlayerController, components::Head>(p_ent)) return;
 
     auto& cam = m_registry.get<components::PlayerCamera>(p_ent);
     auto& ctrl = m_registry.get<components::PlayerController>(p_ent);
@@ -25,9 +27,11 @@ void CameraSystem::Update() {
 
     ProcessCameraInput(cam, dt);
     LerpFOV(cam, ctrl, dt);
+    LerpPlayerHeight(cam, ctrl, dt);
 
     auto& head = m_registry.get<components::Head>(p_ent);
     head.lookDir = cam.camera.getCamFront();
+    head.relativePos = glm::vec3(0.0f, cam.playerEyeHeight, 0.0f);
 }
 
 void CameraSystem::ProcessCameraInput(components::PlayerCamera& cam, float dt) {
@@ -76,6 +80,15 @@ void CameraSystem::LerpFOV(components::PlayerCamera& cam, components::PlayerCont
         ASCIIgL::Logger::Debug("CameraSystem: player now facing " + cardinal);
         m_lastCardinal = cardinal;
     }
+}
+
+void CameraSystem::LerpPlayerHeight(components::PlayerCamera& cam, components::PlayerController& ctrl, float dt) {
+    const float targetEyeHeight = ctrl.isSneaking()
+        ? cam.SHIFTING_PLAYER_EYE_HEIGHT
+        : cam.PLAYER_EYE_HEIGHT;
+    const float t = std::min(cam.PLAYER_EYE_HEIGHT_LERP_SPEED * dt, 1.0f);
+
+    cam.playerEyeHeight += (targetEyeHeight - cam.playerEyeHeight) * t;
 }
 
 }

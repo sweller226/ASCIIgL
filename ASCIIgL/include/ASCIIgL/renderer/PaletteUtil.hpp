@@ -41,6 +41,7 @@ namespace PaletteUtil {
     // -------------------------
 
     glm::vec3 Linear1ToOklab(const glm::vec3& c);
+    glm::vec3 OklabToLinear1(const glm::vec3& c);
 
     // -------------------------
     // Linear → sRGB

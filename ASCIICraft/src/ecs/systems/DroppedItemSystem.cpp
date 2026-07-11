@@ -10,14 +10,12 @@
 #include <ASCIICraft/ecs/components/PhysicsBody.hpp>
 #include <ASCIICraft/ecs/components/DroppedItemTag.hpp>
 #include <ASCIICraft/ecs/components/Pickup.hpp>
-#include <ASCIICraft/ecs/components/Lifetime.hpp>
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
 
 #include <glm/gtc/constants.hpp>
 
 #include <cmath>
-#include <vector>
 
 namespace ecs::systems {
 
@@ -29,34 +27,8 @@ DroppedItemSystem::DroppedItemSystem(entt::registry& registry, ASCIIgL::EventBus
 void DroppedItemSystem::Update() {
     const float dt = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
 
-    DespawnItems(dt);
     SpinItems(dt);
     PickupItems(dt);
-}
-
-void DroppedItemSystem::DespawnItems(const float dt) {
-    using namespace ecs::components;
-
-    std::vector<entt::entity> toDestroy;
-
-    auto view = registry.view<DroppedItemTag, Lifetime>();
-    for (auto entity : view) {
-        auto& lifetime = view.get<Lifetime>(entity);
-
-        lifetime.ageSeconds += dt;
-
-        const bool shouldDespawn = lifetime.shouldDespawn;
-        const bool maxReached = (lifetime.maxLifetimeSeconds > 0.0f &&
-                                 lifetime.ageSeconds >= lifetime.maxLifetimeSeconds);
-
-        if (shouldDespawn || maxReached) {
-            toDestroy.push_back(entity);
-        }
-    }
-
-    for (auto entity : toDestroy) {
-        registry.destroy(entity);
-    }
 }
 
 void DroppedItemSystem::SpinItems(const float dt) {

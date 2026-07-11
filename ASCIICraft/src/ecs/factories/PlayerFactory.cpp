@@ -1,5 +1,6 @@
 #include <ASCIICraft/ecs/factories/PlayerFactory.hpp>
 
+#include <algorithm>
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 #include <ASCIICraft/ecs/components/ItemCarried.hpp>
 #include <ASCIICraft/ecs/components/HotbarSelection.hpp>
@@ -42,23 +43,66 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     // --- Inventory (36 slots: 0-8 hotbar, 9-35 main) ---
     auto& inv = registry.emplace<components::Inventory>(p_ent, 36);
     if (auto* itemRegistry = registry.ctx().find<ecs::data::ItemRegistry>()) {
-        const auto seedSlot = [&](int slot, const char* itemName, int count) {
+        const char* hotbarItems[] = {
+            "minecraft:wooden_sword",
+            "minecraft:wooden_pickaxe",
+            "minecraft:wooden_axe",
+            "minecraft:wooden_shovel",
+            "minecraft:bread",
+            "minecraft:oak_planks",
+        };
+        const int hotbarCounts[] = {1, 1, 1, 1, 64, 64};
+
+        const char* blockItems[] = {
+            "minecraft:dandelion",
+            "minecraft:poppy",
+            "minecraft:tall_grass",
+            "minecraft:fern",
+            "minecraft:fence",
+            "minecraft:oak_stairs",
+            "minecraft:cobblestone",
+            "minecraft:stone_stairs",
+            "minecraft:dirt",
+            "minecraft:grass",
+            "minecraft:oak_log",
+            "minecraft:oak_planks",
+            "minecraft:oak_slab",
+            "minecraft:cobblestone_slab",
+            "minecraft:oak_leaves",
+            "minecraft:crafting_table",
+            "minecraft:bookshelf",
+            "minecraft:furnace",
+            "minecraft:glass",
+            "minecraft:blue_wool",
+            "minecraft:green_wool",
+        };
+
+        const auto seedSlot = [&](int slot, const char* itemName, int count = -1) {
             const int id = itemRegistry->GetIdFromName(itemName, registry);
             if (id < 0 || slot < 0 || slot >= inv.capacity) {
                 return;
             }
-            inv.slots[slot] = components::ItemStack::fromRegistry(registry, id, count);
+            components::ItemStack stack = components::ItemStack::fromRegistry(registry, id, 1);
+            if (!stack.isEmpty()) {
+                stack.count = (count < 0) ? stack.maxStackSize : std::min(count, stack.maxStackSize);
+                inv.slots[slot] = stack;
+            }
         };
 
-        seedSlot(0, "minecraft:stone", 64);
-        seedSlot(1, "minecraft:dirt", 64);
-        seedSlot(2, "minecraft:grass", 64);
-        seedSlot(3, "minecraft:oak_log", 16);
-        seedSlot(4, "minecraft:coal", 32);
-        seedSlot(5, "minecraft:wooden_pickaxe", 1);
-        seedSlot(6, "minecraft:iron_sword", 1);
-        seedSlot(7, "minecraft:torch", 16);
-        seedSlot(8, "minecraft:iron_ingot", 8);
+        constexpr int hotbarItemCount = static_cast<int>(sizeof(hotbarItems) / sizeof(hotbarItems[0]));
+        for (int i = 0; i < hotbarItemCount; ++i) {
+            seedSlot(i, hotbarItems[i], hotbarCounts[i]);
+        }
+
+        constexpr int mainInventoryStart = 9;
+        constexpr int blockItemCount = static_cast<int>(sizeof(blockItems) / sizeof(blockItems[0]));
+        for (int i = 0; i < blockItemCount; ++i) {
+            const int slot = mainInventoryStart + i;
+            if (slot >= inv.capacity) {
+                break;
+            }
+            seedSlot(slot, blockItems[i]);
+        }
     } else {
         ASCIIgL::Logger::Warning("PlayerFactory: ItemRegistry missing; inventory left empty.");
     }
@@ -77,7 +121,7 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     stepSoundState.lastPosition = position;
 
     // --- Camera ---
-    glm::vec3 eyePos = position + glm::vec3(0, cam.PLAYER_EYE_HEIGHT, 0);
+    glm::vec3 eyePos = position + glm::vec3(0, cam.playerEyeHeight, 0);
     glm::vec3 lookDir = glm::vec3(0.0f, 0.0f, -1.0f);
     const unsigned screenW = ASCIIgL::Screen::GetInst().GetWidth();
     const unsigned screenH = ASCIIgL::Screen::GetInst().GetHeight();
@@ -89,7 +133,7 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
 
     // --- Head ---
     head.lookDir = lookDir;
-    head.relativePos = glm::vec3(0, cam.PLAYER_EYE_HEIGHT, 0);
+    head.relativePos = glm::vec3(0, cam.playerEyeHeight, 0);
 
     // --- Reach ---
     reach.reach = 5.0f;
