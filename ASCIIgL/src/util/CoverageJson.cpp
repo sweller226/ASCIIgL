@@ -8,12 +8,6 @@
 
 namespace ASCIIgL {
 
-static const wchar_t* DEFAULT_CHAR_RAMP = L" ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890.:,;'\"(!?)+-*/=\"";
-
-const wchar_t* CoverageJson::GetDefaultCharRamp() {
-    return DEFAULT_CHAR_RAMP;
-}
-
 namespace {
 
 static nlohmann::json s_json;
@@ -76,6 +70,9 @@ bool CoverageJson::GetIntervalForFontSize(float fontSize, CoverageInterval& out)
     if (!Load() || !s_json.contains("intervals") || !s_json["intervals"].is_array() || s_json["intervals"].empty())
         return false;
 
+    if (!s_json.contains("chars") || !s_json["chars"].is_array() || s_json["chars"].empty())
+        return false;
+
     const auto& intervals = s_json["intervals"];
     size_t bestIdx = 0;
     bool found = false;
@@ -105,15 +102,14 @@ bool CoverageJson::GetIntervalForFontSize(float fontSize, CoverageInterval& out)
     out.sizeMax = iv["sizeMax"].get<float>();
 
     const size_t jsonN = coverages.size();
-    out.coverages.reserve(jsonN);
-    for (size_t i = 0; i < jsonN; ++i)
-        out.coverages.push_back(coverages[i].get<float>());
+    if (s_json["chars"].size() < jsonN)
+        return false;
 
-    const bool hasChars = s_json.contains("chars") && s_json["chars"].is_array() && s_json["chars"].size() >= jsonN;
+    out.coverages.reserve(jsonN);
     out.chars.reserve(jsonN);
     for (size_t i = 0; i < jsonN; ++i) {
-        unsigned cp = hasChars ? s_json["chars"][i].get<unsigned>() : static_cast<unsigned>(DEFAULT_CHAR_RAMP[i]);
-        out.chars.push_back(cp);
+        out.coverages.push_back(coverages[i].get<float>());
+        out.chars.push_back(s_json["chars"][i].get<unsigned>());
     }
 
     if (iv.contains("cellPixelsX") && iv.contains("cellPixelsY")) {

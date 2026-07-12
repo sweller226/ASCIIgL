@@ -69,12 +69,12 @@ public:
     // Initialization
     // =========================================================================
     /// supersample2x: when true, 3D renders at 2x resolution and box-filters down before quantization.
-    /// charRamp: custom chars for coverage; nullptr or empty = use default ramp.
-    /// charRampCount: when using default ramp, subsample to this many chars with evenly
-    /// spaced coverage (default 10); ignored if charRamp is set.
+    /// charRamp: optional custom chars; nullptr/empty = use the "chars" array from coverage JSON.
+    /// charRampCount: when using JSON chars, subsample to this many with evenly spaced coverage;
+    /// <= 0 (default -1) keeps the full ramp. Ignored if charRamp is set.
     void Initialize(bool supersample2x = false,
                     const wchar_t* charRamp = nullptr,
-                    int charRampCount = 10);
+                    int charRampCount = -1);
     bool IsInitialized() const;
     bool GetSupersample2x() const;
 
@@ -204,7 +204,7 @@ private:
     // -------------------------------------------------------------------------
     // ASCII quantization and LUT
     // -------------------------------------------------------------------------
-    void LoadCharCoverageFromJson(const wchar_t* charRamp = nullptr, int charRampCount = 10);
+    bool LoadCharCoverageFromJson(const wchar_t* charRamp = nullptr, int charRampCount = -1);
     void PrecomputeColorLUT();
     void PrecomputeMonochromeColorLUT(Palette& palette);
     void PrecomputeMultiColorLUT(Palette& palette);

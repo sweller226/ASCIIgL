@@ -3,6 +3,7 @@
 #include <algorithm>              // std::clamp
 #include <cstring>                // strlen
 #include <sstream>                // std::ostringstream
+#include <stdexcept>
 #include <string>                 // std::wstring
 
 #include <d3dcompiler.h>
@@ -51,7 +52,10 @@ void Renderer::Initialize(bool supersample2x, const wchar_t* charRamp, int charR
     impl_->_renderTargetWidth = screenW * scale;
     impl_->_renderTargetHeight = screenH * scale;
 
-    LoadCharCoverageFromJson(charRamp, charRampCount);
+    if (!LoadCharCoverageFromJson(charRamp, charRampCount)) {
+        Logger::Error("[Renderer] Failed to load char coverage; coverage_cleartype.json is required.");
+        throw std::runtime_error("Renderer: coverage_cleartype.json is required but was not found or invalid.");
+    }
 
     Logger::Info("[Renderer] Initializing DirectX 11...");
 

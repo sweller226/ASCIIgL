@@ -67,11 +67,12 @@ int ScreenWindowImpl::Initialize(unsigned int width, unsigned int height, float 
 
     if (!RegisterWindowClass()) return -1;
 
-    // Pixels per character cell from coverage JSON (matches CharCoverage tool); fallback if file missing
-    int cellPixelsX = 8;
-    int cellPixelsY = 16;
+    // Pixels per character cell from coverage JSON (matches CharCoverage tool)
+    int cellPixelsX = 0;
+    int cellPixelsY = 0;
     if (!CoverageJson::GetCellSizeForFontSize(fontSize, &cellPixelsX, &cellPixelsY)) {
-        Logger::Warning(L"ScreenWindowImpl: Coverage JSON not available; using default cell size 8x16.");
+        Logger::Error(L"ScreenWindowImpl: coverage_cleartype.json is required but was not found or has no interval for this font size.");
+        return -1;
     }
 
     // Get maximum window size: use primary monitor work area (desktop minus taskbar)

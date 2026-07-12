@@ -139,7 +139,7 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
     renderer.SetCCW(true);
 
     ASCIIgL::Logger::Debug("Initializing renderer...");
-    renderer.Initialize(SUPERSAMPLE_2X, nullptr, 10);
+    renderer.Initialize(SUPERSAMPLE_2X);
     if (!renderer.IsInitialized()) {
         ASCIIgL::Logger::Error("Failed to initialize renderer");
         return false;

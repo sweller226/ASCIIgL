@@ -152,64 +152,61 @@ void Renderer::DrawScreenBorderPxBuff(const unsigned short col) {
 // CHAR COVERAGE (loaded from JSON to match char_coverage tool)
 // =============================================================================
 
-static void ApplyFallbackRamp(std::vector<wchar_t>& ramp, std::vector<float>& coverage, const wchar_t* chars) {
-    ramp.clear();
-    coverage.clear();
-    for (const wchar_t* p = chars; *p; ++p) {
-        ramp.push_back(*p);
-        coverage.push_back(0.5f);
-    }
-}
-
-/// Subsample current ramp to K evenly spaced indices (for fallback when all coverage is equal).
-static void SubsampleRampByIndex(std::vector<wchar_t>& ramp, std::vector<float>& coverage, int K) {
-    const size_t n = ramp.size();
-    if (K <= 0 || static_cast<size_t>(K) >= n) return;
-    std::vector<wchar_t> out(static_cast<size_t>(K));
-    std::vector<float> outCov(static_cast<size_t>(K));
-    for (int i = 0; i < K; ++i) {
-        size_t j = (K > 1) ? (static_cast<size_t>(i) * (n - 1)) / static_cast<size_t>(K - 1) : n / 2;
-        out[static_cast<size_t>(i)] = ramp[j];
-        outCov[static_cast<size_t>(i)] = coverage[j];
-    }
-    ramp = std::move(out);
-    coverage = std::move(outCov);
-}
-
-void Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp, int charRampCount) {
+bool Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp, int charRampCount) {
     impl_->_charRamp.clear();
     impl_->_charCoverage.clear();
     impl_->_colorLUTState = ColorLUTState::NotComputed;
     impl_->_lutGpuResourcesDirty = true;
 
     const bool useCustomRamp = (charRamp && *charRamp);
-    const wchar_t* rampToUse = useCustomRamp ? charRamp : CoverageJson::GetDefaultCharRamp();
-
     float fontSize = Screen::GetInst().GetFontSize();
 
     CoverageInterval interval;
     if (!CoverageJson::GetIntervalForFontSize(fontSize, interval)) {
-        Logger::Warning("[Renderer] coverage_cleartype.json not found or has no intervals; using fallback char ramp.");
-        ApplyFallbackRamp(impl_->_charRamp, impl_->_charCoverage, rampToUse);
-        if (!useCustomRamp && charRampCount > 0)
-            SubsampleRampByIndex(impl_->_charRamp, impl_->_charCoverage, charRampCount);
-        return;
+        Logger::Error("[Renderer] coverage_cleartype.json not found or has no interval for font size " +
+                      std::to_string(fontSize) + ".");
+        return false;
     }
 
-    // Build char -> coverage map from interval (chars[i] -> coverages[i])
-    std::unordered_map<unsigned, float> charToCoverage;
-    const size_t jsonN = interval.coverages.size();
-    for (size_t i = 0; i < jsonN && i < interval.chars.size(); ++i)
-        charToCoverage[interval.chars[i]] = interval.coverages[i];
+    if (interval.chars.empty() || interval.chars.size() != interval.coverages.size()) {
+        Logger::Error("[Renderer] coverage JSON chars/coverages missing or mismatched.");
+        return false;
+    }
 
-    // Fill ramp and coverage from the requested ramp, looking up coverage from interval
-    for (const wchar_t* p = rampToUse; *p; ++p) {
-        wchar_t ch = *p;
-        unsigned cp = static_cast<unsigned>(ch);
-        auto it = charToCoverage.find(cp);
-        float cov = (it != charToCoverage.end()) ? it->second : 0.5f;
-        impl_->_charRamp.push_back(ch);
-        impl_->_charCoverage.push_back(cov);
+    if (useCustomRamp) {
+        // Custom ramp: look up each requested char's coverage from the JSON interval.
+        std::unordered_map<unsigned, float> charToCoverage;
+        for (size_t i = 0; i < interval.chars.size(); ++i)
+            charToCoverage[interval.chars[i]] = interval.coverages[i];
+
+        for (const wchar_t* p = charRamp; *p; ++p) {
+            unsigned cp = static_cast<unsigned>(*p);
+            auto it = charToCoverage.find(cp);
+            if (it == charToCoverage.end()) {
+                Logger::Error("[Renderer] Custom charRamp includes codepoint " + std::to_string(cp) +
+                              " which is not in coverage_cleartype.json.");
+                impl_->_charRamp.clear();
+                impl_->_charCoverage.clear();
+                return false;
+            }
+            impl_->_charRamp.push_back(*p);
+            impl_->_charCoverage.push_back(it->second);
+        }
+    } else {
+        // Default: use the JSON chars array paired with this interval's coverages.
+        impl_->_charRamp.reserve(interval.chars.size());
+        impl_->_charCoverage.reserve(interval.coverages.size());
+        for (size_t i = 0; i < interval.chars.size(); ++i) {
+            impl_->_charRamp.push_back(static_cast<wchar_t>(interval.chars[i]));
+            impl_->_charCoverage.push_back(interval.coverages[i]);
+        }
+    }
+
+    if (impl_->_charRamp.empty() || impl_->_charRamp.size() != impl_->_charCoverage.size()) {
+        Logger::Error("[Renderer] Char ramp empty after loading coverage JSON.");
+        impl_->_charRamp.clear();
+        impl_->_charCoverage.clear();
+        return false;
     }
 
     // Sort ramp by coverage ascending (low-coverage chars first, high last)
@@ -226,7 +223,7 @@ void Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp, int charRampCou
     impl_->_charRamp = std::move(sortedRamp);
     impl_->_charCoverage = std::move(sortedCoverage);
 
-    // When using default ramp (no custom string), optionally subsample to charRampCount chars with evenly spaced coverage
+    // When using JSON chars (no custom string), optionally subsample if charRampCount > 0
     if (!useCustomRamp && charRampCount > 0) {
         const size_t n = impl_->_charRamp.size();
         const int K = charRampCount;
@@ -293,6 +290,7 @@ void Renderer::LoadCharCoverageFromJson(const wchar_t* charRamp, int charRampCou
         }
         Logger::Debug(L"[Renderer] char coverage " + charDesc + L" => " + std::to_wstring(cov));
     }
+    return true;
 }
 
 // =============================================================================
@@ -321,11 +319,9 @@ size_t Renderer::MonochromeLuminanceToIndex(float L) const {
 void Renderer::PrecomputeColorLUT() {
     Palette& palette = Screen::GetInst().GetPalette();
     if (impl_->_colorLUTState != ColorLUTState::NotComputed) return;
-    // Ensure we have a valid char ramp so the GPU quantization pass can run (avoid "nothing renders" when JSON missing or empty)
     if (impl_->_charRamp.empty() || impl_->_charRamp.size() != impl_->_charCoverage.size()) {
-        Logger::Warning("[Renderer] Char ramp empty or size mismatch; using fallback ramp for LUT.");
-        ApplyFallbackRamp(impl_->_charRamp, impl_->_charCoverage, CoverageJson::GetDefaultCharRamp());
-        SubsampleRampByIndex(impl_->_charRamp, impl_->_charCoverage, 10);
+        Logger::Error("[Renderer] Char ramp empty or size mismatch; cannot precompute color LUT without coverage JSON.");
+        return;
     }
 
     if (Screen::GetInst().IsMonochromePalette()) {

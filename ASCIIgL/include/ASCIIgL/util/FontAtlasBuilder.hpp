@@ -20,7 +20,7 @@ struct FontAtlasBuildResult {
 /// Build font atlas using DirectWrite. One slice per character in charRamp (order preserved).
 /// \param fontPath  Path to .ttf file (e.g. res/ASCIIgL/fonts/square/square.ttf). If null or empty, uses system font "Square Modern" / "Square".
 /// \param pointSize Font size in points (same as Screen/CharCoverage).
-/// \param charRamp  Null-terminated wide string of characters (e.g. CoverageJson::GetDefaultCharRamp()).
+/// \param charRamp  Null-terminated wide string of characters (active renderer ramp / JSON chars).
 /// \param cellPixelsX  Cell width in pixels (e.g. from CoverageJson::GetCellSizeForFontSize).
 /// \param cellPixelsY  Cell height in pixels.
 /// \return Build result with slices for Texture2DArray upload; success false on failure.
