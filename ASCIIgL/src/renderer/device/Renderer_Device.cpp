@@ -17,6 +17,7 @@
 
 #include "renderer/resources/ShaderCompilerInternal.hpp"
 #include "renderer/core/RendererImpl.hpp"
+#include "renderer/device/BlueNoise64.hpp"
 
 namespace ASCIIgL {
 
@@ -98,6 +99,11 @@ void Renderer::Initialize(bool supersample2x, const wchar_t* charRamp, int charR
 
     if (!InitializeQuantizationShaders()) {
         Logger::Error("[Renderer] Failed to initialize quantization shaders");
+        return;
+    }
+
+    if (!InitializeBlueNoiseTexture()) {
+        Logger::Error("[Renderer] Failed to initialize blue noise texture");
         return;
     }
 
@@ -367,7 +373,7 @@ bool Renderer::InitializeDepthStencil() {
         return false;
     }
 
-    // No-depth state (depth test disabled)
+    // No-depth state (depth test disabled, no writes) — used by fullscreen passes
     dsDesc.DepthEnable = FALSE;
     dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
     hr = impl_->_device->CreateDepthStencilState(&dsDesc, &impl_->_depthStencilStateNoTest);
@@ -387,6 +393,19 @@ bool Renderer::InitializeDepthStencil() {
         std::ostringstream ss;
         ss << std::hex << hr;
         Logger::Error("[Renderer] Failed to create no-write depth stencil state: 0x" + ss.str());
+        return false;
+    }
+
+    // Overlay HUD/GUI: never occluded by scene depth, but write near depth so depth-aware
+    // SSAA resolve does not pick samples using geometry behind the overlay.
+    dsDesc.DepthEnable = TRUE;
+    dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+    dsDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;
+    hr = impl_->_device->CreateDepthStencilState(&dsDesc, &impl_->_depthStencilStateOverlayWrite);
+    if (FAILED(hr)) {
+        std::ostringstream ss;
+        ss << std::hex << hr;
+        Logger::Error("[Renderer] Failed to create overlay depth stencil state: 0x" + ss.str());
         return false;
     }
 
@@ -605,6 +624,7 @@ const char* QUANTIZATION_PS_SRC = R"(
 Texture2D<float4> g_colorTex : register(t0);
 Texture1D<uint2>  g_monoLutTex  : register(t1);
 Texture3D<uint2>  g_multiLutTex : register(t2);
+Texture2D<float>  g_blueNoiseTex : register(t3);
 SamplerState      g_sam       : register(s0);
 
 cbuffer LUTConstants : register(b0) {
@@ -618,7 +638,10 @@ cbuffer LUTConstants : register(b0) {
     uint   _pad2;
 };
 
-static const uint BAYER4[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+// 64x64 tiled blue-noise thresholds in [0,1]. Channel offsets decorrelate RGB dither.
+static float BlueNoiseThreshold(uint px, uint py) {
+    return g_blueNoiseTex.Load(int3(int(px & 63u), int(py & 63u), 0));
+}
 
 struct PSOut {
     uint2 glyph_attr : SV_Target0;
@@ -636,7 +659,6 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
         float denom = Lmax - Lmin;
         uint px = (uint)pos.x;
         uint py = (uint)pos.y;
-        float bayerNorm = (float)(BAYER4[(py & 3u) * 4u + (px & 3u)]) / 16.0;
         float fIdx;
         if (denom < 1e-8) fIdx = 0.0;
         else if (L <= Lmin) fIdx = 0.0;
@@ -647,7 +669,8 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
             if (ditherEnabled != 0u) {
                 float base = floor(fIdxCont);
                 float fracPart = frac(fIdxCont);
-                fIdx = base + (fracPart > bayerNorm ? 1.0 : 0.0);
+                float bn = BlueNoiseThreshold(px, py);
+                fIdx = base + (fracPart > bn ? 1.0 : 0.0);
             } else {
                 fIdx = floor(fIdxCont + 0.5);
             }
@@ -664,15 +687,19 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
         if (ditherEnabled != 0u) {
             uint px = (uint)pos.x;
             uint py = (uint)pos.y;
-            float bayerNorm = (float)(BAYER4[(py & 3u) * 4u + (px & 3u)]) / 16.0;
+            float3 bn = float3(
+                BlueNoiseThreshold(px, py),
+                BlueNoiseThreshold(px + 37u, py + 17u),
+                BlueNoiseThreshold(px + 19u, py + 47u)
+            );
 
             float3 base = floor(cont);
             float3 fr   = cont - base;
 
             float3 dithered = base + float3(
-                fr.r > bayerNorm ? 1.0 : 0.0,
-                fr.g > bayerNorm ? 1.0 : 0.0,
-                fr.b > bayerNorm ? 1.0 : 0.0
+                fr.r > bn.r ? 1.0 : 0.0,
+                fr.g > bn.g ? 1.0 : 0.0,
+                fr.b > bn.b ? 1.0 : 0.0
             );
 
             rIdx = (uint)clamp(dithered.r, 0.0, maxIdx);
@@ -796,6 +823,42 @@ bool Renderer::InitializeQuantizationShaders() {
     hr = impl_->_device->CreateBuffer(&bd, &init, &impl_->_fullscreenQuadVB);
     if (FAILED(hr)) {
         Logger::Error("[Renderer] Failed to create fullscreen quad VB");
+        return false;
+    }
+
+    return true;
+}
+
+bool Renderer::InitializeBlueNoiseTexture() {
+    D3D11_TEXTURE2D_DESC texDesc = {};
+    texDesc.Width = BlueNoise::kSize;
+    texDesc.Height = BlueNoise::kSize;
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = 1;
+    texDesc.Format = DXGI_FORMAT_R8_UNORM;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.Usage = D3D11_USAGE_IMMUTABLE;
+    texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    D3D11_SUBRESOURCE_DATA srd = {};
+    srd.pSysMem = BlueNoise::kThresholds;
+    srd.SysMemPitch = BlueNoise::kSize * sizeof(std::uint8_t);
+
+    impl_->_blueNoiseTexture.Reset();
+    HRESULT hr = impl_->_device->CreateTexture2D(&texDesc, &srd, &impl_->_blueNoiseTexture);
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] Failed to create blue noise texture");
+        return false;
+    }
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = DXGI_FORMAT_R8_UNORM;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = 1;
+    impl_->_blueNoiseSRV.Reset();
+    hr = impl_->_device->CreateShaderResourceView(impl_->_blueNoiseTexture.Get(), &srvDesc, &impl_->_blueNoiseSRV);
+    if (FAILED(hr)) {
+        Logger::Error("[Renderer] Failed to create blue noise SRV");
         return false;
     }
 
@@ -989,8 +1052,9 @@ void Renderer::RunQuantizationPass() {
     }
     if (impl_->_colorLUTState == ColorLUTState::NotComputed) return;
     EnsureQuantizationResources();
-    if (!impl_->_resolvedTextureSRV || !impl_->_monochromeLUTSRV || !impl_->_colorLUTSRV) {
-        Logger::Warning("[Renderer] RunQuantizationPass skipped: resolved SRV or LUT SRVs missing.");
+    if (!impl_->_resolvedTextureSRV || !impl_->_monochromeLUTSRV || !impl_->_colorLUTSRV ||
+        !impl_->_blueNoiseSRV) {
+        Logger::Warning("[Renderer] RunQuantizationPass skipped: resolved SRV, LUT SRVs, or blue noise missing.");
         return;
     }
 
@@ -1019,9 +1083,10 @@ void Renderer::RunQuantizationPass() {
     ID3D11ShaderResourceView* srvs[] = {
         impl_->_resolvedTextureSRV.Get(),
         impl_->_monochromeLUTSRV.Get(),
-        impl_->_colorLUTSRV.Get()
+        impl_->_colorLUTSRV.Get(),
+        impl_->_blueNoiseSRV.Get()
     };
-    impl_->_context->PSSetShaderResources(0, 3, srvs);
+    impl_->_context->PSSetShaderResources(0, 4, srvs);
     impl_->_context->PSSetSamplers(0, 1, impl_->_samplerLinear.GetAddressOf());
     impl_->_context->VSSetShader(impl_->_quantizationVS.Get(), nullptr, 0);
     impl_->_context->PSSetShader(impl_->_quantizationPS.Get(), nullptr, 0);
@@ -1035,8 +1100,8 @@ void Renderer::RunQuantizationPass() {
 
     impl_->_context->Draw(6, 0);
 
-    ID3D11ShaderResourceView* nullSRVs[] = { nullptr, nullptr, nullptr };
-    impl_->_context->PSSetShaderResources(0, 3, nullSRVs);
+    ID3D11ShaderResourceView* nullSRVs[] = { nullptr, nullptr, nullptr, nullptr };
+    impl_->_context->PSSetShaderResources(0, 4, nullSRVs);
 
     // Restore main render target so next frame draws to the correct RT
     impl_->_context->OMSetRenderTargets(1, impl_->_renderTargetView.GetAddressOf(), impl_->_depthStencilView.Get());
@@ -1329,6 +1394,8 @@ void Renderer::Shutdown()
     impl_->_colorLUTSRV.Reset();
     impl_->_monochromeLUTTexture.Reset();
     impl_->_colorLUTTexture.Reset();
+    impl_->_blueNoiseSRV.Reset();
+    impl_->_blueNoiseTexture.Reset();
     impl_->_resolvedTextureSRV.Reset();
     impl_->_resolvedTextureRTV.Reset();
     impl_->_charInfoRTV.Reset();
@@ -1360,6 +1427,7 @@ void Renderer::Shutdown()
 
     impl_->_blendStateAlpha.Reset();
     impl_->_blendStateOpaque.Reset();
+    impl_->_depthStencilStateOverlayWrite.Reset();
     impl_->_depthStencilStateNoWrite.Reset();
     impl_->_depthStencilStateNoTest.Reset();
     impl_->_depthStencilState.Reset();

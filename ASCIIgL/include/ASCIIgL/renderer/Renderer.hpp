@@ -47,7 +47,7 @@ public:
         int           layer           = 0;
         bool          transparent     = false;    // false = opaque pass, true = transparent pass
         bool          backfaceCulling = true;     // per-draw cull state override
-        bool          depthTest       = true;     // false = HUD/overlay draws that must not be depth-occluded
+        bool          depthTest       = true;     // false = HUD/overlay: no occlusion test; writes near depth for SSAA
         float         sortKey         = 0.0f;     // used for transparent sorting (e.g. depth or layer)
         std::vector<UniformOverride> overrides;   // per-draw uniform overrides
     };
@@ -124,7 +124,7 @@ public:
     glm::ivec3 GetBackgroundCol() const;
     void SetBackgroundCol(const glm::ivec3& color);
 
-    /// Enables 4x4 Bayer ordered dithering for the monochrome LUT path. Default: false.
+    /// Enables blue-noise ordered dithering for LUT quantization. Default: false.
     void SetDitheringEnabled(bool enabled);
     bool GetDitheringEnabled() const;
 
@@ -192,6 +192,7 @@ private:
     bool InitializeFontAtlas();
     bool InitializeCharInfoTarget();
     bool InitializeQuantizationShaders();
+    bool InitializeBlueNoiseTexture();
     bool InitializeDownsampleShader();
     void RunDownsamplePass();
 

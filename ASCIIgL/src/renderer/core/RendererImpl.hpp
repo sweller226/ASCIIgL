@@ -53,6 +53,8 @@ struct Renderer::Impl {
     ComPtr<ID3D11DepthStencilState> _depthStencilState;
     ComPtr<ID3D11DepthStencilState> _depthStencilStateNoTest;
     ComPtr<ID3D11DepthStencilState> _depthStencilStateNoWrite;
+    // Overlay draws (depthTest=false): always pass + write so SSAA resolve sees near depth.
+    ComPtr<ID3D11DepthStencilState> _depthStencilStateOverlayWrite;
     ComPtr<ID3D11BlendState> _blendStateOpaque;
     ComPtr<ID3D11BlendState> _blendStateAlpha;
 
@@ -81,6 +83,8 @@ struct Renderer::Impl {
     ComPtr<ID3D11ShaderResourceView> _monochromeLUTSRV;
     ComPtr<ID3D11Texture3D> _colorLUTTexture;
     ComPtr<ID3D11Texture1D> _monochromeLUTTexture;
+    ComPtr<ID3D11Texture2D> _blueNoiseTexture;
+    ComPtr<ID3D11ShaderResourceView> _blueNoiseSRV;
     ComPtr<ID3D11Buffer> _lutConstantsCB;
     ComPtr<ID3D11VertexShader> _quantizationVS;
     ComPtr<ID3D11PixelShader> _quantizationPS;
