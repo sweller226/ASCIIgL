@@ -49,6 +49,7 @@ struct Renderer::Impl {
     ComPtr<ID3D11RenderTargetView> _resolvedTextureRTV;
     ComPtr<ID3D11Texture2D> _depthStencilBuffer;
     ComPtr<ID3D11DepthStencilView> _depthStencilView;
+    ComPtr<ID3D11ShaderResourceView> _depthStencilSRV;
     ComPtr<ID3D11DepthStencilState> _depthStencilState;
     ComPtr<ID3D11DepthStencilState> _depthStencilStateNoTest;
     ComPtr<ID3D11DepthStencilState> _depthStencilStateNoWrite;

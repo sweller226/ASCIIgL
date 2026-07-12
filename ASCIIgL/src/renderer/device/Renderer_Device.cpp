@@ -292,17 +292,25 @@ bool Renderer::InitializeRenderTarget() {
 }
 
 bool Renderer::InitializeDepthStencil() {
+    // SSAA downsample needs to sample depth, so the resource must be typeless with
+    // both DSV + SRV binds. Plain D24_UNORM_S8_UINT cannot be used as an SRV.
     D3D11_TEXTURE2D_DESC depthDesc = {};
     depthDesc.Width = impl_->_renderTargetWidth;
     depthDesc.Height = impl_->_renderTargetHeight;
     depthDesc.MipLevels = 1;
     depthDesc.ArraySize = 1;
-    depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    depthDesc.Format = impl_->_supersample2x
+        ? DXGI_FORMAT_R24G8_TYPELESS
+        : DXGI_FORMAT_D24_UNORM_S8_UINT;
     depthDesc.SampleDesc.Count = 1;
     depthDesc.SampleDesc.Quality = 0;
     depthDesc.Usage = D3D11_USAGE_DEFAULT;
     depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+    if (impl_->_supersample2x) {
+        depthDesc.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
+    }
 
+    impl_->_depthStencilSRV.Reset();
     impl_->_depthStencilView.Reset();
     impl_->_depthStencilBuffer.Reset();
     HRESULT hr = impl_->_device->CreateTexture2D(&depthDesc, nullptr, &impl_->_depthStencilBuffer);
@@ -313,12 +321,35 @@ bool Renderer::InitializeDepthStencil() {
         return false;
     }
 
-    hr = impl_->_device->CreateDepthStencilView(impl_->_depthStencilBuffer.Get(), nullptr, &impl_->_depthStencilView);
+    D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+    dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+    dsvDesc.Texture2D.MipSlice = 0;
+    hr = impl_->_device->CreateDepthStencilView(
+        impl_->_depthStencilBuffer.Get(),
+        impl_->_supersample2x ? &dsvDesc : nullptr,
+        &impl_->_depthStencilView);
     if (FAILED(hr)) {
         std::ostringstream ss;
         ss << std::hex << hr;
         Logger::Error("[Renderer] Failed to create depth stencil view: 0x" + ss.str());
         return false;
+    }
+
+    if (impl_->_supersample2x) {
+        D3D11_SHADER_RESOURCE_VIEW_DESC depthSrvDesc = {};
+        depthSrvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+        depthSrvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        depthSrvDesc.Texture2D.MipLevels = 1;
+        depthSrvDesc.Texture2D.MostDetailedMip = 0;
+        hr = impl_->_device->CreateShaderResourceView(
+            impl_->_depthStencilBuffer.Get(), &depthSrvDesc, &impl_->_depthStencilSRV);
+        if (FAILED(hr)) {
+            std::ostringstream ss;
+            ss << std::hex << hr;
+            Logger::Error("[Renderer] Failed to create depth stencil SRV: 0x" + ss.str());
+            return false;
+        }
     }
 
     // Create depth stencil state
@@ -661,17 +692,37 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
 
 const char* DOWNSAMPLE_PS_SRC = R"(
 Texture2D<float4> g_source : register(t0);
+Texture2D<float>  g_depth  : register(t1);
 
 float4 main(float4 pos : SV_Position) : SV_Target {
     int x = (int)pos.x;
     int y = (int)pos.y;
     int hx = x * 2;
     int hy = y * 2;
+
     float4 c00 = g_source.Load(int3(hx,     hy,     0));
     float4 c10 = g_source.Load(int3(hx + 1, hy,     0));
     float4 c01 = g_source.Load(int3(hx,     hy + 1, 0));
     float4 c11 = g_source.Load(int3(hx + 1, hy + 1, 0));
-    return (c00 + c10 + c01 + c11) * 0.25;
+
+    float d00 = g_depth.Load(int3(hx,     hy,     0));
+    float d10 = g_depth.Load(int3(hx + 1, hy,     0));
+    float d01 = g_depth.Load(int3(hx,     hy + 1, 0));
+    float d11 = g_depth.Load(int3(hx + 1, hy + 1, 0));
+
+    // Smaller depth = closer. Average only hi-res samples at the nearest depth so
+    // background/sky does not bleed into foreground silhouettes during SSAA resolve.
+    float minDepth = min(min(d00, d10), min(d01, d11));
+    static const float kDepthEpsilon = 1e-5;
+
+    float4 sum = float4(0.0, 0.0, 0.0, 0.0);
+    float count = 0.0;
+    if (d00 <= minDepth + kDepthEpsilon) { sum += c00; count += 1.0; }
+    if (d10 <= minDepth + kDepthEpsilon) { sum += c10; count += 1.0; }
+    if (d01 <= minDepth + kDepthEpsilon) { sum += c01; count += 1.0; }
+    if (d11 <= minDepth + kDepthEpsilon) { sum += c11; count += 1.0; }
+
+    return (count > 0.0) ? (sum / count) : ((c00 + c10 + c01 + c11) * 0.25);
 }
 )";
 
@@ -884,7 +935,8 @@ void Renderer::UploadLUTsToGPU() {
 }
 
 void Renderer::RunDownsamplePass() {
-    if (!impl_->_renderTargetSRV || !impl_->_resolvedTextureRTV || !impl_->_downsamplePS) {
+    if (!impl_->_renderTargetSRV || !impl_->_depthStencilSRV || !impl_->_resolvedTextureRTV ||
+        !impl_->_downsamplePS) {
         Logger::Warning("[Renderer] RunDownsamplePass skipped: SSAA resources missing.");
         return;
     }
@@ -907,8 +959,11 @@ void Renderer::RunDownsamplePass() {
     vp.MaxDepth = 1.f;
     impl_->_context->RSSetViewports(1, &vp);
 
-    ID3D11ShaderResourceView* srvs[] = { impl_->_renderTargetSRV.Get() };
-    impl_->_context->PSSetShaderResources(0, 1, srvs);
+    ID3D11ShaderResourceView* srvs[] = {
+        impl_->_renderTargetSRV.Get(),
+        impl_->_depthStencilSRV.Get(),
+    };
+    impl_->_context->PSSetShaderResources(0, 2, srvs);
     impl_->_context->VSSetShader(impl_->_quantizationVS.Get(), nullptr, 0);
     impl_->_context->PSSetShader(impl_->_downsamplePS.Get(), nullptr, 0);
     impl_->_context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -919,8 +974,8 @@ void Renderer::RunDownsamplePass() {
 
     impl_->_context->Draw(6, 0);
 
-    ID3D11ShaderResourceView* nullSRV = nullptr;
-    impl_->_context->PSSetShaderResources(0, 1, &nullSRV);
+    ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
+    impl_->_context->PSSetShaderResources(0, 2, nullSRVs);
 
     impl_->_context->OMSetRenderTargets(1, impl_->_renderTargetView.GetAddressOf(), impl_->_depthStencilView.Get());
     InvalidateBoundState();
@@ -1308,6 +1363,7 @@ void Renderer::Shutdown()
     impl_->_depthStencilStateNoWrite.Reset();
     impl_->_depthStencilStateNoTest.Reset();
     impl_->_depthStencilState.Reset();
+    impl_->_depthStencilSRV.Reset();
     impl_->_depthStencilView.Reset();
     impl_->_depthStencilBuffer.Reset();
     impl_->_renderTargetView.Reset();
