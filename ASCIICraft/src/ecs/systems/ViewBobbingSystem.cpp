@@ -1,5 +1,6 @@
 #include <ASCIICraft/ecs/systems/ViewBobbingSystem.hpp>
 
+#include <ASCIICraft/ecs/components/HandSwing.hpp>
 #include <ASCIICraft/ecs/components/PlayerController.hpp>
 #include <ASCIICraft/ecs/components/PhysicsBody.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
@@ -21,6 +22,16 @@ ViewBobbingSystem::ViewBobbingSystem(entt::registry& registry)
 
 void ViewBobbingSystem::Update() {
     const float dt = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
+
+    // Advance held-item swings (triggered by mining/placing, drawn by HeldItemRenderSystem).
+    for (auto [ent, swing] : m_registry.view<components::HandSwing>().each()) {
+        if (!swing.swinging) continue;
+        swing.progress += dt / components::HandSwing::kSwingDurationSeconds;
+        if (swing.progress >= 1.0f) {
+            swing.swinging = false;
+            swing.progress = 0.0f;
+        }
+    }
 
     auto view = m_registry.view<
         components::ViewBobbing,

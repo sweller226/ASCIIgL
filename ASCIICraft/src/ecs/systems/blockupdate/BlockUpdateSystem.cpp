@@ -79,7 +79,8 @@ namespace ecs::systems {
             chunkManager->SetBlockState(e.position, blockstate::BlockStateRegistry::AIR_STATE_ID);
             RefreshFenceNeighbors(*bsr, *chunkManager, e.position);
 
-            if (itemRegistry->Resolve(type.name) != entt::null) {
+            // Mining without a sufficient tool breaks the block but yields no drop.
+            if (e.harvested && itemRegistry->Resolve(type.name) != entt::null) {
                 factories::ItemFactory itemFactory(m_registry);
                 itemFactory.createDroppedItemByName(type.name, 1, BlockDropPosition(e.position));
             }

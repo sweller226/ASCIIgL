@@ -38,6 +38,17 @@ const std::vector<CatalogEntry>& GetBlockTextureCatalog() {
         {"minecraft:blocks/tallgrass",         "res/textures/blocks/tallgrass.png", &kGrassTintHue},
         {"minecraft:blocks/wool_colored_blue", "res/textures/blocks/blue_wool.png", nullptr, 0.0f},
         {"minecraft:blocks/wool_colored_green", "res/textures/blocks/green_wool.png", nullptr, 0.0f},
+        // Mining crack overlay stages (paletteWeight 0: don't skew palette clustering).
+        {"minecraft:blocks/destroy_stage_0",   "res/textures/blocks/destroy_stage_0.png", nullptr, 0.0f},
+        {"minecraft:blocks/destroy_stage_1",   "res/textures/blocks/destroy_stage_1.png", nullptr, 0.0f},
+        {"minecraft:blocks/destroy_stage_2",   "res/textures/blocks/destroy_stage_2.png", nullptr, 0.0f},
+        {"minecraft:blocks/destroy_stage_3",   "res/textures/blocks/destroy_stage_3.png", nullptr, 0.0f},
+        {"minecraft:blocks/destroy_stage_4",   "res/textures/blocks/destroy_stage_4.png", nullptr, 0.0f},
+        {"minecraft:blocks/destroy_stage_5",   "res/textures/blocks/destroy_stage_5.png", nullptr, 0.0f},
+        {"minecraft:blocks/destroy_stage_6",   "res/textures/blocks/destroy_stage_6.png", nullptr, 0.0f},
+        {"minecraft:blocks/destroy_stage_7",   "res/textures/blocks/destroy_stage_7.png", nullptr, 0.0f},
+        {"minecraft:blocks/destroy_stage_8",   "res/textures/blocks/destroy_stage_8.png", nullptr, 0.0f},
+        {"minecraft:blocks/destroy_stage_9",   "res/textures/blocks/destroy_stage_9.png", nullptr, 0.0f},
     };
     return kCatalog;
 }

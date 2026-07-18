@@ -1,9 +1,5 @@
 #pragma once
 
-#include <cstdint>
-#include <string>
-#include <unordered_map>
-
 #include <entt/entt.hpp>
 #include <glm/glm.hpp>
 
@@ -33,10 +29,7 @@ public:
     void Update() override;
 
 private:
-    void RebuildStepSoundMap(const blockstate::BlockStateRegistry& bsr);
     void UpdateStepSounds(float deltaTime);
-
-    std::string ResolveStepSoundId(uint16_t typeId, const blockstate::BlockStateRegistry& bsr) const;
 
     bool TryEmitStepSound(
         entt::entity ent,
@@ -48,15 +41,8 @@ private:
         util::RNG& rng
     ) const;
 
-    void MapType(const blockstate::BlockStateRegistry& bsr, const char* typeName, const char* soundId);
-
-    static constexpr const char* DEFAULT_STEP_SOUND_ID = "step.stone";
-
     entt::registry&    m_registry;
     ASCIIgL::EventBus& m_eventBus;
-
-    std::unordered_map<uint16_t, std::string> m_stepSoundByTypeId;
-    bool m_mapBuilt = false;
 };
 
 } // namespace ecs::systems

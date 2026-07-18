@@ -43,6 +43,7 @@
 #include <ASCIICraft/ecs/systems/DroppedItemSystem.hpp>
 #include <ASCIICraft/ecs/systems/HotbarSystem.hpp>
 #include <ASCIICraft/ecs/systems/BlockTargetSystem.hpp>
+#include <ASCIICraft/ecs/systems/BreakOverlayRenderSystem.hpp>
 
 // event systems
 #include <ASCIIgL/util/EventBus.hpp>
@@ -91,6 +92,7 @@ private:
     ecs::systems::CameraSystem cameraSystem;
     ecs::systems::PhysicsSystem physicsSystem;
     ecs::systems::BlockTargetSystem blockTargetSystem;
+    ecs::systems::BreakOverlayRenderSystem breakOverlayRenderSystem;
     ecs::systems::EntityRenderSystem entityRenderSystem;
     ecs::systems::HeldItemRenderSystem heldItemRenderSystem;
     ecs::systems::LifetimeSystem lifetimeSystem;
@@ -136,6 +138,7 @@ private:
     bool LoadGUIBlockMaterial();
     bool LoadGUITextMaterial();
     bool LoadBlockTargetOutlineMaterial();
+    bool LoadBreakOverlayMaterial();
     bool LoadFont();
 
     bool LoadTextures(bool multicolor);

@@ -86,6 +86,11 @@ const BlockType& BlockStateRegistry::GetType(uint16_t typeId) const {
     return types[typeId];
 }
 
+BlockType& BlockStateRegistry::GetTypeMutable(uint16_t typeId) {
+    assert(typeId < types.size() && "Invalid typeId");
+    return types[typeId];
+}
+
 uint16_t BlockStateRegistry::GetTypeId(const std::string& name) const {
     auto it = nameToType.find(name);
     if (it == nameToType.end()) {

@@ -1,6 +1,7 @@
 #include <ASCIICraft/ecs/systems/blockupdate/PlacingSystem.hpp>
 
 #include <ASCIICraft/ecs/components/BlockTarget.hpp>
+#include <ASCIICraft/ecs/components/HandSwing.hpp>
 #include <ASCIICraft/ecs/components/Head.hpp>
 #include <ASCIICraft/ecs/components/HotbarSelection.hpp>
 #include <ASCIICraft/ecs/components/Inventory.hpp>
@@ -145,6 +146,10 @@ void PlacingSystem::PlayerPlace() {
         m_eventBus.emit(events::InventoryChangedEvent{
             playerEnt, slotIndex, oldStack, inventory->slots[slotIndex]
         });
+
+        if (auto* swing = m_registry.try_get<components::HandSwing>(playerEnt)) {
+            swing->Trigger();
+        }
         break;
     }
 }
