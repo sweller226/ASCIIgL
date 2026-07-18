@@ -3,6 +3,9 @@
 #include <ASCIIgL/renderer/screen/ScreenImpl.hpp>
 #include <vector>
 #include <string>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -20,6 +23,21 @@ class ScreenTerminalImpl : public ScreenImpl {
 private:
     Screen& screen;
     std::vector<CHAR_INFO> _pixelBuffer;
+
+    // Presenter thread: WriteConsoleOutputW is a blocking RPC into the console host,
+    // so it runs on its own thread while the game thread starts the next frame.
+    // OutputBuffer() copies _pixelBuffer into _presentBuffer (overwriting any frame the
+    // presenter hasn't picked up yet, i.e. frames are dropped rather than blocking).
+    std::thread _presenterThread;
+    std::mutex _presentMutex;
+    std::condition_variable _presentCV;
+    std::vector<CHAR_INFO> _presentBuffer; // pending frame, guarded by _presentMutex
+    std::vector<CHAR_INFO> _writeBuffer;   // presenter-owned during WriteConsoleOutputW
+    bool _framePending = false;
+    bool _presenterExit = false;
+
+    void PresenterLoop();
+    void StopPresenter();
 
 public:
     HANDLE _hOutput = nullptr;

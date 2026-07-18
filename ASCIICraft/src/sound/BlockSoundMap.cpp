@@ -5,10 +5,24 @@
 namespace sound {
 
 namespace {
-const std::string kDefaultStepSoundId = "step.stone";
+const std::string kDefaultFamily = "stone";
 }
 
-const std::string& BlockSoundMap::ResolveStepSoundId(
+std::string BlockSoundMap::ResolveStepSoundId(
+    uint16_t typeId,
+    const blockstate::BlockStateRegistry& bsr
+) {
+    return "step." + ResolveFamily(typeId, bsr);
+}
+
+std::string BlockSoundMap::ResolveDigSoundId(
+    uint16_t typeId,
+    const blockstate::BlockStateRegistry& bsr
+) {
+    return "dig." + ResolveFamily(typeId, bsr);
+}
+
+const std::string& BlockSoundMap::ResolveFamily(
     uint16_t typeId,
     const blockstate::BlockStateRegistry& bsr
 ) {
@@ -16,68 +30,71 @@ const std::string& BlockSoundMap::ResolveStepSoundId(
         Build(bsr);
     }
 
-    const auto it = m_soundByTypeId.find(typeId);
-    if (it != m_soundByTypeId.end()) {
+    const auto it = m_familyByTypeId.find(typeId);
+    if (it != m_familyByTypeId.end()) {
         return it->second;
     }
 
     // Name-based fallback, cached so the string search runs once per type.
-    std::string resolved = kDefaultStepSoundId;
+    std::string resolved = kDefaultFamily;
     if (typeId < bsr.GetTotalTypeCount()) {
         const std::string& name = bsr.GetType(typeId).name;
         if (name.find("grass") != std::string::npos || name.find("leaves") != std::string::npos) {
-            resolved = "step.grass";
+            resolved = "grass";
         } else if (name.find("dirt") != std::string::npos || name.find("gravel") != std::string::npos) {
-            resolved = "step.gravel";
+            resolved = "gravel";
         } else if (name.find("log") != std::string::npos || name.find("planks") != std::string::npos ||
                    name.find("wood") != std::string::npos || name.find("fence") != std::string::npos) {
-            resolved = "step.wood";
+            resolved = "wood";
         } else if (name.find("sand") != std::string::npos) {
-            resolved = "step.sand";
+            resolved = "sand";
         } else if (name.find("snow") != std::string::npos) {
-            resolved = "step.snow";
+            resolved = "snow";
         } else if (name.find("wool") != std::string::npos || name.find("carpet") != std::string::npos) {
-            resolved = "step.cloth";
+            resolved = "cloth";
         }
     }
 
-    return m_soundByTypeId.emplace(typeId, std::move(resolved)).first->second;
+    return m_familyByTypeId.emplace(typeId, std::move(resolved)).first->second;
 }
 
 void BlockSoundMap::MapType(
     const blockstate::BlockStateRegistry& bsr,
     const char* typeName,
-    const char* soundId
+    const char* family
 ) {
     const uint16_t typeId = bsr.GetTypeId(typeName);
-    m_soundByTypeId[typeId] = soundId;
+    m_familyByTypeId[typeId] = family;
 }
 
 void BlockSoundMap::Build(const blockstate::BlockStateRegistry& bsr) {
-    m_soundByTypeId.clear();
+    m_familyByTypeId.clear();
 
-    MapType(bsr, "minecraft:grass", "step.grass");
-    MapType(bsr, "minecraft:dirt", "step.gravel");
-    MapType(bsr, "minecraft:tall_grass", "step.grass");
-    MapType(bsr, "minecraft:fern", "step.grass");
-    MapType(bsr, "minecraft:dandelion", "step.grass");
-    MapType(bsr, "minecraft:poppy", "step.grass");
+    MapType(bsr, "minecraft:grass", "grass");
+    MapType(bsr, "minecraft:dirt", "gravel");
+    MapType(bsr, "minecraft:tall_grass", "grass");
+    MapType(bsr, "minecraft:fern", "grass");
+    MapType(bsr, "minecraft:dandelion", "grass");
+    MapType(bsr, "minecraft:poppy", "grass");
 
-    MapType(bsr, "minecraft:oak_stairs", "step.wood");
-    MapType(bsr, "minecraft:stone_stairs", "step.stone");
-    MapType(bsr, "minecraft:cobblestone", "step.stone");
-    MapType(bsr, "minecraft:cobblestone_slab", "step.stone");
-    MapType(bsr, "minecraft:glass", "step.stone");
+    MapType(bsr, "minecraft:oak_stairs", "wood");
+    MapType(bsr, "minecraft:stone_stairs", "stone");
+    MapType(bsr, "minecraft:cobblestone", "stone");
+    MapType(bsr, "minecraft:cobblestone_slab", "stone");
+    MapType(bsr, "minecraft:glass", "stone");
 
-    MapType(bsr, "minecraft:oak_log", "step.wood");
-    MapType(bsr, "minecraft:oak_planks", "step.wood");
-    MapType(bsr, "minecraft:oak_slab", "step.wood");
-    MapType(bsr, "minecraft:fence", "step.wood");
-    MapType(bsr, "minecraft:crafting_table", "step.wood");
-    MapType(bsr, "minecraft:bookshelf", "step.wood");
-    MapType(bsr, "minecraft:furnace", "step.wood");
+    MapType(bsr, "minecraft:oak_log", "wood");
+    MapType(bsr, "minecraft:oak_planks", "wood");
+    MapType(bsr, "minecraft:oak_slab", "wood");
+    MapType(bsr, "minecraft:fence", "wood");
+    MapType(bsr, "minecraft:crafting_table", "wood");
+    MapType(bsr, "minecraft:bookshelf", "wood");
+    MapType(bsr, "minecraft:furnace", "wood");
 
-    MapType(bsr, "minecraft:oak_leaves", "step.grass");
+    MapType(bsr, "minecraft:oak_leaves", "grass");
+
+    MapType(bsr, "minecraft:blue_wool", "cloth");
+    MapType(bsr, "minecraft:green_wool", "cloth");
 
     m_built = true;
 }

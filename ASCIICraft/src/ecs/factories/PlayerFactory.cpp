@@ -65,6 +65,7 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
             "minecraft:fence",
             "minecraft:oak_stairs",
             "minecraft:cobblestone",
+            "minecraft:stone",
             "minecraft:stone_stairs",
             "minecraft:dirt",
             "minecraft:grass",

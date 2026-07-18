@@ -155,5 +155,5 @@ private:
     static inline int SCREEN_HEIGHT = 300;
     static constexpr bool SUPERSAMPLE_2X = true;
     static constexpr float FONT_SIZE = 3.0f;
-    static constexpr float TARGET_FPS = 60.0f;
+    static constexpr float TARGET_FPS = 120.0f;
 };

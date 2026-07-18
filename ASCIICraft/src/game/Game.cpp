@@ -894,6 +894,7 @@ void Game::InitializeBlockStates() {
     registerJsonBackedOrLog("minecraft:oak_stairs");
 
     registerOpaqueJsonBacked("minecraft:cobblestone");
+    registerOpaqueJsonBacked("minecraft:stone");
 
     bsr.RegisterType("minecraft:stone_stairs", {
         blockstate::BlockProperty{ "facing", { "east", "west", "south", "north" } },
@@ -1034,6 +1035,7 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterBlockItem(registry, "minecraft:fence",            "Oak Fence");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_stairs",       "Oak Stairs");
     itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone",    "Cobblestone");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:stone",          "Stone");
     itemRegistry.RegisterBlockItem(registry, "minecraft:stone_stairs",   "Cobblestone Stairs");
     itemRegistry.RegisterBlockItem(registry, "minecraft:dirt",             "Dirt");
     itemRegistry.RegisterBlockItem(registry, "minecraft:grass",            "Grass Block");

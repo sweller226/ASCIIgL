@@ -71,7 +71,7 @@ bool StepSFXSystem::TryEmitStepSound(
     }
 
     const uint16_t typeId = bsr.GetTypeIdFromStateOr(floorBlock.stateId, 0);
-    const std::string& soundId = soundMap->ResolveStepSoundId(typeId, bsr);
+    const std::string soundId = soundMap->ResolveStepSoundId(typeId, bsr);
     if (!soundRegistry.Has(soundId)) {
         ASCIIgL::Logger::Warningf("[StepSFXSystem] Unregistered step sound id: %s", soundId.c_str());
         return false;

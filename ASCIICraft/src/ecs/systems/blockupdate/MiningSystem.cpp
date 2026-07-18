@@ -197,13 +197,13 @@ void MiningSystem::EmitHitEffects(
     hitEvent.face = face;
     m_eventBus.emit(hitEvent);
 
-    // Dig loop: vanilla reuses the block's step sound, quieter and lower-pitched.
+    // Hit loop: vanilla reuses the block's step sound, quieter and lower-pitched.
     const auto* bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
     auto* soundMap = m_registry.ctx().find<sound::BlockSoundMap>();
     const auto* soundRegistry = m_registry.ctx().find<sound::SoundRegistry>();
     if (bsr && soundMap && soundRegistry) {
         const uint16_t typeId = bsr->GetTypeIdFromStateOr(mining.stateId, 0);
-        const std::string& soundId = soundMap->ResolveStepSoundId(typeId, *bsr);
+        const std::string soundId = soundMap->ResolveStepSoundId(typeId, *bsr);
         if (soundRegistry->Has(soundId)) {
             m_eventBus.emit(events::PlaySoundEvent{soundId, playerEnt, 0.25f, 0.5f});
         }
@@ -217,8 +217,13 @@ void MiningSystem::EmitBreakSound(entt::entity playerEnt, uint32_t stateId) {
     if (!bsr || !soundMap || !soundRegistry) return;
 
     const uint16_t typeId = bsr->GetTypeIdFromStateOr(stateId, 0);
-    const std::string& soundId = soundMap->ResolveStepSoundId(typeId, *bsr);
-    if (!soundRegistry->Has(soundId)) return;
+    // Vanilla plays the dedicated dig/break sound on destroy (step sounds are
+    // only used for the hit loop while mining).
+    std::string soundId = soundMap->ResolveDigSoundId(typeId, *bsr);
+    if (!soundRegistry->Has(soundId)) {
+        soundId = soundMap->ResolveStepSoundId(typeId, *bsr);
+        if (!soundRegistry->Has(soundId)) return;
+    }
 
     m_eventBus.emit(events::PlaySoundEvent{soundId, playerEnt, 1.0f, 0.8f});
 }

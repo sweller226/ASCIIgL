@@ -1,6 +1,7 @@
 #include <ASCIIgL/renderer/screen/ScreenTerminalImpl.hpp>
 
 #include <algorithm>
+#include <cstring>
 #include <string>
 #include <thread>
 #include <algorithm>
@@ -52,6 +53,7 @@ ScreenTerminalImpl::ScreenTerminalImpl(Screen& screenRef)
 }
 
 ScreenTerminalImpl::~ScreenTerminalImpl() {
+    StopPresenter();
     SetConsoleCtrlHandler(ConsoleCtrlHandler, FALSE);
     if (_hOutput != nullptr && _hOutput != INVALID_HANDLE_VALUE) {
         CloseHandle(_hOutput);
@@ -155,6 +157,11 @@ int ScreenTerminalImpl::Initialize(const unsigned int width, const unsigned int 
 
     Logger::Debug(L"Creating pixel buffer.");
 	_pixelBuffer.resize(adjustedWidth * adjustedHeight);
+    _presentBuffer.resize(_pixelBuffer.size());
+    _writeBuffer.resize(_pixelBuffer.size());
+
+    Logger::Debug(L"Starting console presenter thread.");
+    _presenterThread = std::thread(&ScreenTerminalImpl::PresenterLoop, this);
 
     SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
     return 0;
@@ -165,7 +172,45 @@ void ScreenTerminalImpl::ClearPixelBuffer() {
 }
 
 void ScreenTerminalImpl::OutputBuffer() {
-    WriteConsoleOutputW(_hOutput, _pixelBuffer.data(), dwBufferSize, dwBufferCoord, &rcRegion);
+    // Hand the completed frame to the presenter thread and return immediately.
+    // If the presenter is still writing the previous frame, the pending (not yet
+    // picked up) frame is overwritten: the game never blocks on the console.
+    {
+        std::lock_guard<std::mutex> lock(_presentMutex);
+        std::memcpy(_presentBuffer.data(), _pixelBuffer.data(), _pixelBuffer.size() * sizeof(CHAR_INFO));
+        _framePending = true;
+    }
+    _presentCV.notify_one();
+}
+
+void ScreenTerminalImpl::PresenterLoop() {
+    for (;;) {
+        {
+            std::unique_lock<std::mutex> lock(_presentMutex);
+            _presentCV.wait(lock, [this] { return _framePending || _presenterExit; });
+            if (_presenterExit) {
+                return;
+            }
+            std::swap(_writeBuffer, _presentBuffer);
+            _framePending = false;
+        }
+
+        // WriteConsoleOutputW may clip the write region in-place; pass a copy so the
+        // shared rcRegion stays intact.
+        SMALL_RECT region = rcRegion;
+        WriteConsoleOutputW(_hOutput, _writeBuffer.data(), dwBufferSize, dwBufferCoord, &region);
+    }
+}
+
+void ScreenTerminalImpl::StopPresenter() {
+    {
+        std::lock_guard<std::mutex> lock(_presentMutex);
+        _presenterExit = true;
+    }
+    _presentCV.notify_one();
+    if (_presenterThread.joinable()) {
+        _presenterThread.join();
+    }
 }
 
 void ScreenTerminalImpl::RenderTabTitle() {

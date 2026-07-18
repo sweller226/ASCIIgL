@@ -59,6 +59,69 @@ void RegisterDefaultSounds(SoundRegistry& registry) {
         "res/sounds/step/cloth4.ogg",
     });
 
+    registry.Register("dig.grass", {
+        "res/sounds/dig/grass1.ogg",
+        "res/sounds/dig/grass2.ogg",
+        "res/sounds/dig/grass3.ogg",
+        "res/sounds/dig/grass4.ogg",
+    });
+
+    registry.Register("dig.gravel", {
+        "res/sounds/dig/gravel1.ogg",
+        "res/sounds/dig/gravel2.ogg",
+        "res/sounds/dig/gravel3.ogg",
+        "res/sounds/dig/gravel4.ogg",
+    });
+
+    registry.Register("dig.wood", {
+        "res/sounds/dig/wood1.ogg",
+        "res/sounds/dig/wood2.ogg",
+        "res/sounds/dig/wood3.ogg",
+        "res/sounds/dig/wood4.ogg",
+    });
+
+    registry.Register("dig.stone", {
+        "res/sounds/dig/stone1.ogg",
+        "res/sounds/dig/stone2.ogg",
+        "res/sounds/dig/stone3.ogg",
+        "res/sounds/dig/stone4.ogg",
+    });
+
+    registry.Register("dig.sand", {
+        "res/sounds/dig/sand1.ogg",
+        "res/sounds/dig/sand2.ogg",
+        "res/sounds/dig/sand3.ogg",
+        "res/sounds/dig/sand4.ogg",
+    });
+
+    registry.Register("dig.snow", {
+        "res/sounds/dig/snow1.ogg",
+        "res/sounds/dig/snow2.ogg",
+        "res/sounds/dig/snow3.ogg",
+        "res/sounds/dig/snow4.ogg",
+    });
+
+    registry.Register("dig.cloth", {
+        "res/sounds/dig/cloth1.ogg",
+        "res/sounds/dig/cloth2.ogg",
+        "res/sounds/dig/cloth3.ogg",
+        "res/sounds/dig/cloth4.ogg",
+    });
+
+    registry.Register("dig.coral", {
+        "res/sounds/dig/coral1.ogg",
+        "res/sounds/dig/coral2.ogg",
+        "res/sounds/dig/coral3.ogg",
+        "res/sounds/dig/coral4.ogg",
+    });
+
+    registry.Register("dig.wet_grass", {
+        "res/sounds/dig/wet_grass1.ogg",
+        "res/sounds/dig/wet_grass2.ogg",
+        "res/sounds/dig/wet_grass3.ogg",
+        "res/sounds/dig/wet_grass4.ogg",
+    });
+
     registry.Register("music.game.calm1", "res/sounds/music/game/calm1.ogg");
     registry.Register("music.game.calm2", "res/sounds/music/game/calm2.ogg");
     registry.Register("music.game.calm3", "res/sounds/music/game/calm3.ogg");
