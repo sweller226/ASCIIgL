@@ -25,30 +25,34 @@ static const glm::vec3 kRightHandOffset{0.56f, -0.52f, -0.72f};
 constexpr int kHeldItemLayer = 1;
 constexpr float kPi = 3.14159265358979f;
 
-/// Minecraft's first-person swing (ItemRenderer.transformFirstPerson):
-/// a translation arc plus rotations driven by sin curves of the progress.
-glm::mat4 BuildSwingMatrix(float progress) {
+/// Minecraft first-person item swing rotations (ItemInHandRenderer.applyItemArmAttackTransform).
+glm::mat4 BuildSwingRotationMatrix(float progress) {
     if (progress <= 0.0f) {
         return glm::mat4(1.0f);
     }
 
+    const float f  = std::sin(progress * progress * kPi);
+    const float f1 = std::sin(std::sqrt(progress) * kPi);
+
+    glm::mat4 m(1.0f);
+    m = glm::rotate(m, glm::radians(45.0f + f * -20.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    m = glm::rotate(m, glm::radians(f1 * -20.0f),        glm::vec3(0.0f, 0.0f, 1.0f));
+    m = glm::rotate(m, glm::radians(f1 * -80.0f),        glm::vec3(1.0f, 0.0f, 0.0f));
+    m = glm::rotate(m, glm::radians(-45.0f),             glm::vec3(0.0f, 1.0f, 0.0f));
+    return m;
+}
+
+/// Vanilla swing position arc applied before equip offset (right hand).
+glm::vec3 BuildSwingArcOffset(float progress) {
+    if (progress <= 0.0f) {
+        return glm::vec3(0.0f);
+    }
     const float sqrtP = std::sqrt(progress);
-    const glm::vec3 swingTranslate(
+    return glm::vec3(
         -0.4f * std::sin(sqrtP * kPi),
          0.2f * std::sin(sqrtP * kPi * 2.0f),
         -0.2f * std::sin(progress * kPi)
     );
-
-    const float f  = std::sin(progress * progress * kPi);
-    const float f1 = std::sin(sqrtP * kPi);
-
-    glm::mat4 m = glm::translate(glm::mat4(1.0f), swingTranslate);
-    m = glm::rotate(m, glm::radians(45.0f),        glm::vec3(0.0f, 1.0f, 0.0f));
-    m = glm::rotate(m, glm::radians(f * -20.0f),   glm::vec3(0.0f, 1.0f, 0.0f));
-    m = glm::rotate(m, glm::radians(f1 * -20.0f),  glm::vec3(0.0f, 0.0f, 1.0f));
-    m = glm::rotate(m, glm::radians(f1 * -80.0f),  glm::vec3(1.0f, 0.0f, 0.0f));
-    m = glm::rotate(m, glm::radians(-45.0f),       glm::vec3(0.0f, 1.0f, 0.0f));
-    return m;
 }
 
 glm::mat4 BuildHandLocalModel(
@@ -56,8 +60,10 @@ glm::mat4 BuildHandLocalModel(
     bool is2DIcon,
     float swingProgress
 ) {
-    glm::mat4 model = BuildSwingMatrix(swingProgress);
+    // Vanilla item path: swing arc, equip offset, then swing rotations (T_arc * T_hand * R).
+    glm::mat4 model = glm::translate(glm::mat4(1.0f), BuildSwingArcOffset(swingProgress));
     model = glm::translate(model, kRightHandOffset);
+    model *= BuildSwingRotationMatrix(swingProgress);
     if (heldPose) {
         model = model * heldPose->getModel();
     }

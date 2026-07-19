@@ -26,6 +26,7 @@
 #include <ASCIICraft/world/block/models/JsonModelLoader.hpp>
 #include <ASCIICraft/world/block/state/JsonBlockStateLoader.hpp>
 #include <ASCIICraft/world/block/state/VariantKey.hpp>
+#include <ASCIICraft/world/chunk/LegacyStateIdMigration.hpp>
 #include <ASCIICraft/textures/BlockTextureCatalog.hpp>
 #include <ASCIICraft/textures/ItemTextureCatalog.hpp>
 #include <ASCIICraft/textures/TextureCatalog.hpp>
@@ -1012,6 +1013,8 @@ void Game::InitializeBlockStates() {
     }
 
     blockbreak::ApplyBlockBreakData(bsr);
+
+    legacy_state_id::BuildRemapTable(bsr);
 
     ASCIIgL::Logger::Info("BlockStateRegistry: " +
         std::to_string(bsr.GetTotalTypeCount()) + " types, " +

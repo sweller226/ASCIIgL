@@ -17,6 +17,10 @@
 #include <ASCIICraft/world/chunk/CrossChunkEdit.hpp>
 #include <ASCIICraft/world/Sizes.hpp>
 
+namespace blockstate {
+class BlockStateRegistry;
+}
+
 #pragma pack(push, 1)
 
 // Region-level metadata
@@ -50,7 +54,7 @@ struct ChunkHeader {
     uint32_t version;   // Chunk format version (palette, lighting, etc.)
 };
 
-// One unique block entry in the palette
+// v1 palette entry: raw registration-order stateId
 struct SerializedBlock {
     uint32_t stateId;
     bool operator==(const SerializedBlock& other) const {
@@ -58,13 +62,14 @@ struct SerializedBlock {
     }
 };
 
+// v1 meta edit entry
 struct SerializedEdit {
     uint32_t stateId;
     uint16_t pos;
 };
 
 struct PaletteHeader {
-    uint16_t paletteSize; // Number of SerializedBlock entries
+    uint16_t paletteSize; // Number of palette entries
     uint8_t  indexBits;   // 4, 8, or 16 bits per block index
 };
 
@@ -81,6 +86,10 @@ namespace std {
 
 static constexpr uint32_t MAX_CHUNK_BLOB_SIZE = 1u << 20; // 1 MiB
 static constexpr uint32_t MAX_META_BLOB_SIZE  = 1u << 20; // 1 MiB
+
+static constexpr uint32_t CHUNK_BLOB_VERSION_V1 = 1;
+static constexpr uint32_t CHUNK_BLOB_VERSION_V2 = 2;
+static constexpr uint32_t META_BLOB_VERSION_V2 = 2;
 
 // Region file interface
 class RegionFile {
@@ -102,19 +111,25 @@ public:
     RegionFile(RegionFile&&) = delete;
     RegionFile& operator=(RegionFile&&) = delete;
 
-    bool LoadChunk(Chunk* out);
-    bool SaveChunk(const Chunk* data);
+    bool LoadChunk(Chunk* out, const blockstate::BlockStateRegistry& bsr);
+    bool SaveChunk(const Chunk* data, const blockstate::BlockStateRegistry& bsr);
 
-    bool LoadMetaData(const ChunkCoord& pos, MetaBucket* out);
-    bool SaveMetaData(const ChunkCoord& pos, const MetaBucket* data);
+    bool LoadMetaData(const ChunkCoord& pos, MetaBucket* out, const blockstate::BlockStateRegistry& bsr);
+    bool SaveMetaData(const ChunkCoord& pos, const MetaBucket* data, const blockstate::BlockStateRegistry& bsr);
 
     /// Used by unload callback: save chunk + optional meta under region lock, then optionally Close(). Thread-safe.
-    void SaveChunkForUnload(const Chunk* data, const ChunkCoord& pos, const MetaBucket* meta, bool closeAfter);
+    void SaveChunkForUnload(
+        const Chunk* data,
+        const ChunkCoord& pos,
+        const MetaBucket* meta,
+        bool closeAfter,
+        const blockstate::BlockStateRegistry& bsr
+    );
 
     /// Batch save: open once, write multiple chunks/metas, flush once. Much faster than N separate SaveChunk/SaveMetaData.
     bool BeginBatchSave();
-    void SaveChunkInBatch(const Chunk* data);
-    void SaveMetaDataInBatch(const ChunkCoord& pos, const MetaBucket* data);
+    void SaveChunkInBatch(const Chunk* data, const blockstate::BlockStateRegistry& bsr);
+    void SaveMetaDataInBatch(const ChunkCoord& pos, const MetaBucket* data, const blockstate::BlockStateRegistry& bsr);
     void EndBatchSave();
 
     const RegionCoord& GetRegionCoord() const;
@@ -152,14 +167,14 @@ private:
     void readHeaderAndIndex();
 
     /// Append one chunk/meta blob and update in-memory index. Caller must have file open (e.g. openForReadWrite or BeginBatchSave).
-    void appendChunkBlobAndUpdateIndex(const Chunk* data);
-    void appendMetaBlobAndUpdateIndex(const ChunkCoord& pos, const MetaBucket* data);
+    void appendChunkBlobAndUpdateIndex(const Chunk* data, const blockstate::BlockStateRegistry& bsr);
+    void appendMetaBlobAndUpdateIndex(const ChunkCoord& pos, const MetaBucket* data, const blockstate::BlockStateRegistry& bsr);
 
-    void parseChunkBlob(const std::vector<uint8_t>& blob, Chunk* out);
-    std::vector<uint8_t> buildChunkBlob(const Chunk* data);
+    void parseChunkBlob(const std::vector<uint8_t>& blob, Chunk* out, const blockstate::BlockStateRegistry& bsr);
+    std::vector<uint8_t> buildChunkBlob(const Chunk* data, const blockstate::BlockStateRegistry& bsr);
 
-    void parseMetaBlob(const std::vector<uint8_t>& blob, MetaBucket* out);
-    std::vector<uint8_t> buildMetaBlob(const MetaBucket* data);
+    void parseMetaBlob(const std::vector<uint8_t>& blob, MetaBucket* out, const blockstate::BlockStateRegistry& bsr);
+    std::vector<uint8_t> buildMetaBlob(const MetaBucket* data, const blockstate::BlockStateRegistry& bsr);
 };
 
 class RegionManager {

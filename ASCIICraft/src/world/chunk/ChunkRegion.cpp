@@ -1,13 +1,118 @@
 #include <ASCIICraft/world/chunk/ChunkRegion.hpp>
 
+#include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/block/state/VariantKey.hpp>
+#include <ASCIICraft/world/chunk/LegacyStateIdMigration.hpp>
+
 #include <filesystem>
 #include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <limits>
 
 #include <sstream>
 
 #include <ASCIIgL/util/Logger.hpp>
+
+namespace {
+
+void AppendBytes(std::vector<uint8_t>& buffer, const void* ptr, size_t size) {
+    const size_t old = buffer.size();
+    buffer.resize(old + size);
+    std::memcpy(buffer.data() + old, ptr, size);
+}
+
+void AppendLengthPrefixedString(std::vector<uint8_t>& buffer, const std::string& s) {
+    if (s.size() > std::numeric_limits<uint16_t>::max()) {
+        throw std::runtime_error("Serialized string exceeds uint16 length");
+    }
+    const uint16_t len = static_cast<uint16_t>(s.size());
+    AppendBytes(buffer, &len, sizeof(len));
+    if (len > 0) {
+        AppendBytes(buffer, s.data(), len);
+    }
+}
+
+std::string ReadLengthPrefixedString(const std::vector<uint8_t>& blob, size_t& pos) {
+    if (pos + sizeof(uint16_t) > blob.size()) {
+        throw std::runtime_error("Chunk/meta blob truncated (string length)");
+    }
+    uint16_t len = 0;
+    std::memcpy(&len, blob.data() + pos, sizeof(len));
+    pos += sizeof(len);
+    if (pos + len > blob.size()) {
+        throw std::runtime_error("Chunk/meta blob truncated (string data)");
+    }
+    std::string out;
+    if (len > 0) {
+        out.assign(reinterpret_cast<const char*>(blob.data() + pos), len);
+        pos += len;
+    }
+    return out;
+}
+
+bool TryParseMetaBlobV2(
+    const std::vector<uint8_t>& blob,
+    MetaBucket* out,
+    const blockstate::BlockStateRegistry& bsr
+) {
+    size_t pos = 0;
+    auto require = [&](size_t n) -> bool {
+        return pos + n <= blob.size();
+    };
+
+    if (!require(sizeof(MetaBucketHeader))) return false;
+    MetaBucketHeader mh{};
+    std::memcpy(&mh, blob.data() + pos, sizeof(mh));
+    pos += sizeof(mh);
+    if (mh.version != META_BLOB_VERSION_V2) return false;
+
+    if (!require(sizeof(uint32_t))) return false;
+    uint32_t count = 0;
+    std::memcpy(&count, blob.data() + pos, sizeof(count));
+    pos += sizeof(count);
+    // Reject absurd counts early so a v1 blob with leading dword == 2 falls back cleanly.
+    if (count > (blob.size() / 4u)) return false;
+
+    out->edits.clear();
+    out->edits.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        if (!require(sizeof(uint16_t))) return false;
+        uint16_t packedPos = 0;
+        std::memcpy(&packedPos, blob.data() + pos, sizeof(packedPos));
+        pos += sizeof(packedPos);
+
+        if (!require(sizeof(uint16_t))) return false;
+        uint16_t nameLen = 0;
+        std::memcpy(&nameLen, blob.data() + pos, sizeof(nameLen));
+        pos += sizeof(nameLen);
+        if (!require(nameLen)) return false;
+        std::string name;
+        if (nameLen > 0) {
+            name.assign(reinterpret_cast<const char*>(blob.data() + pos), nameLen);
+            pos += nameLen;
+        }
+
+        if (!require(sizeof(uint16_t))) return false;
+        uint16_t propsLen = 0;
+        std::memcpy(&propsLen, blob.data() + pos, sizeof(propsLen));
+        pos += sizeof(propsLen);
+        if (!require(propsLen)) return false;
+        std::string props;
+        if (propsLen > 0) {
+            props.assign(reinterpret_cast<const char*>(blob.data() + pos), propsLen);
+            pos += propsLen;
+        }
+
+        CrossChunkEdit e;
+        e.packedPos = packedPos;
+        e.stateId = blockstate::ResolveStateFromSerialized(bsr, name, props);
+        out->edits.push_back(e);
+    }
+    return true;
+}
+
+} // namespace
 
 // Small helpers used by the methods below
 static inline uint64_t fileSizeOnDisk(const std::string& path) {
@@ -276,7 +381,11 @@ static std::vector<uint8_t> packIndices(const std::vector<uint16_t>& indices, ui
     return out;
 }
 
-void RegionFile::parseChunkBlob(const std::vector<uint8_t>& blob, Chunk* out) {
+void RegionFile::parseChunkBlob(
+    const std::vector<uint8_t>& blob,
+    Chunk* out,
+    const blockstate::BlockStateRegistry& bsr
+) {
     size_t pos = 0;
     auto require = [&](size_t n) {
         if (pos + n > blob.size()) throw std::runtime_error("Chunk blob truncated");
@@ -292,55 +401,64 @@ void RegionFile::parseChunkBlob(const std::vector<uint8_t>& blob, Chunk* out) {
     std::memcpy(&ph, blob.data() + pos, sizeof(ph));
     pos += sizeof(ph);
 
-    // Sanity check palette size (avoid huge allocations)
     if (ph.paletteSize > 65535) throw std::runtime_error("paletteSize too large");
 
-    // Read palette
-    std::vector<SerializedBlock> palette;
-    palette.resize(ph.paletteSize);
-    if (ph.paletteSize > 0) {
-        require(palette.size() * sizeof(SerializedBlock));
-        std::memcpy(palette.data(), blob.data() + pos, palette.size() * sizeof(SerializedBlock));
-        pos += palette.size() * sizeof(SerializedBlock);
+    std::vector<uint32_t> resolvedPalette;
+    resolvedPalette.reserve(ph.paletteSize);
+
+    if (ch.version == CHUNK_BLOB_VERSION_V2) {
+        for (uint16_t i = 0; i < ph.paletteSize; ++i) {
+            const std::string name = ReadLengthPrefixedString(blob, pos);
+            const std::string props = ReadLengthPrefixedString(blob, pos);
+            resolvedPalette.push_back(blockstate::ResolveStateFromSerialized(bsr, name, props));
+        }
+    } else if (ch.version == CHUNK_BLOB_VERSION_V1 || ch.version == 0) {
+        // v1: raw numeric stateIds (version 0 tolerated for truncated/default headers)
+        require(static_cast<size_t>(ph.paletteSize) * sizeof(SerializedBlock));
+        for (uint16_t i = 0; i < ph.paletteSize; ++i) {
+            SerializedBlock sb{};
+            std::memcpy(&sb, blob.data() + pos, sizeof(sb));
+            pos += sizeof(sb);
+            resolvedPalette.push_back(legacy_state_id::RemapLegacyStateId(sb.stateId));
+        }
+    } else {
+        throw std::runtime_error("Unsupported chunk blob version: " + std::to_string(ch.version));
     }
 
-    // Remaining bytes are indices
     size_t indicesBytes = blob.size() - pos;
     const uint8_t* indicesPtr = blob.data() + pos;
 
     std::vector<uint16_t> indices;
     unpackIndices(indicesPtr, indicesBytes, ph.indexBits, static_cast<size_t>(Chunk::VOLUME), indices);
 
-    // Map indices to blocks and fill chunk
     for (size_t i = 0; i < indices.size(); ++i) {
         uint16_t idx = indices[i];
-        if (idx >= palette.size()) throw std::runtime_error("palette index out of range");
-        const SerializedBlock& sb = palette[idx];
-        out->SetBlockStateByIndex(static_cast<int>(i), sb.stateId);
+        if (idx >= resolvedPalette.size()) throw std::runtime_error("palette index out of range");
+        out->SetBlockStateByIndex(static_cast<int>(i), resolvedPalette[idx]);
     }
 }
 
-std::vector<uint8_t> RegionFile::buildChunkBlob(const Chunk* data) {
-    // Use uint16_t for map values to avoid accidental overflow and to match indices vector
-    std::unordered_map<SerializedBlock, uint16_t> paletteMap;
-    std::vector<SerializedBlock> palette;
+std::vector<uint8_t> RegionFile::buildChunkBlob(
+    const Chunk* data,
+    const blockstate::BlockStateRegistry& bsr
+) {
+    std::unordered_map<uint32_t, uint16_t> paletteMap;
+    std::vector<uint32_t> palette;
     std::vector<uint16_t> indices(Chunk::VOLUME);
 
     for (int i = 0; i < static_cast<int>(Chunk::VOLUME); ++i) {
-        uint32_t stateId = data->GetBlockStateByIndex(i);
-        SerializedBlock key{ stateId };
-        auto it = paletteMap.find(key);
+        const uint32_t stateId = data->GetBlockStateByIndex(i);
+        auto it = paletteMap.find(stateId);
         if (it == paletteMap.end()) {
-            uint16_t id = static_cast<uint16_t>(palette.size());
-            paletteMap.emplace(key, id);
-            palette.push_back(key);
+            const uint16_t id = static_cast<uint16_t>(palette.size());
+            paletteMap.emplace(stateId, id);
+            palette.push_back(stateId);
             indices[i] = id;
         } else {
             indices[i] = it->second;
         }
     }
 
-    // Enforce a reasonable palette limit (you said <=256 block types per chunk)
     if (palette.size() > 65535) throw std::runtime_error("Palette too large (unexpected)");
 
     uint8_t indexBits = 8;
@@ -348,33 +466,30 @@ std::vector<uint8_t> RegionFile::buildChunkBlob(const Chunk* data) {
     else if (palette.size() <= 256) indexBits = 8;
     else indexBits = 16;
 
-    // Defensive check: ensure palette fits in chosen indexBits
-    uint32_t maxIndex = (indexBits == 16) ? 0xFFFFu : ((1u << indexBits) - 1u);
+    const uint32_t maxIndex = (indexBits == 16) ? 0xFFFFu : ((1u << indexBits) - 1u);
     if (palette.size() - 1u > maxIndex) throw std::runtime_error("Palette size doesn't fit in chosen indexBits");
 
     std::vector<uint8_t> buffer;
-    auto append = [&](const void* ptr, size_t size) {
-        size_t old = buffer.size();
-        buffer.resize(old + size);
-        std::memcpy(buffer.data() + old, ptr, size);
-    };
 
-    ChunkHeader ch{ 1 };
-    append(&ch, sizeof(ch));
+    ChunkHeader ch{ CHUNK_BLOB_VERSION_V2 };
+    AppendBytes(buffer, &ch, sizeof(ch));
 
     PaletteHeader ph{ static_cast<uint16_t>(palette.size()), indexBits };
-    append(&ph, sizeof(ph));
+    AppendBytes(buffer, &ph, sizeof(ph));
 
-    if (!palette.empty()) append(palette.data(), palette.size() * sizeof(SerializedBlock));
+    for (const uint32_t stateId : palette) {
+        const blockstate::SerializedStateIdentity id = blockstate::SerializeState(bsr, stateId);
+        AppendLengthPrefixedString(buffer, id.name);
+        AppendLengthPrefixedString(buffer, id.props);
+    }
 
     std::vector<uint8_t> packed = packIndices(indices, indexBits);
-    if (!packed.empty()) append(packed.data(), packed.size());
+    if (!packed.empty()) AppendBytes(buffer, packed.data(), packed.size());
 
-    
     if (buffer.empty()) {
         ASCIIgL::Logger::Warning("buildChunkBlob: buffer is empty, nothing to write");
-    } 
-    
+    }
+
     if (buffer.size() > MAX_CHUNK_BLOB_SIZE) {
         ASCIIgL::Logger::Errorf("buildChunkBlob: buffer size %zu exceeds MAX_CHUNK_BLOB_SIZE %u", buffer.size(), MAX_CHUNK_BLOB_SIZE);
         throw std::runtime_error("Chunk blob too large");
@@ -383,7 +498,7 @@ std::vector<uint8_t> RegionFile::buildChunkBlob(const Chunk* data) {
     return buffer;
 }
 
-bool RegionFile::LoadChunk(Chunk* out) {
+bool RegionFile::LoadChunk(Chunk* out, const blockstate::BlockStateRegistry& bsr) {
     std::lock_guard<std::mutex> g(_mutex);
     if (!EnsureOpen()) {
         ASCIIgL::Logger::Error("LoadChunk: EnsureOpen failed");
@@ -438,12 +553,12 @@ bool RegionFile::LoadChunk(Chunk* out) {
     if (blob.size() != entry.length) return false;
 
     safeRead(_file, reinterpret_cast<char*>(blob.data()), static_cast<std::streamsize>(blob.size()), fsize, entry.offset);
-    parseChunkBlob(blob, out);
+    parseChunkBlob(blob, out, bsr);
     return true;
 }
 
 
-void RegionFile::appendChunkBlobAndUpdateIndex(const Chunk* data) {
+void RegionFile::appendChunkBlobAndUpdateIndex(const Chunk* data, const blockstate::BlockStateRegistry& bsr) {
     RegionCoord rp = data->GetCoord().ToRegionCoord();
     glm::ivec3 lp = data->GetCoord().ToLocalRegion(rp);
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
@@ -457,7 +572,7 @@ void RegionFile::appendChunkBlobAndUpdateIndex(const Chunk* data) {
         throw std::out_of_range("Local chunk coords out of region bounds");
     }
     auto& entry = chunkIndexes[off];
-    std::vector<uint8_t> raw = buildChunkBlob(data);
+    std::vector<uint8_t> raw = buildChunkBlob(data, bsr);
     _file.clear();
     _file.seekp(0, std::ios::end);
     if (!_file.good()) {
@@ -489,20 +604,20 @@ void RegionFile::appendChunkBlobAndUpdateIndex(const Chunk* data) {
     entry.flags = static_cast<uint8_t>(entry.flags | 0x1);
 }
 
-bool RegionFile::SaveChunk(const Chunk* data) {
+bool RegionFile::SaveChunk(const Chunk* data, const blockstate::BlockStateRegistry& bsr) {
     std::lock_guard<std::mutex> g(_mutex);
     if (!EnsureOpen()) {
         ASCIIgL::Logger::Error("SaveChunk: EnsureOpen failed");
         throw std::runtime_error("Failed to open region file for write");
     }
-    appendChunkBlobAndUpdateIndex(data);
+    appendChunkBlobAndUpdateIndex(data, bsr);
     writeHeaderAndIndex();
     _file.flush();
     return true;
 }
 
 
-bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out) {
+bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out, const blockstate::BlockStateRegistry& bsr) {
     std::lock_guard<std::mutex> g(_mutex);
     if (!EnsureOpen()) {
         ASCIIgL::Logger::Error("LoadMetaData: EnsureOpen failed");
@@ -558,11 +673,15 @@ bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out) {
     if (blob.size() != entry.length) return false;
 
     safeRead(_file, reinterpret_cast<char*>(blob.data()), static_cast<std::streamsize>(blob.size()), fsize, entry.offset);
-    parseMetaBlob(blob, out);
+    parseMetaBlob(blob, out, bsr);
     return true;
 }
 
-void RegionFile::appendMetaBlobAndUpdateIndex(const ChunkCoord& pos, const MetaBucket* data) {
+void RegionFile::appendMetaBlobAndUpdateIndex(
+    const ChunkCoord& pos,
+    const MetaBucket* data,
+    const blockstate::BlockStateRegistry& bsr
+) {
     RegionCoord rp = pos.ToRegionCoord();
     glm::ivec3 lp = pos.ToLocalRegion(rp);
     if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
@@ -576,7 +695,7 @@ void RegionFile::appendMetaBlobAndUpdateIndex(const ChunkCoord& pos, const MetaB
         throw std::out_of_range("Local chunk coords out of region bounds");
     }
     auto& entry = metaIndexes[off];
-    std::vector<uint8_t> raw = buildMetaBlob(data);
+    std::vector<uint8_t> raw = buildMetaBlob(data, bsr);
     if (header.metaStart == 0) {
         const size_t entryCount = static_cast<size_t>(sizes::REGION_SIZE) * sizes::REGION_SIZE * sizes::REGION_SIZE;
         const uint32_t headerSize = static_cast<uint32_t>(sizeof(RegionHeader));
@@ -621,27 +740,37 @@ void RegionFile::appendMetaBlobAndUpdateIndex(const ChunkCoord& pos, const MetaB
     entry.flags = static_cast<uint8_t>(entry.flags | 0x1);
 }
 
-bool RegionFile::SaveMetaData(const ChunkCoord& pos, const MetaBucket* data) {
+bool RegionFile::SaveMetaData(
+    const ChunkCoord& pos,
+    const MetaBucket* data,
+    const blockstate::BlockStateRegistry& bsr
+) {
     std::lock_guard<std::mutex> g(_mutex);
     if (!EnsureOpen()) {
         ASCIIgL::Logger::Error("SaveMetaData: EnsureOpen failed");
         throw std::runtime_error("Failed to open region file for write");
     }
-    appendMetaBlobAndUpdateIndex(pos, data);
+    appendMetaBlobAndUpdateIndex(pos, data, bsr);
     writeHeaderAndIndex();
     _file.flush();
     return true;
 }
 
-void RegionFile::SaveChunkForUnload(const Chunk* data, const ChunkCoord& pos, const MetaBucket* meta, bool closeAfter) {
+void RegionFile::SaveChunkForUnload(
+    const Chunk* data,
+    const ChunkCoord& pos,
+    const MetaBucket* meta,
+    bool closeAfter,
+    const blockstate::BlockStateRegistry& bsr
+) {
     std::lock_guard<std::mutex> g(_mutex);
     if (!EnsureOpen()) {
         ASCIIgL::Logger::Error("SaveChunkForUnload: EnsureOpen failed");
         throw std::runtime_error("Failed to open region file for write");
     }
-    appendChunkBlobAndUpdateIndex(data);
+    appendChunkBlobAndUpdateIndex(data, bsr);
     if (meta && !meta->edits.empty())
-        appendMetaBlobAndUpdateIndex(pos, meta);
+        appendMetaBlobAndUpdateIndex(pos, meta, bsr);
     writeHeaderAndIndex();
     _file.flush();
     if (closeAfter)
@@ -653,12 +782,16 @@ bool RegionFile::BeginBatchSave() {
     return EnsureOpen();
 }
 
-void RegionFile::SaveChunkInBatch(const Chunk* data) {
-    appendChunkBlobAndUpdateIndex(data);
+void RegionFile::SaveChunkInBatch(const Chunk* data, const blockstate::BlockStateRegistry& bsr) {
+    appendChunkBlobAndUpdateIndex(data, bsr);
 }
 
-void RegionFile::SaveMetaDataInBatch(const ChunkCoord& pos, const MetaBucket* data) {
-    appendMetaBlobAndUpdateIndex(pos, data);
+void RegionFile::SaveMetaDataInBatch(
+    const ChunkCoord& pos,
+    const MetaBucket* data,
+    const blockstate::BlockStateRegistry& bsr
+) {
+    appendMetaBlobAndUpdateIndex(pos, data, bsr);
 }
 
 void RegionFile::EndBatchSave() {
@@ -668,31 +801,41 @@ void RegionFile::EndBatchSave() {
     _batchLock.reset();
 }
 
-void RegionFile::parseMetaBlob(const std::vector<uint8_t>& blob, MetaBucket* out) {
+void RegionFile::parseMetaBlob(
+    const std::vector<uint8_t>& blob,
+    MetaBucket* out,
+    const blockstate::BlockStateRegistry& bsr
+) {
     if (!out) throw std::invalid_argument("out is null");
     out->edits.clear();
 
+    if (blob.size() < sizeof(uint32_t)) return;
+
+    // Prefer v2 when the leading dword is the version marker and the payload walks cleanly.
+    // Falls back to v1 when count happens to equal 2 but the blob is still the old numeric layout.
+    if (blob.size() >= sizeof(MetaBucketHeader) + sizeof(uint32_t)) {
+        uint32_t maybeVersion = 0;
+        std::memcpy(&maybeVersion, blob.data(), sizeof(maybeVersion));
+        if (maybeVersion == META_BLOB_VERSION_V2) {
+            MetaBucket probe;
+            if (TryParseMetaBlobV2(blob, &probe, bsr)) {
+                out->edits = std::move(probe.edits);
+                return;
+            }
+        }
+    }
+
+    // v1: raw count + SerializedEdit entries (legacy numeric stateIds)
     size_t pos = 0;
-    auto require = [&](size_t n) {
-        if (pos + n > blob.size()) throw std::runtime_error("Meta blob truncated");
-    };
-
-    // Need at least 4 bytes for count (native endianness)
-    if (blob.size() < sizeof(uint32_t)) return; // empty or invalid blob -> leave edits empty
-
-    // Read count using native endianness (memcpy)
     uint32_t count = 0;
     std::memcpy(&count, blob.data() + pos, sizeof(count));
     pos += sizeof(count);
 
-    // Each SerializedEdit is 4 bytes
     const size_t perEntry = sizeof(SerializedEdit);
     size_t availableEntries = 0;
     if (pos < blob.size()) {
         availableEntries = (blob.size() - pos) / perEntry;
     }
-
-    // Clamp count to available entries to tolerate truncated blobs
     if (count > availableEntries) count = static_cast<uint32_t>(availableEntries);
 
     out->edits.reserve(count);
@@ -703,42 +846,32 @@ void RegionFile::parseMetaBlob(const std::vector<uint8_t>& blob, MetaBucket* out
 
         CrossChunkEdit e;
         e.packedPos = se.pos;
-        e.stateId = se.stateId;
-
+        e.stateId = legacy_state_id::RemapLegacyStateId(se.stateId);
         out->edits.push_back(e);
     }
 }
 
-std::vector<uint8_t> RegionFile::buildMetaBlob(const MetaBucket* data) {
+std::vector<uint8_t> RegionFile::buildMetaBlob(
+    const MetaBucket* data,
+    const blockstate::BlockStateRegistry& bsr
+) {
     if (!data) return {};
 
     const uint32_t count = static_cast<uint32_t>(data->edits.size());
     std::vector<uint8_t> out;
-    out.reserve(sizeof(uint32_t) + count * sizeof(SerializedEdit));
+    out.reserve(sizeof(MetaBucketHeader) + sizeof(uint32_t) + count * 32u);
 
-    // Helper to append raw bytes
-    auto append_raw = [&](const void* ptr, size_t size) {
-        size_t old = out.size();
-        out.resize(old + size);
-        std::memcpy(out.data() + old, ptr, size);
-    };
+    MetaBucketHeader mh{ META_BLOB_VERSION_V2 };
+    AppendBytes(out, &mh, sizeof(mh));
+    AppendBytes(out, &count, sizeof(count));
 
-    // Write count (native endianness)
-    append_raw(&count, sizeof(count));
-
-    // Build contiguous array of SerializedEdit and append
-    if (count > 0) {
-        std::vector<SerializedEdit> arr;
-        arr.reserve(count);
-        for (const CrossChunkEdit& e : data->edits) {
-            SerializedEdit se;
-            se.stateId = e.stateId;
-            se.pos = e.packedPos;
-            arr.push_back(se);
-        }
-        append_raw(arr.data(), arr.size() * sizeof(SerializedEdit));
+    for (const CrossChunkEdit& e : data->edits) {
+        AppendBytes(out, &e.packedPos, sizeof(e.packedPos));
+        const blockstate::SerializedStateIdentity id = blockstate::SerializeState(bsr, e.stateId);
+        AppendLengthPrefixedString(out, id.name);
+        AppendLengthPrefixedString(out, id.props);
     }
-    
+
     if (out.empty()) {
         ASCIIgL::Logger::Warning("buildMetaBlob: buffer is empty, nothing to write");
     }
