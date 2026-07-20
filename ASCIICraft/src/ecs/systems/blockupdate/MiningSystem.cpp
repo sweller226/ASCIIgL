@@ -37,16 +37,11 @@ void MiningSystem::Update() {
 
     switch (mode) {
         case GameMode::Creative:
+        case GameMode::Spectator:
             CreativeBreakEvents(playerEnt);
             break;
         case GameMode::Survival:
             SurvivalMining(playerEnt, ASCIIgL::FPSClock::GetInst().GetDeltaTime());
-            break;
-        case GameMode::Spectator:
-            if (auto* mining = m_registry.try_get<components::MiningProgress>(playerEnt)) {
-                mining->active = false;
-                mining->progress = 0.0f;
-            }
             break;
     }
 }

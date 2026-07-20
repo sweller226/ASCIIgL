@@ -14,10 +14,9 @@ struct ToolProperty;
 namespace ecs::systems {
 
 /// Handles block breaking.
-/// - Creative: instant break on primary-action press (original behavior).
+/// - Creative / Spectator: instant break on primary-action press.
 /// - Survival: timed mining while primary action is held, using the Minecraft
 ///   formula (block hardness, tool class match, harvest level gating drops).
-/// - Spectator: no mining.
 class MiningSystem : public ISystem {
 public:
     MiningSystem(entt::registry& registry, ASCIIgL::EventBus& eventBus);

@@ -137,7 +137,7 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
 
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
-    renderer.SetDitheringEnabled(true);
+    renderer.SetDitheringEnabled(false);
     renderer.SetBackgroundCol(glm::ivec3(255, 255, 255));
     renderer.SetWireframe(false);
     renderer.SetBackfaceCulling(true);
@@ -713,7 +713,7 @@ void Game::RenderPlaying() {
 void Game::InitializeWorld() {
     WorldParams worldParams{};
     worldParams.spawnPoint = WorldCoord(0, 120, 0);
-    worldParams.renderDistance = 16;
+    worldParams.renderDistance = 12;
     worldParams.worldSeed = 12345ULL;
     registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, worldParams));
     ASCIIgL::Logger::Debug("World created and stored in registry context.");

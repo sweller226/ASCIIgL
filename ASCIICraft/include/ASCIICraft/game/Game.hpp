@@ -68,8 +68,8 @@ public:
     ~Game();
     
     // Core game functions
-    bool Initialize(bool renderToTerminal = true, bool multicolor = false);
-    void Run(std::function<bool()> shouldExternalExit, bool renderToTerminal = true, bool multicolor = false);
+    bool Initialize(bool renderToTerminal = true, bool multicolor = true);
+    void Run(std::function<bool()> shouldExternalExit, bool renderToTerminal = true, bool multicolor = true);
     void Shutdown();
     
     // Game state management
