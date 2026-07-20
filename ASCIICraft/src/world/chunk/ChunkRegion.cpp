@@ -104,12 +104,19 @@ bool TryParseMetaBlobV2(
             pos += propsLen;
         }
 
+        // Reject clearly non-name payloads so a v1 numeric blob is not accepted as v2.
+        if (name.empty() || name.find(':') == std::string::npos) {
+            return false;
+        }
+
         CrossChunkEdit e;
         e.packedPos = packedPos;
         e.stateId = blockstate::ResolveStateFromSerialized(bsr, name, props);
         out->edits.push_back(e);
     }
-    return true;
+
+    // Exact-length match prevents false accepts (e.g. v1 with count==2 and first stateId air).
+    return pos == blob.size();
 }
 
 } // namespace
