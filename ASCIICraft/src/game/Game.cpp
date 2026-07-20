@@ -20,11 +20,13 @@
 #include <glm/vec2.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <ASCIICraft/world/block/BlockBreakData.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 #include <ASCIICraft/world/block/state/JsonBlockModelRegistration.hpp>
 #include <ASCIICraft/world/block/models/JsonModelLoader.hpp>
 #include <ASCIICraft/world/block/state/JsonBlockStateLoader.hpp>
 #include <ASCIICraft/world/block/state/VariantKey.hpp>
+#include <ASCIICraft/world/chunk/LegacyStateIdMigration.hpp>
 #include <ASCIICraft/textures/BlockTextureCatalog.hpp>
 #include <ASCIICraft/textures/ItemTextureCatalog.hpp>
 #include <ASCIICraft/textures/TextureCatalog.hpp>
@@ -41,6 +43,7 @@
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 #include <ASCIICraft/ecs/components/PlayerController.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/sound/BlockSoundMap.hpp>
 #include <ASCIICraft/sound/SoundRegistry.hpp>
 
 // shaders
@@ -49,6 +52,7 @@
 #include <ASCIICraft/rendering/DroppedItemShaders.hpp>
 #include <ASCIICraft/rendering/HeldItemShaders.hpp>
 #include <ASCIICraft/rendering/BlockTargetOutlineShaders.hpp>
+#include <ASCIICraft/rendering/BreakOverlayShaders.hpp>
 
 Game::Game()
     : gameState(GameState::Playing)
@@ -57,6 +61,7 @@ Game::Game()
     , movementSystem(registry, gameplayInputFilter, eventBus)
     , physicsSystem(registry)
     , blockTargetSystem(registry)
+    , breakOverlayRenderSystem(registry)
     , entityRenderSystem(registry)
     , heldItemRenderSystem(registry)
     , cameraSystem(registry, gameplayInputFilter)
@@ -132,7 +137,7 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
     ASCIIgL::Logger::Debug("FPSClock initialized with target FPS: " + std::to_string(TARGET_FPS));
 
     ASCIIgL::Renderer& renderer = ASCIIgL::Renderer::GetInst();
-    renderer.SetDitheringEnabled(true);
+    renderer.SetDitheringEnabled(false);
     renderer.SetBackgroundCol(glm::ivec3(255, 255, 255));
     renderer.SetWireframe(false);
     renderer.SetBackfaceCulling(true);
@@ -474,6 +479,7 @@ bool Game::LoadResources() {
     if (!LoadGUIBlockMaterial())     return false;
     if (!LoadGUITextMaterial())           return false;
     if (!LoadBlockTargetOutlineMaterial()) return false;
+    if (!LoadBreakOverlayMaterial())       return false;
 
     ASCIIgL::Logger::Info("Resources loaded successfully");
     return true;
@@ -655,6 +661,26 @@ bool Game::LoadBlockTargetOutlineMaterial() {
     });
 }
 
+bool Game::LoadBreakOverlayMaterial() {
+    return ASCIIgL::BuildAndRegisterMaterial({
+        "breakOverlayMaterial",
+        BreakOverlayShaders::GetVSSource(),
+        BreakOverlayShaders::GetPSSource(),
+        ASCIIgL::VertFormats::PosUVLayer(),
+        BreakOverlayShaders::GetUniformLayout(),
+        true,
+        [](ASCIIgL::Material& material) {
+            auto terrainTextureArray = ASCIIgL::TextureLibrary::GetInst().GetTextureArray("terrainTextureArray");
+            if (!terrainTextureArray) {
+                ASCIIgL::Logger::Error("terrainTextureArray missing for break overlay material");
+                return false;
+            }
+            material.SetTextureArray(0, terrainTextureArray.get());
+            return true;
+        }
+    });
+}
+
 bool Game::LoadFont() {
     constexpr int kDefaultFontStartingLayer = 33;
     constexpr const char* kDefaultFontCharacters =
@@ -678,6 +704,7 @@ void Game::RenderPlaying() {
     // Keep 2D GUI camera in sync with viewport (GPU pipeline uses Screen dimensions; 2D ortho must match)
     GetWorldPtr(registry)->Render();
     // blockTargetSystem.Render(); // Outline rendering disabled for now.
+    breakOverlayRenderSystem.Render();
     entityRenderSystem.Render();
     heldItemRenderSystem.Render();
     guiManager.Render();
@@ -686,7 +713,7 @@ void Game::RenderPlaying() {
 void Game::InitializeWorld() {
     WorldParams worldParams{};
     worldParams.spawnPoint = WorldCoord(0, 120, 0);
-    worldParams.renderDistance = 10;
+    worldParams.renderDistance = 12;
     worldParams.worldSeed = 12345ULL;
     registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, worldParams));
     ASCIIgL::Logger::Debug("World created and stored in registry context.");
@@ -714,6 +741,7 @@ void Game::InitializeSystems() {
 
     auto& soundRegistry = registry.ctx().emplace<sound::SoundRegistry>();
     sound::RegisterDefaultSounds(soundRegistry);
+    registry.ctx().emplace<sound::BlockSoundMap>();
 
     ASCIIgL::Logger::Debug("Systems initialized.");
 }
@@ -867,6 +895,7 @@ void Game::InitializeBlockStates() {
     registerJsonBackedOrLog("minecraft:oak_stairs");
 
     registerOpaqueJsonBacked("minecraft:cobblestone");
+    registerOpaqueJsonBacked("minecraft:stone");
 
     bsr.RegisterType("minecraft:stone_stairs", {
         blockstate::BlockProperty{ "facing", { "east", "west", "south", "north" } },
@@ -983,6 +1012,10 @@ void Game::InitializeBlockStates() {
         blockstate::AssertUniqueVariantKeysPerType(bsr, tid, "Game::InitializeBlockStates");
     }
 
+    blockbreak::ApplyBlockBreakData(bsr);
+
+    legacy_state_id::BuildRemapTable(bsr);
+
     ASCIIgL::Logger::Info("BlockStateRegistry: " +
         std::to_string(bsr.GetTotalTypeCount()) + " types, " +
         std::to_string(bsr.GetTotalStateCount()) + " states registered.");
@@ -1005,6 +1038,7 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterBlockItem(registry, "minecraft:fence",            "Oak Fence");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_stairs",       "Oak Stairs");
     itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone",    "Cobblestone");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:stone",          "Stone");
     itemRegistry.RegisterBlockItem(registry, "minecraft:stone_stairs",   "Cobblestone Stairs");
     itemRegistry.RegisterBlockItem(registry, "minecraft:dirt",             "Dirt");
     itemRegistry.RegisterBlockItem(registry, "minecraft:grass",            "Grass Block");
@@ -1028,18 +1062,18 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterResourceItem(registry, "minecraft:bread", "Bread", itemLayer("minecraft:items/bread"), 64);
 
     // === Swords ===
-    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_sword",  "Wooden Sword",  itemLayer("minecraft:items/wood_sword"),  {2.0f, 1, 60},   {4.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:stone_sword",   "Stone Sword",   itemLayer("minecraft:items/stone_sword"), {3.0f, 2, 131},  {5.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:iron_sword",    "Iron Sword",    itemLayer("minecraft:items/iron_sword"),  {6.0f, 3, 251},  {6.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_sword",  "Wooden Sword",  itemLayer("minecraft:items/wood_sword"),  {2.0f, 1, 60,  ToolClass::Sword},   {4.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_sword",   "Stone Sword",   itemLayer("minecraft:items/stone_sword"), {3.0f, 2, 131, ToolClass::Sword},  {5.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:iron_sword",    "Iron Sword",    itemLayer("minecraft:items/iron_sword"),  {6.0f, 3, 251, ToolClass::Sword},  {6.0f, 1.6f});
     // === Shovels ===
-    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_shovel",  "Wooden Shovel",  itemLayer("minecraft:items/wood_shovel"),  {2.0f, 1, 60},   {1.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:iron_shovel",    "Iron Shovel",    itemLayer("minecraft:items/iron_shovel"),  {6.0f, 3, 251},  {3.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_shovel",  "Wooden Shovel",  itemLayer("minecraft:items/wood_shovel"),  {2.0f, 1, 60,  ToolClass::Shovel},   {1.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:iron_shovel",    "Iron Shovel",    itemLayer("minecraft:items/iron_shovel"),  {6.0f, 3, 251, ToolClass::Shovel},  {3.0f, 1.6f});
     // === Pickaxes ===
-    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_pickaxe",  "Wooden Pickaxe",  itemLayer("minecraft:items/wood_pickaxe"),  {2.0f, 1, 60},   {2.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:stone_pickaxe",   "Stone Pickaxe",   itemLayer("minecraft:items/stone_pickaxe"), {3.0f, 2, 131},  {3.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:iron_pickaxe",    "Iron Pickaxe",    itemLayer("minecraft:items/iron_pickaxe"),  {6.0f, 3, 251},  {4.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_pickaxe",  "Wooden Pickaxe",  itemLayer("minecraft:items/wood_pickaxe"),  {2.0f, 1, 60,  ToolClass::Pickaxe},   {2.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_pickaxe",   "Stone Pickaxe",   itemLayer("minecraft:items/stone_pickaxe"), {3.0f, 2, 131, ToolClass::Pickaxe},  {3.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:iron_pickaxe",    "Iron Pickaxe",    itemLayer("minecraft:items/iron_pickaxe"),  {6.0f, 3, 251, ToolClass::Pickaxe},  {4.0f, 1.6f});
 
     // === Axes ===
-    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_axe",  "Wooden Axe",  itemLayer("minecraft:items/wood_axe"),  {2.0f, 1, 60},   {3.0f, 1.6f});
-    itemRegistry.RegisterToolItem(registry, "minecraft:iron_axe",    "Iron Axe",    itemLayer("minecraft:items/iron_axe"),  {6.0f, 3, 251},  {5.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:wooden_axe",  "Wooden Axe",  itemLayer("minecraft:items/wood_axe"),  {2.0f, 1, 60,  ToolClass::Axe},   {3.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:iron_axe",    "Iron Axe",    itemLayer("minecraft:items/iron_axe"),  {6.0f, 3, 251, ToolClass::Axe},  {5.0f, 1.6f});
 }

@@ -4,6 +4,7 @@
 #include <ASCIIgL/renderer/Renderer.hpp>
 #include <ASCIIgL/engine/Camera3D.hpp>
 
+#include <ASCIICraft/ecs/components/HandSwing.hpp>
 #include <ASCIICraft/ecs/components/HotbarSelection.hpp>
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 #include <ASCIICraft/ecs/components/ItemVisual.hpp>
@@ -15,14 +16,54 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <cmath>
+
 namespace ecs::systems {
 namespace {
 
 static const glm::vec3 kRightHandOffset{0.56f, -0.52f, -0.72f};
 constexpr int kHeldItemLayer = 1;
+constexpr float kPi = 3.14159265358979f;
 
-glm::mat4 BuildHandLocalModel(const components::ItemHeldMeshTransform* heldPose, bool is2DIcon) {
-    glm::mat4 model = glm::translate(glm::mat4(1.0f), kRightHandOffset);
+/// Minecraft first-person item swing rotations (ItemInHandRenderer.applyItemArmAttackTransform).
+glm::mat4 BuildSwingRotationMatrix(float progress) {
+    if (progress <= 0.0f) {
+        return glm::mat4(1.0f);
+    }
+
+    const float f  = std::sin(progress * progress * kPi);
+    const float f1 = std::sin(std::sqrt(progress) * kPi);
+
+    glm::mat4 m(1.0f);
+    m = glm::rotate(m, glm::radians(45.0f + f * -20.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    m = glm::rotate(m, glm::radians(f1 * -20.0f),        glm::vec3(0.0f, 0.0f, 1.0f));
+    m = glm::rotate(m, glm::radians(f1 * -80.0f),        glm::vec3(1.0f, 0.0f, 0.0f));
+    m = glm::rotate(m, glm::radians(-45.0f),             glm::vec3(0.0f, 1.0f, 0.0f));
+    return m;
+}
+
+/// Vanilla swing position arc applied before equip offset (right hand).
+glm::vec3 BuildSwingArcOffset(float progress) {
+    if (progress <= 0.0f) {
+        return glm::vec3(0.0f);
+    }
+    const float sqrtP = std::sqrt(progress);
+    return glm::vec3(
+        -0.4f * std::sin(sqrtP * kPi),
+         0.2f * std::sin(sqrtP * kPi * 2.0f),
+        -0.2f * std::sin(progress * kPi)
+    );
+}
+
+glm::mat4 BuildHandLocalModel(
+    const components::ItemHeldMeshTransform* heldPose,
+    bool is2DIcon,
+    float swingProgress
+) {
+    // Vanilla item path: swing arc, equip offset, then swing rotations (T_arc * T_hand * R).
+    glm::mat4 model = glm::translate(glm::mat4(1.0f), BuildSwingArcOffset(swingProgress));
+    model = glm::translate(model, kRightHandOffset);
+    model *= BuildSwingRotationMatrix(swingProgress);
     if (heldPose) {
         model = model * heldPose->getModel();
     }
@@ -110,7 +151,9 @@ void HeldItemRenderSystem::Render() {
     }
 
     const auto* heldPose = m_registry.try_get<components::ItemHeldMeshTransform>(itemDef);
-    const glm::mat4 model = BuildHandLocalModel(heldPose, visual->is2DIcon);
+    const auto* swing = m_registry.try_get<components::HandSwing>(player);
+    const float swingProgress = (swing && swing->swinging) ? swing->progress : 0.0f;
+    const glm::mat4 model = BuildHandLocalModel(heldPose, visual->is2DIcon, swingProgress);
     const glm::mat4 bobMatrix = BuildHeldItemBobMatrix(bob, transform);
     const glm::mat4 mvp = m_viewModelCamera->proj * bobMatrix * m_viewModelCamera->view * model;
 

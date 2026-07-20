@@ -537,7 +537,7 @@ bool Renderer::InitializeBlendStates() {
 }
 
 bool Renderer::InitializeStagingTexture() {
-    // Create staging texture for CHAR_INFO readback (R16G16_UINT = glyph, attributes)
+    // Create staging texture ring for CHAR_INFO readback (R16G16_UINT = glyph, attributes)
     D3D11_TEXTURE2D_DESC stagingDesc = {};
     stagingDesc.Width = Screen::GetInst().GetWidth();
     stagingDesc.Height = Screen::GetInst().GetHeight();
@@ -549,13 +549,16 @@ bool Renderer::InitializeStagingTexture() {
     stagingDesc.Usage = D3D11_USAGE_STAGING;
     stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 
-    HRESULT hr = impl_->_device->CreateTexture2D(&stagingDesc, nullptr, &impl_->_stagingTexture);
-    if (FAILED(hr)) {
-        std::ostringstream ss;
-        ss << std::hex << hr;
-        Logger::Error("[Renderer] Failed to create staging texture: 0x" + ss.str());
-        return false;
+    for (size_t i = 0; i < Renderer::Impl::_stagingRingSize; ++i) {
+        HRESULT hr = impl_->_device->CreateTexture2D(&stagingDesc, nullptr, &impl_->_stagingTextures[i]);
+        if (FAILED(hr)) {
+            std::ostringstream ss;
+            ss << std::hex << hr;
+            Logger::Error("[Renderer] Failed to create staging texture " + std::to_string(i) + ": 0x" + ss.str());
+            return false;
+        }
     }
+    impl_->_stagingCopyCount = 0;
 
     return true;
 }
@@ -1352,11 +1355,23 @@ void Renderer::DownloadFramebuffer()
         return;
     }
 
-    // Copy CHAR_INFO render target to staging (R16G16_UINT = glyph, attributes per pixel)
-    impl_->_context->CopyResource(impl_->_stagingTexture.Get(), impl_->_charInfoTexture.Get());
+    // Copy CHAR_INFO render target into the current staging ring slot, then map the
+    // slot copied (_stagingRingSize - 1) frames ago. That copy has long since completed
+    // on the GPU, so Map returns without stalling the pipeline. Output lags the GPU by
+    // (_stagingRingSize - 1) frames; during warm-up we map the just-written slot
+    // (a blocking sync, but only for the first couple of frames).
+    constexpr size_t ringSize = Renderer::Impl::_stagingRingSize;
+    const size_t writeSlot = static_cast<size_t>(impl_->_stagingCopyCount % ringSize);
+    impl_->_context->CopyResource(impl_->_stagingTextures[writeSlot].Get(), impl_->_charInfoTexture.Get());
+
+    const bool warmedUp = impl_->_stagingCopyCount >= (ringSize - 1);
+    const size_t readSlot = warmedUp ? (writeSlot + 1) % ringSize : writeSlot;
+    ++impl_->_stagingCopyCount;
+
+    ID3D11Texture2D* readTexture = impl_->_stagingTextures[readSlot].Get();
 
     D3D11_MAPPED_SUBRESOURCE mapped;
-    HRESULT hr = impl_->_context->Map(impl_->_stagingTexture.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+    HRESULT hr = impl_->_context->Map(readTexture, 0, D3D11_MAP_READ, 0, &mapped);
     if (FAILED(hr)) {
         Logger::Warning("[Renderer] Failed to map staging texture for CHAR_INFO readback");
         return;
@@ -1374,7 +1389,7 @@ void Renderer::DownloadFramebuffer()
         }
     }
 
-    impl_->_context->Unmap(impl_->_stagingTexture.Get(), 0);
+    impl_->_context->Unmap(readTexture, 0);
 }
 
 // =========================================================================
@@ -1405,7 +1420,9 @@ void Renderer::Shutdown()
     impl_->_charInfoRTV.Reset();
     impl_->_charInfoSRV.Reset();
     impl_->_charInfoTexture.Reset();
-    impl_->_stagingTexture.Reset();
+    for (auto& staging : impl_->_stagingTextures) {
+        staging.Reset();
+    }
 
     impl_->_fontAtlasSamplerPoint.Reset();
     impl_->_fontAtlasSRV.Reset();

@@ -16,6 +16,11 @@ struct ParticleSpawnEvent {
     int       count    = 1;
     glm::vec3 scale = glm::vec3(0.125f, 0.125f, 0.125f);
 
+    // Physics: gravity pull and (optionally) a tiny collider so the particle
+    // settles on the ground instead of falling through (block-break debris).
+    bool gravity = false;
+    bool collideWorld = false;
+
     std::shared_ptr<ASCIIgL::Mesh>     mesh;
     std::shared_ptr<ASCIIgL::Material> material;
 };

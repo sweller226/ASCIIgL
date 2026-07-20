@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ASCIICraft/world/block/BlockBreakData.hpp>
+
 namespace ecs::components {
 
 // ============================================================================
@@ -13,6 +15,7 @@ struct ToolProperty {
     float miningSpeed = 1.0f;    // Speed multiplier
     int harvestLevel = 0;        // 0=hand, 1=wood, 2=stone, 3=iron, 4=highest
     int durability = 0;          // Max durability (0 = unbreakable)
+    ToolClass toolClass = ToolClass::None;  // matched against BlockType::preferredTool
 };
 
 /// Property for food items

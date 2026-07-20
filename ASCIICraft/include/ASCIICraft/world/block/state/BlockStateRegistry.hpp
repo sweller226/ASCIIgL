@@ -46,6 +46,7 @@ public:
     BlockState& GetStateMutable(uint32_t stateId);
 
     const BlockType&  GetType(uint16_t typeId) const;
+    BlockType&        GetTypeMutable(uint16_t typeId);
     
     uint16_t GetTypeId(const std::string& name) const;
     uint32_t GetDefaultState(uint16_t typeId) const;

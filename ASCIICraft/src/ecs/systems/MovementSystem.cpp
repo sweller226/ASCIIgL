@@ -61,17 +61,30 @@ void MovementSystem::ProcessSwitchGameModeEvents() {
         return;
     }
 
-    // Toggle between Survival and Spectator, mirroring PlayerFactory defaults.
-    if (pmode->gamemode == GameMode::Survival) {
-        pmode->gamemode = GameMode::Spectator;
-        ctrl->movementState = MovementState::Flying;
-        flying->enabled = true;
-        col->disabled = true;
-    } else {
-        pmode->gamemode = GameMode::Survival;
-        ctrl->movementState = MovementState::Walking;
-        flying->enabled = false;
-        col->disabled = false;
+    // Cycle Survival -> Creative -> Spectator, mirroring PlayerFactory defaults.
+    // Creative uses survival movement (instant breaking is handled in MiningSystem).
+    switch (pmode->gamemode) {
+        case GameMode::Survival:
+            pmode->gamemode = GameMode::Creative;
+            ctrl->movementState = MovementState::Walking;
+            flying->enabled = false;
+            col->disabled = false;
+            ASCIIgL::Logger::Info("Game mode: Creative");
+            break;
+        case GameMode::Creative:
+            pmode->gamemode = GameMode::Spectator;
+            ctrl->movementState = MovementState::Flying;
+            flying->enabled = true;
+            col->disabled = true;
+            ASCIIgL::Logger::Info("Game mode: Spectator");
+            break;
+        case GameMode::Spectator:
+            pmode->gamemode = GameMode::Survival;
+            ctrl->movementState = MovementState::Walking;
+            flying->enabled = false;
+            col->disabled = false;
+            ASCIIgL::Logger::Info("Game mode: Survival");
+            break;
     }
 }
 

@@ -43,6 +43,7 @@
 #include <ASCIICraft/ecs/systems/DroppedItemSystem.hpp>
 #include <ASCIICraft/ecs/systems/HotbarSystem.hpp>
 #include <ASCIICraft/ecs/systems/BlockTargetSystem.hpp>
+#include <ASCIICraft/ecs/systems/BreakOverlayRenderSystem.hpp>
 
 // event systems
 #include <ASCIIgL/util/EventBus.hpp>
@@ -67,8 +68,8 @@ public:
     ~Game();
     
     // Core game functions
-    bool Initialize(bool renderToTerminal = true, bool multicolor = false);
-    void Run(std::function<bool()> shouldExternalExit, bool renderToTerminal = true, bool multicolor = false);
+    bool Initialize(bool renderToTerminal = true, bool multicolor = true);
+    void Run(std::function<bool()> shouldExternalExit, bool renderToTerminal = true, bool multicolor = true);
     void Shutdown();
     
     // Game state management
@@ -91,6 +92,7 @@ private:
     ecs::systems::CameraSystem cameraSystem;
     ecs::systems::PhysicsSystem physicsSystem;
     ecs::systems::BlockTargetSystem blockTargetSystem;
+    ecs::systems::BreakOverlayRenderSystem breakOverlayRenderSystem;
     ecs::systems::EntityRenderSystem entityRenderSystem;
     ecs::systems::HeldItemRenderSystem heldItemRenderSystem;
     ecs::systems::LifetimeSystem lifetimeSystem;
@@ -136,6 +138,7 @@ private:
     bool LoadGUIBlockMaterial();
     bool LoadGUITextMaterial();
     bool LoadBlockTargetOutlineMaterial();
+    bool LoadBreakOverlayMaterial();
     bool LoadFont();
 
     bool LoadTextures(bool multicolor);
@@ -152,5 +155,5 @@ private:
     static inline int SCREEN_HEIGHT = 300;
     static constexpr bool SUPERSAMPLE_2X = true;
     static constexpr float FONT_SIZE = 3.0f;
-    static constexpr float TARGET_FPS = 60.0f;
+    static constexpr float TARGET_FPS = 120.0f;
 };

@@ -16,17 +16,23 @@ ASCIIgL
 ASCIICraft
     Run FastDebug Command
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\FastDebug"
-    .\ASCIICraft.exe --color
+    .\ASCIICraft.exe
 
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\FastDebug"
     .\ASCIICraft.exe --window
 
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\FastDebug"
+    .\ASCIICraft.exe --mono
+
     Run Release Command
+    cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
+    .\ASCIICraft.exe
+
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
     .\ASCIICraft.exe --window
 
     cd "C:\Users\Skwig\Dev\Projects\ASCIIgL\ASCIICraft\build\bin\Release"
-    .\ASCIICraft.exe --color
+    .\ASCIICraft.exe --mono
 
     Build Release
     ./scripts/build_release.ps1

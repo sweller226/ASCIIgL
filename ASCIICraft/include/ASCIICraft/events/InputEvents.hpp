@@ -10,6 +10,11 @@ struct QuitRequestedEvent {};
 /// Only emitted when not blocking. MiningSystem consumes for break block.
 struct PrimaryActionPressedEvent {};
 
+/// Emitted every frame the "interact_left" / primary action is held down (including
+/// the initial press frame). Only emitted when not blocking. MiningSystem consumes
+/// for timed (survival) mining; its absence means mining stops/resets.
+struct PrimaryActionHeldEvent {};
+
 /// Emitted when the player presses the key bound to "interact_right" / secondary action (e.g. right click / R).
 /// Only emitted when not blocking. PlacingSystem consumes for place block.
 struct SecondaryActionPressedEvent {};

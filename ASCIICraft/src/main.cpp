@@ -62,11 +62,15 @@ static bool ParseRenderToTerminal(int argc, char* argv[]) {
 }
 
 static bool ParseMulticolor(int argc, char* argv[]) {
+    bool multicolor = true; // default: full color palette
     for (int i = 1; i < argc; ++i) {
-        if (std::string(argv[i]) == "--color")
-            return true;
+        std::string arg = argv[i];
+        if (arg == "--color" || arg == "-c")
+            multicolor = true;
+        else if (arg == "--mono" || arg == "--monochrome" || arg == "-m")
+            multicolor = false;
     }
-    return false;
+    return multicolor;
 }
 
 int main(int argc, char* argv[]) {

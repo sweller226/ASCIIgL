@@ -5,6 +5,8 @@
 #include <ASCIICraft/ecs/components/ItemCarried.hpp>
 #include <ASCIICraft/ecs/components/HotbarSelection.hpp>
 #include <ASCIICraft/ecs/components/BlockTarget.hpp>
+#include <ASCIICraft/ecs/components/MiningProgress.hpp>
+#include <ASCIICraft/ecs/components/HandSwing.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 #include <ASCIICraft/ecs/components/ViewBobbing.hpp>
 #include <ASCIICraft/ecs/data/ItemRegistry.hpp>
@@ -38,6 +40,8 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     auto& head    = registry.emplace<components::Head>(p_ent);
     auto& reach   = registry.emplace<components::Reach>(p_ent);
     registry.emplace<components::BlockTarget>(p_ent);
+    registry.emplace<components::MiningProgress>(p_ent);
+    registry.emplace<components::HandSwing>(p_ent);
     auto& input   = registry.emplace<components::PlayerInput>(p_ent);
 
     // --- Inventory (36 slots: 0-8 hotbar, 9-35 main) ---
@@ -61,6 +65,7 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
             "minecraft:fence",
             "minecraft:oak_stairs",
             "minecraft:cobblestone",
+            "minecraft:stone",
             "minecraft:stone_stairs",
             "minecraft:dirt",
             "minecraft:grass",

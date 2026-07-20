@@ -9,7 +9,7 @@
 1. **Render the scene in 3D** — DirectX 11 draws block meshes, items, particles, and UI into an off-screen color buffer at full RGB precision.
 2. **Build a palette** — On startup, the engine samples block and item textures and clusters them into 16 colors (Oklab k-means) so the palette matches the game's art.
 3. **Quantize to ASCII** — A precomputed lookup table maps each target color to the best foreground/background glyph pair, scored in perceptual (Oklab) space using character coverage data.
-4. **Present the frame** — Output goes to a Windows Terminal console (default) or a native window (`--window`). Terminal mode applies a custom 16-color scheme derived from the palette; `--color` enables the full clustered palette instead of monochrome.
+4. **Present the frame** — Output goes to a Windows Terminal console (default) or a native window (`--window`). Uses the full clustered 16-color palette by default; `--mono` switches to monochrome.
 
 ## Core operations
 
@@ -20,7 +20,7 @@
 | Build engine + deploy to game | repo root | `./scripts/build_ASCIIgL_ASCIICraft.ps1` |
 | Run (terminal) | `ASCIICraft/build/bin/Release/` | `./ASCIICraft.exe` |
 | Run (window) | same | `./ASCIICraft.exe --window` |
-| Run (16-color) | same | `./ASCIICraft.exe --color` or `--window --color` |
+| Run (monochrome) | same | `./ASCIICraft.exe --mono` or `--window --mono` |
 
 Platform: **Windows 10/11**, DirectX 11, Windows Terminal recommended for console output.
 

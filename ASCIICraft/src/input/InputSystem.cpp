@@ -35,6 +35,7 @@ void InputSystem::Update() {
     if (m_inputMode == InputMode::Gameplay) {
         if (input.IsActionPressed("quit"))    m_eventBus.emit(events::QuitRequestedEvent{});
         if (input.IsActionPressed("interact_left"))  m_eventBus.emit(events::PrimaryActionPressedEvent{});
+        if (input.IsActionHeld("interact_left"))     m_eventBus.emit(events::PrimaryActionHeldEvent{});
         if (input.IsActionPressed("interact_right")) m_eventBus.emit(events::SecondaryActionPressedEvent{});
         // Game mode toggle (P) — hard-wired for now, not action-bound.
         if (input.IsKeyPressed(ASCIIgL::Key::P)) m_eventBus.emit(events::SwitchGameModeEvent{});

@@ -20,6 +20,7 @@
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 
 #include <ASCIICraft/world/Sizes.hpp>
+#include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 #include <ASCIICraft/world/block/state/FaceDir.hpp>
 #include <ASCIICraft/world/chunk/ChunkUtil.hpp>
 
@@ -41,8 +42,13 @@ ChunkManager::ChunkManager(
     chunkJobQueue->SetMaxDrainPerFrame(static_cast<size_t>(MAX_QUEUES_PER_FRAME));
     chunkJobQueue->SetMaxDrainMeshPerFrame(static_cast<size_t>(MAX_MESH_APPLIES_PER_FRAME));
     chunkJobQueue->SetUnloadSaveCallback([this](Chunk* c, ChunkCoord coord, const MetaBucket* meta, bool closeRegionAfterSave, std::shared_ptr<RegionFile> region) {
-        if (region)
-            region->SaveChunkForUnload(c, coord, meta, closeRegionAfterSave);
+        if (!region) return;
+        auto* bsr = this->registry.ctx().find<blockstate::BlockStateRegistry>();
+        if (!bsr) {
+            ASCIIgL::Logger::Error("UnloadSaveCallback: BlockStateRegistry missing");
+            return;
+        }
+        region->SaveChunkForUnload(c, coord, meta, closeRegionAfterSave, *bsr);
     });
     UpdateFogFromRenderDistance();
     
@@ -97,10 +103,16 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
     std::shared_ptr<RegionFile> region = GetOrCreateRegion(coord.ToRegionCoord());
     if (!region) return;
 
+    auto* bsr = registry.ctx().find<blockstate::BlockStateRegistry>();
+    if (!bsr) {
+        ASCIIgL::Logger::Error("LoadChunk: BlockStateRegistry missing");
+        return;
+    }
+
     // Try loading chunk from region file with error handling for corruption
     bool loadedFromFile = false;
     try {
-        loadedFromFile = region->LoadChunk(chunkPtr);
+        loadedFromFile = region->LoadChunk(chunkPtr, *bsr);
     } catch (const std::exception& e) {
         ASCIIgL::Logger::Warningf("Failed to load chunk (%d,%d,%d) from region file: %s. Regenerating.",
                                    coord.x, coord.y, coord.z, e.what());
@@ -111,9 +123,9 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
         loadedFromFile = false;
     }
 
-    // Load metadata (crossâ€‘chunk edits stored in region file)
+    // Load metadata (cross-chunk edits stored in region file)
     auto cachedMetaBucket = std::make_unique<MetaBucket>();
-    region->LoadMetaData(coord, cachedMetaBucket.get());
+    region->LoadMetaData(coord, cachedMetaBucket.get(), *bsr);
 
     if (loadedFromFile) {
         chunkPtr->SetGenerated(true);
@@ -160,6 +172,12 @@ void ChunkManager::SaveAll() {
     for (auto& [rp, _] : chunksByRegion) allRegions.insert(rp);
     for (auto& [rp, _] : metaByRegion) allRegions.insert(rp);
 
+    auto* bsr = registry.ctx().find<blockstate::BlockStateRegistry>();
+    if (!bsr) {
+        ASCIIgL::Logger::Error("SaveAll: BlockStateRegistry missing");
+        return;
+    }
+
     int metaCount = 0;
     for (const RegionCoord& rp : allRegions) {
         std::shared_ptr<RegionFile> region = GetOrCreateRegion(rp);
@@ -167,12 +185,12 @@ void ChunkManager::SaveAll() {
         auto itChunks = chunksByRegion.find(rp);
         if (itChunks != chunksByRegion.end()) {
             for (auto& [coord, chunk] : itChunks->second)
-                region->SaveChunkInBatch(chunk);
+                region->SaveChunkInBatch(chunk, *bsr);
         }
         auto itMeta = metaByRegion.find(rp);
         if (itMeta != metaByRegion.end()) {
             for (auto& [coord, meta] : itMeta->second) {
-                region->SaveMetaDataInBatch(coord, meta);
+                region->SaveMetaDataInBatch(coord, meta, *bsr);
                 metaCount++;
             }
         }
@@ -272,8 +290,13 @@ void ChunkManager::ProcessMetaBucketExpiry() {
             continue;
         }
 
-        if (std::shared_ptr<RegionFile> region = GetOrCreateRegion(key.ToRegionCoord()))
-            region->SaveMetaData(key, &it->second);
+        if (std::shared_ptr<RegionFile> region = GetOrCreateRegion(key.ToRegionCoord())) {
+            auto* bsr = registry.ctx().find<blockstate::BlockStateRegistry>();
+            if (bsr)
+                region->SaveMetaData(key, &it->second, *bsr);
+            else
+                ASCIIgL::Logger::Error("ProcessMetaBucketExpiry: BlockStateRegistry missing");
+        }
         crossChunkEdits.erase(it);
         metaSaveCount++;
     }

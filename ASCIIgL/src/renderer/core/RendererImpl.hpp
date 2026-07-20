@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <unordered_map>
 #include <vector>
 
@@ -73,7 +74,11 @@ struct Renderer::Impl {
 
     ComPtr<ID3D11RasterizerState> _rasterizerStates[8];
 
-    ComPtr<ID3D11Texture2D> _stagingTexture;
+    // Staging ring for CHAR_INFO readback: each frame copies into one slot and maps
+    // the slot written (_stagingRingSize - 1) frames ago, so Map never stalls on the GPU.
+    static constexpr size_t _stagingRingSize = 3;
+    std::array<ComPtr<ID3D11Texture2D>, _stagingRingSize> _stagingTextures;
+    uint64_t _stagingCopyCount = 0;
 
     ComPtr<ID3D11Texture2D> _charInfoTexture;
     ComPtr<ID3D11RenderTargetView> _charInfoRTV;
