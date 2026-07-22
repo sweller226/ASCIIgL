@@ -59,9 +59,9 @@ static std::string GetCardinalDirection(const glm::vec3& front) {
 }
 
 void CameraSystem::LerpFOV(components::PlayerCamera& cam, components::PlayerController& ctrl, float dt) {
-    // Smoothly adjust FOV when sprinting (slight increase for speed effect)
+    // Smoothly adjust FOV when sprinting (on foot or creative fly + Ctrl)
     float targetFOV = cam.FOV;
-    if (ctrl.isRunning()) {
+    if (ctrl.sprinting) {
         targetFOV = cam.FOV + 10.0f;  // +10 degrees when sprinting
     }
     

@@ -165,6 +165,12 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
             flying.enabled = false;
             col.disabled = false;
             break;
+        case GameMode::Creative:
+            // Creative starts grounded; double-tap Space toggles flight in MovementSystem.
+            ctrl.movementState = MovementState::Walking;
+            flying.enabled = false;
+            col.disabled = false;
+            break;
         case GameMode::Spectator:
             ctrl.movementState = MovementState::Flying;
             flying.enabled = true;

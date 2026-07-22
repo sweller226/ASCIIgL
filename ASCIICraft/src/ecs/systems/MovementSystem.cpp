@@ -7,6 +7,8 @@
 
 #include <entt/entt.hpp>
 
+#include <algorithm>
+
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
 #include <ASCIICraft/ecs/components/PlayerController.hpp>
@@ -17,6 +19,38 @@
 #include <ASCIICraft/ecs/components/PlayerMode.hpp>
 
 namespace ecs::systems {
+
+namespace {
+
+void DisableCreativeFlight(
+    components::PlayerController& ctrl,
+    components::FlyingPhysics& flying,
+    components::Velocity& vel
+) {
+    flying.enabled = false;
+    ctrl.movementState = MovementState::Walking;
+    ctrl.flyToggleTimer = 0.0f;
+    ctrl.flyLandGrace = 0.0f;
+    vel.linear.y = 0.0f;
+}
+
+void EnableCreativeFlight(
+    components::PlayerController& ctrl,
+    components::FlyingPhysics& flying,
+    components::GroundPhysics& ground,
+    components::Velocity& vel,
+    components::Jump& jump
+) {
+    flying.enabled = true;
+    ctrl.movementState = MovementState::Flying;
+    ctrl.flyToggleTimer = 0.0f;
+    ctrl.flyLandGrace = components::PlayerController::FLY_LAND_GRACE;
+    ground.onGround = false;
+    vel.linear.y = std::max(vel.linear.y, 0.5f);
+    jump.bufferTime = 0.0f;
+}
+
+} // namespace
 
 MovementSystem::MovementSystem(entt::registry& registry, IInputSource& input, ASCIIgL::EventBus& eventBus)
     : m_registry(registry)
@@ -45,7 +79,8 @@ void MovementSystem::ProcessSwitchGameModeEvents() {
         components::FlyingPhysics,
         components::Gravity,
         components::Collider,
-        components::PlayerMode
+        components::PlayerMode,
+        components::Velocity
     >(p_ent)) {
         ASCIIgL::Logger::Error("MovementSystem::ProcessSwitchGameModeEvents: missing components on player.");
         return;
@@ -55,27 +90,32 @@ void MovementSystem::ProcessSwitchGameModeEvents() {
     auto* flying   = m_registry.try_get<components::FlyingPhysics>(p_ent);
     auto* col      = m_registry.try_get<components::Collider>(p_ent);
     auto* pmode    = m_registry.try_get<components::PlayerMode>(p_ent);
+    auto* vel      = m_registry.try_get<components::Velocity>(p_ent);
 
-    if (!ctrl || !flying || !col || !pmode) {
+    if (!ctrl || !flying || !col || !pmode || !vel) {
         ASCIIgL::Logger::Error("MovementSystem::ProcessSwitchGameModeEvents: try_get returned NULL for one or more components.");
         return;
     }
 
     // Cycle Survival -> Creative -> Spectator, mirroring PlayerFactory defaults.
-    // Creative uses survival movement (instant breaking is handled in MiningSystem).
     switch (pmode->gamemode) {
         case GameMode::Survival:
             pmode->gamemode = GameMode::Creative;
             ctrl->movementState = MovementState::Walking;
             flying->enabled = false;
             col->disabled = false;
+            ctrl->flyToggleTimer = 0.0f;
+            ctrl->flyLandGrace = 0.0f;
             ASCIIgL::Logger::Info("Game mode: Creative");
             break;
         case GameMode::Creative:
+            // Leaving Creative clears any in-mode flight before Spectator takes over.
             pmode->gamemode = GameMode::Spectator;
             ctrl->movementState = MovementState::Flying;
             flying->enabled = true;
             col->disabled = true;
+            ctrl->flyToggleTimer = 0.0f;
+            ctrl->flyLandGrace = 0.0f;
             ASCIIgL::Logger::Info("Game mode: Spectator");
             break;
         case GameMode::Spectator:
@@ -83,6 +123,9 @@ void MovementSystem::ProcessSwitchGameModeEvents() {
             ctrl->movementState = MovementState::Walking;
             flying->enabled = false;
             col->disabled = false;
+            ctrl->flyToggleTimer = 0.0f;
+            ctrl->flyLandGrace = 0.0f;
+            vel->linear.y = 0.0f;
             ASCIIgL::Logger::Info("Game mode: Survival");
             break;
     }
@@ -137,6 +180,32 @@ void MovementSystem::ProcessMovementInput() {
 
     const float dt = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
 
+    ctrl->flyToggleTimer = std::max(0.0f, ctrl->flyToggleTimer - dt);
+    ctrl->flyLandGrace = std::max(0.0f, ctrl->flyLandGrace - dt);
+
+    // Landing ends creative flight (vanilla). Grace avoids instant cancel right after toggle-on.
+    if (pmode->gamemode == GameMode::Creative
+        && flyingPhy->enabled
+        && groundPhy->onGround
+        && ctrl->flyLandGrace <= 0.0f) {
+        DisableCreativeFlight(*ctrl, *flyingPhy, *vel);
+    }
+
+    // Creative: double-tap Space toggles flight.
+    bool toggledCreativeFlight = false;
+    if (pmode->gamemode == GameMode::Creative && m_input.IsActionPressed("jump")) {
+        if (ctrl->flyToggleTimer > 0.0f) {
+            if (flyingPhy->enabled) {
+                DisableCreativeFlight(*ctrl, *flyingPhy, *vel);
+            } else {
+                EnableCreativeFlight(*ctrl, *flyingPhy, *groundPhy, *vel, *jump);
+            }
+            toggledCreativeFlight = true;
+        } else {
+            ctrl->flyToggleTimer = components::PlayerController::FLY_TOGGLE_WINDOW;
+        }
+    }
+
     // --- input -> desired horizontal direction ---
     glm::vec3 forward = cam->camera.getCamFrontNoY();
     glm::vec3 right   = cam->camera.getCamRightNoY();
@@ -152,15 +221,23 @@ void MovementSystem::ProcessMovementInput() {
     if (moveLen > 1e-6f) moveXZ /= moveLen;
 
     // --- movement state ---
+    const bool sprintHeld = m_input.IsActionHeld("sprint") && moveLen > 0.01f;
     if (pmode->gamemode == GameMode::Spectator) {
         ctrl->movementState = MovementState::Flying;
-    } else if (m_input.IsActionHeld("sprint") && moveLen > 0.01f && !(ctrl->movementState == MovementState::Sneaking)) {
+    } else if (flyingPhy->enabled) {
+        // Creative flight: keep Flying; sprint only affects speed below.
+        ctrl->movementState = MovementState::Flying;
+    } else if (sprintHeld && !(ctrl->movementState == MovementState::Sneaking)) {
         ctrl->movementState = MovementState::Running;
     } else if (m_input.IsActionHeld("sneak") && !ctrl->isFlying() && (pmode->gamemode != GameMode::Spectator)) {
         ctrl->movementState = MovementState::Sneaking;
     } else {
         ctrl->movementState = MovementState::Walking;
     }
+
+    // Sprint FOV / speed cue: ground run, or Ctrl while creative-flying with move input.
+    ctrl->sprinting = (ctrl->movementState == MovementState::Running)
+        || (pmode->gamemode == GameMode::Creative && flyingPhy->enabled && sprintHeld);
 
     float targetSpeed = 0.0f;
 
@@ -178,7 +255,13 @@ void MovementSystem::ProcessMovementInput() {
             break;
 
         case MovementState::Flying:
-            targetSpeed = ctrl->FLY_SPEED;
+            if (pmode->gamemode == GameMode::Spectator) {
+                targetSpeed = ctrl->SPECTATOR_FLY_SPEED;
+            } else if (sprintHeld) {
+                targetSpeed = ctrl->CREATIVE_FLY_SPRINT_SPEED;
+            } else {
+                targetSpeed = ctrl->CREATIVE_FLY_SPEED;
+            }
             break;
     }
 
@@ -188,7 +271,7 @@ void MovementSystem::ProcessMovementInput() {
     jump->jumpCooldown = std::max(0.0f, jump->jumpCooldown - dt);
     jump->bufferTime = std::max(0.0f, jump->bufferTime - dt);
 
-    if (m_input.IsActionPressed("jump")) {
+    if (m_input.IsActionPressed("jump") && !toggledCreativeFlight) {
         jump->bufferTime = jump->JUMP_BUFFER_MAX;
     }
 
@@ -199,24 +282,30 @@ void MovementSystem::ProcessMovementInput() {
     }
 
     // --- horizontal acceleration ---
-    glm::vec3 currentHoriz(vel->linear.x, 0.0f, vel->linear.z);
-    float accel = groundPhy->onGround ? ctrl->GROUND_ACCEL : ctrl->AIR_ACCEL;
-    if (flyingPhy->enabled) { accel = ctrl->GROUND_ACCEL; }
+    // Flying: snap to desired velocity (same as vertical). Walk accel at fly speeds
+    // takes too long to start/stop and feels like ice.
+    if (flyingPhy->enabled) {
+        vel->linear.x = desiredHoriz.x;
+        vel->linear.z = desiredHoriz.z;
+    } else {
+        glm::vec3 currentHoriz(vel->linear.x, 0.0f, vel->linear.z);
+        float accel = groundPhy->onGround ? ctrl->GROUND_ACCEL : ctrl->AIR_ACCEL;
 
-    glm::vec3 delta = desiredHoriz - currentHoriz;
-    float maxStep = accel * dt;
-    float deltaLen = glm::length(delta);
-    if (deltaLen > maxStep && deltaLen > 0.0f) delta *= (maxStep / deltaLen);
-    currentHoriz += delta;
+        glm::vec3 delta = desiredHoriz - currentHoriz;
+        float maxStep = accel * dt;
+        float deltaLen = glm::length(delta);
+        if (deltaLen > maxStep && deltaLen > 0.0f) delta *= (maxStep / deltaLen);
+        currentHoriz += delta;
 
-    vel->linear.x = currentHoriz.x;
-    vel->linear.z = currentHoriz.z;
+        vel->linear.x = currentHoriz.x;
+        vel->linear.z = currentHoriz.z;
 
-    float horizSpeed2 = currentHoriz.x * currentHoriz.x + currentHoriz.z * currentHoriz.z;
-    if (targetSpeed > 0.0f && horizSpeed2 > targetSpeed * targetSpeed) {
-        glm::vec2 clamped = glm::normalize(glm::vec2(currentHoriz.x, currentHoriz.z)) * targetSpeed;
-        vel->linear.x = clamped.x;
-        vel->linear.z = clamped.y;
+        float horizSpeed2 = currentHoriz.x * currentHoriz.x + currentHoriz.z * currentHoriz.z;
+        if (targetSpeed > 0.0f && horizSpeed2 > targetSpeed * targetSpeed) {
+            glm::vec2 clamped = glm::normalize(glm::vec2(currentHoriz.x, currentHoriz.z)) * targetSpeed;
+            vel->linear.x = clamped.x;
+            vel->linear.z = clamped.y;
+        }
     }
 
     // --- jump logic ---
@@ -225,7 +314,8 @@ void MovementSystem::ProcessMovementInput() {
         || (jumpHeld && groundPhy->onGround);
     const bool canJump = (groundPhy->onGround || jump->coyoteTime > 0.0f)
         && jump->jumpCooldown <= 0.0f
-        && !ctrl->isFlying();
+        && !ctrl->isFlying()
+        && !toggledCreativeFlight;
 
     if (wantsJump && canJump) {
         jump->RefreshJumpVelocity(grav->acceleration.y);

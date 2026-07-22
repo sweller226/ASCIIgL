@@ -2,7 +2,7 @@
 
 enum class GameMode {
     Survival,
-    Creative,  // Survival movement, instant block breaking
+    Creative,  // Survival movement or toggled flight; instant block breaking
     Spectator  // Spectator mode with noclip
 };
 
