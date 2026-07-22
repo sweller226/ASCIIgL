@@ -80,6 +80,7 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
             "minecraft:glass",
             "minecraft:blue_wool",
             "minecraft:green_wool",
+            "minecraft:farmland",
         };
 
         const auto seedSlot = [&](int slot, const char* itemName, int count = -1) {

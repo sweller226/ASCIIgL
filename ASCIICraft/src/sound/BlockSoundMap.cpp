@@ -72,6 +72,7 @@ void BlockSoundMap::Build(const blockstate::BlockStateRegistry& bsr) {
 
     MapType(bsr, "minecraft:grass", "grass");
     MapType(bsr, "minecraft:dirt", "gravel");
+    MapType(bsr, "minecraft:farmland", "gravel");
     MapType(bsr, "minecraft:tall_grass", "grass");
     MapType(bsr, "minecraft:fern", "grass");
     MapType(bsr, "minecraft:dandelion", "grass");

@@ -50,6 +50,9 @@ const std::vector<CatalogEntry>& GetBlockTextureCatalog() {
         {"minecraft:blocks/destroy_stage_8",   "res/textures/blocks/destroy_stage_8.png", nullptr, 0.0f},
         {"minecraft:blocks/destroy_stage_9",   "res/textures/blocks/destroy_stage_9.png", nullptr, 0.0f},
         {"minecraft:blocks/stone",             "res/textures/blocks/stone.png", nullptr, 0.0f},
+        // Farmland tops (paletteWeight 0: don't skew palette clustering).
+        {"minecraft:blocks/farmland",          "res/textures/blocks/farmland.png", nullptr, 0.0f},
+        {"minecraft:blocks/farmland_moist",    "res/textures/blocks/farmland_moist.png", nullptr, 0.0f},
     };
     return kCatalog;
 }
