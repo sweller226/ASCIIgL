@@ -46,7 +46,8 @@ private:
         const World &world,
         const blockstate::BlockStateRegistry *bsr,
         const components::StepPhysics *stepPhysics,
-        components::GroundPhysics *groundPhysics
+        components::GroundPhysics *groundPhysics,
+        bool isSneaking
     );
 
     void UpdateGroundState(
@@ -56,6 +57,25 @@ private:
         const VoxelOverlapProbe &overlaps,
         components::GroundPhysics *groundPhysics
     );
+
+    bool HasGroundSupport(
+        const glm::vec3 &pos,
+        const VoxelOverlapProbe &overlaps
+    ) const;
+
+    void ClampSneakEdge(
+        const glm::vec3 &preHorizPos,
+        glm::vec3 &pos,
+        components::Velocity &vel,
+        const VoxelOverlapProbe &overlaps
+    ) const;
+
+    float BinarySearchSupport(
+        const glm::vec3 &startPos,
+        const glm::vec3 &direction,
+        float maxDistance,
+        const VoxelOverlapProbe &overlaps
+    ) const;
 
     bool TryStepUp(
         const components::Velocity &vel,

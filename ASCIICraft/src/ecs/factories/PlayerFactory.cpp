@@ -80,6 +80,8 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
             "minecraft:glass",
             "minecraft:blue_wool",
             "minecraft:green_wool",
+            "minecraft:farmland",
+            "minecraft:water",
         };
 
         const auto seedSlot = [&](int slot, const char* itemName, int count = -1) {
@@ -161,6 +163,12 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     // --- Movement state based on mode ---
     switch (mode) {
         case GameMode::Survival:
+            ctrl.movementState = MovementState::Walking;
+            flying.enabled = false;
+            col.disabled = false;
+            break;
+        case GameMode::Creative:
+            // Creative starts grounded; double-tap Space toggles flight in MovementSystem.
             ctrl.movementState = MovementState::Walking;
             flying.enabled = false;
             col.disabled = false;

@@ -60,7 +60,7 @@ void MiningSystem::CreativeBreakEvents(entt::entity playerEnt) {
         events::BreakBlockEvent breakEvent;
         breakEvent.stateId = target->stateId;
         breakEvent.position = target->blockPos;
-        breakEvent.harvested = true;
+        breakEvent.harvested = false; // Creative/spectator: break without drops.
         m_eventBus.emit(breakEvent);
         EmitBreakSound(playerEnt, target->stateId);
         if (auto* swing = m_registry.try_get<components::HandSwing>(playerEnt)) {

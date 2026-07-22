@@ -78,22 +78,29 @@ void GUIManager::Render() {
         screen->Draw(*m_renderer);
     }
 
-    if (!m_screenStack.empty() && m_screenStack.back()->blocksInput) {
+    if (m_screenStack.empty() || !m_cursorSurface.mesh || !m_cursorSurface.material) {
+        return;
+    }
+
+    if (m_screenStack.back()->blocksInput) {
         const glm::vec2 cursorTopLeft = GetCursorDrawTopLeft();
         const entt::entity player = ecs::components::GetPlayerEntity(m_registry);
         if (player != entt::null && m_registry.valid(player)) {
-            if (m_cursorSurface.mesh && m_cursorSurface.material) {
-                m_renderer->RenderGUIQuad(
-                    cursorTopLeft, m_cursorSize, 9998, m_cursorSurface.mesh, m_cursorSurface.material);
-            }
+            m_renderer->RenderGUIQuad(
+                cursorTopLeft, m_cursorSize, 9998, m_cursorSurface.mesh, m_cursorSurface.material);
 
             if (const auto* carried = m_registry.try_get<ecs::components::ItemCarried>(player)) {
                 DrawItemStackIcon(m_registry, *m_renderer, carried->stack, cursorTopLeft, m_cursorSize, 9999);
             }
-        } else if (m_cursorSurface.mesh && m_cursorSurface.material) {
+        } else {
             m_renderer->RenderGUIQuad(
                 cursorTopLeft, m_cursorSize, 10000, m_cursorSurface.mesh, m_cursorSurface.material);
         }
+    } else {
+        // Gameplay reticle: same cursor sprite, locked to screen center.
+        const glm::vec2 cursorTopLeft = m_screenSize * 0.5f - m_cursorSize * 0.5f;
+        m_renderer->RenderGUIQuad(
+            cursorTopLeft, m_cursorSize, 9998, m_cursorSurface.mesh, m_cursorSurface.material);
     }
 }
 

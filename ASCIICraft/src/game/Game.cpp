@@ -988,6 +988,17 @@ void Game::InitializeBlockStates() {
     registerOpaqueJsonBacked("minecraft:blue_wool");
     registerOpaqueJsonBacked("minecraft:green_wool");
 
+    // Matches assets/minecraft/blockstates/farmland.json (moisture 0–7; 15/16 tall).
+    bsr.RegisterType("minecraft:farmland", {
+        blockstate::BlockProperty{ "moisture", {"0", "1", "2", "3", "4", "5", "6", "7"}, 0 }
+    });
+    const uint16_t farmlandType = bsr.GetTypeId("minecraft:farmland");
+    bsr.SetDerivedData(farmlandType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+        s.isFullBlock = false;
+    });
+    registerJsonBackedOrLog("minecraft:farmland");
+
     // === Water ===
     bsr.RegisterType("minecraft:water", {
         blockstate::BlockProperty{ "top", {"false", "true"}, 1 }
@@ -1030,7 +1041,7 @@ void Game::InitializeItemDefinitions() {
         );
     };
 
-    // === Block items (all registered block types except air and water) ===
+    // === Block items (all registered block types except air) ===
     itemRegistry.RegisterBlockItem(registry, "minecraft:dandelion",        "Dandelion", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
     itemRegistry.RegisterBlockItem(registry, "minecraft:poppy",            "Poppy", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
     itemRegistry.RegisterBlockItem(registry, "minecraft:tall_grass",       "Tall Grass", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
@@ -1053,6 +1064,8 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterBlockItem(registry, "minecraft:glass",            "Glass");
     itemRegistry.RegisterBlockItem(registry, "minecraft:blue_wool",        "Blue Wool");
     itemRegistry.RegisterBlockItem(registry, "minecraft:green_wool",       "Green Wool");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:farmland",         "Farmland");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:water",            "Water");
 
     // === Resources / Materials ===
     itemRegistry.RegisterResourceItem(registry, "minecraft:coal",       "Coal",       itemLayer("minecraft:items/coal"));
