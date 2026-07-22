@@ -11,6 +11,7 @@
 #include <ASCIICraft/world/query/VoxelOverlap.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
+#include <ASCIICraft/ecs/components/PlayerController.hpp>
 #include <ASCIICraft/ecs/components/ViewBobbing.hpp>
 
 
@@ -71,8 +72,10 @@ void PhysicsSystem::IntegrateEntities(float dt, const World &world) {
         auto *groundComp = m_registry.try_get<components::GroundPhysics>(ent);
         const auto *flyingComp = m_registry.try_get<components::FlyingPhysics>(ent);
         auto *col = m_registry.try_get<components::Collider>(ent);
+        auto *ctrl = m_registry.try_get<components::PlayerController>(ent);
 
         const bool canFly = flyingComp && flyingComp->enabled;
+        const bool isSneaking = ctrl && ctrl->isSneaking();
 
         if (gravityComp && !canFly) {
             v.linear += gravityComp->acceleration * dt;
@@ -85,7 +88,7 @@ void PhysicsSystem::IntegrateEntities(float dt, const World &world) {
         v.ClampSpeed();
 
         if (col && !col->disabled) {
-            ResolveAABBAgainstWorld(t, *col, v, dt, world, bsr, stepComp, groundComp);
+            ResolveAABBAgainstWorld(t, *col, v, dt, world, bsr, stepComp, groundComp, isSneaking);
         } else {
             t.setPosition(t.position + v.linear * dt);
         }
@@ -100,7 +103,8 @@ void PhysicsSystem::ResolveAABBAgainstWorld(
     const World &world,
     const blockstate::BlockStateRegistry *bsr,
     const components::StepPhysics *stepPhysics,
-    components::GroundPhysics *groundPhysics
+    components::GroundPhysics *groundPhysics,
+    bool isSneaking
 ) {
     glm::vec3 pos = t.position + col.localOffset;
     const glm::vec3 half = col.halfExtents;
@@ -125,6 +129,10 @@ void PhysicsSystem::ResolveAABBAgainstWorld(
     }
 
     // ===== HORIZONTAL =====
+    const glm::vec3 preHorizPos = pos;
+    const bool wasSupported = groundPhysics &&
+        (groundPhysics->onGround || HasGroundSupport(pos, overlaps));
+
     const float horizSpeed = glm::length(glm::vec2(vel.linear.x, vel.linear.z));
     if (horizSpeed > MOVE_EPSILON) {
         glm::vec3 targetPos = pos;
@@ -135,7 +143,7 @@ void PhysicsSystem::ResolveAABBAgainstWorld(
             pos.x = targetPos.x;
             pos.z = targetPos.z;
         } else {
-            const bool supported = overlaps(glm::vec3(pos.x, pos.y - GROUND_PROBE_DISTANCE, pos.z));
+            const bool supported = HasGroundSupport(pos, overlaps);
             const bool canStepUp =
                 stepPhysics && stepPhysics->stepHeight > MOVE_EPSILON && groundPhysics &&
                 (groundPhysics->onGround || (vel.linear.y <= 0.0f && supported));
@@ -144,6 +152,10 @@ void PhysicsSystem::ResolveAABBAgainstWorld(
                 SlideHorizontal(pos, vel, dt, overlaps);
             }
         }
+    }
+
+    if (isSneaking && wasSupported && vel.linear.y <= 0.0f) {
+        ClampSneakEdge(preHorizPos, pos, vel, overlaps);
     }
 
     t.setPosition(pos - col.localOffset);
@@ -176,6 +188,91 @@ void PhysicsSystem::UpdateGroundState(
         vel.linear.x *= AIR_FRICTION;
         vel.linear.z *= AIR_FRICTION;
     }
+}
+
+bool PhysicsSystem::HasGroundSupport(
+    const glm::vec3 &pos,
+    const VoxelOverlapProbe &overlaps
+) const {
+    return overlaps(glm::vec3(pos.x, pos.y - GROUND_PROBE_DISTANCE, pos.z));
+}
+
+void PhysicsSystem::ClampSneakEdge(
+    const glm::vec3 &preHorizPos,
+    glm::vec3 &pos,
+    components::Velocity &vel,
+    const VoxelOverlapProbe &overlaps
+) const {
+    if (HasGroundSupport(pos, overlaps)) {
+        return;
+    }
+
+    glm::vec3 xOnly = preHorizPos;
+    xOnly.x = pos.x;
+    if (!overlaps(xOnly) && HasGroundSupport(xOnly, overlaps)) {
+        pos = xOnly;
+        vel.linear.z = 0.0f;
+        return;
+    }
+
+    glm::vec3 zOnly = preHorizPos;
+    zOnly.z = pos.z;
+    if (!overlaps(zOnly) && HasGroundSupport(zOnly, overlaps)) {
+        pos = zOnly;
+        vel.linear.x = 0.0f;
+        return;
+    }
+
+    // Neither single-axis change keeps support — binary-search each axis independently.
+    pos = preHorizPos;
+
+    const float dx = xOnly.x - preHorizPos.x;
+    if (std::abs(dx) > MOVE_EPSILON) {
+        const float signX = (dx > 0.0f) ? 1.0f : -1.0f;
+        const float safeX = BinarySearchSupport(preHorizPos, glm::vec3(signX, 0.0f, 0.0f), std::abs(dx), overlaps);
+        pos.x = preHorizPos.x + signX * safeX;
+        if (safeX < std::abs(dx) - MOVE_EPSILON) {
+            vel.linear.x = 0.0f;
+        }
+    } else {
+        vel.linear.x = 0.0f;
+    }
+
+    const glm::vec3 afterX = pos;
+    const float dz = zOnly.z - preHorizPos.z;
+    if (std::abs(dz) > MOVE_EPSILON) {
+        const float signZ = (dz > 0.0f) ? 1.0f : -1.0f;
+        const float safeZ = BinarySearchSupport(afterX, glm::vec3(0.0f, 0.0f, signZ), std::abs(dz), overlaps);
+        pos.z = afterX.z + signZ * safeZ;
+        if (safeZ < std::abs(dz) - MOVE_EPSILON) {
+            vel.linear.z = 0.0f;
+        }
+    } else {
+        vel.linear.z = 0.0f;
+    }
+}
+
+float PhysicsSystem::BinarySearchSupport(
+    const glm::vec3 &startPos,
+    const glm::vec3 &direction,
+    float maxDistance,
+    const VoxelOverlapProbe &overlaps
+) const {
+    float low = 0.0f;
+    float high = maxDistance;
+
+    constexpr int iterations = 8;
+    for (int i = 0; i < iterations; ++i) {
+        const float mid = (low + high) * 0.5f;
+        const glm::vec3 testPos = startPos + direction * mid;
+        if (!overlaps(testPos) && HasGroundSupport(testPos, overlaps)) {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+
+    return low;
 }
 
 bool PhysicsSystem::TryStepUp(

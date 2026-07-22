@@ -4,16 +4,20 @@
 
 <h2>What makes it different</h2>
 
-<p>Most “ASCII games” fake the look in a normal graphics window. ASCIICraft actually renders through an ASCII pipeline: each cell is a character, and colors are chosen to approximate the 3D image. The game builds its <strong>16-color palette from its own block and item textures</strong> using perceptual color clustering, so the palette fits the world instead of a fixed retro scheme.</p>
+<p>Most “ASCII games” fake the look in a normal graphics window. ASCIICraft actually renders through an ASCII pipeline: each cell is a character, and colors are chosen to approximate the 3D image. The game builds its <strong>16-color palette from its own block and item textures</strong> using perceptual color clustering (Oklab), so the palette fits the world instead of a fixed retro scheme. Depth-aware supersampling keeps edges cleaner when that scene is quantized down to the character grid.</p>
 
 <h2>Features</h2>
 
 <ul>
-  <li>Procedural terrain with trees, grass, water, and varied biomes</li>
-  <li>Block breaking and placement</li>
-  <li>Inventory, hotbar, and item drops</li>
+  <li>Procedural terrain with trees, grass, water, stone, and varied biomes</li>
+  <li>Minecraft-style block mining — hold to break, with tool speed, destroy stages, swing animation, and break particles</li>
+  <li>Block placement, inventory, hotbar, and item drops</li>
+  <li>First-person held items and tools</li>
   <li>First-person movement — walk, sprint, sneak, and fly</li>
+  <li>Game modes: Survival, Creative, and Spectator (start in Spectator; cycle with <strong>P</strong>)</li>
+  <li>World saving on quit — chunks persist, and older 1.0 worlds migrate automatically</li>
   <li>Sound and music</li>
+  <li>Optional blue-noise dithering (off by default; toggle with <strong>K</strong>)</li>
   <li>Two render modes:
     <ul>
       <li><strong>Terminal mode</strong> (default) — runs in Windows Terminal; applies a custom color scheme on launch</li>
@@ -33,40 +37,40 @@
   </thead>
   <tbody>
     <tr><td><strong>W A S D</strong></td><td>Move</td></tr>
-    <tr><td><strong>Space</strong></td><td>Jump</td></tr>
+    <tr><td><strong>Space</strong></td><td>Jump / fly up</td></tr>
     <tr><td><strong>Ctrl</strong></td><td>Sprint</td></tr>
-    <tr><td><strong>Shift</strong></td><td>Sneak</td></tr>
+    <tr><td><strong>Shift</strong></td><td>Sneak / fly down</td></tr>
     <tr><td><strong>Arrow keys</strong></td><td>Look around</td></tr>
-    <tr><td><strong>F</strong></td><td>Break / mine block</td></tr>
+    <tr><td><strong>F</strong></td><td>Hold to mine / break block</td></tr>
     <tr><td><strong>R</strong></td><td>Place block</td></tr>
     <tr><td><strong>E</strong></td><td>Open / close inventory</td></tr>
     <tr><td><strong>Q</strong></td><td>Drop item</td></tr>
     <tr><td><strong>1–9</strong></td><td>Select hotbar slot</td></tr>
-    <tr><td><strong>P</strong></td><td>Toggle flying</td></tr>
+    <tr><td><strong>P</strong></td><td>Cycle game mode (Survival → Creative → Spectator)</td></tr>
     <tr><td><strong>K</strong></td><td>Toggle dithering</td></tr>
-    <tr><td><strong>Esc</strong></td><td>Quit</td></tr>
+    <tr><td><strong>Esc</strong></td><td>Quit (saves the world)</td></tr>
   </tbody>
 </table>
 
 <h2>Launch options</h2>
 
-<pre><code>ASCIICraft.exe                    Terminal mode, monochrome (default)
+<pre><code>ASCIICraft.exe                    Terminal mode, 16-color (default)
 ASCIICraft.exe --window           Window mode
-ASCIICraft.exe --color            16-color palette
-ASCIICraft.exe --window --color   Full color in a window</code></pre>
+ASCIICraft.exe --mono             Terminal mode, monochrome
+ASCIICraft.exe --window --mono    Window mode, monochrome</code></pre>
+
+<p><code>--color</code> / <code>-c</code> forces the 16-color palette; <code>--mono</code> / <code>--monochrome</code> / <code>-m</code> forces monochrome. <code>--terminal</code> / <code>-t</code> and <code>--window</code> / <code>-w</code> select the display.</p>
 
 <h2>Requirements</h2>
 
 <ul>
   <li><strong>Windows 10 or 11</strong> (64-bit)</li>
-  <li><strong>Windows Terminal</strong> recommended for terminal mode</li>
+  <li><strong>Windows Terminal</strong> for terminal mode</li>
   <li>GPU with <strong>DirectX 11</strong> support</li>
 </ul>
 
 <h2>Terminal tips</h2>
 
 <ul>
-  <li>The game tries to install the <strong>Square Modern</strong> font from bundled resources on first run</li>
-  <li>Set <strong>line height to 1.0</strong> in Windows Terminal</li>
-  <li><strong>Aliased</strong> rendering gives a sharper retro look; <strong>ClearType</strong> is easier to read</li>
+  <li>The game tries to install the <strong>Square Modern</strong> font from bundled resources on first run. If it fails, go into the resources folder and download it manually.</li>
 </ul>
