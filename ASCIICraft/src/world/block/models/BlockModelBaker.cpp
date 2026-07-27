@@ -227,6 +227,47 @@ namespace {
         return out;
     }
 
+    /// Vanilla ModelRotation uvlock degrees for the common X0 / X180 variants.
+    /// Side faces stay at 0 or 180 — never 90/270 — so non-square stair/fence UVs do not stretch.
+    int UvlockCorrectionDegrees(int faceIndex, int variantX, int variantY) {
+        const int x = ((variantX % 360) + 360) % 360;
+        const int y = ((variantY % 360) + 360) % 360;
+        const int yIdx = (y / 90) & 3;
+
+        const int top = static_cast<int>(FaceDir::Top);
+        const int bottom = static_cast<int>(FaceDir::Bottom);
+        const int east = static_cast<int>(FaceDir::East);
+        const int west = static_cast<int>(FaceDir::West);
+
+        if (x == 0) {
+            // X0_Y*: D={0,90,180,270}, U={0,270,180,90}, sides=0
+            static constexpr int kDown[4] = {0, 90, 180, 270};
+            static constexpr int kUp[4] = {0, 270, 180, 90};
+            if (faceIndex == bottom) return kDown[yIdx];
+            if (faceIndex == top) return kUp[yIdx];
+            return 0;
+        }
+
+        if (x == 180) {
+            // X180_Y*: D={180,270,0,90}, U={180,90,0,270}, N/S=0, E/W=180
+            static constexpr int kDown[4] = {180, 270, 0, 90};
+            static constexpr int kUp[4] = {180, 90, 0, 270};
+            if (faceIndex == bottom) return kDown[yIdx];
+            if (faceIndex == top) return kUp[yIdx];
+            if (faceIndex == east || faceIndex == west) return 180;
+            return 0;
+        }
+
+        // Rare X90/X270: only counter-rotate horizontal faces (square-safe); leave sides alone.
+        if (faceIndex == top) {
+            return (360 - y) % 360;
+        }
+        if (faceIndex == bottom) {
+            return y % 360;
+        }
+        return 0;
+    }
+
     std::array<glm::vec2, modelbuilderutil::VERTS_PER_FACE> ApplyUvlock(
         const std::array<glm::vec2, modelbuilderutil::VERTS_PER_FACE>& in,
         int faceIndex,
@@ -236,38 +277,8 @@ namespace {
     ) {
         if (!uvlock) return in;
 
-        auto rotateFaceY = [](int f) -> int {
-            switch (f) {
-                case static_cast<int>(FaceDir::North): return static_cast<int>(FaceDir::East);
-                case static_cast<int>(FaceDir::East): return static_cast<int>(FaceDir::South);
-                case static_cast<int>(FaceDir::South): return static_cast<int>(FaceDir::West);
-                case static_cast<int>(FaceDir::West): return static_cast<int>(FaceDir::North);
-                default: return f;
-            }
-        };
-        auto rotateFaceX = [](int f) -> int {
-            switch (f) {
-                case static_cast<int>(FaceDir::Top): return static_cast<int>(FaceDir::South);
-                case static_cast<int>(FaceDir::South): return static_cast<int>(FaceDir::Bottom);
-                case static_cast<int>(FaceDir::Bottom): return static_cast<int>(FaceDir::North);
-                case static_cast<int>(FaceDir::North): return static_cast<int>(FaceDir::Top);
-                default: return f; // east/west unchanged around X
-            }
-        };
-
-        int transformedFace = faceIndex;
-        int ySteps = ((variantY / 90) % 4 + 4) % 4;
-        int xSteps = ((variantX / 90) % 4 + 4) % 4;
-        while (xSteps-- > 0) transformedFace = rotateFaceX(transformedFace);
-        while (ySteps-- > 0) transformedFace = rotateFaceY(transformedFace);
-
-        // Better uvlock rule than previous heuristic:
-        // counter-rotate yaw for all faces, and add pitch compensation for east/west-facing sides.
-        // This aligns common fence/stair variant behavior with world-facing texture orientation.
-        int correction = (360 - variantY) % 360;
-        if (transformedFace == static_cast<int>(FaceDir::East) || transformedFace == static_cast<int>(FaceDir::West)) {
-            correction = (correction + (360 - variantX) % 360) % 360;
-        }
+        // Lookup is keyed by the model-space face (JSON face name), matching vanilla FaceBakery.
+        const int correction = UvlockCorrectionDegrees(faceIndex, variantX, variantY);
         return RotateFaceUVs(in, faceIndex, correction);
     }
 

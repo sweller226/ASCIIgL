@@ -67,6 +67,9 @@ public:
     /// Window handle (console in terminal mode, app window in window mode). nullptr if not initialized.
     NativeWindowHandle GetWindowHandle() const;
 
+    /// Write raw bytes to the active console output (terminal mode). No-op in window mode.
+    void WriteOutputBytes(const char* data, size_t length);
+
     /// Call once per frame. Pumps Win32 messages (window mode); no-op in terminal mode. Sets exit flag on WM_QUIT or console Ctrl.
     void ProcessMessages();
     /// True after user requested exit (closed window, or console Ctrl+C/close). Poll after ProcessMessages().

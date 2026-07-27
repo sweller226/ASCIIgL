@@ -8,8 +8,10 @@
 
 namespace ecs::systems {
 
-HotbarSystem::HotbarSystem(entt::registry& registry)
-    : registry(registry) {}
+HotbarSystem::HotbarSystem(entt::registry& registry, IInputSource& input)
+    : registry(registry)
+    , m_input(input)
+{}
 
 void HotbarSystem::Update() {
     using namespace ecs::components;
@@ -33,6 +35,18 @@ void HotbarSystem::Update() {
 
     if (input.IsActionPressed("hotbar_0")) {
         selection.selectedSlot = HotbarSelection::kSlotCount - 1;
+    }
+
+    // Minecraft-style: wheel up (positive) moves selection left / lower index; wraps.
+    const int scroll = m_input.GetScrollDelta();
+    if (scroll != 0) {
+        int slot = selection.selectedSlot - scroll;
+        const int count = HotbarSelection::kSlotCount;
+        slot %= count;
+        if (slot < 0) {
+            slot += count;
+        }
+        selection.selectedSlot = slot;
     }
 
     selection.clamp();

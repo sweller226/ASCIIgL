@@ -7,6 +7,7 @@
 #include <ASCIICraft/ecs/components/Inventory.hpp>
 #include <ASCIICraft/ecs/components/ItemProperties.hpp>
 #include <ASCIICraft/ecs/components/PhysicsBody.hpp>
+#include <ASCIICraft/ecs/components/PlayerMode.hpp>
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/ecs/data/ItemRegistry.hpp>
@@ -23,16 +24,8 @@
 
 namespace {
 
-FaceDir OppositeHorizontalFaceDir(FaceDir face) {
-    switch (face) {
-        case FaceDir::North: return FaceDir::South;
-        case FaceDir::South: return FaceDir::North;
-        case FaceDir::East:  return FaceDir::West;
-        case FaceDir::West:  return FaceDir::East;
-        default:             return FaceDir::North;
-    }
-}
-
+/// Horizontal look direction used by placement. BlockPlacement decides whether to
+/// keep it (stairs) or invert it (furnace-like blocks that face the player).
 std::optional<FaceDir> GetPlayerPlacementFacing(
     entt::registry& registry,
     entt::entity playerEnt
@@ -42,7 +35,7 @@ std::optional<FaceDir> GetPlayerPlacementFacing(
         return std::nullopt;
     }
 
-    return OppositeHorizontalFaceDir(DominantHorizontalFaceDir(head->lookDir));
+    return DominantHorizontalFaceDir(head->lookDir);
 }
 
 bool PlayerOverlapsPlacementCell(
@@ -141,11 +134,15 @@ void PlacingSystem::PlayerPlace() {
         placeEvent.position = target->placePos;
         m_eventBus.emit(placeEvent);
 
-        const components::ItemStack oldStack = heldStack;
-        InventorySystem::removeItemAt(*inventory, slotIndex, 1);
-        m_eventBus.emit(events::InventoryChangedEvent{
-            playerEnt, slotIndex, oldStack, inventory->slots[slotIndex]
-        });
+        const auto* pmode = m_registry.try_get<components::PlayerMode>(playerEnt);
+        const GameMode mode = pmode ? pmode->gamemode : GameMode::Survival;
+        if (mode != GameMode::Creative) {
+            const components::ItemStack oldStack = heldStack;
+            InventorySystem::removeItemAt(*inventory, slotIndex, 1);
+            m_eventBus.emit(events::InventoryChangedEvent{
+                playerEnt, slotIndex, oldStack, inventory->slots[slotIndex]
+            });
+        }
 
         if (auto* swing = m_registry.try_get<components::HandSwing>(playerEnt)) {
             swing->Trigger();

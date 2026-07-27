@@ -61,6 +61,7 @@ public:
     const ScreenPixel* GetPixelBufferData() const override;
     size_t GetPixelBufferSize() const override;
     NativeWindowHandle GetWindowHandle() override;
+    void WriteOutputBytes(const char* data, size_t length) override;
     void ProcessMessages() override;
 
     // Windows Terminal methods (not part of ScreenImpl)
@@ -71,6 +72,8 @@ public:
     bool IsFontInstalled(const std::wstring& fontName);
     bool InstallFontFromFile(const std::wstring& fontFilePath);
     void SetPaletteTerminal(const Palette& palette, HANDLE& hOutput);
+    /// Ensure WT settings disable paste confirmation dialogs (idempotent).
+    void EnsureTerminalPasteWarningsDisabled();
 };
 
 } // namespace ASCIIgL

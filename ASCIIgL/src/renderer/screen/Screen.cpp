@@ -166,6 +166,11 @@ NativeWindowHandle Screen::GetWindowHandle() const {
     return _impl ? _impl->GetWindowHandle() : nullptr;
 }
 
+void Screen::WriteOutputBytes(const char* data, size_t length) {
+    if (_impl)
+        _impl->WriteOutputBytes(data, length);
+}
+
 void Screen::ProcessMessages() {
     if (_impl)
         _impl->ProcessMessages();

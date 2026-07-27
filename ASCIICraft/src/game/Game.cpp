@@ -71,7 +71,7 @@ Game::Game()
     , miningSystem(registry, eventBus)
     , inventorySystem(registry, eventBus)
     , droppedItemSystem(registry, eventBus)
-    , hotbarSystem(registry)
+    , hotbarSystem(registry, inputSystem)
     , lifetimeSystem(registry)
     , particleSystem(registry, eventBus)
     , soundSystem(registry, eventBus)
@@ -180,6 +180,8 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
     InitializeGUI();
 
     ASCIIgL::InputManager::GetInst().Initialize();
+    // Temporary: enable mouse look scheme for testing (keyboard arrows when false).
+    inputSystem.SetMouseLookEnabled(true);
     ASCIIgL::Logger::Debug("InputManager initialized.");
 
     gameState = GameState::Playing;
@@ -344,6 +346,8 @@ void Game::Shutdown() {
     shutdownInvoked_ = true;
 
     ASCIIgL::Logger::Info("Shutting down ASCIICraft...");
+
+    ASCIIgL::InputManager::GetInst().Shutdown();
 
     // Clear libraries if we want to release all resources on shutdown
     if (auto world = GetWorldPtr(registry)) {
@@ -895,7 +899,10 @@ void Game::InitializeBlockStates() {
     registerJsonBackedOrLog("minecraft:oak_stairs");
 
     registerOpaqueJsonBacked("minecraft:cobblestone");
+    registerOpaqueJsonBacked("minecraft:mossy_cobblestone");
     registerOpaqueJsonBacked("minecraft:stone");
+    registerOpaqueJsonBacked("minecraft:stonebrick");
+    registerOpaqueJsonBacked("minecraft:mossy_stonebrick");
 
     bsr.RegisterType("minecraft:stone_stairs", {
         blockstate::BlockProperty{ "facing", { "east", "west", "south", "north" } },
@@ -907,6 +914,17 @@ void Game::InitializeBlockStates() {
         s.renderMode = blockstate::RenderMode::Opaque;
     });
     registerJsonBackedOrLog("minecraft:stone_stairs");
+
+    bsr.RegisterType("minecraft:mossy_cobblestone_stairs", {
+        blockstate::BlockProperty{ "facing", { "east", "west", "south", "north" } },
+        blockstate::BlockProperty{ "half", { "bottom", "top" } },
+        blockstate::BlockProperty{ "shape", { "straight", "outer_right", "outer_left", "inner_right", "inner_left" } },
+    });
+    const uint16_t mossyCobblestoneStairsType = bsr.GetTypeId("minecraft:mossy_cobblestone_stairs");
+    bsr.SetDerivedData(mossyCobblestoneStairsType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
+    registerJsonBackedOrLog("minecraft:mossy_cobblestone_stairs");
 
     registerOpaqueJsonBacked("minecraft:dirt");
 
@@ -952,6 +970,16 @@ void Game::InitializeBlockStates() {
         s.isFullBlock = false;
     });
     registerJsonBackedOrLog("minecraft:cobblestone_slab");
+
+    bsr.RegisterType("minecraft:mossy_cobblestone_slab", {
+        blockstate::BlockProperty{ "half", { "bottom", "top" } },
+    });
+    const uint16_t mossyCobblestoneSlabType = bsr.GetTypeId("minecraft:mossy_cobblestone_slab");
+    bsr.SetDerivedData(mossyCobblestoneSlabType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+        s.isFullBlock = false;
+    });
+    registerJsonBackedOrLog("minecraft:mossy_cobblestone_slab");
 
     bsr.RegisterType("minecraft:oak_leaves", {});
     const uint16_t leavesType = bsr.GetTypeId("minecraft:oak_leaves");
@@ -1049,14 +1077,19 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterBlockItem(registry, "minecraft:fence",            "Oak Fence");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_stairs",       "Oak Stairs");
     itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone",    "Cobblestone");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:mossy_cobblestone", "Mossy Cobblestone");
     itemRegistry.RegisterBlockItem(registry, "minecraft:stone",          "Stone");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:stonebrick",     "Stone Bricks");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:mossy_stonebrick", "Mossy Stone Bricks");
     itemRegistry.RegisterBlockItem(registry, "minecraft:stone_stairs",   "Cobblestone Stairs");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:mossy_cobblestone_stairs", "Mossy Cobblestone Stairs");
     itemRegistry.RegisterBlockItem(registry, "minecraft:dirt",             "Dirt");
     itemRegistry.RegisterBlockItem(registry, "minecraft:grass",            "Grass Block");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_log",          "Oak Log");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_planks",         "Oak Planks");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_slab",         "Oak Slab");
     itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone_slab", "Cobblestone Slab");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:mossy_cobblestone_slab", "Mossy Cobblestone Slab");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_leaves",       "Oak Leaves");
     itemRegistry.RegisterBlockItem(registry, "minecraft:crafting_table",   "Crafting Table");
     itemRegistry.RegisterBlockItem(registry, "minecraft:bookshelf",        "Bookshelf");

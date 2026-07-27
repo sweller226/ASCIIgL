@@ -1,6 +1,8 @@
 #pragma once
 
 #include <entt/entt.hpp>
+#include <glm/vec2.hpp>
+#include <string>
 
 #include <ASCIICraft/ecs/components/PlayerController.hpp>
 #include <ASCIICraft/ecs/components/PlayerCamera.hpp>
@@ -18,6 +20,7 @@ public:
 private:
     entt::registry& m_registry;
     IInputSource& m_input;
+    glm::vec2 m_smoothedLook{0.0f, 0.0f};
 
     void ProcessCameraInput(components::PlayerCamera& cam, float dt);
     void LerpFOV(components::PlayerCamera& cam, components::PlayerController& ctrl, float dt);
