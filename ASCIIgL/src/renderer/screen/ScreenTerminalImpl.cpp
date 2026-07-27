@@ -131,6 +131,7 @@ int ScreenTerminalImpl::Initialize(const unsigned int width, const unsigned int 
     // Configure for Windows Terminal
     SetFontTerminal(_hOutput, fontSize);
     SetPaletteTerminal(palette, _hOutput);
+    EnsureTerminalPasteWarningsDisabled();
 
     // Disable quick edit mode
     DWORD mode;
@@ -280,6 +281,14 @@ size_t ScreenTerminalImpl::GetPixelBufferSize() const {
 
 NativeWindowHandle ScreenTerminalImpl::GetWindowHandle() {
     return static_cast<NativeWindowHandle>(GetConsoleWindow());
+}
+
+void ScreenTerminalImpl::WriteOutputBytes(const char* data, size_t length) {
+    if (!data || length == 0 || _hOutput == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    DWORD written = 0;
+    WriteConsoleA(_hOutput, data, static_cast<DWORD>(length), &written, nullptr);
 }
 
 void ScreenTerminalImpl::ProcessMessages() {
@@ -603,6 +612,65 @@ void ScreenTerminalImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOut
 
     } catch (const std::exception& e) {
         Logger::Error(L"Failed to modify Windows Terminal color scheme: " + std::wstring(converter.from_bytes(e.what())));
+    }
+}
+
+void ScreenTerminalImpl::EnsureTerminalPasteWarningsDisabled() {
+    Logger::Info(L"Ensuring Windows Terminal paste warnings are disabled.");
+
+    std::wstring settingsPath = GetTerminalSettingsPath();
+    if (settingsPath.empty()) {
+        Logger::Error(L"Could not find Windows Terminal settings path.");
+        return;
+    }
+
+    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+    try {
+        std::string settingsPathStr = converter.to_bytes(settingsPath);
+
+        std::ifstream file(settingsPathStr);
+        if (!file.is_open()) {
+            Logger::Error(L"Could not open Windows Terminal settings file.");
+            return;
+        }
+        std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        file.close();
+
+        nlohmann::json j;
+        try {
+            j = nlohmann::json::parse(content);
+        } catch (const std::exception& e) {
+            Logger::Error(L"Failed to parse Windows Terminal settings.json: " + std::wstring(converter.from_bytes(e.what())));
+            return;
+        }
+
+        const bool multiOk = j.contains("multiLinePasteWarning") && j["multiLinePasteWarning"].is_boolean()
+            && j["multiLinePasteWarning"].get<bool>() == false;
+        const bool largeOk = j.contains("largePasteWarning") && j["largePasteWarning"].is_boolean()
+            && j["largePasteWarning"].get<bool>() == false;
+
+        if (multiOk && largeOk) {
+            Logger::Info(L"Windows Terminal paste warnings already disabled; no settings change.");
+            return;
+        }
+
+        std::filesystem::copy_file(settingsPath, settingsPath + L".paste_warning_backup",
+            std::filesystem::copy_options::overwrite_existing);
+
+        j["multiLinePasteWarning"] = false;
+        j["largePasteWarning"] = false;
+
+        std::ofstream outFile(settingsPathStr);
+        if (!outFile.is_open()) {
+            Logger::Error(L"Could not write to Windows Terminal settings file.");
+            return;
+        }
+        outFile << j.dump(4);
+        outFile.close();
+
+        Logger::Info(L"Disabled Windows Terminal multiLinePasteWarning and largePasteWarning.");
+    } catch (const std::exception& e) {
+        Logger::Error(L"Failed to update Windows Terminal paste warnings: " + std::wstring(converter.from_bytes(e.what())));
     }
 }
 

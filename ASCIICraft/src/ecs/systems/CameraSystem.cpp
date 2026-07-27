@@ -7,6 +7,8 @@
 #include <ASCIIgL/engine/FPSClock.hpp>
 
 #include <algorithm>
+#include <cmath>
+#include <glm/vec2.hpp>
 
 namespace ecs::systems {
 
@@ -38,17 +40,32 @@ void CameraSystem::ProcessCameraInput(components::PlayerCamera& cam, float dt) {
     float yawDelta = 0.0f;
     float pitchDelta = 0.0f;
 
-    if (m_input.IsActionHeld("camera_left")) {
-        yawDelta -= m_input.GetMouseSensitivity() * dt;
-    }
-    if (m_input.IsActionHeld("camera_right")) {
-        yawDelta += m_input.GetMouseSensitivity() * dt;
-    }
-    if (m_input.IsActionHeld("camera_up")) {
-        pitchDelta += m_input.GetMouseSensitivity() * 0.9f * dt;
-    }
-    if (m_input.IsActionHeld("camera_down")) {
-        pitchDelta -= m_input.GetMouseSensitivity() * 0.9f * dt;
+    if (m_input.IsMouseLookEnabled()) {
+        // Relative mouse deltas are in pixels; scale with the shared sensitivity knob.
+        constexpr float kMouseScale = 0.003f;
+        // Low-pass look deltas to reduce pixel-step jitter (higher = snappier).
+        constexpr float kSmoothHz = 27.0f;
+        const float smoothT = 1.0f - std::exp(-kSmoothHz * dt);
+        const glm::vec2 lookDelta = m_input.GetLookDelta();
+        m_smoothedLook = glm::mix(m_smoothedLook, lookDelta, smoothT);
+
+        const float sens = m_input.GetMouseSensitivity();
+        yawDelta += m_smoothedLook.x * sens * kMouseScale;
+        pitchDelta -= m_smoothedLook.y * sens * kMouseScale;
+    } else {
+        m_smoothedLook = {0.0f, 0.0f};
+        if (m_input.IsActionHeld("camera_left")) {
+            yawDelta -= m_input.GetMouseSensitivity() * dt;
+        }
+        if (m_input.IsActionHeld("camera_right")) {
+            yawDelta += m_input.GetMouseSensitivity() * dt;
+        }
+        if (m_input.IsActionHeld("camera_up")) {
+            pitchDelta += m_input.GetMouseSensitivity() * 0.9f * dt;
+        }
+        if (m_input.IsActionHeld("camera_down")) {
+            pitchDelta -= m_input.GetMouseSensitivity() * 0.9f * dt;
+        }
     }
 
     cam.camera.setCamDir(cam.camera.GetYaw() + yawDelta, cam.camera.GetPitch() + pitchDelta);

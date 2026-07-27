@@ -9,6 +9,7 @@
 #include <ASCIICraft/ecs/components/PlayerTag.hpp>
 #include <ASCIIgL/util/EventBus.hpp>
 #include <ASCIIgL/engine/TextureLibrary.hpp>
+#include <ASCIIgL/engine/InputManager.hpp>
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <algorithm>
 #include <glm/vec2.hpp>
@@ -85,14 +86,19 @@ void GUIManager::Render() {
     if (m_screenStack.back()->blocksInput) {
         const glm::vec2 cursorTopLeft = GetCursorDrawTopLeft();
         const entt::entity player = ecs::components::GetPlayerEntity(m_registry);
+        // Mouse look uses the OS pointer in inventory — skip the soft cursor/crosshair sprite.
+        const bool drawSoftCursor = !m_input.IsMouseLookEnabled();
+
         if (player != entt::null && m_registry.valid(player)) {
-            m_renderer->RenderGUIQuad(
-                cursorTopLeft, m_cursorSize, 9998, m_cursorSurface.mesh, m_cursorSurface.material);
+            if (drawSoftCursor) {
+                m_renderer->RenderGUIQuad(
+                    cursorTopLeft, m_cursorSize, 9998, m_cursorSurface.mesh, m_cursorSurface.material);
+            }
 
             if (const auto* carried = m_registry.try_get<ecs::components::ItemCarried>(player)) {
                 DrawItemStackIcon(m_registry, *m_renderer, carried->stack, cursorTopLeft, m_cursorSize, 9999);
             }
-        } else {
+        } else if (drawSoftCursor) {
             m_renderer->RenderGUIQuad(
                 cursorTopLeft, m_cursorSize, 10000, m_cursorSurface.mesh, m_cursorSurface.material);
         }
@@ -146,9 +152,15 @@ void GUIManager::ToggleScreen(GUIScreen* screen) {
         const unsigned screenW = ASCIIgL::Screen::GetInst().GetWidth();
         const unsigned screenH = ASCIIgL::Screen::GetInst().GetHeight();
         const glm::vec2 screenSize{static_cast<float>(screenW), static_cast<float>(screenH)};
-        glm::vec2 initialHotspot{};
-        if (screen->TryGetInitialCursorPosition(screenSize, initialHotspot)) {
-            m_cursorHotspot = initialHotspot;
+
+        // Mouse mode: GUI hotspot must match the OS pointer (not inventory's default slot).
+        if (m_input.IsMouseLookEnabled()) {
+            m_cursorHotspot = ASCIIgL::InputManager::GetInst().GetPointerScreenPos();
+        } else {
+            glm::vec2 initialHotspot{};
+            if (screen->TryGetInitialCursorPosition(screenSize, initialHotspot)) {
+                m_cursorHotspot = initialHotspot;
+            }
         }
     }
 }
@@ -159,10 +171,15 @@ void GUIManager::UpdateCursor(GUIScreen* top) {
     const float dt = ASCIIgL::FPSClock::GetInst().GetDeltaTime();
     const float cursorStep = m_cursorMoveSpeed * dt;
 
-    if (m_input.IsActionHeld("camera_left"))  m_cursorHotspot.x -= cursorStep;
-    if (m_input.IsActionHeld("camera_right")) m_cursorHotspot.x += cursorStep;
-    if (m_input.IsActionHeld("camera_up"))    m_cursorHotspot.y -= cursorStep;
-    if (m_input.IsActionHeld("camera_down"))  m_cursorHotspot.y += cursorStep;
+    if (m_input.IsMouseLookEnabled()) {
+        // Live sample so hotspot stays locked to the OS cursor (cached pointer can lag a frame).
+        m_cursorHotspot = ASCIIgL::InputManager::GetInst().GetPointerScreenPos();
+    } else {
+        if (m_input.IsActionHeld("camera_left"))  m_cursorHotspot.x -= cursorStep;
+        if (m_input.IsActionHeld("camera_right")) m_cursorHotspot.x += cursorStep;
+        if (m_input.IsActionHeld("camera_up"))    m_cursorHotspot.y -= cursorStep;
+        if (m_input.IsActionHeld("camera_down"))  m_cursorHotspot.y += cursorStep;
+    }
 
     const glm::vec2 halfSize = m_cursorSize * 0.5f;
     const glm::vec2 minHotspot = halfSize;

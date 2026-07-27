@@ -2,6 +2,7 @@
 
 #include <ASCIICraft/input/IInputSource.hpp>
 #include <ASCIICraft/input/InputSystem.hpp>
+#include <glm/vec2.hpp>
 
 /// Wraps the real input source and blocks all gameplay input when GUI is active.
 /// Pass this to MovementSystem and CameraSystem so they see "no input" when the GUI is open,
@@ -25,6 +26,26 @@ public:
 
     float GetMouseSensitivity() const override {
         return m_inputSystem.GetMouseSensitivity();
+    }
+
+    bool IsMouseLookEnabled() const override {
+        return m_inputSystem.IsMouseLookEnabled();
+    }
+
+    glm::vec2 GetLookDelta() const override {
+        if (m_inputSystem.GetInputMode() != input::InputMode::Gameplay)
+            return {0.0f, 0.0f};
+        return m_inputSystem.GetLookDelta();
+    }
+
+    glm::vec2 GetPointerPosition() const override {
+        return m_inputSystem.GetPointerPosition();
+    }
+
+    int GetScrollDelta() const override {
+        if (m_inputSystem.GetInputMode() != input::InputMode::Gameplay)
+            return 0;
+        return m_inputSystem.GetScrollDelta();
     }
 
 private:

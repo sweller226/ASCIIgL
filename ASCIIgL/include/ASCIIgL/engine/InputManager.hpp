@@ -5,6 +5,8 @@
 #include <memory>
 #include <functional>
 
+#include <glm/vec2.hpp>
+
 namespace ASCIIgL {
 
 /**
@@ -135,6 +137,8 @@ public:
 
     void Initialize();
     void Update();
+    /// Restore OS cursor / VT mouse tracking. Safe to call multiple times.
+    void Shutdown();
     
     // ========================================================================
     // Key State Queries
@@ -175,6 +179,40 @@ public:
     void SetMouseSensitivity(float sensitivity);
     float GetMouseSensitivity() const;
 
+    // ========================================================================
+    // Mouse (Win32): relative capture for 3D look, absolute position for 2D GUI
+    // ========================================================================
+
+    /// Relative mode: hide OS cursor, recenter each frame, accumulate deltas.
+    void SetMouseCapture(bool capture);
+    bool IsMouseCaptured() const;
+
+    /// Terminal-only: enable/disable VT mouse tracking to suppress text selection.
+    void SetTerminalMouseTracking(bool enabled);
+    bool IsTerminalMouseTrackingEnabled() const;
+
+    /// Pixel delta since last Update while captured. Zeros after read.
+    glm::vec2 GetMouseDelta();
+    /// Pointer in host client pixels (origin top-left of client area).
+    glm::vec2 GetPointerClientPos() const;
+    /// Pointer mapped into Screen cell/pixel space (0..width, 0..height).
+    glm::vec2 GetPointerScreenPos() const;
+    bool IsHostFocused() const;
+
+    /// Accumulate OS / console wheel input (positive = wheel away / "up").
+    void AddScrollDelta(int wheelDelta);
+    /// Notches this frame (wheel delta / WHEEL_DELTA), then clears. Positive = up.
+    int ConsumeScrollDelta();
+
+    enum class MouseButton {
+        Left,
+        Right,
+    };
+
+    bool IsMouseButtonPressed(MouseButton button) const;
+    bool IsMouseButtonHeld(MouseButton button) const;
+    bool IsMouseButtonDown(MouseButton button) const;
+
 private:
     InputManager();
     ~InputManager();
@@ -194,10 +232,29 @@ private:
     
     // Settings
     float mouseSensitivity = 80.0f;  // Default sensitivity
+
+    bool mouseCaptured = false;
+    bool terminalMouseTracking = false;
+    bool ignoreNextMouseSample = false;
+    glm::vec2 mouseDeltaAccum{0.0f, 0.0f};
+    int scrollDeltaAccum = 0;
+    InputState mouseButtonStates[2] = {InputState::Released, InputState::Released};
+    InputState previousMouseButtonStates[2] = {InputState::Released, InputState::Released};
+    unsigned long savedInputConsoleMode = 0;
+    bool savedInputConsoleModeValid = false;
+    glm::vec2 consolePointerCell{0.0f, 0.0f};
+    bool consolePointerValid = false;
     
     // Helper functions
     InputState CalculateKeyState(Key key) const;
     void UpdateToggleStates();
+    void UpdateMouse();
+    void UpdateMouseButtons();
+    void PollConsoleMouseInput();
+    void ApplySystemCursorHidden(bool hidden);
+    void WriteTerminalMouseTracking(bool enabled);
+    void ApplyTerminalMouseInputMode(bool enabled);
+    static int MouseButtonIndex(MouseButton button);
 };
 
 } // namespace ASCIIgL

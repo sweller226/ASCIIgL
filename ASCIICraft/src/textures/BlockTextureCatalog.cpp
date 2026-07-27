@@ -15,6 +15,9 @@ const std::vector<CatalogEntry>& GetBlockTextureCatalog() {
     static const std::vector<CatalogEntry> kCatalog = {
         {"minecraft:blocks/dirt",              "res/textures/blocks/dirt.png"},
         {"minecraft:blocks/cobblestone",       "res/textures/blocks/cobblestone.png", nullptr, 0.0f},
+        {"minecraft:blocks/cobblestone_mossy", "res/textures/blocks/mossy_cobblestone.png", nullptr, 0.0f},
+        {"minecraft:blocks/stonebrick",        "res/textures/blocks/stone_bricks.png", nullptr, 0.0f},
+        {"minecraft:blocks/stonebrick_mossy",  "res/textures/blocks/mossy_stone_bricks.png", nullptr, 0.0f},
         {"minecraft:blocks/log_oak",           "res/textures/blocks/log_oak.png"},
         {"minecraft:blocks/log_oak_top",       "res/textures/blocks/log_oak_top.png"},
         {"minecraft:blocks/leaves_oak",        "res/textures/blocks/leaves_oak.png", &kGrassTintHue},

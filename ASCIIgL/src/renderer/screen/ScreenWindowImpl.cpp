@@ -1,5 +1,6 @@
 #include <ASCIIgL/renderer/screen/ScreenWindowImpl.hpp>
 #include <ASCIIgL/renderer/screen/Screen.hpp>
+#include <ASCIIgL/engine/InputManager.hpp>
 #include <ASCIIgL/util/Logger.hpp>
 #include <ASCIIgL/util/CoverageJson.hpp>
 
@@ -18,6 +19,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
+    case WM_MOUSEWHEEL: {
+        const int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+        InputManager::GetInst().AddScrollDelta(delta);
+        return 0;
+    }
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);

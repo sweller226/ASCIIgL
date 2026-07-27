@@ -29,6 +29,8 @@ public:
     virtual size_t GetPixelBufferSize() const = 0;
     /// Window handle (console or app window). nullptr if not initialized.
     virtual NativeWindowHandle GetWindowHandle() = 0;
+    /// Write raw bytes to console output (terminal). Default no-op for window backends.
+    virtual void WriteOutputBytes(const char* /*data*/, size_t /*length*/) {}
     /// Pump Win32 messages (window mode); no-op in terminal. Sets Screen exit flag on WM_QUIT.
     virtual void ProcessMessages() = 0;
 };

@@ -3,8 +3,25 @@
 #include <ASCIICraft/world/chunk/ChunkManager.hpp>
 
 #include <algorithm>
+#include <string>
 
 namespace {
+
+FaceDir OppositeHorizontalFaceDir(FaceDir face) {
+    switch (face) {
+        case FaceDir::North: return FaceDir::South;
+        case FaceDir::South: return FaceDir::North;
+        case FaceDir::East:  return FaceDir::West;
+        case FaceDir::West:  return FaceDir::East;
+        default:             return FaceDir::North;
+    }
+}
+
+/// Stairs use facing = player look (ascent / full side away from player).
+/// Most other horizontal-facing blocks (furnace, chest, …) face the player.
+bool FacingMatchesPlayerLook(const std::string& typeName) {
+    return typeName.size() >= 7 && typeName.compare(typeName.size() - 7, 7, "_stairs") == 0;
+}
 
 uint32_t ApplyPlayerFacing(
     const blockstate::BlockStateRegistry& bsr,
@@ -17,7 +34,11 @@ uint32_t ApplyPlayerFacing(
 
     const uint16_t typeId = bsr.GetTypeIdFromState(stateId);
     const auto& type = bsr.GetType(typeId);
-    const char* facingValue = FaceDirToString(*faceDir);
+
+    const FaceDir placedFacing = FacingMatchesPlayerLook(type.name)
+        ? *faceDir
+        : OppositeHorizontalFaceDir(*faceDir);
+    const char* facingValue = FaceDirToString(placedFacing);
 
     const auto facingProperty = std::find_if(
         type.properties.begin(),
