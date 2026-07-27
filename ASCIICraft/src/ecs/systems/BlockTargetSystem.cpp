@@ -5,6 +5,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <ASCIIgL/engine/InputManager.hpp>
 #include <ASCIIgL/engine/Mesh.hpp>
 #include <ASCIIgL/renderer/Material.hpp>
 #include <ASCIIgL/renderer/PaletteUtil.hpp>
@@ -180,7 +181,11 @@ void BlockTargetSystem::Update() {
         target->stateId = hit.first;
     }
 
-    const auto placement = chunkManager->BlockIntersectsViewForPlacement(lookDir, origin, reach->reach);
+    // Hold sneak (shift) to place against flowers/plants instead of replacing them.
+    const bool replaceReplaceables = !ASCIIgL::InputManager::GetInst().IsActionHeld("sneak");
+    const auto placement = chunkManager->BlockIntersectsViewForPlacement(
+        lookDir, origin, reach->reach, replaceReplaceables
+    );
     if (placement.first) {
         target->canPlace = true;
         target->placePos = placement.second;

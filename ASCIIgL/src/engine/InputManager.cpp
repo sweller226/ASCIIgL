@@ -801,11 +801,19 @@ std::string InputManager::GetActionForKey(Key key) const {
 }
 
 void InputManager::SetMouseSensitivity(float sensitivity) {
-    mouseSensitivity = std::max(0.1f, sensitivity);
+    mouseSensitivity = std::max(0.01f, sensitivity);
 }
 
 float InputManager::GetMouseSensitivity() const {
     return mouseSensitivity;
+}
+
+void InputManager::SetKeyboardLookSpeed(float degreesPerSecond) {
+    keyboardLookSpeed = std::max(0.1f, degreesPerSecond);
+}
+
+float InputManager::GetKeyboardLookSpeed() const {
+    return keyboardLookSpeed;
 }
 
 // ============================================================================

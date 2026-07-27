@@ -28,6 +28,10 @@ public:
         return m_inputSystem.GetMouseSensitivity();
     }
 
+    float GetKeyboardLookSpeed() const override {
+        return m_inputSystem.GetKeyboardLookSpeed();
+    }
+
     bool IsMouseLookEnabled() const override {
         return m_inputSystem.IsMouseLookEnabled();
     }

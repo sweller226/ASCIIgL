@@ -11,7 +11,10 @@ struct IInputSource {
 
     virtual bool IsActionHeld(const std::string& action) const = 0;
     virtual bool IsActionPressed(const std::string& action) const = 0;
+    /// Mouse look multiplier (1.0 = default).
     virtual float GetMouseSensitivity() const = 0;
+    /// Keyboard arrow look rate in degrees/second.
+    virtual float GetKeyboardLookSpeed() const = 0;
 
     /// True when the mouse look control scheme is active (vs keyboard arrows).
     virtual bool IsMouseLookEnabled() const = 0;

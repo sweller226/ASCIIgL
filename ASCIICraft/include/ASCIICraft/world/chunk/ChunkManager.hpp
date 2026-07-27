@@ -70,7 +70,14 @@ public:
 
     // Raycasting (returns stateId and position)
     std::pair<uint32_t, WorldCoord> BlockIntersectsView(glm::vec3& lookDir, glm::vec3& headPos, float reach);
-    std::pair<bool, WorldCoord> BlockIntersectsViewForPlacement(glm::vec3& lookDir, glm::vec3& headPos, float reach);
+    /// When \p replaceReplaceables is true, flowers/plants are placement targets (replaced).
+    /// When false (sneaking), they are treated as solid so the adjacent empty cell is used.
+    std::pair<bool, WorldCoord> BlockIntersectsViewForPlacement(
+        glm::vec3& lookDir,
+        glm::vec3& headPos,
+        float reach,
+        bool replaceReplaceables = true
+    );
     
     void BlockUpdateNeighboursDirty(const ChunkCoord& chunkCoord, const glm::ivec3& localPos);
 private:

@@ -846,7 +846,28 @@ std::pair<uint32_t, WorldCoord> ChunkManager::BlockIntersectsView(glm::vec3& loo
     return { blockstate::BlockStateRegistry::AIR_STATE_ID, WorldCoord() };
 }
 
-std::pair<bool, WorldCoord> ChunkManager::BlockIntersectsViewForPlacement(glm::vec3& lookDir, glm::vec3& headPos, float reach) {
+static bool IsReplaceablePlacementBlock(const blockstate::BlockStateRegistry& bsr, uint32_t stateId) {
+    if (stateId == blockstate::BlockStateRegistry::AIR_STATE_ID) {
+        return true;
+    }
+
+    if (!bsr.IsValidState(stateId)) {
+        return false;
+    }
+
+    const auto& type = bsr.GetType(bsr.GetTypeIdFromState(stateId));
+    return type.name == "minecraft:dandelion" ||
+           type.name == "minecraft:poppy" ||
+           type.name == "minecraft:tall_grass" ||
+           type.name == "minecraft:fern";
+}
+
+std::pair<bool, WorldCoord> ChunkManager::BlockIntersectsViewForPlacement(
+    glm::vec3& lookDir,
+    glm::vec3& headPos,
+    float reach,
+    bool replaceReplaceables
+) {
     glm::vec3 dir = glm::normalize(lookDir);
     const float step = 0.1f;
 
@@ -866,8 +887,10 @@ std::pair<bool, WorldCoord> ChunkManager::BlockIntersectsViewForPlacement(glm::v
 
         if (stateId == blockstate::BlockStateRegistry::AIR_STATE_ID) {
             lastEmpty = WorldCoord(bx, by, bz);
-        }
-        else {
+        } else if (const auto* bsr = registry.ctx().find<blockstate::BlockStateRegistry>();
+                   replaceReplaceables && bsr && IsReplaceablePlacementBlock(*bsr, stateId)) {
+            return { true, WorldCoord(bx, by, bz) };
+        } else {
             return { true, lastEmpty };
         }
 

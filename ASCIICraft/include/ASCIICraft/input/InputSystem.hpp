@@ -33,6 +33,7 @@ public:
     bool IsActionHeld(const std::string& action) const override;
     bool IsActionPressed(const std::string& action) const override;
     float GetMouseSensitivity() const override;
+    float GetKeyboardLookSpeed() const override;
     glm::vec2 GetLookDelta() const override;
     glm::vec2 GetPointerPosition() const override;
     int GetScrollDelta() const override;
