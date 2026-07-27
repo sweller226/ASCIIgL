@@ -134,9 +134,10 @@ void PlacingSystem::PlayerPlace() {
         placeEvent.position = target->placePos;
         m_eventBus.emit(placeEvent);
 
+        // Creative / Spectator: place without consuming (same as MiningSystem break).
         const auto* pmode = m_registry.try_get<components::PlayerMode>(playerEnt);
         const GameMode mode = pmode ? pmode->gamemode : GameMode::Survival;
-        if (mode != GameMode::Creative) {
+        if (mode == GameMode::Survival) {
             const components::ItemStack oldStack = heldStack;
             InventorySystem::removeItemAt(*inventory, slotIndex, 1);
             m_eventBus.emit(events::InventoryChangedEvent{

@@ -176,8 +176,12 @@ public:
     void ClearInputState();
     Key GetKeyForAction(const std::string& action) const;
     std::string GetActionForKey(Key key) const;
+    /// Mouse look multiplier (1.0 = default). Independent of keyboard look speed.
     void SetMouseSensitivity(float sensitivity);
     float GetMouseSensitivity() const;
+    /// Keyboard arrow look rate in degrees/second.
+    void SetKeyboardLookSpeed(float degreesPerSecond);
+    float GetKeyboardLookSpeed() const;
 
     // ========================================================================
     // Mouse (Win32): relative capture for 3D look, absolute position for 2D GUI
@@ -231,7 +235,8 @@ private:
     std::unordered_map<std::string, bool> toggleStates;  // For toggle actions
     
     // Settings
-    float mouseSensitivity = 80.0f;  // Default sensitivity
+    float mouseSensitivity = 1.0f;       // Mouse look multiplier
+    float keyboardLookSpeed = 80.0f;     // Keyboard look deg/s
 
     bool mouseCaptured = false;
     bool terminalMouseTracking = false;

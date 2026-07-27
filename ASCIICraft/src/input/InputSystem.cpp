@@ -127,6 +127,10 @@ float InputSystem::GetMouseSensitivity() const {
     return ASCIIgL::InputManager::GetInst().GetMouseSensitivity();
 }
 
+float InputSystem::GetKeyboardLookSpeed() const {
+    return ASCIIgL::InputManager::GetInst().GetKeyboardLookSpeed();
+}
+
 glm::vec2 InputSystem::GetLookDelta() const {
     return m_lookDelta;
 }
