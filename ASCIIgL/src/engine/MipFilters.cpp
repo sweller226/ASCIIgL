@@ -80,7 +80,7 @@ void PixelArtMode2x2(const uint8_t* srcData, int srcW, int srcH, uint8_t* dstDat
     }
 }
 
-void PixelArtAlphaCutoutAny2x2(const uint8_t* srcData, int srcW, int srcH, uint8_t* dstData, int dstW, int dstH) {
+void PixelArtAlphaCutoutCoverage2x2(const uint8_t* srcData, int srcW, int srcH, uint8_t* dstData, int dstW, int dstH) {
     constexpr uint8_t kCutoff = 128; // matches common alpha-test cutoff of 0.5
 
     for (int y = 0; y < dstH; ++y) {
@@ -95,20 +95,21 @@ void PixelArtAlphaCutoutAny2x2(const uint8_t* srcData, int srcW, int srcH, uint8
                 SampleRGBAClamp(srcData, srcW, srcH, sx + 1, sy + 1),
             };
 
-            int bestIdx = 0;
-            uint8_t bestA = s[0][3];
-            bool anyOpaque = (bestA >= kCutoff);
-            for (int i = 1; i < 4; ++i) {
+            int opaqueCount = 0;
+            int bestIdx = -1;
+            uint8_t bestA = 0;
+            for (int i = 0; i < 4; ++i) {
                 const uint8_t a = s[i][3];
-                if (a > bestA) {
+                if (a < kCutoff) continue;
+                ++opaqueCount;
+                if (bestIdx < 0 || a > bestA) {
                     bestA = a;
                     bestIdx = i;
                 }
-                if (a >= kCutoff) anyOpaque = true;
             }
 
             const size_t di = (static_cast<size_t>(y) * static_cast<size_t>(dstW) + static_cast<size_t>(x)) * 4;
-            if (!anyOpaque) {
+            if (opaqueCount == 0) {
                 dstData[di + 0] = 0;
                 dstData[di + 1] = 0;
                 dstData[di + 2] = 0;
@@ -116,12 +117,13 @@ void PixelArtAlphaCutoutAny2x2(const uint8_t* srcData, int srcW, int srcH, uint8
                 continue;
             }
 
-            // Keep binary alpha in mips so alpha-test doesn't \"fade out\" at distance.
+            // Coverage alpha (rounded): 1/4→64 (clipped away), 2/4→128 (kept), 3/4→191, 4/4→255.
+            // RGB stays an opaque sample so colors don't darken from transparent black.
             const uint8_t* p = s[bestIdx];
             dstData[di + 0] = p[0];
             dstData[di + 1] = p[1];
             dstData[di + 2] = p[2];
-            dstData[di + 3] = 255;
+            dstData[di + 3] = static_cast<uint8_t>((opaqueCount * 255 + 2) / 4);
         }
     }
 }

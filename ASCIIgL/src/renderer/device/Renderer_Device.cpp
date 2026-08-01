@@ -417,13 +417,15 @@ bool Renderer::InitializeDepthStencil() {
 }
 
 bool Renderer::InitializeSamplers() {
-    // --- Point sampler: pixel-art (GUI, sprites) ---
+    // --- Point sampler: pixel-art (terrain cutouts, GUI, sprites) ---
+    // Full point (incl. mips): MIP_LINEAR lerps opaque RGB with transparent
+    // RGB(0,0,0) at half-integer LODs, which darkens cutouts into a black
+    // "mip border" after alpha clip still passes the faded sample.
     D3D11_SAMPLER_DESC pointDesc = {};
-    pointDesc.Filter = D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
+    pointDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
     pointDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
     pointDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
     pointDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-    // Slight positive LOD bias to favor slightly coarser mips (reduce aliasing).
     pointDesc.MipLODBias = 0.0f;
     pointDesc.MaxAnisotropy = 1;
     pointDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;

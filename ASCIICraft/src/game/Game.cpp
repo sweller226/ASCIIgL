@@ -424,6 +424,9 @@ bool Game::LoadTextures(bool multicolor) {
         ASCIIgL::Logger::Error("Failed to load block texture array");
         return false;   
     }
+    // CPU cutout mips: opaque RGB preserved; alpha = coverage so distant
+    // flowers/leaves thin under clip(a-0.5) instead of inflating solid.
+    blockTextureArray->GenerateMipmapsCPU(-1, ASCIIgL::MipFilters::PixelArtAlphaCutoutCoverage2x2);
 
     std::vector<std::string> itemTexturePaths =
         textures::BuildTexturePaths(itemtextures::GetItemTextureCatalog());
@@ -432,6 +435,7 @@ bool Game::LoadTextures(bool multicolor) {
         ASCIIgL::Logger::Error("Failed to load item texture array");
         return false;
     }
+    itemTextureArray->GenerateMipmapsCPU(-1, ASCIIgL::MipFilters::PixelArtAlphaCutoutCoverage2x2);
 
     auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture(
         "res/textures/gui/container/inventory.png", "inventoryTexture", ASCIIgL::MonochromeMapping{}
