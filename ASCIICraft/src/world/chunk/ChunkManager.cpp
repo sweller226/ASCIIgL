@@ -859,7 +859,10 @@ static bool IsReplaceablePlacementBlock(const blockstate::BlockStateRegistry& bs
     return type.name == "minecraft:dandelion" ||
            type.name == "minecraft:poppy" ||
            type.name == "minecraft:tall_grass" ||
-           type.name == "minecraft:fern";
+           type.name == "minecraft:fern" ||
+           type.name == "minecraft:wheat" ||
+           type.name == "minecraft:carrots" ||
+           type.name == "minecraft:potatoes";
 }
 
 std::pair<bool, WorldCoord> ChunkManager::BlockIntersectsViewForPlacement(

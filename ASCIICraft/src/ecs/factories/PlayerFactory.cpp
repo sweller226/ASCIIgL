@@ -48,14 +48,14 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     auto& inv = registry.emplace<components::Inventory>(p_ent, 36);
     if (auto* itemRegistry = registry.ctx().find<ecs::data::ItemRegistry>()) {
         const char* hotbarItems[] = {
-            "minecraft:wooden_sword",
-            "minecraft:wooden_pickaxe",
-            "minecraft:wooden_axe",
-            "minecraft:wooden_shovel",
-            "minecraft:bread",
-            "minecraft:oak_planks",
+            "minecraft:wheat",
+            "minecraft:carrots",
+            "minecraft:potatoes",
+            "minecraft:farmland",
+            "minecraft:mossy_cobblestone_stairs",
+            "minecraft:mossy_cobblestone_slab",
         };
-        const int hotbarCounts[] = {1, 1, 1, 1, 64, 64};
+        const int hotbarCounts[] = {64, 64, 64, 64, 64, 64};
 
         const char* blockItems[] = {
             "minecraft:dandelion",
@@ -70,12 +70,14 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
             "minecraft:stonebrick",
             "minecraft:mossy_stonebrick",
             "minecraft:stone_stairs",
+            "minecraft:mossy_cobblestone_stairs",
             "minecraft:dirt",
             "minecraft:grass",
             "minecraft:oak_log",
             "minecraft:oak_planks",
             "minecraft:oak_slab",
             "minecraft:cobblestone_slab",
+            "minecraft:mossy_cobblestone_slab",
             "minecraft:oak_leaves",
             "minecraft:crafting_table",
             "minecraft:bookshelf",
@@ -85,6 +87,9 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
             "minecraft:green_wool",
             "minecraft:farmland",
             "minecraft:water",
+            "minecraft:wheat",
+            "minecraft:carrots",
+            "minecraft:potatoes",
         };
 
         const auto seedSlot = [&](int slot, const char* itemName, int count = -1) {

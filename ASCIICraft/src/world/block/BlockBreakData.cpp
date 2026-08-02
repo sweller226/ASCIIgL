@@ -25,6 +25,9 @@ const std::unordered_map<std::string, BreakEntry>& GetBreakTable() {
         {"minecraft:poppy",             {0.0f,     ToolClass::None,    0}},
         {"minecraft:tall_grass",        {0.0f,     ToolClass::None,    0}},
         {"minecraft:fern",              {0.0f,     ToolClass::None,    0}},
+        {"minecraft:wheat",             {0.0f,     ToolClass::None,    0}},
+        {"minecraft:carrots",           {0.0f,     ToolClass::None,    0}},
+        {"minecraft:potatoes",          {0.0f,     ToolClass::None,    0}},
 
         {"minecraft:dirt",              {0.5f,     ToolClass::Shovel,  0}},
         {"minecraft:grass",             {0.6f,     ToolClass::Shovel,  0}},

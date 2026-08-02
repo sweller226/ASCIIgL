@@ -76,6 +76,9 @@ void BlockSoundMap::Build(const blockstate::BlockStateRegistry& bsr) {
     MapType(bsr, "minecraft:tall_grass", "grass");
     MapType(bsr, "minecraft:fern", "grass");
     MapType(bsr, "minecraft:dandelion", "grass");
+    MapType(bsr, "minecraft:wheat", "grass");
+    MapType(bsr, "minecraft:carrots", "grass");
+    MapType(bsr, "minecraft:potatoes", "grass");
     MapType(bsr, "minecraft:poppy", "grass");
 
     MapType(bsr, "minecraft:oak_stairs", "wood");

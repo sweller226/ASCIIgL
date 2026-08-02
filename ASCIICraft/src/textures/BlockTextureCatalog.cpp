@@ -56,6 +56,24 @@ const std::vector<CatalogEntry>& GetBlockTextureCatalog() {
         // Farmland tops (paletteWeight 0: don't skew palette clustering).
         {"minecraft:blocks/farmland",          "res/textures/blocks/farmland.png", nullptr, 0.0f},
         {"minecraft:blocks/farmland_moist",    "res/textures/blocks/farmland_moist.png", nullptr, 0.0f},
+        // Wheat crop stages (model IDs use underscore before digit; files do not).
+        {"minecraft:blocks/wheat_stage_0",     "res/textures/blocks/wheat_stage0.png", nullptr, 0.0f},
+        {"minecraft:blocks/wheat_stage_1",     "res/textures/blocks/wheat_stage1.png", nullptr, 0.0f},
+        {"minecraft:blocks/wheat_stage_2",     "res/textures/blocks/wheat_stage2.png", nullptr, 0.0f},
+        {"minecraft:blocks/wheat_stage_3",     "res/textures/blocks/wheat_stage3.png", nullptr, 0.0f},
+        {"minecraft:blocks/wheat_stage_4",     "res/textures/blocks/wheat_stage4.png", nullptr, 0.0f},
+        {"minecraft:blocks/wheat_stage_5",     "res/textures/blocks/wheat_stage5.png", nullptr, 0.0f},
+        {"minecraft:blocks/wheat_stage_6",     "res/textures/blocks/wheat_stage6.png", nullptr, 0.0f},
+        {"minecraft:blocks/wheat_stage_7",     "res/textures/blocks/wheat_stage7.png", nullptr, 0.0f},
+        // Carrot / potato crop stages (model IDs use underscore before digit; files do not).
+        {"minecraft:blocks/carrots_stage_0",   "res/textures/blocks/carrots_stage0.png", nullptr, 0.0f},
+        {"minecraft:blocks/carrots_stage_1",   "res/textures/blocks/carrots_stage1.png", nullptr, 0.0f},
+        {"minecraft:blocks/carrots_stage_2",   "res/textures/blocks/carrots_stage2.png", nullptr, 0.0f},
+        {"minecraft:blocks/carrots_stage_3",   "res/textures/blocks/carrots_stage3.png", nullptr, 0.0f},
+        {"minecraft:blocks/potatoes_stage_0",  "res/textures/blocks/potatoes_stage0.png", nullptr, 0.0f},
+        {"minecraft:blocks/potatoes_stage_1",  "res/textures/blocks/potatoes_stage1.png", nullptr, 0.0f},
+        {"minecraft:blocks/potatoes_stage_2",  "res/textures/blocks/potatoes_stage2.png", nullptr, 0.0f},
+        {"minecraft:blocks/potatoes_stage_3",  "res/textures/blocks/potatoes_stage3.png", nullptr, 0.0f},
     };
     return kCatalog;
 }
