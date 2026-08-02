@@ -528,11 +528,10 @@ void ScreenTerminalImpl::SetPaletteTerminal(const Palette& palette, HANDLE& hOut
             return std::string(hexColor);
         };
         
-        // Set default foreground/background for the scheme:
-        // - foreground: palette index 15 (brightest entry)
-        // - background: palette index 0  (darkest entry)
-        // Cursor uses palette[0] as before.
-        customScheme["foreground"]  = toHex(15);
+        // Set foreground and background overrides to palette index 0.
+        // Windows Terminal applies scheme "foreground" whenever FG attribute is 0x0;
+        // matching palette[0] keeps dark FG cells from rendering as bright white.
+        customScheme["foreground"]  = toHex(0);
         customScheme["background"]  = toHex(0);
         customScheme["cursorColor"] = toHex(0);
         
