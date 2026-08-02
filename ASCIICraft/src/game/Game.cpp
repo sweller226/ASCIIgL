@@ -1051,6 +1051,48 @@ void Game::InitializeBlockStates() {
         modelLibrary.RegisterModel(stateId, std::move(model), bsr);
     }
 
+    // Matches assets/minecraft/blockstates/wheat.json (age 0–7; default full grown).
+    bsr.RegisterType("minecraft:wheat", {
+        blockstate::BlockProperty{ "age", {"0", "1", "2", "3", "4", "5", "6", "7"}, 7 }
+    });
+    const uint16_t wheatType = bsr.GetTypeId("minecraft:wheat");
+    bsr.SetDerivedData(wheatType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:wheat");
+
+    // Matches assets/minecraft/blockstates/carrots.json (age 0–7; default full grown).
+    bsr.RegisterType("minecraft:carrots", {
+        blockstate::BlockProperty{ "age", {"0", "1", "2", "3", "4", "5", "6", "7"}, 7 }
+    });
+    const uint16_t carrotsType = bsr.GetTypeId("minecraft:carrots");
+    bsr.SetDerivedData(carrotsType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:carrots");
+
+    // Matches assets/minecraft/blockstates/potatoes.json (age 0–7; default full grown).
+    bsr.RegisterType("minecraft:potatoes", {
+        blockstate::BlockProperty{ "age", {"0", "1", "2", "3", "4", "5", "6", "7"}, 7 }
+    });
+    const uint16_t potatoesType = bsr.GetTypeId("minecraft:potatoes");
+    bsr.SetDerivedData(potatoesType, [&](blockstate::BlockState& s) {
+        s.isRenderable = true;
+        s.isTransparent = false;
+        s.renderMode = blockstate::RenderMode::Cutout;
+        s.isFullBlock = false;
+        s.cullSameType = false;
+    });
+    registerJsonBackedOrLog("minecraft:potatoes");
+
     for (uint16_t tid = 0; tid < bsr.GetTotalTypeCount(); ++tid) {
         blockstate::AssertUniqueVariantKeysPerType(bsr, tid, "Game::InitializeBlockStates");
     }
@@ -1103,6 +1145,9 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterBlockItem(registry, "minecraft:green_wool",       "Green Wool");
     itemRegistry.RegisterBlockItem(registry, "minecraft:farmland",         "Farmland");
     itemRegistry.RegisterBlockItem(registry, "minecraft:water",            "Water");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:wheat",            "Wheat", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
+    itemRegistry.RegisterBlockItem(registry, "minecraft:carrots",          "Carrots", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
+    itemRegistry.RegisterBlockItem(registry, "minecraft:potatoes",         "Potatoes", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
 
     // === Resources / Materials ===
     itemRegistry.RegisterResourceItem(registry, "minecraft:coal",       "Coal",       itemLayer("minecraft:items/coal"));
