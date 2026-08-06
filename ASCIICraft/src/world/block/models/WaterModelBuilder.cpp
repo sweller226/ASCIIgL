@@ -1,6 +1,7 @@
 #include <ASCIICraft/world/block/models/WaterModelBuilder.hpp>
 #include <ASCIICraft/world/block/models/ModelBuilderUtil.hpp>
 #include <ASCIICraft/util/MeshBuilderUtil.hpp>
+#include <ASCIICraft/world/block/CollisionAabb.hpp>
 
 #include <ASCIICraft/textures/BlockTextureCatalog.hpp>
 #include <ASCIICraft/world/block/FaceCulling.hpp>
@@ -51,6 +52,10 @@ blockstate::BlockModel BuildWaterModel(const WaterSpec& spec) {
     blockstate::BlockModel out;
     out.isFullBlock = !spec.top;
     out.computeVisibleFaces = faceculling::ComputeVisibleFacesWater;
+    // Match legacy physics: full water cells are solid unit cubes; surface (top) water is non-solid.
+    if (!spec.top) {
+        out.collisionBoxes = {blockstate::MakeFullBlockCollisionAabb()};
+    }
 
     blockstate::RenderLayer& layer = out.transparent;
     layer.faces.reserve(kFaceCount);

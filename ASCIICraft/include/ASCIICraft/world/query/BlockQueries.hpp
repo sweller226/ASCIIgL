@@ -21,7 +21,8 @@ bool TryGetState(
     const blockstate::BlockState *&out
 );
 
-/// True if this state should participate in AABB physics collision (full-block models only).
+/// True if this state should participate in AABB physics collision
+/// (non-empty geometry-derived collision boxes, or full-block fallback).
 bool IsSolidForPhysics(const blockstate::BlockStateRegistry *bsr, uint32_t stateId);
 
 BlockFilter SolidForPhysicsFilter(const blockstate::BlockStateRegistry *bsr);
