@@ -175,9 +175,11 @@ void MiningSystem::EmitHitEffects(
     if (m_hitEffectTimer > 0.0f) return;
     m_hitEffectTimer = kHitEffectIntervalSeconds;
 
-    // Approximate the mined face as the block face pointing toward the camera.
     FaceDir face = FaceDir::Top;
-    if (const auto* cam = m_registry.try_get<components::PlayerCamera>(playerEnt)) {
+    if (const auto* target = m_registry.try_get<components::BlockTarget>(playerEnt);
+        target && target->active && target->blockPos == mining.blockPos) {
+        face = target->hitFace;
+    } else if (const auto* cam = m_registry.try_get<components::PlayerCamera>(playerEnt)) {
         const glm::vec3 center(
             static_cast<float>(mining.blockPos.x) + 0.5f,
             static_cast<float>(mining.blockPos.y) + 0.5f,

@@ -20,6 +20,7 @@
 #include <ASCIICraft/util/MeshBuilderUtil.hpp>
 #include <ASCIICraft/world/World.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/block/state/FaceDir.hpp>
 
 namespace ecs::systems {
 namespace {
@@ -153,6 +154,7 @@ void BlockTargetSystem::Update() {
 
     target->active = false;
     target->stateId = blockstate::BlockStateRegistry::AIR_STATE_ID;
+    target->hitFace = FaceDir::North;
     target->canPlace = false;
 
     if (!m_gameplayActive) {
@@ -171,24 +173,43 @@ void BlockTargetSystem::Update() {
         return;
     }
 
-    glm::vec3 origin = cam->camera.pos;
-    glm::vec3 lookDir = cam->camera.getCamFront();
+    const glm::vec3 origin = cam->camera.pos;
+    const glm::vec3 lookDir = cam->camera.getCamFront();
 
-    const auto hit = chunkManager->BlockIntersectsView(lookDir, origin, reach->reach);
-    if (hit.first != blockstate::BlockStateRegistry::AIR_STATE_ID) {
-        target->active = true;
-        target->blockPos = hit.second;
-        target->stateId = hit.first;
+    const auto hit = chunkManager->RaycastView(lookDir, origin, reach->reach);
+    if (!hit.has_value()) {
+        return;
     }
+
+    target->active = true;
+    target->blockPos = hit->blockPos;
+    target->stateId = hit->stateId;
+    target->hitFace = hit->face;
 
     // Hold sneak (shift) to place against flowers/plants instead of replacing them.
     const bool replaceReplaceables = !ASCIIgL::InputManager::GetInst().IsActionHeld("sneak");
-    const auto placement = chunkManager->BlockIntersectsViewForPlacement(
-        lookDir, origin, reach->reach, replaceReplaceables
-    );
-    if (placement.first) {
+    const auto* bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
+
+    auto isReplaceable = [&](uint32_t stateId) -> bool {
+        if (!bsr || !bsr->IsValidState(stateId)) {
+            return false;
+        }
+        const auto& type = bsr->GetType(bsr->GetTypeIdFromState(stateId));
+        return type.name == "minecraft:dandelion" ||
+               type.name == "minecraft:poppy" ||
+               type.name == "minecraft:tall_grass" ||
+               type.name == "minecraft:fern" ||
+               type.name == "minecraft:wheat" ||
+               type.name == "minecraft:carrots" ||
+               type.name == "minecraft:potatoes";
+    };
+
+    if (replaceReplaceables && isReplaceable(hit->stateId)) {
         target->canPlace = true;
-        target->placePos = placement.second;
+        target->placePos = hit->blockPos;
+    } else {
+        target->canPlace = true;
+        target->placePos = NeighborCoord(hit->blockPos, hit->face);
     }
 }
 

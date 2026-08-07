@@ -4,12 +4,14 @@
 #include <queue>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 #include <ASCIICraft/world/chunk/ChunkRegion.hpp>
 #include <ASCIICraft/world/chunk/ChunkJobQueue.hpp>
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/terrain/TerrainGenerator.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
+#include <ASCIICraft/world/query/BlockRaycast.hpp>
 #include <ASCIICraft/world/Sizes.hpp>
 
 #include <entt/entt.hpp>
@@ -78,6 +80,13 @@ public:
         float reach,
         bool replaceReplaceables = true
     );
+
+    /// Collider-based view raycast (nearest selection AABB hit within reach).
+    std::optional<worldquery::BlockRayHit> RaycastView(
+        const glm::vec3& lookDir,
+        const glm::vec3& headPos,
+        float reach
+    ) const;
     
     void BlockUpdateNeighboursDirty(const ChunkCoord& chunkCoord, const glm::ivec3& localPos);
 private:
