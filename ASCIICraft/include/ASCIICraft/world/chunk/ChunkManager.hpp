@@ -8,6 +8,7 @@
 
 #include <ASCIICraft/world/chunk/ChunkRegion.hpp>
 #include <ASCIICraft/world/chunk/ChunkJobQueue.hpp>
+#include <ASCIICraft/world/chunk/ChunkManagerDeps.hpp>
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/terrain/TerrainGenerator.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
@@ -37,11 +38,14 @@ struct ChunkManagerWaterParams {
 
 class ChunkManager {
 public:
+    /// \param deps injectable collaborators (region directory, clock, job scheduler).
+    ///        Defaults reproduce the original behaviour exactly.
     ChunkManager(
         entt::registry& registry,
         const sizes::WorldDimensions& worldDimensions,
         unsigned int renderDistance,
-        uint64_t worldSeed
+        uint64_t worldSeed,
+        ChunkManagerDeps deps = {}
     );
     ~ChunkManager() = default; // default is fine; list elements are destroyed automatically
 
@@ -161,4 +165,8 @@ private:
     ChunkManagerFogParams   fogParams_;
     ChunkManagerWaterParams waterParams_;
     uint32_t lastAutosaveSeconds_ = 0;
+
+    /// Clock used for meta-bucket expiry and autosave. Never null - the constructor
+    /// substitutes util::NowSeconds when deps supplies none.
+    std::function<uint32_t()> nowSeconds_;
 };

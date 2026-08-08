@@ -173,11 +173,10 @@ static void safeWrite(std::fstream& f, const char* buffer, std::streamsize count
     }
 }
 
-RegionFile::RegionFile(const RegionCoord& coord) : _coord(coord) {
+RegionFile::RegionFile(const RegionCoord& coord, std::filesystem::path regionDir) : _coord(coord) {
     chunkIndexes.resize(static_cast<size_t>(sizes::REGION_SIZE) * sizes::REGION_SIZE * sizes::REGION_SIZE);
     metaIndexes.resize(static_cast<size_t>(sizes::REGION_SIZE) * sizes::REGION_SIZE * sizes::REGION_SIZE);
 
-    const std::filesystem::path regionDir = "regions";
     if (!std::filesystem::exists(regionDir)) {
         std::filesystem::create_directories(regionDir);
     }
@@ -900,7 +899,7 @@ const std::string& RegionFile::GetPath() const {
 
 void RegionManager::AddRegion(const RegionCoord& coord) {
     std::lock_guard<std::mutex> g(mutex_);
-    regionList.push_front(std::make_shared<RegionFile>(coord));
+    regionList.push_front(std::make_shared<RegionFile>(coord, regionDir_));
     regionFiles.emplace(coord, regionList.begin());
 
     if (regionList.size() <= static_cast<size_t>(MAX_REGIONS)) return;
@@ -948,7 +947,7 @@ std::shared_ptr<RegionFile> RegionManager::GetOrCreate(const RegionCoord& coord)
         it->second = regionList.begin();
         return *(it->second);
     }
-    regionList.push_front(std::make_shared<RegionFile>(coord));
+    regionList.push_front(std::make_shared<RegionFile>(coord, regionDir_));
     regionFiles.emplace(coord, regionList.begin());
 
     if (regionList.size() > static_cast<size_t>(MAX_REGIONS)) {

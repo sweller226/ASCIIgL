@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include <filesystem>
 #include <fstream>
 #include <vector>
 #include <cstdint>
@@ -102,7 +103,9 @@ class RegionFile {
 */ 
 
 public:
-    explicit RegionFile(const RegionCoord& coord);
+    /// \param regionDir directory the region file lives in. Created if absent.
+    ///        Relative paths resolve against the process CWD.
+    explicit RegionFile(const RegionCoord& coord, std::filesystem::path regionDir = "regions");
     ~RegionFile();
 
     RegionFile(const RegionFile&) = delete;
@@ -179,7 +182,9 @@ private:
 
 class RegionManager {
 public:
-    RegionManager() = default;
+    /// \param regionDir directory passed to every RegionFile this manager creates.
+    explicit RegionManager(std::filesystem::path regionDir = "regions")
+        : regionDir_(std::move(regionDir)) {}
     ~RegionManager() = default;
 
     static constexpr int MAX_REGIONS = 32;
@@ -191,8 +196,11 @@ public:
     /// Thread-safe: return existing region or create and return new one. Keeps region alive until shared_ptr is released.
     std::shared_ptr<RegionFile> GetOrCreate(const RegionCoord& coord);
 
+    const std::filesystem::path& GetRegionDir() const { return regionDir_; }
+
 private:
     mutable std::mutex mutex_;
+    std::filesystem::path regionDir_;
     using RegionList = std::list<std::shared_ptr<RegionFile>>;
     std::unordered_map<RegionCoord, RegionList::iterator> regionFiles;
     RegionList regionList;

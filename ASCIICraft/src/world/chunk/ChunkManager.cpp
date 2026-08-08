@@ -30,16 +30,19 @@ ChunkManager::ChunkManager(
     entt::registry& registry,
     const sizes::WorldDimensions& worldDimensions,
     const unsigned int renderDistance,
-    const uint64_t worldSeed
+    const uint64_t worldSeed,
+    ChunkManagerDeps deps
 )
     : _worldDimensions(worldDimensions)
     , renderDistance(renderDistance)
     , loadDistance(renderDistance + 1)
     , registry(registry)
-    , terrainGenerator(registry, worldSeed) {
+    , terrainGenerator(registry, worldSeed)
+    , nowSeconds_(deps.nowSeconds ? std::move(deps.nowSeconds)
+                                  : std::function<uint32_t()>(&util::NowSeconds)) {
     ASCIIgL::Logger::Debug("Chunk manager initialized");
-    regionManager = std::make_unique<RegionManager>();
-    chunkJobQueue = std::make_unique<ChunkJobQueue>(registry);
+    regionManager = std::make_unique<RegionManager>(std::move(deps.regionDir));
+    chunkJobQueue = std::make_unique<ChunkJobQueue>(registry, std::move(deps.scheduler));
     chunkJobQueue->SetTerrainGenerator(&terrainGenerator);
     chunkJobQueue->SetMaxDrainPerFrame(static_cast<size_t>(MAX_QUEUES_PER_FRAME));
     chunkJobQueue->SetMaxDrainMeshPerFrame(static_cast<size_t>(MAX_MESH_APPLIES_PER_FRAME));
@@ -268,7 +271,7 @@ void ChunkManager::ApplyEditsToChunk(Chunk* c, const std::vector<CrossChunkEdit>
 
 void ChunkManager::ProcessMetaBucketExpiry() {
     PROFILE_SCOPE("Chunk.UpdateChunkLoading.MetaBuckets");
-    const uint32_t now = util::NowSeconds();
+    const uint32_t now = nowSeconds_();
     constexpr int MAX_META_SAVES_PER_FRAME = 4;
     int metaSaveCount = 0;
 
@@ -685,7 +688,7 @@ void ChunkManager::SetBlockState(int x, int y, int z, uint32_t stateId) {
             metaTimeTracker.push(chunkCoord);
         } else {
             it->second.edits.push_back(crossChunkEdit);
-            it->second.lastTouched = util::NowSeconds();
+            it->second.lastTouched = nowSeconds_();
         }
     } else {
         chunk->SetBlockState(localPos.x, localPos.y, localPos.z, stateId);
@@ -717,7 +720,7 @@ void ChunkManager::Update() {
         DrainAndApplyJobResults();
     }
 
-    const uint32_t now = util::NowSeconds();
+    const uint32_t now = nowSeconds_();
     if (lastAutosaveSeconds_ == 0) {
         lastAutosaveSeconds_ = now;
         return;
