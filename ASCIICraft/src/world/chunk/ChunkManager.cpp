@@ -271,12 +271,18 @@ void ChunkManager::ApplyEditsToChunk(Chunk* c, const std::vector<CrossChunkEdit>
 
 void ChunkManager::ProcessMetaBucketExpiry() {
     PROFILE_SCOPE("Chunk.UpdateChunkLoading.MetaBuckets");
+    FlushExpiredMetaBuckets(/*force=*/false);
+}
+
+void ChunkManager::FlushExpiredMetaBuckets(bool force) {
     const uint32_t now = nowSeconds_();
     constexpr int MAX_META_SAVES_PER_FRAME = 4;
     int metaSaveCount = 0;
 
     size_t queueSize = metaTimeTracker.size();
-    for (size_t i = 0; i < queueSize && metaSaveCount < MAX_META_SAVES_PER_FRAME; ++i) {
+    for (size_t i = 0; i < queueSize; ++i) {
+        if (!force && metaSaveCount >= MAX_META_SAVES_PER_FRAME) break;
+
         const ChunkCoord key = metaTimeTracker.front();
         metaTimeTracker.pop();
 
@@ -286,6 +292,9 @@ void ChunkManager::ProcessMetaBucketExpiry() {
 
         MetaBucket& bucket = it->second;
 
+        // An ungenerated chunk still expects these edits to be applied in memory when
+        // its terrain lands; persisting and dropping them now would lose them.
+        // Requeued even under force.
         if (Chunk* c = GetChunk(key)) {
             if (!c->IsGenerated()) {
                 metaTimeTracker.push(key);
@@ -293,7 +302,7 @@ void ChunkManager::ProcessMetaBucketExpiry() {
             }
         }
 
-        if (now - bucket.lastTouched < META_BUCKET_TIME_LIMIT) {
+        if (!force && now - bucket.lastTouched < META_BUCKET_TIME_LIMIT) {
             metaTimeTracker.push(key);
             continue;
         }
@@ -303,11 +312,46 @@ void ChunkManager::ProcessMetaBucketExpiry() {
             if (bsr)
                 region->SaveMetaData(key, &it->second, *bsr);
             else
-                ASCIIgL::Logger::Error("ProcessMetaBucketExpiry: BlockStateRegistry missing");
+                ASCIIgL::Logger::Error("FlushExpiredMetaBuckets: BlockStateRegistry missing");
         }
         crossChunkEdits.erase(it);
         metaSaveCount++;
     }
+}
+
+ChunkManager::Stats ChunkManager::GetStats() const {
+    Stats s;
+    s.loadedChunks = loadedChunks.size();
+    for (const auto& [coord, chunk] : loadedChunks) {
+        if (chunk && chunk->IsGenerated()) ++s.generatedChunks;
+    }
+    s.pendingCrossChunkBuckets = crossChunkEdits.size();
+    s.metaTimeTrackerSize = metaTimeTracker.size();
+    return s;
+}
+
+std::vector<ChunkCoord> ChunkManager::GetLoadedCoords() const {
+    std::vector<ChunkCoord> out;
+    out.reserve(loadedChunks.size());
+    for (const auto& [coord, chunk] : loadedChunks) out.push_back(coord);
+    return out;
+}
+
+std::shared_ptr<const Chunk> ChunkManager::GetChunkShared(const ChunkCoord& coord) const {
+    auto it = loadedChunks.find(coord);
+    if (it == loadedChunks.end()) return nullptr;
+    return it->second;
+}
+
+bool ChunkManager::HasPendingCrossChunkEdits(const ChunkCoord& coord) const {
+    auto it = crossChunkEdits.find(coord);
+    return it != crossChunkEdits.end() && !it->second.edits.empty();
+}
+
+std::vector<CrossChunkEdit> ChunkManager::GetPendingCrossChunkEdits(const ChunkCoord& coord) const {
+    auto it = crossChunkEdits.find(coord);
+    if (it == crossChunkEdits.end()) return {};
+    return it->second.edits;
 }
 
 void ChunkManager::LoadChunksInRadius(const ChunkCoord& playerChunk, unsigned int loadRadius) {
