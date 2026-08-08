@@ -149,7 +149,12 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
                 mergedEdits.push_back(std::move(e));
             crossChunkEdits.erase(it);
         }
-        crossChunkEdits[coord].edits = std::move(mergedEdits);
+        // operator[] default-constructs the bucket, whose constructor stamps
+        // lastTouched from util::NowSeconds rather than this manager's clock; restamp
+        // it so expiry compares like with like.
+        MetaBucket& bucket = crossChunkEdits[coord];
+        bucket.lastTouched = nowSeconds_();
+        bucket.edits = std::move(mergedEdits);
         chunkJobQueue->EnqueueTerrainGen(chunkPtr);
     }
 }
@@ -727,6 +732,12 @@ void ChunkManager::SetBlockState(int x, int y, int z, uint32_t stateId) {
         auto it = crossChunkEdits.find(chunkCoord);
         if (it == crossChunkEdits.end()) {
             MetaBucket metaBucket;
+            // Stamp from this manager's clock. MetaBucket's constructor reads
+            // util::NowSeconds() directly, which is the same source in production but
+            // not when a clock is injected - and expiry compares against nowSeconds_,
+            // so a mismatched stamp underflows the uint32 subtraction and expires the
+            // bucket immediately.
+            metaBucket.lastTouched = nowSeconds_();
             metaBucket.edits.push_back(crossChunkEdit);
             crossChunkEdits.insert({chunkCoord, metaBucket});
             metaTimeTracker.push(chunkCoord);
