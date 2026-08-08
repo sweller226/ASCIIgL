@@ -2,7 +2,7 @@
 
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 #include <ASCIICraft/world/block/state/VariantKey.hpp>
-#include <ASCIICraft/world/chunk/LegacyStateIdMigration.hpp>
+#include <ASCIICraft/world/chunk/V1StateIdRemap.hpp>
 
 #include <filesystem>
 #include <algorithm>
@@ -426,7 +426,7 @@ void RegionFile::parseChunkBlob(
             SerializedBlock sb{};
             std::memcpy(&sb, blob.data() + pos, sizeof(sb));
             pos += sizeof(sb);
-            resolvedPalette.push_back(legacy_state_id::RemapLegacyStateId(sb.stateId));
+            resolvedPalette.push_back(v1_state_id::Remap(sb.stateId));
         }
     } else {
         throw std::runtime_error("Unsupported chunk blob version: " + std::to_string(ch.version));
@@ -853,7 +853,7 @@ void RegionFile::parseMetaBlob(
 
         CrossChunkEdit e;
         e.packedPos = se.pos;
-        e.stateId = legacy_state_id::RemapLegacyStateId(se.stateId);
+        e.stateId = v1_state_id::Remap(se.stateId);
         out->edits.push_back(e);
     }
 }

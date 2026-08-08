@@ -1,4 +1,4 @@
-#include <ASCIICraft/world/chunk/LegacyStateIdMigration.hpp>
+#include <ASCIICraft/world/chunk/V1StateIdRemap.hpp>
 
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 
@@ -9,12 +9,14 @@
 #include <string>
 #include <vector>
 
-namespace legacy_state_id {
+namespace v1_state_id {
 namespace {
 
-// Pre-stone registration order from Game::InitializeBlockStates (minecraft:stone omitted).
-// Property cardinalities must match the live registry for each type.
-constexpr const char* kLegacyTypeOrder[] = {
+// Block registration order as it stood when v1 blobs were written (minecraft:stone
+// omitted - it was inserted later). Entries are resolved by NAME against the live
+// registry, so current registration order may change freely; only this list and the
+// names in it are fixed. Property cardinalities must match the live registry.
+constexpr const char* kV1TypeOrder[] = {
     "minecraft:air",
     "minecraft:dandelion",
     "minecraft:poppy",
@@ -40,61 +42,63 @@ constexpr const char* kLegacyTypeOrder[] = {
     "minecraft:water",
 };
 
-std::vector<uint32_t> g_legacyToCurrent;
+std::vector<uint32_t> g_v1ToCurrent;
 
 } // namespace
 
 void BuildRemapTable(const blockstate::BlockStateRegistry& bsr) {
-    g_legacyToCurrent.clear();
-    g_legacyToCurrent.reserve(bsr.GetTotalStateCount());
+    g_v1ToCurrent.clear();
+    g_v1ToCurrent.reserve(bsr.GetTotalStateCount());
 
-    uint32_t legacyCobbleId = UINT32_MAX;
-    uint32_t legacyStoneStairsBase = UINT32_MAX;
+    uint32_t v1CobbleId = UINT32_MAX;
+    uint32_t v1StoneStairsBase = UINT32_MAX;
 
-    for (const char* typeName : kLegacyTypeOrder) {
+    for (const char* typeName : kV1TypeOrder) {
         const uint16_t typeId = bsr.GetTypeId(typeName);
         if (typeId == 0 && std::string(typeName) != "minecraft:air") {
             ASCIIgL::Logger::Error(
-                std::string("LegacyStateIdMigration: missing legacy type '") + typeName + "'"
+                std::string("V1StateIdRemap: missing v1 type '") + typeName + "'"
             );
             continue;
         }
         const blockstate::BlockType& type = bsr.GetType(typeId);
         if (std::strcmp(typeName, "minecraft:cobblestone") == 0) {
-            legacyCobbleId = static_cast<uint32_t>(g_legacyToCurrent.size());
+            v1CobbleId = static_cast<uint32_t>(g_v1ToCurrent.size());
         } else if (std::strcmp(typeName, "minecraft:stone_stairs") == 0) {
-            legacyStoneStairsBase = static_cast<uint32_t>(g_legacyToCurrent.size());
+            v1StoneStairsBase = static_cast<uint32_t>(g_v1ToCurrent.size());
         }
         for (uint32_t i = 0; i < type.stateCount; ++i) {
-            g_legacyToCurrent.push_back(type.baseStateId + i);
+            g_v1ToCurrent.push_back(type.baseStateId + i);
         }
     }
 
     // Stone was inserted after cobblestone; v1 worlds must still map these correctly.
-    if (legacyCobbleId != UINT32_MAX) {
+    // These run on every launch and are the cheap guard against a block rename
+    // silently breaking v1 loads.
+    if (v1CobbleId != UINT32_MAX) {
         const uint32_t expected = bsr.GetDefaultState("minecraft:cobblestone");
-        if (RemapLegacyStateId(legacyCobbleId) != expected) {
-            ASCIIgL::Logger::Error("LegacyStateIdMigration: cobblestone remap mismatch");
+        if (Remap(v1CobbleId) != expected) {
+            ASCIIgL::Logger::Error("V1StateIdRemap: cobblestone remap mismatch");
         }
     }
-    if (legacyStoneStairsBase != UINT32_MAX) {
+    if (v1StoneStairsBase != UINT32_MAX) {
         const uint32_t expected = bsr.GetDefaultState("minecraft:stone_stairs");
-        if (RemapLegacyStateId(legacyStoneStairsBase) != expected) {
-            ASCIIgL::Logger::Error("LegacyStateIdMigration: stone_stairs remap mismatch");
+        if (Remap(v1StoneStairsBase) != expected) {
+            ASCIIgL::Logger::Error("V1StateIdRemap: stone_stairs remap mismatch");
         }
     }
 
     ASCIIgL::Logger::Info(
-        "LegacyStateIdMigration: remap table built (" +
-        std::to_string(g_legacyToCurrent.size()) + " legacy stateIds)"
+        "V1StateIdRemap: remap table built (" +
+        std::to_string(g_v1ToCurrent.size()) + " v1 stateIds)"
     );
 }
 
-uint32_t RemapLegacyStateId(uint32_t legacyStateId) {
-    if (legacyStateId >= g_legacyToCurrent.size()) {
+uint32_t Remap(uint32_t v1StateId) {
+    if (v1StateId >= g_v1ToCurrent.size()) {
         return blockstate::BlockStateRegistry::AIR_STATE_ID;
     }
-    return g_legacyToCurrent[legacyStateId];
+    return g_v1ToCurrent[v1StateId];
 }
 
-} // namespace legacy_state_id
+} // namespace v1_state_id

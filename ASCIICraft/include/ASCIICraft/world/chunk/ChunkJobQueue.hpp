@@ -4,6 +4,7 @@
 #include <ASCIICraft/world/chunk/Chunk.hpp>
 #include <ASCIICraft/world/chunk/ChunkMeshGen.hpp>
 #include <ASCIICraft/world/chunk/ChunkRegion.hpp>
+#include <ASCIICraft/world/chunk/IChunkJobScheduler.hpp>
 #include <ASCIICraft/world/terrain/TerrainResult.hpp>
 #include <ASCIICraft/world/chunk/CrossChunkEdit.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
@@ -17,7 +18,6 @@
 
 #include <entt/entt.hpp>
 
-#include <oneapi/tbb/task_group.h>
 #include <oneapi/tbb/concurrent_queue.h>
 
 class TerrainGenerator;
@@ -45,7 +45,10 @@ using UnloadSaveCallback = std::function<void(Chunk* chunk, ChunkCoord coord, co
 /// - Drain completed results on the main thread and apply (apply block data to chunk, or create Mesh and assign).
 class ChunkJobQueue {
 public:
+    /// Uses the production oneTBB scheduler.
     explicit ChunkJobQueue(entt::registry& registry);
+    /// Uses a caller-supplied scheduler. Null falls back to the oneTBB one.
+    ChunkJobQueue(entt::registry& registry, std::unique_ptr<IChunkJobScheduler> scheduler);
     ~ChunkJobQueue();
 
     ChunkJobQueue(const ChunkJobQueue&) = delete;
@@ -82,10 +85,13 @@ private:
     TerrainGenerator* terrainGenerator_ = nullptr;
     UnloadSaveCallback unloadSaveCallback_;
 
-    oneapi::tbb::task_group taskGroup_;
     oneapi::tbb::concurrent_queue<CompletedTerrainResult> completedTerrainQueue_;
     oneapi::tbb::concurrent_queue<CompletedMeshResult> completedMeshQueue_;
 
     size_t maxDrainPerFrame_ = 0;
     size_t maxDrainMeshPerFrame_ = 0;
+
+    /// Declared LAST so it is destroyed FIRST. Its destructor drains in-flight tasks,
+    /// which push into the completed* queues above - those must still be alive.
+    std::unique_ptr<IChunkJobScheduler> scheduler_;
 };
