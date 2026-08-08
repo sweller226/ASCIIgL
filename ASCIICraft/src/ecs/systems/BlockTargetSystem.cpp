@@ -155,6 +155,7 @@ void BlockTargetSystem::Update() {
     target->active = false;
     target->stateId = blockstate::BlockStateRegistry::AIR_STATE_ID;
     target->hitFace = FaceDir::North;
+    target->hitLocalY = 0.0f;
     target->canPlace = false;
 
     if (!m_gameplayActive) {
@@ -185,6 +186,8 @@ void BlockTargetSystem::Update() {
     target->blockPos = hit->blockPos;
     target->stateId = hit->stateId;
     target->hitFace = hit->face;
+    const glm::vec3 hitPos = origin + lookDir * hit->t;
+    target->hitLocalY = hitPos.y - static_cast<float>(hit->blockPos.y);
 
     // Hold sneak (shift) to place against flowers/plants instead of replacing them.
     const bool replaceReplaceables = !ASCIIgL::InputManager::GetInst().IsActionHeld("sneak");

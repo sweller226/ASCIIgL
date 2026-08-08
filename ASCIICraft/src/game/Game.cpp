@@ -9,7 +9,7 @@
 #include <ASCIIgL/renderer/MaterialBuilder.hpp>
 
 #include <ASCIIgL/engine/TextureLibrary.hpp>
-#include <ASCIIgL/engine/MipFilters.hpp>
+// #include <ASCIIgL/engine/MipFilters.hpp> // CPU mips disabled; GPU GenerateMips used instead
 #include <ASCIIgL/engine/MonochromeMapping.hpp>
 #include <ASCIIgL/engine/Camera2D.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
@@ -424,10 +424,7 @@ bool Game::LoadTextures(bool multicolor) {
         ASCIIgL::Logger::Error("Failed to load block texture array");
         return false;   
     }
-    // CPU cutout mips: opaque RGB preserved; alpha = coverage so distant
-    // flowers/leaves thin under clip(a-0.5) instead of inflating solid.
-    blockTextureArray->GenerateMipmapsCPU(-1, ASCIIgL::MipFilters::PixelArtAlphaCutoutCoverage2x2);
-
+    
     std::vector<std::string> itemTexturePaths =
         textures::BuildTexturePaths(itemtextures::GetItemTextureCatalog());
     auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(itemTexturePaths, "itemTextureArray", monoMap);
@@ -435,7 +432,6 @@ bool Game::LoadTextures(bool multicolor) {
         ASCIIgL::Logger::Error("Failed to load item texture array");
         return false;
     }
-    itemTextureArray->GenerateMipmapsCPU(-1, ASCIIgL::MipFilters::PixelArtAlphaCutoutCoverage2x2);
 
     auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture(
         "res/textures/gui/container/inventory.png", "inventoryTexture", ASCIIgL::MonochromeMapping{}

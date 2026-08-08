@@ -59,6 +59,51 @@ uint32_t ApplyPlayerFacing(
     return bsr.WithProperty(stateId, "facing", facingValue);
 }
 
+/// Minecraft-like half selection from the targeted face / local hit Y.
+uint32_t ApplyPlayerHalf(
+    const blockstate::BlockStateRegistry& bsr,
+    uint32_t stateId,
+    const std::optional<blockplacement::HitPlacementInfo>& hitInfo
+) {
+    if (!hitInfo || !bsr.IsValidState(stateId)) {
+        return stateId;
+    }
+
+    const uint16_t typeId = bsr.GetTypeIdFromState(stateId);
+    const auto& type = bsr.GetType(typeId);
+
+    const auto halfProperty = std::find_if(
+        type.properties.begin(),
+        type.properties.end(),
+        [](const blockstate::BlockProperty& property) {
+            return property.name == "half";
+        }
+    );
+    if (halfProperty == type.properties.end()) {
+        return stateId;
+    }
+
+    const char* halfValue = "bottom";
+    switch (hitInfo->hitFace) {
+        case FaceDir::Top:
+            halfValue = "bottom";
+            break;
+        case FaceDir::Bottom:
+            halfValue = "top";
+            break;
+        default:
+            halfValue = (hitInfo->hitLocalY >= 0.5f) ? "top" : "bottom";
+            break;
+    }
+
+    const auto& allowedValues = halfProperty->allowedValues;
+    if (std::find(allowedValues.begin(), allowedValues.end(), halfValue) == allowedValues.end()) {
+        return stateId;
+    }
+
+    return bsr.WithProperty(stateId, "half", halfValue);
+}
+
 } // namespace
 
 namespace blockplacement {
@@ -70,7 +115,8 @@ namespace blockplacement {
         const WorldCoord& position,
         PlacementContext context,
         const bool keepStateId,
-        std::optional<FaceDir> faceDir
+        std::optional<FaceDir> faceDir,
+        std::optional<HitPlacementInfo> hitInfo
     ) {
         if (keepStateId) {
             return stateId;
@@ -81,6 +127,10 @@ namespace blockplacement {
         }
 
         stateId = ApplyPlayerFacing(bsr, stateId, faceDir);
+
+        if (context == PlacementContext::PlayerPlacement) {
+            stateId = ApplyPlayerHalf(bsr, stateId, hitInfo);
+        }
 
         const uint16_t placedTypeId = bsr.GetTypeIdFromState(stateId);
         const auto& placedType = bsr.GetType(placedTypeId);
@@ -98,9 +148,12 @@ namespace blockplacement {
         int x, int y, int z,
         PlacementContext context,
         const bool keepStateId,
-        std::optional<FaceDir> faceDir
+        std::optional<FaceDir> faceDir,
+        std::optional<HitPlacementInfo> hitInfo
     ) {
-        return FinalizePlacedState(bsr, chunkManager, stateId, WorldCoord(x, y, z), context, keepStateId, faceDir);
+        return FinalizePlacedState(
+            bsr, chunkManager, stateId, WorldCoord(x, y, z), context, keepStateId, faceDir, hitInfo
+        );
     }
 
     uint32_t FinalizePlacedStateBasic(

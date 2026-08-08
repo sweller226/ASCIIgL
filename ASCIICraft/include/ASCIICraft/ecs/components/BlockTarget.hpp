@@ -15,6 +15,8 @@ struct BlockTarget {
     uint32_t stateId = blockstate::BlockStateRegistry::AIR_STATE_ID;
     /// Face of the selection AABB that the look ray entered.
     FaceDir hitFace = FaceDir::North;
+    /// Y of the hit point within the targeted cell [0, 1] (used for slab/stair half selection).
+    float hitLocalY = 0.0f;
 
     /// Adjacent empty cell where a block would be placed (valid when canPlace is true).
     bool canPlace = false;
