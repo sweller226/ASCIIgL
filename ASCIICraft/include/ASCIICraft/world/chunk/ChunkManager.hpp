@@ -54,8 +54,9 @@ public:
     void SetBlockState(int x, int y, int z, uint32_t stateId);
 
     // Save handling
-    void SaveAll();
-    
+    void SaveAll();           // persist only; does not unload from memory
+    void ClearLoadedMemory(); // shutdown-only: drop loadedChunks / crossChunkEdits / regionLoadedCounts
+
     // Rendering support
     void RenderChunks();
     
@@ -150,6 +151,7 @@ private:
     static constexpr int MAX_MESH_APPLIES_PER_FRAME = 128;  // GPU uploads per frame; small meshes = cheaper
     static constexpr int MAX_SYNC_MESH_REBUILDS_PER_FRAME = 4;  // main-thread mesh build (small chunk = fast)
     static constexpr unsigned int UNLOAD_RADIUS_PADDING = 0; // extra chunks beyond load radius before unloading
+    static constexpr uint32_t AUTOSAVE_INTERVAL_SECONDS = 60;
 
     // World settings
     const sizes::WorldDimensions& _worldDimensions;
@@ -158,4 +160,5 @@ private:
 
     ChunkManagerFogParams   fogParams_;
     ChunkManagerWaterParams waterParams_;
+    uint32_t lastAutosaveSeconds_ = 0;
 };

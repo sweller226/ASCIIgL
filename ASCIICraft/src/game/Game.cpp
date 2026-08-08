@@ -353,6 +353,7 @@ void Game::Shutdown() {
     if (auto world = GetWorldPtr(registry)) {
         if (auto cm = world->GetChunkManager()) {
             cm->SaveAll();
+            cm->ClearLoadedMemory();
         }
     }
     ASCIIgL::MaterialLibrary::GetInst().Clear();

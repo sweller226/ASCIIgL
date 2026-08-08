@@ -24,6 +24,7 @@
 #include <ASCIICraft/world/block/state/FaceDir.hpp>
 #include <ASCIICraft/world/chunk/ChunkUtil.hpp>
 #include <ASCIICraft/world/query/BlockRaycast.hpp>
+#include <ASCIICraft/util/TimeUtil.hpp>
 
 ChunkManager::ChunkManager(
     entt::registry& registry,
@@ -160,7 +161,7 @@ void ChunkManager::SaveAll() {
     // Group chunks and metadata by region; one open/flush/close per region (much faster than per-chunk).
     std::unordered_map<RegionCoord, std::vector<std::pair<ChunkCoord, Chunk*>>> chunksByRegion;
     for (auto& [coord, chunkPtr] : loadedChunks) {
-        if (!chunkPtr) continue;
+        if (!chunkPtr || !chunkPtr->IsGenerated()) continue;
         chunksByRegion[coord.ToRegionCoord()].emplace_back(coord, chunkPtr.get());
     }
     std::unordered_map<RegionCoord, std::vector<std::pair<ChunkCoord, const MetaBucket*>>> metaByRegion;
@@ -197,11 +198,14 @@ void ChunkManager::SaveAll() {
         }
         region->EndBatchSave();
     }
+
+    ASCIIgL::Logger::Info("SaveAll complete. Saved " + std::to_string(metaCount) + " meta buckets.");
+}
+
+void ChunkManager::ClearLoadedMemory() {
     loadedChunks.clear();
     crossChunkEdits.clear();
     regionLoadedCounts.clear();
-
-    ASCIIgL::Logger::Info("SaveAll complete. Saved " + std::to_string(metaCount) + " meta buckets.");
 }
 
 void ChunkManager::UnloadChunk(const ChunkCoord& coord) {
@@ -711,6 +715,16 @@ void ChunkManager::Update() {
     {
         PROFILE_SCOPE("Chunk.Update.DrainAndApplyJobResultsLate");
         DrainAndApplyJobResults();
+    }
+
+    const uint32_t now = util::NowSeconds();
+    if (lastAutosaveSeconds_ == 0) {
+        lastAutosaveSeconds_ = now;
+        return;
+    }
+    if (now - lastAutosaveSeconds_ >= AUTOSAVE_INTERVAL_SECONDS) {
+        SaveAll();
+        lastAutosaveSeconds_ = now;
     }
 }
 
