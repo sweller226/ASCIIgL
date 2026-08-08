@@ -13,6 +13,30 @@ if(CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # ---------------------------------------------------------------------------
+# Test options
+#
+# ASAN must be declared before any target so ASCIICraft_core is instrumented too
+# (an uninstrumented library linked into an instrumented exe reports garbage).
+# Configure into a SEPARATE build dir - do not mix ASan and non-ASan objects:
+#   cmake -S ASCIICraft -B ASCIICraft/build-asan -DASCIICRAFT_TESTS_ASAN=ON
+# ---------------------------------------------------------------------------
+option(ASCIICRAFT_BUILD_TESTS "Build the ASCIICraft test suite" ON)
+option(ASCIICRAFT_TESTS_ASAN  "Build with MSVC AddressSanitizer"  OFF)
+
+if(ASCIICRAFT_TESTS_ASAN)
+    if(NOT MSVC)
+        message(FATAL_ERROR "ASCIICRAFT_TESTS_ASAN is MSVC-only.")
+    endif()
+    message(STATUS "ASCIICraft: AddressSanitizer ENABLED")
+    # /RTC is incompatible with /fsanitize=address; strip it if a config set it.
+    foreach(cfgFlags CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_FASTDEBUG CMAKE_CXX_FLAGS_RELEASE)
+        string(REGEX REPLACE "/RTC[1csu]+" "" ${cfgFlags} "${${cfgFlags}}")
+    endforeach()
+    add_compile_options(/fsanitize=address /Zi)
+    add_link_options(/INCREMENTAL:NO /DEBUG)
+endif()
+
+# ---------------------------------------------------------------------------
 # Consumer vendor libraries (defines entt, FastNoiseLite, stb, fmt, etc.)
 # ---------------------------------------------------------------------------
 add_subdirectory(vendor)
@@ -81,54 +105,79 @@ file(GLOB_RECURSE ASCIICraft_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
 )
 
+# main.cpp belongs to the executable only, so ASCIICraft_core can be linked by
+# other executables (the test suite) without dragging in a second entry point.
+set(ASCIICraft_MAIN "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+list(REMOVE_ITEM ASCIICraft_SOURCES "${ASCIICraft_MAIN}")
+
 # ---------------------------------------------------------------------------
 # Tracy (TracyClient.cpp #includes .cpp files from public/common and public/client)
 # ---------------------------------------------------------------------------
 set(ASCIICraft_TRACY_PUBLIC "${ASCIIgL_SOURCE_VENDOR_DIR}/tracy/public")
 
 # ---------------------------------------------------------------------------
-# Game Executable
+# Core Library (everything except main.cpp)
+#
+# Linked by the game executable and by the test suite. STATIC rather than OBJECT
+# so the linker pulls archive members lazily: a test that only touches the world
+# code never pulls Game.obj, the GUI, or the sound system.
+#
+# NOTE: TracyClient.cpp is deliberately NOT in this archive. ASCIIgL.lib already
+# contains a copy, and a second copy here risks LNK2005 when both get pulled.
+# Each *executable* compiles it directly instead - which is what the game already
+# did, and why its own .obj currently wins over the archive member.
 # ---------------------------------------------------------------------------
-add_executable(ASCIICraft
+add_library(ASCIICraft_core STATIC
     ${ASCIICraft_SOURCES}
     ${ASCIICraft_HEADERS}
-    "${ASCIICraft_TRACY_PUBLIC}/TracyClient.cpp"
 )
 
-# ---------------------------------------------------------------------------
-# Include Directories
-# ---------------------------------------------------------------------------
-target_include_directories(ASCIICraft PRIVATE
+# PUBLIC throughout: these are usage requirements the test executable must inherit.
+target_include_directories(ASCIICraft_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${ASCIICraft_TRACY_PUBLIC}"
+    "${ASCIICraft_TRACY_PUBLIC}"          # ASCIIgLConfig forces TRACY_ENABLE but does not export this
 )
 
-
-# ---------------------------------------------------------------------------
-# Linking
-# ---------------------------------------------------------------------------
-target_link_libraries(ASCIICraft PRIVATE ASCIIgL::ASCIIgL)
-target_link_libraries(ASCIICraft PRIVATE TBB::tbb)
-target_link_libraries(ASCIICraft PRIVATE OpenAL::OpenAL)
-target_link_libraries(ASCIICraft PRIVATE stb)
+# ASCIIgL::ASCIIgL carries glm::glm, the GLM_FORCE_* defines and TRACY_ENABLE via
+# INTERFACE_COMPILE_DEFINITIONS. Do not restate the glm defines or add /arch:AVX2
+# here - that would create the ABI mismatch it looks like it is preventing.
+target_link_libraries(ASCIICraft_core PUBLIC ASCIIgL::ASCIIgL)
+target_link_libraries(ASCIICraft_core PUBLIC TBB::tbb)          # not in ASCIIgL's link interface
+target_link_libraries(ASCIICraft_core PUBLIC OpenAL::OpenAL)
+target_link_libraries(ASCIICraft_core PUBLIC stb)
 
 if(TARGET entt)
-    target_link_libraries(ASCIICraft PRIVATE entt)
+    target_link_libraries(ASCIICraft_core PUBLIC entt)
 endif()
 
 if(TARGET FastNoiseLite)
-    target_link_libraries(ASCIICraft PRIVATE FastNoiseLite)
+    target_link_libraries(ASCIICraft_core PUBLIC FastNoiseLite)
 endif()
 
 if(TARGET nlohmann_json)
-    target_link_libraries(ASCIICraft PRIVATE nlohmann_json)
+    target_link_libraries(ASCIICraft_core PUBLIC nlohmann_json)
 endif()
 
 # Platform-specific
 if(WIN32)
-    target_compile_definitions(ASCIICraft PRIVATE NOMINMAX TRACY_ENABLE)
-    target_link_libraries(ASCIICraft PRIVATE winmm)
+    target_compile_definitions(ASCIICraft_core PUBLIC NOMINMAX TRACY_ENABLE)
+    target_link_libraries(ASCIICraft_core PUBLIC winmm)
 endif()
+
+set_target_properties(ASCIICraft_core PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY_FASTDEBUG "${CMAKE_BINARY_DIR}/lib/FastDebug"
+    ARCHIVE_OUTPUT_DIRECTORY_RELEASE   "${CMAKE_BINARY_DIR}/lib/Release"
+)
+
+# ---------------------------------------------------------------------------
+# Game Executable
+# ---------------------------------------------------------------------------
+add_executable(ASCIICraft
+    "${ASCIICraft_MAIN}"
+    "${ASCIICraft_TRACY_PUBLIC}/TracyClient.cpp"
+)
+
+target_link_libraries(ASCIICraft PRIVATE ASCIICraft_core)
 
 # ---------------------------------------------------------------------------
 # Output Configuration
@@ -203,4 +252,15 @@ if(WIN32)
             "$<TARGET_FILE_DIR:ASCIICraft>/OpenAL32.dll"
         COMMENT "Copying OpenAL32.dll"
     )
+endif()
+
+# ---------------------------------------------------------------------------
+# Tests
+#
+# enable_testing() must be called in this directory (or above) for ctest to
+# pick up the tests registered in tests/CMakeLists.txt.
+# ---------------------------------------------------------------------------
+if(ASCIICRAFT_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
 endif()
