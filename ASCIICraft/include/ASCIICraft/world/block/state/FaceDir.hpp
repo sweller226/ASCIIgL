@@ -109,6 +109,19 @@ inline const char* FaceDirToString(FaceDir face) {
     }
 }
 
+/// Facing property value for all six directions (Minecraft "up"/"down", not top/bottom).
+inline const char* FaceDirToFacingString(FaceDir face) {
+    switch (face) {
+        case FaceDir::Top:    return "up";
+        case FaceDir::Bottom: return "down";
+        case FaceDir::North:  return "north";
+        case FaceDir::South:  return "south";
+        case FaceDir::East:   return "east";
+        case FaceDir::West:   return "west";
+    }
+    return "north";
+}
+
 inline const char* FaceDirCardinalLabel(FaceDir face) {
     switch (face) {
         case FaceDir::North: return "North";

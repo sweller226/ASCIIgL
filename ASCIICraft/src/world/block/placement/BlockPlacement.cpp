@@ -3,6 +3,7 @@
 #include <ASCIICraft/world/chunk/ChunkManager.hpp>
 
 #include <algorithm>
+#include <optional>
 #include <string>
 
 namespace {
@@ -26,19 +27,15 @@ bool FacingMatchesPlayerLook(const std::string& typeName) {
 uint32_t ApplyPlayerFacing(
     const blockstate::BlockStateRegistry& bsr,
     uint32_t stateId,
-    std::optional<FaceDir> faceDir
+    std::optional<FaceDir> faceDir,
+    const std::optional<blockplacement::HitPlacementInfo>& hitInfo = std::nullopt
 ) {
-    if (!faceDir || !bsr.IsValidState(stateId)) {
+    if (!bsr.IsValidState(stateId)) {
         return stateId;
     }
 
     const uint16_t typeId = bsr.GetTypeIdFromState(stateId);
     const auto& type = bsr.GetType(typeId);
-
-    const FaceDir placedFacing = FacingMatchesPlayerLook(type.name)
-        ? *faceDir
-        : OppositeHorizontalFaceDir(*faceDir);
-    const char* facingValue = FaceDirToString(placedFacing);
 
     const auto facingProperty = std::find_if(
         type.properties.begin(),
@@ -52,6 +49,28 @@ uint32_t ApplyPlayerFacing(
     }
 
     const auto& allowedValues = facingProperty->allowedValues;
+    const bool allowsVertical =
+        std::find(allowedValues.begin(), allowedValues.end(), "up") != allowedValues.end() ||
+        std::find(allowedValues.begin(), allowedValues.end(), "down") != allowedValues.end();
+
+    // Barrels / dispensers: facing matches the clicked face (all six directions).
+    if (allowsVertical && hitInfo) {
+        const char* facingValue = FaceDirToFacingString(hitInfo->hitFace);
+        if (std::find(allowedValues.begin(), allowedValues.end(), facingValue) == allowedValues.end()) {
+            return stateId;
+        }
+        return bsr.WithProperty(stateId, "facing", facingValue);
+    }
+
+    if (!faceDir) {
+        return stateId;
+    }
+
+    const FaceDir placedFacing = FacingMatchesPlayerLook(type.name)
+        ? *faceDir
+        : OppositeHorizontalFaceDir(*faceDir);
+    const char* facingValue = FaceDirToString(placedFacing);
+
     if (std::find(allowedValues.begin(), allowedValues.end(), facingValue) == allowedValues.end()) {
         return stateId;
     }
@@ -104,6 +123,55 @@ uint32_t ApplyPlayerHalf(
     return bsr.WithProperty(stateId, "half", halfValue);
 }
 
+/// Pillar / log axis from the targeted face: axis points into/away from that face.
+uint32_t ApplyPlayerAxis(
+    const blockstate::BlockStateRegistry& bsr,
+    uint32_t stateId,
+    const std::optional<blockplacement::HitPlacementInfo>& hitInfo
+) {
+    if (!hitInfo || !bsr.IsValidState(stateId)) {
+        return stateId;
+    }
+
+    const uint16_t typeId = bsr.GetTypeIdFromState(stateId);
+    const auto& type = bsr.GetType(typeId);
+
+    const auto axisProperty = std::find_if(
+        type.properties.begin(),
+        type.properties.end(),
+        [](const blockstate::BlockProperty& property) {
+            return property.name == "axis";
+        }
+    );
+    if (axisProperty == type.properties.end()) {
+        return stateId;
+    }
+
+    const char* axisValue = "y";
+    switch (hitInfo->hitFace) {
+        case FaceDir::East:
+        case FaceDir::West:
+            axisValue = "x";
+            break;
+        case FaceDir::North:
+        case FaceDir::South:
+            axisValue = "z";
+            break;
+        case FaceDir::Top:
+        case FaceDir::Bottom:
+        default:
+            axisValue = "y";
+            break;
+    }
+
+    const auto& allowedValues = axisProperty->allowedValues;
+    if (std::find(allowedValues.begin(), allowedValues.end(), axisValue) == allowedValues.end()) {
+        return stateId;
+    }
+
+    return bsr.WithProperty(stateId, "axis", axisValue);
+}
+
 } // namespace
 
 namespace blockplacement {
@@ -126,10 +194,11 @@ namespace blockplacement {
             return stateId;
         }
 
-        stateId = ApplyPlayerFacing(bsr, stateId, faceDir);
+        stateId = ApplyPlayerFacing(bsr, stateId, faceDir, hitInfo);
 
         if (context == PlacementContext::PlayerPlacement) {
             stateId = ApplyPlayerHalf(bsr, stateId, hitInfo);
+            stateId = ApplyPlayerAxis(bsr, stateId, hitInfo);
         }
 
         const uint16_t placedTypeId = bsr.GetTypeIdFromState(stateId);

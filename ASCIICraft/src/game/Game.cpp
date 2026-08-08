@@ -424,7 +424,7 @@ bool Game::LoadTextures(bool multicolor) {
         ASCIIgL::Logger::Error("Failed to load block texture array");
         return false;   
     }
-    
+
     std::vector<std::string> itemTexturePaths =
         textures::BuildTexturePaths(itemtextures::GetItemTextureCatalog());
     auto itemTextureArray = ASCIIgL::TextureLibrary::GetInst().LoadTextureArray(itemTexturePaths, "itemTextureArray", monoMap);
@@ -1005,6 +1005,16 @@ void Game::InitializeBlockStates() {
     });
     registerJsonBackedOrLog("minecraft:furnace");
 
+    bsr.RegisterType("minecraft:barrel", {
+        blockstate::BlockProperty{ "facing", { "north", "south", "west", "east", "up", "down" } },
+        blockstate::BlockProperty{ "open", { "false", "true" }, 0 },
+    });
+    const uint16_t barrelType = bsr.GetTypeId("minecraft:barrel");
+    bsr.SetDerivedData(barrelType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
+    registerJsonBackedOrLog("minecraft:barrel");
+
     bsr.RegisterType("minecraft:glass", {});
     const uint16_t glassType = bsr.GetTypeId("minecraft:glass");
     bsr.SetDerivedData(glassType, [&](blockstate::BlockState& s) {
@@ -1136,6 +1146,7 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterBlockItem(registry, "minecraft:crafting_table",   "Crafting Table");
     itemRegistry.RegisterBlockItem(registry, "minecraft:bookshelf",        "Bookshelf");
     itemRegistry.RegisterBlockItem(registry, "minecraft:furnace",          "Furnace");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:barrel",           "Barrel");
     itemRegistry.RegisterBlockItem(registry, "minecraft:glass",            "Glass");
     itemRegistry.RegisterBlockItem(registry, "minecraft:blue_wool",        "Blue Wool");
     itemRegistry.RegisterBlockItem(registry, "minecraft:green_wool",       "Green Wool");
