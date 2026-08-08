@@ -28,3 +28,6 @@
 [submodule "ASCIICraft/vendor/entt"]
 	path = ASCIICraft/vendor/entt
 	url = https://github.com/skypjack/entt.git
+[submodule "ASCIICraft/vendor/doctest"]
+	path = ASCIICraft/vendor/doctest
+	url = https://github.com/doctest/doctest.git
