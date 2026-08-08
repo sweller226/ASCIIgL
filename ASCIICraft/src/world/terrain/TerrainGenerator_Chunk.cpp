@@ -10,6 +10,7 @@
 #include <FastNoiseLite.h>
 
 #include <ASCIICraft/world/Sizes.hpp>
+#include <ASCIICraft/world/terrain/TerrainKeys.hpp>
 
 using namespace terrain_generator_internal;
 
@@ -71,11 +72,7 @@ void TerrainGenerator::GenerateChunkInto(ChunkCoord coord, uint32_t* blocks, Ter
 
     const uint32_t grassId = bsr->GetDefaultState("minecraft:grass");
 
-    auto blockKey = [](int x, int y, int z) -> uint64_t {
-        return (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 42) ^
-               (static_cast<uint64_t>(static_cast<uint32_t>(y)) << 21) ^
-               static_cast<uint64_t>(static_cast<uint32_t>(z));
-    };
+    const auto& blockKey = terrain::BlockKey;
 
     std::unordered_set<uint64_t> occupied;
     for (const auto& b : treeBlocks) {
