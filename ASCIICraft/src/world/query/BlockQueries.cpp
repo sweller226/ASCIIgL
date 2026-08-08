@@ -31,6 +31,10 @@ bool IsSolidForPhysics(const blockstate::BlockStateRegistry *bsr, uint32_t state
     }
     const blockstate::BlockState *state = nullptr;
     if (TryGetState(bsr, stateId, state)) {
+        if (!state->collisionBoxes.empty()) {
+            return true;
+        }
+        // Safety fallback for states registered without baked boxes.
         return state->isFullBlock;
     }
     // Registry missing or invalid id: behave like legacy “any non-air is solid”.

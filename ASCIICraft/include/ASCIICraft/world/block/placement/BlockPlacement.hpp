@@ -19,6 +19,12 @@ enum class PlacementContext {
     BlockUpdate           // Block update/neighbor change (neighbor-based)
 };
 
+/// Ray hit info used to choose half=top|bottom for slabs/stairs on player placement.
+struct HitPlacementInfo {
+    FaceDir hitFace = FaceDir::North;
+    float hitLocalY = 0.0f;
+};
+
 /// Applies placement-time logic that depends on neighbor state.
 uint32_t FinalizePlacedState(
     const blockstate::BlockStateRegistry& bsr,
@@ -27,7 +33,8 @@ uint32_t FinalizePlacedState(
     const WorldCoord& position,
     PlacementContext context = PlacementContext::TerrainGeneration,
     const bool keepStateId = false,
-    std::optional<FaceDir> faceDir = std::nullopt
+    std::optional<FaceDir> faceDir = std::nullopt,
+    std::optional<HitPlacementInfo> hitInfo = std::nullopt
 );
 
 /// Overload for individual coordinates.
@@ -38,7 +45,8 @@ uint32_t FinalizePlacedState(
     int x, int y, int z,
     PlacementContext context = PlacementContext::TerrainGeneration,
     const bool keepStateId = false,
-    std::optional<FaceDir> faceDir = std::nullopt
+    std::optional<FaceDir> faceDir = std::nullopt,
+    std::optional<HitPlacementInfo> hitInfo = std::nullopt
 );
 
 /// Applies placement-time logic that does not require neighbor queries.
@@ -61,4 +69,4 @@ uint32_t FinalizePlacedStateBasic(
     std::optional<FaceDir> faceDir = std::nullopt
 );
 
-}
+} // namespace blockplacement

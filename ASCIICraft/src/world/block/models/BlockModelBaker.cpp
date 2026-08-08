@@ -1,4 +1,5 @@
 #include <ASCIICraft/world/block/models/BlockModelBaker.hpp>
+#include <ASCIICraft/world/block/models/BlockModelCollision.hpp>
 #include <ASCIICraft/world/block/models/ModelBuilderUtil.hpp>
 #include <ASCIICraft/util/MeshBuilderUtil.hpp>
 
@@ -301,6 +302,7 @@ jsonutil::LoadResult<blockstate::BlockModel> BakeResolvedModel(
     out.isFullBlock = resolved.isFullBlock;
     out.opaqueNoCull = resolved.opaqueNoCull;
     out.computeVisibleFaces = out.isFullBlock ? faceculling::ComputeVisibleFacesFullBlock : nullptr;
+    out.collisionBoxes = BuildCollisionBoxes(resolved, variantX, variantY);
 
     out.opaque.faces.reserve(resolved.elements.size() * modelbuilderutil::FACE_COUNT);
     out.transparent.faces.reserve(resolved.elements.size());

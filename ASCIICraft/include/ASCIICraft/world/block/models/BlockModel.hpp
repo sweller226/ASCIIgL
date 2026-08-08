@@ -42,6 +42,8 @@ namespace blockstate {
         bool opaqueNoCull = false;
         RenderLayer opaque;
         RenderLayer transparent;
+        /// Physics colliders in local block space [0,1], derived from model elements.
+        std::vector<CollisionAabb> collisionBoxes;
 
         std::function<void(
             int, int, int,

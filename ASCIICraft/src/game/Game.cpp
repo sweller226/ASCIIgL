@@ -9,7 +9,7 @@
 #include <ASCIIgL/renderer/MaterialBuilder.hpp>
 
 #include <ASCIIgL/engine/TextureLibrary.hpp>
-#include <ASCIIgL/engine/MipFilters.hpp>
+// #include <ASCIIgL/engine/MipFilters.hpp> // CPU mips disabled; GPU GenerateMips used instead
 #include <ASCIIgL/engine/MonochromeMapping.hpp>
 #include <ASCIIgL/engine/Camera2D.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
@@ -424,9 +424,6 @@ bool Game::LoadTextures(bool multicolor) {
         ASCIIgL::Logger::Error("Failed to load block texture array");
         return false;   
     }
-    // CPU cutout mips: opaque RGB preserved; alpha = coverage so distant
-    // flowers/leaves thin under clip(a-0.5) instead of inflating solid.
-    blockTextureArray->GenerateMipmapsCPU(-1, ASCIIgL::MipFilters::PixelArtAlphaCutoutCoverage2x2);
 
     std::vector<std::string> itemTexturePaths =
         textures::BuildTexturePaths(itemtextures::GetItemTextureCatalog());
@@ -435,7 +432,6 @@ bool Game::LoadTextures(bool multicolor) {
         ASCIIgL::Logger::Error("Failed to load item texture array");
         return false;
     }
-    itemTextureArray->GenerateMipmapsCPU(-1, ASCIIgL::MipFilters::PixelArtAlphaCutoutCoverage2x2);
 
     auto inventoryTexture = ASCIIgL::TextureLibrary::GetInst().LoadTexture(
         "res/textures/gui/container/inventory.png", "inventoryTexture", ASCIIgL::MonochromeMapping{}
@@ -1009,6 +1005,16 @@ void Game::InitializeBlockStates() {
     });
     registerJsonBackedOrLog("minecraft:furnace");
 
+    bsr.RegisterType("minecraft:barrel", {
+        blockstate::BlockProperty{ "facing", { "north", "south", "west", "east", "up", "down" } },
+        blockstate::BlockProperty{ "open", { "false", "true" }, 0 },
+    });
+    const uint16_t barrelType = bsr.GetTypeId("minecraft:barrel");
+    bsr.SetDerivedData(barrelType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
+    registerJsonBackedOrLog("minecraft:barrel");
+
     bsr.RegisterType("minecraft:glass", {});
     const uint16_t glassType = bsr.GetTypeId("minecraft:glass");
     bsr.SetDerivedData(glassType, [&](blockstate::BlockState& s) {
@@ -1140,6 +1146,7 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterBlockItem(registry, "minecraft:crafting_table",   "Crafting Table");
     itemRegistry.RegisterBlockItem(registry, "minecraft:bookshelf",        "Bookshelf");
     itemRegistry.RegisterBlockItem(registry, "minecraft:furnace",          "Furnace");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:barrel",           "Barrel");
     itemRegistry.RegisterBlockItem(registry, "minecraft:glass",            "Glass");
     itemRegistry.RegisterBlockItem(registry, "minecraft:blue_wool",        "Blue Wool");
     itemRegistry.RegisterBlockItem(registry, "minecraft:green_wool",       "Green Wool");

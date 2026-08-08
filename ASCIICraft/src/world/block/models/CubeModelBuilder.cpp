@@ -1,6 +1,7 @@
 #include <ASCIICraft/world/block/models/CubeModelBuilder.hpp>
 #include <ASCIICraft/world/block/models/ModelBuilderUtil.hpp>
 #include <ASCIICraft/util/MeshBuilderUtil.hpp>
+#include <ASCIICraft/world/block/CollisionAabb.hpp>
 
 #include <vector>
 
@@ -104,6 +105,7 @@ blockstate::BlockModel BuildCubeModel(const CubeSpec& spec) {
     blockstate::BlockModel out;
     out.isFullBlock = true;
     out.computeVisibleFaces = faceculling::ComputeVisibleFacesFullBlock;
+    out.collisionBoxes = {blockstate::MakeFullBlockCollisionAabb()};
 
     blockstate::RenderLayer& layer = spec.transparent ? out.transparent : out.opaque;
     layer.faces.reserve(kFaceCount);

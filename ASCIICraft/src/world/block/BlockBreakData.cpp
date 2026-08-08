@@ -51,6 +51,7 @@ const std::unordered_map<std::string, BreakEntry>& GetBreakTable() {
         {"minecraft:fence",             {2.0f,     ToolClass::Axe,     0}},
         {"minecraft:crafting_table",    {2.5f,     ToolClass::Axe,     0}},
         {"minecraft:bookshelf",         {1.5f,     ToolClass::Axe,     0}},
+        {"minecraft:barrel",            {2.5f,     ToolClass::Axe,     0}},
 
         {"minecraft:oak_leaves",        {0.2f,     ToolClass::None,    0}},
         {"minecraft:glass",             {0.3f,     ToolClass::None,    0}},

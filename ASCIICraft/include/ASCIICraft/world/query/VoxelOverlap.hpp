@@ -44,7 +44,7 @@ std::optional<VoxelOverlapHit> QueryVoxelOverlap(
 /// Enriches \p hit.typeId when \p bsr is available.
 void EnrichHitWithTypeId(const blockstate::BlockStateRegistry *bsr, VoxelOverlapHit &hit);
 
-/// Physics AABB overlap using full-block collision rules.
+/// Physics AABB overlap using geometry-derived collision boxes (full-cell fallback when needed).
 bool OverlapsSolidForPhysics(
     const World *world,
     const blockstate::BlockStateRegistry *bsr,

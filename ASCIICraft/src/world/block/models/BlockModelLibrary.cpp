@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <mutex>
 #include <utility>
 
@@ -51,12 +52,33 @@ namespace {
         return h;
     }
 
+    inline std::size_t HashCollisionBoxes(const std::vector<blockstate::CollisionAabb>& boxes) {
+        std::size_t h = boxes.size();
+        for (const auto& box : boxes) {
+            // Bit-cast floats for a stable fingerprint (exact baked values).
+            auto hashFloat = [&](float f) {
+                uint32_t bits = 0;
+                static_assert(sizeof(bits) == sizeof(f));
+                std::memcpy(&bits, &f, sizeof(bits));
+                HashCombine(h, static_cast<std::size_t>(bits));
+            };
+            hashFloat(box.min.x);
+            hashFloat(box.min.y);
+            hashFloat(box.min.z);
+            hashFloat(box.max.x);
+            hashFloat(box.max.y);
+            hashFloat(box.max.z);
+        }
+        return h;
+    }
+
     inline std::size_t FingerprintModel(const blockstate::BlockModel& m) {
         std::size_t h = 0;
         HashCombine(h, static_cast<std::size_t>(m.isFullBlock ? 1 : 0));
         HashCombine(h, static_cast<std::size_t>(m.opaqueNoCull ? 1 : 0));
         HashCombine(h, HashLayer(m.opaque));
         HashCombine(h, HashLayer(m.transparent));
+        HashCombine(h, HashCollisionBoxes(m.collisionBoxes));
         return h;
     }
 
@@ -68,7 +90,8 @@ namespace {
         return a.isFullBlock == b.isFullBlock &&
                a.opaqueNoCull == b.opaqueNoCull &&
                LayerEqual(a.opaque, b.opaque) &&
-               LayerEqual(a.transparent, b.transparent);
+               LayerEqual(a.transparent, b.transparent) &&
+               a.collisionBoxes == b.collisionBoxes;
     }
 
     inline uint32_t MixCoordHash(const uint32_t stateId, const int worldX, const int worldY, const int worldZ) {
@@ -132,6 +155,7 @@ void BlockModelLibrary::RegisterModelSet(
 
     bool fullBlockValue = false;
     bool fullBlockSet = false;
+    std::vector<blockstate::CollisionAabb> collisionBoxes;
 
     for (const ModelPtr& inModel : models) {
         if (!inModel) {
@@ -156,12 +180,15 @@ void BlockModelLibrary::RegisterModelSet(
         if (!fullBlockSet) {
             fullBlockValue = inModel->isFullBlock;
             fullBlockSet = true;
+            collisionBoxes = inModel->collisionBoxes;
         }
     }
 
     stateModelSets_[stateId] = std::move(newSet);
 
-    bsr.GetStateMutable(stateId).isFullBlock = fullBlockSet ? fullBlockValue : false;
+    blockstate::BlockState& state = bsr.GetStateMutable(stateId);
+    state.isFullBlock = fullBlockSet ? fullBlockValue : false;
+    state.collisionBoxes = std::move(collisionBoxes);
 }
 
 void BlockModelLibrary::RegisterModelSet(

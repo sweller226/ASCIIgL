@@ -23,6 +23,7 @@
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 #include <ASCIICraft/world/block/state/FaceDir.hpp>
 #include <ASCIICraft/world/chunk/ChunkUtil.hpp>
+#include <ASCIICraft/world/query/BlockRaycast.hpp>
 
 ChunkManager::ChunkManager(
     entt::registry& registry,
@@ -822,28 +823,30 @@ void ChunkManager::RenderChunks() {
 
 }
 
-std::pair<uint32_t, WorldCoord> ChunkManager::BlockIntersectsView(glm::vec3& lookDir, glm::vec3& headPos, float reach) {
-    glm::vec3 dir = glm::normalize(lookDir);
-    const float step = 0.1f;
+std::optional<worldquery::BlockRayHit> ChunkManager::RaycastView(
+    const glm::vec3& lookDir,
+    const glm::vec3& headPos,
+    float reach
+) const {
+    const auto* bsr = registry.ctx().find<blockstate::BlockStateRegistry>();
+    return worldquery::RaycastBlocks(
+        [this](int x, int y, int z) { return GetBlockState(x, y, z); },
+        bsr,
+        headPos,
+        lookDir,
+        reach
+    );
+}
 
-    float dist = 0.0f;
-    while (dist <= reach) {
-        glm::vec3 pos = headPos + dir * dist;
-
-        int bx = static_cast<int>(floor(pos.x));
-        int by = static_cast<int>(floor(pos.y));
-        int bz = static_cast<int>(floor(pos.z));
-
-        uint32_t stateId = GetBlockState(bx, by, bz);
-
-        if (stateId != blockstate::BlockStateRegistry::AIR_STATE_ID) {
-            return { stateId, WorldCoord(bx, by, bz) };
-        }
-
-        dist += step;
+std::pair<uint32_t, WorldCoord> ChunkManager::BlockIntersectsView(
+    glm::vec3& lookDir,
+    glm::vec3& headPos,
+    float reach
+) {
+    if (const auto hit = RaycastView(lookDir, headPos, reach)) {
+        return {hit->stateId, hit->blockPos};
     }
-
-    return { blockstate::BlockStateRegistry::AIR_STATE_ID, WorldCoord() };
+    return {blockstate::BlockStateRegistry::AIR_STATE_ID, WorldCoord()};
 }
 
 static bool IsReplaceablePlacementBlock(const blockstate::BlockStateRegistry& bsr, uint32_t stateId) {
@@ -871,36 +874,18 @@ std::pair<bool, WorldCoord> ChunkManager::BlockIntersectsViewForPlacement(
     float reach,
     bool replaceReplaceables
 ) {
-    glm::vec3 dir = glm::normalize(lookDir);
-    const float step = 0.1f;
-
-    float dist = 0.0f;
-
-    // Track the last empty block position
-    WorldCoord lastEmpty;
-
-    while (dist <= reach) {
-        glm::vec3 pos = headPos + dir * dist;
-
-        int bx = static_cast<int>(floor(pos.x));
-        int by = static_cast<int>(floor(pos.y));
-        int bz = static_cast<int>(floor(pos.z));
-
-        uint32_t stateId = GetBlockState(bx, by, bz);
-
-        if (stateId == blockstate::BlockStateRegistry::AIR_STATE_ID) {
-            lastEmpty = WorldCoord(bx, by, bz);
-        } else if (const auto* bsr = registry.ctx().find<blockstate::BlockStateRegistry>();
-                   replaceReplaceables && bsr && IsReplaceablePlacementBlock(*bsr, stateId)) {
-            return { true, WorldCoord(bx, by, bz) };
-        } else {
-            return { true, lastEmpty };
-        }
-
-        dist += step;
+    const auto hit = RaycastView(lookDir, headPos, reach);
+    if (!hit.has_value()) {
+        return {false, WorldCoord()};
     }
 
-    return { false, WorldCoord() };
+    const auto* bsr = registry.ctx().find<blockstate::BlockStateRegistry>();
+    if (replaceReplaceables && bsr && IsReplaceablePlacementBlock(*bsr, hit->stateId)) {
+        return {true, hit->blockPos};
+    }
+
+    const WorldCoord placePos = NeighborCoord(hit->blockPos, hit->face);
+    return {true, placePos};
 }
 
 void ChunkManager::BlockUpdateNeighboursDirty(const ChunkCoord& chunkCoord, const glm::ivec3& localPos) {

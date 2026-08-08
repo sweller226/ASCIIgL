@@ -16,11 +16,13 @@
 #include <ASCIICraft/events/ItemEvents.hpp>
 #include <ASCIICraft/events/PlaceBlockEvent.hpp>
 #include <ASCIICraft/world/World.hpp>
+#include <ASCIICraft/world/block/CollisionAabb.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
 #include <ASCIICraft/world/block/state/FaceDir.hpp>
 #include <ASCIICraft/world/block/placement/BlockPlacement.hpp>
 
 #include <optional>
+#include <vector>
 
 namespace {
 
@@ -38,10 +40,12 @@ std::optional<FaceDir> GetPlayerPlacementFacing(
     return DominantHorizontalFaceDir(head->lookDir);
 }
 
-bool PlayerOverlapsPlacementCell(
+bool PlayerOverlapsPlacementState(
     entt::registry& registry,
     entt::entity playerEnt,
-    const WorldCoord& placementPos
+    const WorldCoord& placementPos,
+    const blockstate::BlockStateRegistry& bsr,
+    uint32_t stateId
 ) {
     const auto* transform = registry.try_get<ecs::components::Transform>(playerEnt);
     const auto* collider = registry.try_get<ecs::components::Collider>(playerEnt);
@@ -53,16 +57,37 @@ bool PlayerOverlapsPlacementCell(
     const glm::vec3 playerMin = playerCenter - collider->halfExtents;
     const glm::vec3 playerMax = playerCenter + collider->halfExtents;
 
-    const glm::vec3 blockMin(
-        static_cast<float>(placementPos.x),
-        static_cast<float>(placementPos.y),
-        static_cast<float>(placementPos.z)
-    );
-    const glm::vec3 blockMax = blockMin + glm::vec3(1.0f);
+    const std::vector<blockstate::CollisionAabb>* boxes = nullptr;
+    static const std::vector<blockstate::CollisionAabb> kFullCell = {
+        blockstate::MakeFullBlockCollisionAabb()
+    };
 
-    return playerMin.x < blockMax.x && playerMax.x > blockMin.x &&
-           playerMin.y < blockMax.y && playerMax.y > blockMin.y &&
-           playerMin.z < blockMax.z && playerMax.z > blockMin.z;
+    if (bsr.IsValidState(stateId)) {
+        const auto& state = bsr.GetState(stateId);
+        if (!state.collisionBoxes.empty()) {
+            boxes = &state.collisionBoxes;
+        }
+    }
+    if (!boxes) {
+        boxes = &kFullCell;
+    }
+
+    for (const blockstate::CollisionAabb& local : *boxes) {
+        glm::vec3 boxMin;
+        glm::vec3 boxMax;
+        blockstate::CollisionAabbWorldBounds(
+            local,
+            placementPos.x,
+            placementPos.y,
+            placementPos.z,
+            boxMin,
+            boxMax
+        );
+        if (blockstate::AabbsOverlap(playerMin, playerMax, boxMin, boxMax)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -118,6 +143,10 @@ void PlacingSystem::PlayerPlace() {
         if (!bsr->IsValidState(baseStateId)) break;
 
         const std::optional<FaceDir> faceDir = GetPlayerPlacementFacing(m_registry, playerEnt);
+        const blockplacement::HitPlacementInfo hitInfo{
+            target->hitFace,
+            target->hitLocalY
+        };
         uint32_t finalizedStateId = blockplacement::FinalizePlacedState(
             *bsr,
             *chunkManager,
@@ -125,9 +154,14 @@ void PlacingSystem::PlayerPlace() {
             target->placePos,
             blockplacement::PlacementContext::PlayerPlacement,
             false,
-            faceDir
+            faceDir,
+            hitInfo
         );
-        if (PlayerOverlapsPlacementCell(m_registry, playerEnt, target->placePos)) break;
+        if (PlayerOverlapsPlacementState(
+                m_registry, playerEnt, target->placePos, *bsr, finalizedStateId
+            )) {
+            break;
+        }
 
         events::PlaceBlockEvent placeEvent;
         placeEvent.stateId = finalizedStateId;

@@ -74,6 +74,10 @@ const std::vector<CatalogEntry>& GetBlockTextureCatalog() {
         {"minecraft:blocks/potatoes_stage_1",  "res/textures/blocks/potatoes_stage1.png", nullptr, 0.0f},
         {"minecraft:blocks/potatoes_stage_2",  "res/textures/blocks/potatoes_stage2.png", nullptr, 0.0f},
         {"minecraft:blocks/potatoes_stage_3",  "res/textures/blocks/potatoes_stage3.png", nullptr, 0.0f},
+        {"minecraft:blocks/barrel_side",       "res/textures/blocks/barrel_side.png", nullptr, 0.0f},
+        {"minecraft:blocks/barrel_top",        "res/textures/blocks/barrel_top.png", nullptr, 0.0f},
+        {"minecraft:blocks/barrel_top_open",   "res/textures/blocks/barrel_top_open.png", nullptr, 0.0f},
+        {"minecraft:blocks/barrel_bottom",     "res/textures/blocks/barrel_bottom.png", nullptr, 0.0f},
     };
     return kCatalog;
 }

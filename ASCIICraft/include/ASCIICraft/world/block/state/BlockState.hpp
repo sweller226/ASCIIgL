@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 
+#include <ASCIICraft/world/block/CollisionAabb.hpp>
 #include <ASCIICraft/world/block/state/FaceDir.hpp>
 
 namespace blockstate {
@@ -30,6 +31,10 @@ struct BlockState {
     /// If true, don't draw a face when the neighbor block is the same type (e.g. dirt, glass).
     /// If false, always draw faces against same-type neighbors (e.g. leaves).
     bool cullSameType = true;
+    /// Physics colliders in local block space, synced from the baked BlockModel.
+    /// Empty means non-solid for physics (unless isFullBlock fallback applies).
+    std::vector<CollisionAabb> collisionBoxes;
 };
 
 } // namespace blockstate
+
