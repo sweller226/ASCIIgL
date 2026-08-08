@@ -93,7 +93,11 @@ endif()
 # ---------------------------------------------------------------------------
 include("${DOCTEST_DIR}/scripts/cmake/doctest.cmake")
 
+# TIMEOUT is a safety net, not a performance budget. Several tests exercise lock and
+# lifetime bugs whose failure mode is a hang; without this, one of them wedges the
+# whole run until CTest's 1500s default expires.
 doctest_discover_tests(ASCIICraft_tests
     WORKING_DIRECTORY "$<TARGET_FILE_DIR:ASCIICraft_tests>"
     ADD_LABELS 1
+    PROPERTIES TIMEOUT 120
 )
