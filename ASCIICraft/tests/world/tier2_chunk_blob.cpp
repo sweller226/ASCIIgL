@@ -23,7 +23,12 @@ void FillWithDistinctStates(Chunk& chunk, uint32_t distinctStates) {
     for (int i = 0; i < Chunk::VOLUME; ++i) {
         chunk.SetBlockStateByIndex(i, static_cast<uint32_t>(i) % distinctStates);
     }
+    chunk.SetGenerated(true);
 }
+
+/// The save path refuses ungenerated chunks, so any chunk a test persists has to look
+/// like one whose terrain actually ran.
+void MarkGenerated(Chunk& c) { c.SetGenerated(true); }
 
 bool SameBlocks(const Chunk& a, const Chunk& b) {
     for (int i = 0; i < Chunk::VOLUME; ++i) {
@@ -55,6 +60,7 @@ TEST_CASE("round-trips across the 4-bit palette range") {
     for (const uint32_t n : {1u, 2u, 15u, 16u}) {
         CAPTURE(n);
         Chunk src(ChunkCoord{0, 0, 0});
+        MarkGenerated(src);
         FillWithDistinctStates(src, n);
         Chunk dst(src.GetCoord());
         RoundTrip(src, dir.Path(), dst);
@@ -68,6 +74,7 @@ TEST_CASE("round-trips across the 8-bit palette range") {
     for (const uint32_t n : {17u, 100u, 220u}) {
         CAPTURE(n);
         Chunk src(ChunkCoord{1, 2, 3});
+        MarkGenerated(src);
         FillWithDistinctStates(src, n);
         Chunk dst(src.GetCoord());
         RoundTrip(src, dir.Path(), dst);
@@ -87,6 +94,7 @@ TEST_CASE("the 16-bit palette path is unreachable with the current block set") {
 TEST_CASE("an all-air chunk round-trips") {
     testsupport::TempDir dir("blobair");
     Chunk src(ChunkCoord{4, 5, 6});   // constructor fills with air
+    MarkGenerated(src);
     Chunk dst(src.GetCoord());
         RoundTrip(src, dir.Path(), dst);
     CHECK(SameBlocks(src, dst));
@@ -108,6 +116,8 @@ TEST_CASE("blocks with properties keep their variant across a round-trip") {
     REQUIRE(logZ != logY);
 
     Chunk src(ChunkCoord{7, 1, 7});
+
+    MarkGenerated(src);
     src.SetBlockState(1, 1, 1, logY);
     src.SetBlockState(2, 1, 1, logX);
     src.SetBlockState(3, 1, 1, logZ);
@@ -128,6 +138,7 @@ TEST_CASE("a randomized chunk round-trips") {
     for (int iteration = 0; iteration < 20; ++iteration) {
         CAPTURE(iteration);
         Chunk src(ChunkCoord{iteration % 8, 0, iteration / 8});
+        MarkGenerated(src);
         for (int i = 0; i < Chunk::VOLUME; ++i) {
             src.SetBlockStateByIndex(i, pick(rng));
         }
@@ -142,6 +153,8 @@ TEST_CASE("saving the same chunk twice yields the newest content") {
     const ChunkCoord coord{2, 3, 4};
 
     Chunk v1(coord);
+
+    MarkGenerated(v1);
     v1.SetBlockState(0, 0, 0, testsupport::Ids().stone);
     {
         RegionFile region(coord.ToRegionCoord(), dir.Path());
@@ -149,6 +162,8 @@ TEST_CASE("saving the same chunk twice yields the newest content") {
     }
 
     Chunk v2(coord);
+
+    MarkGenerated(v2);
     v2.SetBlockState(0, 0, 0, testsupport::Ids().glass);
     {
         RegionFile region(coord.ToRegionCoord(), dir.Path());
@@ -167,8 +182,11 @@ TEST_CASE("chunks at both region-index corners round-trip independently") {
     const RegionCoord region{0, 0, 0};
 
     Chunk low(ChunkCoord{0, 0, 0});
+
+    MarkGenerated(low);
     low.SetBlockState(0, 0, 0, testsupport::Ids().stone);
     Chunk high(ChunkCoord{31, 31, 31});
+    MarkGenerated(high);
     high.SetBlockState(0, 0, 0, testsupport::Ids().glass);
 
     {
@@ -193,6 +211,8 @@ TEST_CASE("negative chunk coordinates map to the right region and slot") {
     REQUIRE(coord.ToRegionCoord() == RegionCoord{-1, 0, -1});
 
     Chunk src(coord);
+
+    MarkGenerated(src);
     src.SetBlockState(5, 5, 5, testsupport::Ids().stone);
     Chunk dst(src.GetCoord());
         RoundTrip(src, dir.Path(), dst);

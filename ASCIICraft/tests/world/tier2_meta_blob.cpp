@@ -133,8 +133,7 @@ TEST_CASE("different chunks in one region keep separate buckets") {
 
 // --- DEFECT D: meta blobs replace instead of merging -------------------------
 
-TEST_CASE("two saves to the same chunk merge rather than replace"
-          * doctest::should_fail()) {
+TEST_CASE("two saves to the same chunk merge rather than replace") {
     // appendMetaBlobAndUpdateIndex overwrites the single index entry for the chunk, so
     // the second save orphans the first blob. Both sets of edits should survive.
     testsupport::TempDir dir("meta_merge");
@@ -152,8 +151,7 @@ TEST_CASE("two saves to the same chunk merge rather than replace"
     CHECK(loaded.edits.size() == 2);
 }
 
-TEST_CASE("spills from two neighbours into one unloaded chunk both survive"
-          * doctest::should_fail()) {
+TEST_CASE("spills from two neighbours into one unloaded chunk both survive") {
     // The tree-cut-off scenario in serialization terms. Chunk A's tree spills into B,
     // then chunk C's tree spills into the same B. B is never loaded in between, so
     // each spill arrives as its own SaveMetaData - and the second erases the first.
@@ -181,8 +179,7 @@ TEST_CASE("spills from two neighbours into one unloaded chunk both survive"
 
 // --- DEFECT E: applied edits are never cleared -------------------------------
 
-TEST_CASE("meta edits are cleared once they have been applied to a chunk"
-          * doctest::should_fail()) {
+TEST_CASE("meta edits are cleared once they have been applied to a chunk") {
     // Meta index flags are only ever OR'd with 0x1, never cleared, so a bucket stays
     // on disk forever. Every subsequent load re-applies it on top of the chunk blob.
     //
@@ -200,6 +197,7 @@ TEST_CASE("meta edits are cleared once they have been applied to a chunk"
     // block mined back out to air.
     Chunk chunk(coord);
     chunk.SetBlockState(8, 8, 8, testsupport::Ids().air);
+    chunk.SetGenerated(true);   // the save path only persists generated chunks
     {
         RegionFile region(coord.ToRegionCoord(), dir.Path());
         REQUIRE(region.SaveChunk(&chunk, testsupport::SharedBlocks()));

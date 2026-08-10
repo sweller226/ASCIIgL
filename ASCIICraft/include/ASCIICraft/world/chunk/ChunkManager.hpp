@@ -192,7 +192,11 @@ private:
     static constexpr int MAX_CHUNK_UNLOADS_PER_FRAME = 128; // cap unloads per frame; rest drained next frame
     static constexpr int MAX_MESH_APPLIES_PER_FRAME = 128;  // GPU uploads per frame; small meshes = cheaper
     static constexpr int MAX_SYNC_MESH_REBUILDS_PER_FRAME = 4;  // main-thread mesh build (small chunk = fast)
-    static constexpr unsigned int UNLOAD_RADIUS_PADDING = 0; // extra chunks beyond load radius before unloading
+    // Hysteresis: chunks are kept one shell beyond the load radius before unloading.
+    // At 0 a player oscillating across a single chunk boundary loads and unloads a
+    // whole shell every frame, which multiplies disk I/O and widens the window for
+    // every load/unload race. Costs one extra shell of resident chunks (16 KiB each).
+    static constexpr unsigned int UNLOAD_RADIUS_PADDING = 1;
     static constexpr uint32_t AUTOSAVE_INTERVAL_SECONDS = 60;
 
     // World settings

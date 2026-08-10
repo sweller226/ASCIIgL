@@ -66,22 +66,6 @@ ChunkCoord WorldTestHarness::PlayerChunk() const {
     return WorldCoord(glm::ivec3(transform.position)).ToChunkCoord();
 }
 
-void WorldTestHarness::PumpOrdered() {
-    // Order matters, and not for tidiness. A plain RunAll drains the queue in FIFO
-    // order, so an unload partway through frees a chunk whose terrain job is still
-    // later in the SAME batch - running it then corrupts the heap (defect A).
-    //
-    // Running every terrain job before any unload removes that window. Jobs left over
-    // from an earlier frame are handled by DropStaleTerrainJobs.
-    //
-    // Tests that want the adversarial ordering drive RunFirst directly.
-    DropStaleTerrainJobs();
-    scheduler_->RunAllOfKind(ChunkJobKind::Terrain);
-    scheduler_->RunAllOfKind(ChunkJobKind::Mesh);
-    scheduler_->RunAllOfKind(ChunkJobKind::Unload);
-    DropStaleTerrainJobs();
-}
-
 void WorldTestHarness::Step(bool pumpJobs) {
     chunkManager_->Update();
     if (!pumpJobs) return;
@@ -90,7 +74,7 @@ void WorldTestHarness::Step(bool pumpJobs) {
     // single pump is not necessarily enough to reach a fixed point. Bounded to keep a
     // self-re-enqueueing job from spinning forever.
     for (int pass = 0; pass < 8 && scheduler_->PendingCount() > 0; ++pass) {
-        PumpOrdered();
+        scheduler_->RunAll();
         chunkManager_->Update();
     }
 }
@@ -102,43 +86,6 @@ void WorldTestHarness::StepFrames(int count, bool pumpJobs) {
 bool WorldTestHarness::Quiesce(int maxFrames) {
     for (int frame = 0; frame < maxFrames; ++frame) {
         Step(true);
-
-        if (scheduler_->PendingCount() != 0) continue;
-
-        bool allGenerated = true;
-        for (const ChunkCoord coord : chunkManager_->GetLoadedCoords()) {
-            const auto chunk = chunkManager_->GetChunkShared(coord);
-            if (!chunk || !chunk->IsGenerated()) { allGenerated = false; break; }
-        }
-        if (allGenerated) return true;
-    }
-    return false;
-}
-
-void WorldTestHarness::PumpRandomSubset(uint64_t& rngState, double fraction) {
-    DropStaleTerrainJobs();
-    scheduler_->RunRandomSubsetOfKind(ChunkJobKind::Terrain, rngState, fraction);
-    scheduler_->RunRandomSubsetOfKind(ChunkJobKind::Mesh, rngState, fraction);
-    scheduler_->RunRandomSubsetOfKind(ChunkJobKind::Unload, rngState, fraction);
-    DropStaleTerrainJobs();
-}
-
-size_t WorldTestHarness::DropStaleTerrainJobs() {
-    size_t dropped = 0;
-    for (const ChunkJobTag& tag : scheduler_->PendingTags()) {
-        if (tag.kind != ChunkJobKind::Terrain) continue;
-        if (chunkManager_->GetChunkShared(tag.coord) != nullptr) continue;
-        if (scheduler_->DropFirst(ChunkJobKind::Terrain, tag.coord)) ++dropped;
-    }
-    return dropped;
-}
-
-bool WorldTestHarness::QuiesceSafely(int maxFrames) {
-    // Step already pumps in the safe order, so this is Quiesce with the stale-job
-    // sweep applied before the settled check too.
-    for (int frame = 0; frame < maxFrames; ++frame) {
-        Step(true);
-        DropStaleTerrainJobs();
 
         if (scheduler_->PendingCount() != 0) continue;
 

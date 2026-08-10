@@ -88,6 +88,11 @@ namespace std {
 static constexpr uint32_t MAX_CHUNK_BLOB_SIZE = 1u << 20; // 1 MiB
 static constexpr uint32_t MAX_META_BLOB_SIZE  = 1u << 20; // 1 MiB
 
+/// On-disk region container version, written into RegionHeader::version and validated
+/// on read. Distinct from the chunk/meta blob versions below, which describe the
+/// payloads rather than the file layout.
+static constexpr uint32_t REGION_FORMAT_VERSION = 1;
+
 static constexpr uint32_t CHUNK_BLOB_VERSION_V1 = 1;
 static constexpr uint32_t CHUNK_BLOB_VERSION_V2 = 2;
 static constexpr uint32_t META_BLOB_VERSION_V2 = 2;
@@ -118,7 +123,16 @@ public:
     bool SaveChunk(const Chunk* data, const blockstate::BlockStateRegistry& bsr);
 
     bool LoadMetaData(const ChunkCoord& pos, MetaBucket* out, const blockstate::BlockStateRegistry& bsr);
+    /// Appends \p data, merging with any bucket already stored for \p pos.
     bool SaveMetaData(const ChunkCoord& pos, const MetaBucket* data, const blockstate::BlockStateRegistry& bsr);
+
+    /// Marks the meta bucket for \p pos as absent.
+    ///
+    /// Called once the edits have been folded into the chunk's own blob. Without it
+    /// the bucket is re-applied on every subsequent load, so a block the player mined
+    /// out reappears - the entry's present bit was previously only ever set, never
+    /// cleared.
+    void ClearMetaData(const ChunkCoord& pos);
 
     /// Used by unload callback: save chunk + optional meta under region lock, then optionally Close(). Thread-safe.
     void SaveChunkForUnload(
@@ -178,6 +192,12 @@ private:
 
     void parseMetaBlob(const std::vector<uint8_t>& blob, MetaBucket* out, const blockstate::BlockStateRegistry& bsr);
     std::vector<uint8_t> buildMetaBlob(const MetaBucket* data, const blockstate::BlockStateRegistry& bsr);
+
+    /// LoadMetaData without taking _mutex. Caller must already hold it with the file
+    /// open; used by the append path so it can merge with the existing bucket.
+    bool loadMetaBlobUnlocked(const ChunkCoord& pos, MetaBucket* out, const blockstate::BlockStateRegistry& bsr);
+    /// ClearMetaData without taking _mutex or rewriting the index.
+    void clearMetaEntryUnlocked(const ChunkCoord& pos);
 };
 
 class RegionManager {

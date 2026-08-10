@@ -31,6 +31,11 @@ struct CompletedMeshResult {
 /// Result pushed when a terrain generation job finishes (terrain data to apply to chunk).
 struct CompletedTerrainResult {
     ChunkCoord coord;
+    /// Identifies the Chunk instance this was generated for. The coord alone is not
+    /// enough: unload+reload puts a DIFFERENT Chunk at the same coord, and applying an
+    /// older instance's result to it marks it generated while its own job is still
+    /// pending, and consumes the cross-chunk edits meant for it.
+    uint64_t instanceId = 0;
     TerrainResult result;
 };
 
@@ -58,7 +63,9 @@ public:
     void SetTerrainGenerator(TerrainGenerator* gen) { terrainGenerator_ = gen; }
     TerrainGenerator* GetTerrainGenerator() const { return terrainGenerator_; }
 
-    void EnqueueTerrainGen(Chunk* chunk);
+    /// Takes shared ownership: the job may outlive the chunk's removal from
+    /// loadedChunks, and must not write through a freed pointer.
+    void EnqueueTerrainGen(std::shared_ptr<Chunk> chunk);
     void EnqueueMeshGen(Chunk* chunk);
     void EnqueueUnload(ChunkCoord coord, std::shared_ptr<Chunk> chunk, std::optional<MetaBucket> meta, bool closeRegionAfterSave, std::shared_ptr<RegionFile> region);
 

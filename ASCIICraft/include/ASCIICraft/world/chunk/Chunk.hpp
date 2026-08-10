@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <unordered_map>
 #include <memory>
 #include <cstdint>
@@ -37,6 +38,21 @@ public:
 
     // Chunk properties
     const ChunkCoord& GetCoord() const { return coord; }
+
+    /// Unique per Chunk instance, never reused within a process run.
+    ///
+    /// Coordinates alone cannot identify a chunk: unload then reload gives a NEW
+    /// Chunk at the same coord, and a terrain result produced for the old one must
+    /// not be applied to the new one. Results carry this id so the drain can tell
+    /// the two apart.
+    uint64_t GetInstanceId() const { return instanceId; }
+
+    /// Set when the chunk is unloaded. A terrain job that has not started yet checks
+    /// this and returns immediately rather than generating a result nobody wants.
+    /// Atomic because the job runs on a worker while unload happens on the main thread.
+    bool IsCancelled() const { return cancelled.load(std::memory_order_acquire); }
+    void Cancel() { cancelled.store(true, std::memory_order_release); }
+
     bool IsGenerated() const { return generated; }
     bool IsDirty() const { return dirty; }
     void SetDirty(bool d) { dirty = d; }
@@ -79,7 +95,10 @@ public:
 private:
     ChunkCoord coord;
     uint32_t blocks[VOLUME];  // blockstate IDs, 16x16x16 = 4096 entries
-    
+
+    uint64_t instanceId;
+    std::atomic<bool> cancelled{false};
+
     bool generated;
     bool dirty;
 

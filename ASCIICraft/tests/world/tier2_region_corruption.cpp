@@ -35,6 +35,9 @@ fs::path MakePopulatedRegion(const fs::path& dir) {
         for (int b = 0; b < Chunk::VOLUME; ++b) {
             c.SetBlockStateByIndex(b, static_cast<uint32_t>((b + i) % 20));
         }
+        // The save path refuses ungenerated chunks; a fixture chunk must look like one
+        // whose terrain actually ran.
+        c.SetGenerated(true);
         rf.SaveChunkInBatch(&c, testsupport::SharedBlocks());
     }
     rf.EndBatchSave();
@@ -170,6 +173,7 @@ TEST_CASE("a corrupt chunk blob still allows the region to be rewritten") {
 
     Chunk fresh(ChunkCoord{0, 0, 0});
     fresh.SetBlockState(1, 1, 1, testsupport::Ids().stone);
+    fresh.SetGenerated(true);
     {
         RegionFile rf(RegionCoord{0, 0, 0}, dir.Path());
         REQUIRE(rf.SaveChunk(&fresh, testsupport::SharedBlocks()));
@@ -183,8 +187,7 @@ TEST_CASE("a corrupt chunk blob still allows the region to be rewritten") {
 
 // --- DEFECT G: the region header version is written but never checked --------
 
-TEST_CASE("an unknown region format version is rejected"
-          * doctest::should_fail()) {
+TEST_CASE("an unknown region format version is rejected") {
     // RegionHeader::version is written as 1 and never read back. A future format bump
     // would therefore be parsed with the current code's assumptions rather than
     // refused, turning a clean "unsupported save" message into silent corruption.

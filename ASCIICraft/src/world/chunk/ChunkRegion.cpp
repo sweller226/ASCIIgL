@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cstring>
 #include <limits>
+#include <map>
 
 #include <sstream>
 
@@ -258,6 +259,20 @@ void RegionFile::readHeaderAndIndex() {
         std::fill(chunkIndexes.begin(), chunkIndexes.end(), ChunkIndexEntry{0, 0, 0});
         std::fill(metaIndexes.begin(), metaIndexes.end(), MetaBucketIndexEntry{0, 0, 0, 0});
         return;
+    }
+
+    // Validate the format version before trusting anything that follows.
+    //
+    // This was written on every save and never read back, so a file from a future
+    // format would be parsed with today's assumptions - index tables read at the wrong
+    // stride, blobs at the wrong offsets - and silently produce garbage instead of a
+    // clean "unsupported save" refusal. Chunk and meta blobs already version-check;
+    // the region header did not.
+    if (header.version != REGION_FORMAT_VERSION) {
+        ASCIIgL::Logger::Errorf("readHeaderAndIndex: unsupported region format version %u "
+                                "(expected %u) in %s",
+                                header.version, REGION_FORMAT_VERSION, _path.c_str());
+        throw std::runtime_error("Unsupported region format version");
     }
 
     // Read chunk index table (immediately after header)
@@ -611,12 +626,18 @@ void RegionFile::appendChunkBlobAndUpdateIndex(const Chunk* data, const blocksta
 }
 
 bool RegionFile::SaveChunk(const Chunk* data, const blockstate::BlockStateRegistry& bsr) {
+    // Same two rules as the batch and unload paths, so all three write paths behave
+    // identically: never persist an ungenerated chunk, and retire the meta bucket once
+    // its edits are baked into the blob.
+    if (!data || !data->IsGenerated()) return false;
+
     std::lock_guard<std::mutex> g(_mutex);
     if (!EnsureOpen()) {
         ASCIIgL::Logger::Error("SaveChunk: EnsureOpen failed");
         throw std::runtime_error("Failed to open region file for write");
     }
     appendChunkBlobAndUpdateIndex(data, bsr);
+    clearMetaEntryUnlocked(data->GetCoord());
     writeHeaderAndIndex();
     _file.flush();
     return true;
@@ -629,6 +650,16 @@ bool RegionFile::LoadMetaData(const ChunkCoord& pos, MetaBucket* out, const bloc
         ASCIIgL::Logger::Error("LoadMetaData: EnsureOpen failed");
         return false;
     }
+    return loadMetaBlobUnlocked(pos, out, bsr);
+}
+
+bool RegionFile::loadMetaBlobUnlocked(
+    const ChunkCoord& pos,
+    MetaBucket* out,
+    const blockstate::BlockStateRegistry& bsr
+) {
+    // Caller must hold _mutex and have the file open. Split out of LoadMetaData so the
+    // already-locked append path can read the existing bucket in order to merge with it.
 
     RegionCoord rp = pos.ToRegionCoord();
     glm::ivec3 lp = pos.ToLocalRegion(rp);
@@ -701,7 +732,48 @@ void RegionFile::appendMetaBlobAndUpdateIndex(
         throw std::out_of_range("Local chunk coords out of region bounds");
     }
     auto& entry = metaIndexes[off];
-    std::vector<uint8_t> raw = buildMetaBlob(data, bsr);
+
+    // Merge with whatever is already stored for this chunk rather than replacing it.
+    //
+    // Each blob is appended and the index repointed, so a plain overwrite orphans the
+    // previous bucket. Two neighbours spilling a tree into the same unloaded chunk
+    // arrive as two separate saves, and the second used to erase the first - half a
+    // tree silently gone.
+    //
+    // Keyed by packedPos so a later write to the same cell wins, matching the
+    // in-memory apply order.
+    MetaBucket mergedBucket;
+    const MetaBucket* toWrite = data;
+    if ((entry.flags & 0x1) && entry.length > 0) {
+        MetaBucket existing;
+        bool haveExisting = false;
+        try {
+            haveExisting = loadMetaBlobUnlocked(pos, &existing, bsr);
+        } catch (const std::exception& e) {
+            // A corrupt existing bucket must not block writing the new one; the new
+            // edits are the ones we still have in hand.
+            ASCIIgL::Logger::Warningf("appendMetaBlobAndUpdateIndex: discarding unreadable "
+                                      "existing meta for (%d,%d,%d): %s",
+                                      pos.x, pos.y, pos.z, e.what());
+        }
+        if (haveExisting && !existing.edits.empty()) {
+            std::map<uint16_t, uint32_t> byPos;
+            for (const auto& e : existing.edits) byPos[e.packedPos] = e.stateId;
+            if (data) {
+                for (const auto& e : data->edits) byPos[e.packedPos] = e.stateId;
+            }
+            mergedBucket.edits.reserve(byPos.size());
+            for (const auto& [packedPos, stateId] : byPos) {
+                CrossChunkEdit merged{};
+                merged.packedPos = packedPos;
+                merged.stateId = stateId;
+                mergedBucket.edits.push_back(merged);
+            }
+            toWrite = &mergedBucket;
+        }
+    }
+
+    std::vector<uint8_t> raw = buildMetaBlob(toWrite, bsr);
     if (header.metaStart == 0) {
         const size_t entryCount = static_cast<size_t>(sizes::REGION_SIZE) * sizes::REGION_SIZE * sizes::REGION_SIZE;
         const uint32_t headerSize = static_cast<uint32_t>(sizeof(RegionHeader));
@@ -746,6 +818,35 @@ void RegionFile::appendMetaBlobAndUpdateIndex(
     entry.flags = static_cast<uint8_t>(entry.flags | 0x1);
 }
 
+void RegionFile::clearMetaEntryUnlocked(const ChunkCoord& pos) {
+    // Caller must hold _mutex. Only clears the index entry; the blob bytes stay in the
+    // file as dead weight until a compaction pass exists (see the TODO on RegionFile).
+    RegionCoord rp = pos.ToRegionCoord();
+    glm::ivec3 lp = pos.ToLocalRegion(rp);
+    if (lp.x < 0 || lp.y < 0 || lp.z < 0 ||
+        lp.x >= sizes::REGION_SIZE || lp.y >= sizes::REGION_SIZE || lp.z >= sizes::REGION_SIZE) {
+        return;
+    }
+    uint32_t off = indexOffset(lp);
+    if (off >= metaIndexes.size()) return;
+
+    auto& entry = metaIndexes[off];
+    entry.flags = static_cast<uint8_t>(entry.flags & ~0x1);
+    entry.offset = 0;
+    entry.length = 0;
+}
+
+void RegionFile::ClearMetaData(const ChunkCoord& pos) {
+    std::lock_guard<std::mutex> g(_mutex);
+    if (!EnsureOpen()) {
+        ASCIIgL::Logger::Error("ClearMetaData: EnsureOpen failed");
+        return;
+    }
+    clearMetaEntryUnlocked(pos);
+    writeHeaderAndIndex();
+    _file.flush();
+}
+
 bool RegionFile::SaveMetaData(
     const ChunkCoord& pos,
     const MetaBucket* data,
@@ -769,13 +870,47 @@ void RegionFile::SaveChunkForUnload(
     bool closeAfter,
     const blockstate::BlockStateRegistry& bsr
 ) {
+    // Never persist a chunk whose terrain has not run.
+    //
+    // An unload can race an in-flight terrain job, in which case the chunk is still
+    // all air. Writing it sets the present flag, so the next LoadChunk succeeds, calls
+    // SetGenerated(true), and never enqueues terrain again - the chunk stays empty for
+    // the life of the save. ChunkManager::SaveAll already skips ungenerated chunks;
+    // this path did not, which is why the symptom only appeared on unload.
+    //
+    // The meta bucket is still written when the chunk is skipped: those edits are the
+    // only record of a neighbour's tree spill, and dropping them here would trade one
+    // data-loss bug for another.
+    const bool persistChunk = (data != nullptr) && data->IsGenerated();
+    const bool persistMeta  = (meta != nullptr) && !meta->edits.empty();
+
+    if (!persistChunk && !persistMeta) {
+        if (closeAfter) {
+            std::lock_guard<std::mutex> g(_mutex);
+            Close();
+        }
+        return;
+    }
+
     std::lock_guard<std::mutex> g(_mutex);
     if (!EnsureOpen()) {
         ASCIIgL::Logger::Error("SaveChunkForUnload: EnsureOpen failed");
         throw std::runtime_error("Failed to open region file for write");
     }
-    appendChunkBlobAndUpdateIndex(data, bsr);
-    if (meta && !meta->edits.empty())
+    if (persistChunk) {
+        appendChunkBlobAndUpdateIndex(data, bsr);
+        // The chunk blob now contains whatever the previously-stored meta bucket put
+        // there, so that bucket is spent. Leaving it would re-apply those blocks on
+        // every future load and undo any later edit - a mined block would come back.
+        //
+        // Cleared here rather than at read time on purpose: until the chunk is
+        // actually persisted, the on-disk bucket is the only copy of those edits, and
+        // clearing on read would lose them to a crash in between.
+        clearMetaEntryUnlocked(pos);
+    }
+    // Any bucket passed in arrived AFTER the chunk was last written, so it is written
+    // after the clear, not before it.
+    if (persistMeta)
         appendMetaBlobAndUpdateIndex(pos, meta, bsr);
     writeHeaderAndIndex();
     _file.flush();
@@ -785,11 +920,26 @@ void RegionFile::SaveChunkForUnload(
 
 bool RegionFile::BeginBatchSave() {
     _batchLock.emplace(_mutex);
-    return EnsureOpen();
+    if (!EnsureOpen()) {
+        // Release the lock before reporting failure. Previously it stayed held, so a
+        // single unwritable region permanently wedged every later operation on it -
+        // and SaveAll does `if (!BeginBatchSave()) continue;`, silently killing saving
+        // for the rest of the session.
+        _batchLock.reset();
+        return false;
+    }
+    return true;
 }
 
 void RegionFile::SaveChunkInBatch(const Chunk* data, const blockstate::BlockStateRegistry& bsr) {
+    // Same guard as SaveChunkForUnload. SaveAll already filters ungenerated chunks
+    // before calling this, but the invariant belongs with the write, not with one
+    // caller who happens to remember it.
+    if (!data || !data->IsGenerated()) return;
     appendChunkBlobAndUpdateIndex(data, bsr);
+    // Edits are now baked into the blob; see SaveChunkForUnload for why this is done
+    // on write rather than on read.
+    clearMetaEntryUnlocked(data->GetCoord());
 }
 
 void RegionFile::SaveMetaDataInBatch(

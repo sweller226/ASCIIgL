@@ -60,7 +60,7 @@ TEST_CASE("a straight walk out and back preserves chunk content") {
     const ChunkCoord home{0, 5, 0};
 
     h.MovePlayerToChunk(home);
-    REQUIRE(h.QuiesceSafely());
+    REQUIRE(h.Quiesce());
     const std::vector<uint32_t> before = h.BlocksOf(home);
     REQUIRE(before.size() == static_cast<size_t>(Chunk::VOLUME));
     REQUIRE(HasVariedContent(before));
@@ -68,11 +68,11 @@ TEST_CASE("a straight walk out and back preserves chunk content") {
     for (int trip = 0; trip < 3; ++trip) {
         for (int step = 1; step <= 8; ++step) {
             h.MovePlayerToChunk(ChunkCoord{step, 5, 0});
-            REQUIRE(h.QuiesceSafely());
+            REQUIRE(h.Quiesce());
         }
         for (int step = 7; step >= 0; --step) {
             h.MovePlayerToChunk(ChunkCoord{step, 5, 0});
-            REQUIRE(h.QuiesceSafely());
+            REQUIRE(h.Quiesce());
         }
         CAPTURE(trip);
         const std::vector<uint32_t> after = h.BlocksOf(home);
@@ -85,7 +85,7 @@ TEST_CASE("a player edit survives an unload and reload") {
     WorldTestHarness h({});
     const ChunkCoord home{0, 5, 0};
     h.MovePlayerToChunk(home);
-    REQUIRE(h.QuiesceSafely());
+    REQUIRE(h.Quiesce());
 
     // Place a distinctive block in the middle of the chunk.
     const uint32_t marker = testsupport::Ids().glass;
@@ -93,9 +93,9 @@ TEST_CASE("a player edit survives an unload and reload") {
     REQUIRE(h.BlocksOf(home)[chunkutil::GetBlockIndex(8, 8, 8)] == marker);
 
     h.MovePlayerToChunk(ChunkCoord{100, 5, 100});
-    REQUIRE(h.QuiesceSafely());
+    REQUIRE(h.Quiesce());
     h.MovePlayerToChunk(home);
-    REQUIRE(h.QuiesceSafely());
+    REQUIRE(h.Quiesce());
 
     CHECK(h.BlocksOf(home)[chunkutil::GetBlockIndex(8, 8, 8)] == marker);
 }
@@ -111,23 +111,22 @@ TEST_CASE("a player edit survives SaveAll and a fresh ChunkManager") {
         cfg.label = "restart_a";
         WorldTestHarness h(cfg);
         h.MovePlayerToChunk(home);
-        REQUIRE(h.QuiesceSafely());
+        REQUIRE(h.Quiesce());
         h.Chunks().SetBlockState(home.x * 16 + 4, home.y * 16 + 4, home.z * 16 + 4, marker);
         h.Chunks().SaveAll();
 
         // Reload within the same harness - the region dir is per-harness, so this is
         // the reachable equivalent of a restart.
         h.MovePlayerToChunk(ChunkCoord{100, 5, 100});
-        REQUIRE(h.QuiesceSafely());
+        REQUIRE(h.Quiesce());
         h.MovePlayerToChunk(home);
-        REQUIRE(h.QuiesceSafely());
+        REQUIRE(h.Quiesce());
 
         CHECK(h.BlocksOf(home)[chunkutil::GetBlockIndex(4, 4, 4)] == marker);
     }
 }
 
-TEST_CASE("a randomized walk leaves every visited chunk intact"
-          * doctest::should_fail()) {
+TEST_CASE("a randomized walk leaves every visited chunk intact") {
     // The catch-all. Partial job pumping recreates the real interleaving where some
     // terrain lands and some is still queued when the next unload arrives.
     //
@@ -147,13 +146,14 @@ TEST_CASE("a randomized walk leaves every visited chunk intact"
         visited.insert({cx, cz});
 
         h.Chunks().Update();
-        // Partial pump: terrain before unload, so the walk measures content loss
-        // rather than dying of defect A's heap corruption. A's ordering has its own
-        // dedicated pins in tier3_lifecycle.
-        h.PumpRandomSubset(rng, 0.6);
+        // Partial pump in arbitrary order. Running a terrain job after the unload
+        // that removed its chunk is now safe - the job holds a reference and its
+        // result is dropped on the instance-id check - so the walk can use genuinely
+        // unconstrained interleaving again.
+        h.Scheduler().RunRandomSubset(rng, 0.6);
     }
 
-    REQUIRE(h.QuiesceSafely(128));
+    REQUIRE(h.Quiesce(128));
 
     size_t corrupted = 0;
     size_t inspected = 0;
@@ -172,8 +172,7 @@ TEST_CASE("a randomized walk leaves every visited chunk intact"
     CHECK(corrupted == 0);
 }
 
-TEST_CASE("streaming never produces a surface chunk of uniform dirt"
-          * doctest::should_fail()) {
+TEST_CASE("streaming never produces a surface chunk of uniform dirt") {
     // The "entirely filled with dirt" signature, scoped correctly.
     //
     // Underground chunks are legitimately 100% dirt (see tier1_terrain_determinism),
@@ -187,9 +186,9 @@ TEST_CASE("streaming never produces a surface chunk of uniform dirt"
     for (int frame = 0; frame < 80; ++frame) {
         h.MovePlayerToChunk(ChunkCoord{RandomInRange(rng, -3, 3), 5, RandomInRange(rng, -3, 3)});
         h.Chunks().Update();
-        h.PumpRandomSubset(rng, 0.5);
+        h.Scheduler().RunRandomSubset(rng, 0.5);
     }
-    REQUIRE(h.QuiesceSafely(128));
+    REQUIRE(h.Quiesce(128));
 
     size_t uniform = 0;
     size_t inspected = 0;
@@ -218,7 +217,7 @@ TEST_CASE("buffered cross-chunk edits do not grow without bound") {
         h.MovePlayerToChunk(ChunkCoord{RandomInRange(rng, -3, 3), 5, RandomInRange(rng, -3, 3)});
         h.Step(true);
     }
-    REQUIRE(h.QuiesceSafely());
+    REQUIRE(h.Quiesce());
 
     const auto stats = h.Chunks().GetStats();
     CAPTURE(stats.pendingCrossChunkBuckets);
@@ -237,8 +236,12 @@ TEST_CASE("the loaded set stays bounded by the render distance") {
     for (int frame = 0; frame < 60; ++frame) {
         h.MovePlayerToChunk(ChunkCoord{RandomInRange(rng, -6, 6), 5, RandomInRange(rng, -6, 6)});
         h.Step(true);
-        // loadDistance is 2, so the shell is at most 5x5x5.
-        REQUIRE(h.Chunks().GetStats().loadedChunks <= 125 + 32);
+        // loadDistance is 2 (renderDistance + 1) and UNLOAD_RADIUS_PADDING is 1, so
+        // chunks are retained out to radius 3 - a 7x7x7 shell - before unloading.
+        // The padding is deliberate hysteresis; without it a player crossing one chunk
+        // line churns an entire shell every frame.
+        constexpr size_t kRetainedShell = 7 * 7 * 7;
+        REQUIRE(h.Chunks().GetStats().loadedChunks <= kRetainedShell + 32);
     }
 }
 

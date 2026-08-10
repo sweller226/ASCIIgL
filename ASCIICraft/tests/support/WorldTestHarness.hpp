@@ -66,12 +66,12 @@ public:
 
     // --- frame stepping ---
 
-    /// One frame: ChunkManager::Update(), then optionally drain pending jobs.
+    /// One frame: ChunkManager::Update(), then optionally drain pending jobs FIFO.
     ///
-    /// Draining runs terrain before unload rather than plain FIFO. That ordering is
-    /// required, not cosmetic: FIFO lets an unload free a chunk whose terrain job is
-    /// still later in the same batch, which corrupts the heap under defect A. Tests
-    /// that want the adversarial ordering call Scheduler().RunFirst directly.
+    /// Plain FIFO is safe again. It previously had to run terrain before unload to
+    /// dodge defect A, where an unload could free a chunk whose terrain job was still
+    /// later in the same batch. Terrain jobs now hold a reference to their chunk, so
+    /// any ordering is safe.
     void Step(bool pumpJobs = true);
     void StepFrames(int count, bool pumpJobs = true);
 
@@ -79,28 +79,7 @@ public:
     /// \returns false if it did not settle within \p maxFrames.
     bool Quiesce(int maxFrames = 64);
 
-    /// Runs a deterministic random slice of the queue, terrain before unload.
-    ///
-    /// Reproduces the real interleaving where some terrain lands and some is still
-    /// pending when the next unload arrives, without the terrain-after-free ordering
-    /// that crashes under defect A. That ordering has its own dedicated pins.
-    void PumpRandomSubset(uint64_t& rngState, double fraction);
 
-    /// Discards queued terrain jobs whose target chunk is no longer loaded.
-    /// \returns how many were dropped.
-    ///
-    /// This is a WORKAROUND FOR DEFECT A, not a convenience. Terrain jobs capture a
-    /// raw Chunk* and nothing cancels them on unload, so running one after its chunk
-    /// was freed writes 4096 state ids through a dangling pointer. That reliably
-    /// corrupts the heap and kills the process - verified, exit 0xC0000374.
-    ///
-    /// A crashed test cannot be a regression pin, so tests that need to exercise
-    /// defects B or C call this first to neutralise A. Once A is fixed the call
-    /// becomes a no-op and can be deleted.
-    size_t DropStaleTerrainJobs();
-
-    /// Quiesce, dropping stale terrain jobs between frames. Safe under defect A.
-    bool QuiesceSafely(int maxFrames = 64);
 
     // --- reference data ---
 
@@ -118,9 +97,6 @@ private:
     entt::registry registry_;
     entt::entity player_ = entt::null;
     uint32_t clock_ = 1000;   // non-zero so `now - lastTouched` cannot underflow
-    /// Drains pending jobs terrain-first; see Step().
-    void PumpOrdered();
-
     ManualChunkJobScheduler* scheduler_ = nullptr;   // owned by the ChunkManager
     std::unique_ptr<ChunkManager> chunkManager_;
     std::unique_ptr<TerrainGenerator> referenceGenerator_;

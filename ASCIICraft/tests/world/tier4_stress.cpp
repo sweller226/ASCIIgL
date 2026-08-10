@@ -6,27 +6,34 @@
 //     ./scripts/run_tests.ps1 -Stress
 //     ./scripts/run_tests.ps1 -Asan -Stress      (much stronger)
 //
-// Scope note. The obvious Tier 4 test - drive real chunk streaming on the TBB
-// scheduler under churn - CANNOT run while defect A stands: an unload racing an
-// in-flight terrain job writes through a dangling Chunk*, which is verified heap
-// corruption, not a hypothesis. A process that dies mid-suite reports nothing useful,
-// so that scenario lives in tier4_uaf_repro.cpp behind an explicit skip.
+// Covers the region file layer, the region cache, the production scheduler, and full
+// multi-threaded chunk streaming.
 //
-// What remains here is genuinely concurrent and genuinely safe to run: the region
-// file layer and the region cache, neither of which touches chunk lifetime.
+// That last one was impossible until defect A was fixed: an unload racing an in-flight
+// terrain job wrote through a dangling Chunk*, which was verified heap corruption
+// rather than a test failure, so a process running it died mid-suite.
 
 #include <doctest/doctest.h>
 
 #include "support/BlockRegistryFixture.hpp"
 #include "support/TempDir.hpp"
 
+#include <ASCIICraft/ecs/components/PlayerTag.hpp>
+#include <ASCIICraft/ecs/components/Transform.hpp>
+#include <ASCIICraft/world/Sizes.hpp>
+#include <ASCIICraft/world/block/VanillaBlockRegistration.hpp>
 #include <ASCIICraft/world/chunk/Chunk.hpp>
+#include <ASCIICraft/world/chunk/ChunkManager.hpp>
+#include <ASCIICraft/world/chunk/ChunkManagerDeps.hpp>
 #include <ASCIICraft/world/chunk/ChunkRegion.hpp>
 #include <ASCIICraft/world/chunk/IChunkJobScheduler.hpp>
+
+#include <entt/entt.hpp>
 
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <random>
 #include <thread>
 #include <vector>
 
@@ -36,6 +43,9 @@ void FillChunk(Chunk& c, uint32_t seedValue) {
     for (int i = 0; i < Chunk::VOLUME; ++i) {
         c.SetBlockStateByIndex(i, (static_cast<uint32_t>(i) + seedValue) % 20);
     }
+    // Required: the save path refuses ungenerated chunks, so a test chunk has to look
+    // like one whose terrain actually ran.
+    c.SetGenerated(true);
 }
 
 } // namespace
@@ -168,23 +178,86 @@ TEST_CASE("the TBB scheduler handles sustained submission") {
     CHECK(ran.load() == 20 * 200);
 }
 
-TEST_CASE("DEFECT A: real-threaded streaming under churn"
-          * doctest::skip()) {
-    // Deliberately not runnable. With the real TBB scheduler, an unload racing an
-    // in-flight terrain job writes Chunk::VOLUME state ids through a freed pointer.
-    // That is confirmed heap corruption (exit 0xC0000374), so this would kill the
-    // process rather than report anything.
+TEST_CASE("real-threaded streaming under churn") {
+    // This could not run at all until defect A was fixed: on the real TBB scheduler an
+    // unload racing an in-flight terrain job wrote through a freed Chunk*, which was
+    // verified heap corruption (exit 0xC0000374) rather than a test failure.
     //
-    // Once defect A is fixed, delete the skip decorator and implement the body:
-    //   - WorldTestHarness with MakeTbbChunkJobScheduler instead of the manual one
-    //   - 2000 frames of 3-chunk-per-frame teleports
-    //   - every 50 frames assert the column profile invariant and bounded loadedChunks
-    //   - SaveAll every 20 frames while jobs are in flight, then verify from a second
-    //     ChunkManager that every persisted chunk still parses and matches reference
+    // Now terrain jobs hold a shared_ptr to their chunk and results are matched by
+    // instance id, so genuine multi-threaded churn is safe to exercise.
     //
-    // Until then, tier3_integrity covers the same ground deterministically and
-    // tier4_uaf_repro reproduces the crash on demand.
-    FAIL_CHECK("not implemented until defect A is fixed - see comment");
+    // Uses ChunkManager directly rather than WorldTestHarness, because the harness owns
+    // a manual scheduler by construction.
+    testsupport::TempDir dir("stress_stream");
+
+    entt::registry registry;
+    blockstate::VanillaRegistrationOptions opts;
+    opts.buildLegacyRemapTable = false;   // the shared fixture owns that global table
+    blockstate::RegisterVanillaBlocksInContext(registry, opts);
+
+    const entt::entity player = registry.create();
+    registry.emplace<ecs::components::PlayerTag>(player);
+    auto& transform = registry.emplace<ecs::components::Transform>(player);
+
+    ChunkManagerDeps deps;
+    deps.regionDir = dir.Path();
+    deps.scheduler = MakeTbbChunkJobScheduler();   // the production scheduler
+
+    const sizes::WorldDimensions dims(1024, 0, 1024);
+    ChunkManager chunks(registry, dims, /*renderDistance=*/1, /*worldSeed=*/12345ULL,
+                        std::move(deps));
+
+    const auto moveTo = [&](int cx, int cz) {
+        transform.position = glm::vec3(static_cast<float>(cx * 16 + 8), 88.0f,
+                                       static_cast<float>(cz * 16 + 8));
+    };
+
+    // Teleport several chunks per frame so load and unload overlap constantly - the
+    // condition that used to corrupt the heap within a few hundred frames.
+    std::mt19937 rng(20260808u);
+    std::uniform_int_distribution<int> pick(-6, 6);
+
+    for (int frame = 0; frame < 600; ++frame) {
+        moveTo(pick(rng), pick(rng));
+        chunks.Update();
+
+        if (frame % 20 == 0) {
+            // Save while jobs are still in flight. SaveAll waits for pending work
+            // first, which is itself part of what is being exercised.
+            chunks.SaveAll();
+        }
+        if (frame % 50 == 0) {
+            const ChunkManager::Stats stats = chunks.GetStats();
+            CAPTURE(frame);
+            // loadDistance 2 plus one shell of unload hysteresis -> radius 3.
+            REQUIRE(stats.loadedChunks <= 7 * 7 * 7 + 64);
+            REQUIRE(stats.generatedChunks <= stats.loadedChunks);
+        }
+    }
+
+    chunks.SaveAll();
+
+    // Everything persisted must still parse. A torn write from a racing unload would
+    // surface here as a throw or a failed load.
+    RegionManager verify(dir.Path());
+    size_t readable = 0;
+    for (int cx = -8; cx <= 8; ++cx) {
+        for (int cz = -8; cz <= 8; ++cz) {
+            const ChunkCoord coord{cx, 5, cz};
+            auto region = verify.GetOrCreate(coord.ToRegionCoord());
+            REQUIRE(region != nullptr);
+            Chunk probe(coord);
+            try {
+                if (region->LoadChunk(&probe, testsupport::SharedBlocks())) ++readable;
+            } catch (const std::exception& e) {
+                CAPTURE(cx);
+                CAPTURE(cz);
+                FAIL_CHECK("persisted chunk failed to parse: " << e.what());
+            }
+        }
+    }
+    CAPTURE(readable);
+    CHECK(readable > 0);
 }
 
 } // TEST_SUITE("world.tier4.stress")

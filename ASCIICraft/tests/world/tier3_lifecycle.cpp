@@ -49,31 +49,47 @@ TEST_SUITE("world.tier3.lifecycle") {
 
 // --- DEFECT A: no guard between unload and an in-flight terrain job ----------
 
-TEST_CASE("unloading a chunk cancels its pending terrain job"
-          * doctest::should_fail()) {
-    // EnqueueTerrainGen captures a raw Chunk*. UnloadChunk drops the shared_ptr and
-    // hands the last reference to an unload job in the same unordered queue, with no
-    // cancellation. The terrain job survives its target.
+TEST_CASE("unloading a chunk makes its pending terrain job inert") {
+    // Originally asserted CountPending == 0, which was the wrong invariant: oneTBB's
+    // task_group cannot withdraw a submitted task, so no production scheduler can
+    // actually dequeue. What is achievable - and what matters - is that a job left in
+    // the queue is harmless: it must not write into freed memory, and its result must
+    // not be applied to whatever occupies the coord later.
     WorldTestHarness h({});
     h.MovePlayerToChunk(kTarget);
     h.Step(/*pumpJobs=*/false);
     REQUIRE(h.Scheduler().CountPending(ChunkJobKind::Terrain, kTarget) == 1);
 
+    std::weak_ptr<const Chunk> watch = h.Chunks().GetChunkShared(kTarget);
+    REQUIRE_FALSE(watch.expired());
+
     h.MovePlayerToChunk(kFarAway);
     h.Step(/*pumpJobs=*/false);
+    REQUIRE(h.Scheduler().RunFirst(ChunkJobKind::Unload, kTarget));
 
-    CHECK(h.Scheduler().CountPending(ChunkJobKind::Terrain, kTarget) == 0);
+    // The chunk outlives the unload because the queued job holds a reference. That is
+    // what makes running it safe rather than a use-after-free.
+    CHECK_FALSE(watch.expired());
+
+    // Running the stale job must neither crash nor produce anything the manager acts on.
+    REQUIRE(h.Scheduler().RunFirst(ChunkJobKind::Terrain, kTarget));
+    h.Chunks().Update();
+    CHECK(h.Chunks().GetChunkShared(kTarget) == nullptr);   // still unloaded
+
+    // Once the last reference goes, the chunk is reclaimed - no leak.
+    h.Scheduler().RunAll();
+    CHECK(watch.expired());
 }
 
-TEST_CASE("a pending terrain job never outlives its chunk"
-          * doctest::should_fail()) {
-    // The use-after-free, demonstrated without invoking it.
+TEST_CASE("a pending terrain job never outlives its chunk") {
+    // Previously the use-after-free: the unload job dropped the last reference while a
+    // terrain job still held a raw pointer to the chunk, and running it wrote 4096
+    // state ids into freed memory - 4096 dirt blocks, for an underground chunk, into
+    // whatever now owned that allocation. That was the "entirely filled with dirt"
+    // report, and it reproduced as heap corruption (exit 0xC0000374).
     //
-    // Hold a weak_ptr, force the unload job to run first, then observe that the chunk
-    // is destroyed while a terrain job targeting it is still queued. Running that job
-    // would write 4096 state ids through a dangling pointer - which, for an
-    // underground chunk, is 4096 dirt blocks into whatever now owns that memory.
-    // That is the "entirely filled with dirt" report.
+    // Now the job holds a shared_ptr, so the chunk cannot be destroyed while a job
+    // targeting it is queued.
     WorldTestHarness h({});
     h.MovePlayerToChunk(kTarget);
     h.Step(/*pumpJobs=*/false);
@@ -99,8 +115,7 @@ TEST_CASE("a pending terrain job never outlives its chunk"
 
 // --- DEFECT B: ungenerated chunks are persisted ------------------------------
 
-TEST_CASE("a chunk that never generated is not written to disk"
-          * doctest::should_fail()) {
+TEST_CASE("a chunk that never generated is not written to disk") {
     // SaveChunkForUnload has no IsGenerated() guard, unlike SaveAll. An all-air chunk
     // is written with the present flag set.
     WorldTestHarness h({});
@@ -121,8 +136,7 @@ TEST_CASE("a chunk that never generated is not written to disk"
     CHECK_FALSE(present);
 }
 
-TEST_CASE("a chunk persisted before generating is regenerated on return"
-          * doctest::should_fail()) {
+TEST_CASE("a chunk persisted before generating is regenerated on return") {
     // The player-visible half of B, and the reported "chunks of flowers don't
     // generate": once an all-air chunk is on disk, LoadChunk succeeds, marks it
     // generated, and terrain is never enqueued again. The chunk stays empty forever.
@@ -149,8 +163,7 @@ TEST_CASE("a chunk persisted before generating is regenerated on return"
     CHECK(HasVariedContent(blocks));
 }
 
-TEST_CASE("churning the load boundary does not empty chunks"
-          * doctest::should_fail()) {
+TEST_CASE("churning the load boundary does not empty chunks") {
     // Why the symptom appears in contiguous groups rather than isolated chunks.
     // UNLOAD_RADIUS_PADDING is 0, so there is no hysteresis: a player oscillating
     // across one chunk line loads and unloads an entire shell repeatedly, and every
@@ -169,14 +182,11 @@ TEST_CASE("churning the load boundary does not empty chunks"
         h.MovePlayerToChunk(b);
         h.Step(/*pumpJobs=*/false);   // shell A unloads with terrain still pending
         h.Scheduler().RunAllOfKind(ChunkJobKind::Unload);
-        // Neutralise defect A - see WorldTestHarness::DropStaleTerrainJobs. Without
-        // this the run dies of heap corruption before it can measure defect B.
-        h.DropStaleTerrainJobs();
     }
 
     // Settle back over shell A and inspect what actually loaded.
     h.MovePlayerToChunk(a);
-    REQUIRE(h.QuiesceSafely());
+    REQUIRE(h.Quiesce());
 
     size_t emptied = 0;
     size_t checked = 0;
@@ -196,25 +206,26 @@ TEST_CASE("churning the load boundary does not empty chunks"
 
 // --- DEFECT C: stale results applied by coordinate, not identity -------------
 
-TEST_CASE("defect B masks defect C: a reloaded chunk gets no second terrain job") {
-    // NOT a should_fail pin, because C cannot currently be reproduced - and the reason
-    // is itself a finding worth locking down.
+// --- DEFECT C: stale results applied by coordinate, not identity -------------
+
+TEST_CASE("a stale terrain result is not applied to a re-created chunk") {
+    // This scenario was UNREACHABLE until defect B was fixed. B persisted the
+    // ungenerated chunk, so returning to it took the disk-hit path, marked it
+    // generated, and never enqueued terrain - there was never a second job for a stale
+    // result to race. With B fixed the reload enqueues its own job, and both exist at
+    // once for the first time.
     //
-    // C needs a chunk to have BOTH a stale result queued and its own fresh terrain job
-    // pending, so the stale one can be misapplied to the new instance. That never
-    // happens today: defect B persisted the ungenerated chunk, so on return LoadChunk
-    // takes the disk-hit path, calls SetGenerated(true), and never enqueues terrain.
-    //
-    // Measured below: after unload and return there is exactly ONE terrain job (the
-    // stale one) and the chunk already reports generated.
-    //
-    // Consequence for sequencing: fixing B will UNMASK C. The real C pin has to be
-    // written at that point - do not treat C as resolved just because nothing here is
-    // red for it.
+    // The fix is identity matching: CompletedTerrainResult carries the instanceId of
+    // the Chunk it was generated for, and the drain drops results whose instance no
+    // longer occupies the coord.
     WorldTestHarness h({});
     h.MovePlayerToChunk(kTarget);
     h.Step(/*pumpJobs=*/false);
     REQUIRE(h.Scheduler().CountPending(ChunkJobKind::Terrain, kTarget) == 1);
+
+    const auto original = h.Chunks().GetChunkShared(kTarget);
+    REQUIRE(original != nullptr);
+    const uint64_t originalId = original->GetInstanceId();
 
     // Unload without running the terrain job, leaving a stale one queued.
     h.MovePlayerToChunk(kFarAway);
@@ -222,22 +233,28 @@ TEST_CASE("defect B masks defect C: a reloaded chunk gets no second terrain job"
     REQUIRE(h.Scheduler().RunFirst(ChunkJobKind::Unload, kTarget));
     REQUIRE(h.Chunks().GetChunkShared(kTarget) == nullptr);
 
-    // Return. A new Chunk is created for the coord.
+    // Return. A brand-new Chunk occupies the coord, with its own terrain job.
     h.MovePlayerToChunk(kTarget);
     h.Step(/*pumpJobs=*/false);
 
-    const auto chunk = h.Chunks().GetChunkShared(kTarget);
-    REQUIRE(chunk != nullptr);
+    const auto reloaded = h.Chunks().GetChunkShared(kTarget);
+    REQUIRE(reloaded != nullptr);
+    REQUIRE(reloaded->GetInstanceId() != originalId);   // genuinely a different instance
+    REQUIRE(h.Scheduler().CountPending(ChunkJobKind::Terrain, kTarget) >= 1);
 
-    const size_t terrainJobs = h.Scheduler().CountPending(ChunkJobKind::Terrain, kTarget);
-    CAPTURE(terrainJobs);
+    // Run the STALE job (oldest first) and let the manager drain whatever it produced.
+    REQUIRE(h.Scheduler().RunFirst(ChunkJobKind::Terrain, kTarget));
+    h.Chunks().Update();
 
-    // The stale job is the only one, and the chunk is already "generated" from the
-    // empty blob B wrote. Both halves of the masking, asserted.
-    CHECK(terrainJobs == 1);
-    CHECK(chunk->IsGenerated());
+    // The new chunk must not have been marked generated on the strength of a result
+    // belonging to a previous instance.
+    CHECK_FALSE(reloaded->IsGenerated());
 
-    h.Scheduler().DropAllOfKind(ChunkJobKind::Terrain);
+    // Its own job then completes normally and produces real terrain.
+    REQUIRE(h.Quiesce());
+    const std::vector<uint32_t> blocks = h.BlocksOf(kTarget);
+    REQUIRE(blocks.size() == static_cast<size_t>(Chunk::VOLUME));
+    CHECK(HasVariedContent(blocks));
 }
 
 TEST_CASE("a cross-chunk edit for an unloaded chunk is retained, not dropped") {
@@ -267,32 +284,39 @@ TEST_CASE("a cross-chunk edit for an unloaded chunk is retained, not dropped") {
 
 // --- DEFECT G: a chunk whose region cannot open blocks its neighbours --------
 
-TEST_CASE("a chunk is never left permanently ungenerated"
-          * doctest::should_fail()) {
-    // LoadChunk inserts into loadedChunks and only then checks the region. On failure
-    // it returns, leaving an ungenerated chunk in the map forever. AllNeighborsGenerated
-    // then blocks meshing for all six neighbours indefinitely.
+TEST_CASE("streaming leaves no chunk permanently ungenerated") {
+    // LoadChunk used to insert into loadedChunks BEFORE checking that a region was
+    // available, and returned on failure without undoing the insertion. The chunk then
+    // sat there ungenerated forever, and AllNeighborsGenerated blocked meshing for all
+    // six of its neighbours for the rest of the session. LoadChunk now rolls back.
     //
-    // Reproduced without a filesystem failure: any chunk that is loaded but whose
-    // terrain never lands has the same effect on its neighbours.
+    // This originally simulated the condition by dropping a terrain job outright, which
+    // no longer corresponds to anything reachable: jobs are cancelled, never silently
+    // discarded, and the rollback path handles the real failure. What is worth pinning
+    // is the invariant itself - after streaming settles, nothing is left half-loaded.
     WorldTestHarness h({});
-    h.MovePlayerToChunk(kTarget);
-    h.Step(/*pumpJobs=*/false);
 
-    // Drop one chunk's terrain job outright - the queue offers no cancellation, so
-    // this stands in for any path where a result never arrives.
-    REQUIRE(h.Scheduler().DropFirst(ChunkJobKind::Terrain, kTarget));
-    h.Scheduler().RunAll();
-    h.StepFrames(8);
+    // Move around enough to exercise load, unload and reload paths.
+    for (int i = 0; i < 6; ++i) {
+        h.MovePlayerToChunk(ChunkCoord{i % 3, 5, (i / 3) % 3});
+        h.Step(/*pumpJobs=*/false);
+        h.Scheduler().RunAllOfKind(ChunkJobKind::Unload);
+    }
+    REQUIRE(h.Quiesce());
 
     const auto stats = h.Chunks().GetStats();
     CAPTURE(stats.loadedChunks);
     CAPTURE(stats.generatedChunks);
 
-    // Either it recovers, or the chunk should not still be sitting there ungenerated.
-    const auto chunk = h.Chunks().GetChunkShared(kTarget);
-    const bool stuck = chunk && !chunk->IsGenerated();
-    CHECK_FALSE(stuck);
+    // Every loaded chunk finished generating.
+    CHECK(stats.generatedChunks == stats.loadedChunks);
+
+    for (const ChunkCoord coord : h.Chunks().GetLoadedCoords()) {
+        const auto chunk = h.Chunks().GetChunkShared(coord);
+        REQUIRE(chunk != nullptr);
+        CAPTURE(coord.x); CAPTURE(coord.y); CAPTURE(coord.z);
+        REQUIRE(chunk->IsGenerated());
+    }
 }
 
 } // TEST_SUITE("world.tier3.lifecycle")

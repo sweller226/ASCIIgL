@@ -105,12 +105,31 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
     RegionCoord rp = coord.ToRegionCoord();
     regionLoadedCounts[rp] += 1;
 
+    // Bailing out here used to leave the chunk sitting in loadedChunks forever,
+    // ungenerated. AllNeighborsGenerated then returned false for all six neighbours
+    // permanently, so none of them ever meshed. Undo the insertion instead, and let a
+    // later frame retry the load.
+    const auto abandonLoad = [&]() {
+        loadedChunks.erase(coord);
+        auto itCount = regionLoadedCounts.find(rp);
+        if (itCount != regionLoadedCounts.end()) {
+            itCount->second -= 1;
+            if (itCount->second <= 0) regionLoadedCounts.erase(itCount);
+        }
+    };
+
     std::shared_ptr<RegionFile> region = GetOrCreateRegion(coord.ToRegionCoord());
-    if (!region) return;
+    if (!region) {
+        ASCIIgL::Logger::Warningf("LoadChunk: no region for chunk (%d,%d,%d); will retry",
+                                   coord.x, coord.y, coord.z);
+        abandonLoad();
+        return;
+    }
 
     auto* bsr = registry.ctx().find<blockstate::BlockStateRegistry>();
     if (!bsr) {
         ASCIIgL::Logger::Error("LoadChunk: BlockStateRegistry missing");
+        abandonLoad();
         return;
     }
 
@@ -128,9 +147,23 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
         loadedFromFile = false;
     }
 
-    // Load metadata (cross-chunk edits stored in region file)
+    // Load metadata (cross-chunk edits stored in region file).
+    //
+    // Inside a try/catch: this sat just outside the one above, so a corrupt meta blob
+    // threw straight out of ChunkManager::Update() and killed the frame. A damaged
+    // bucket should cost those edits, not the session.
     auto cachedMetaBucket = std::make_unique<MetaBucket>();
-    region->LoadMetaData(coord, cachedMetaBucket.get(), *bsr);
+    try {
+        region->LoadMetaData(coord, cachedMetaBucket.get(), *bsr);
+    } catch (const std::exception& e) {
+        ASCIIgL::Logger::Warningf("Failed to load metadata for chunk (%d,%d,%d): %s. Discarding.",
+                                   coord.x, coord.y, coord.z, e.what());
+        cachedMetaBucket->edits.clear();
+    } catch (...) {
+        ASCIIgL::Logger::Warningf("Failed to load metadata for chunk (%d,%d,%d): unknown error. Discarding.",
+                                   coord.x, coord.y, coord.z);
+        cachedMetaBucket->edits.clear();
+    }
 
     if (loadedFromFile) {
         chunkPtr->SetGenerated(true);
@@ -155,7 +188,12 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
         MetaBucket& bucket = crossChunkEdits[coord];
         bucket.lastTouched = nowSeconds_();
         bucket.edits = std::move(mergedEdits);
-        chunkJobQueue->EnqueueTerrainGen(chunkPtr);
+        // Enrol for expiry. Buckets created here were previously invisible to
+        // ProcessMetaBucketExpiry, which only ever sees coords pushed onto this queue,
+        // so one that never got consumed by a terrain drain leaked for the session.
+        // Duplicate coords in the queue are harmless - the lookup simply misses.
+        metaTimeTracker.push(coord);
+        chunkJobQueue->EnqueueTerrainGen(chunk);
     }
 }
 
@@ -227,6 +265,11 @@ void ChunkManager::UnloadChunk(const ChunkCoord& coord) {
         loadedChunks.erase(itChunk);
         return;
     }
+
+    // Tell any queued terrain job for this chunk not to bother. The job holds a
+    // shared_ptr so the chunk stays alive either way; this just avoids generating a
+    // result that the identity check in ApplyDrainedTerrainResults would discard.
+    chunkToUnload->Cancel();
 
     for (int i = 0; i < 6; ++i) {
         ChunkCoord neighborCoord = NeighborChunkCoord(coord, FaceDirFromIndex(i));
@@ -546,6 +589,14 @@ void ChunkManager::ApplyDrainedTerrainResults() {
     for (auto& r : drainTerrainBuffer_) {
         Chunk* c = GetChunk(r.coord);
         if (!c) continue;
+
+        // Match on identity, not coordinate. If the chunk was unloaded and reloaded
+        // while this result was in flight, the coord now resolves to a different Chunk
+        // that has its own terrain job pending. Applying the old result to it would
+        // mark it generated prematurely AND consume the cross-chunk edits buffered for
+        // it - which is how tree spill went missing at chunk borders.
+        if (c->GetInstanceId() != r.instanceId) continue;
+
         auto metaIt = crossChunkEdits.find(r.coord);
         if (metaIt != crossChunkEdits.end()) {
             ApplyEditsToChunk(c, metaIt->second.edits);

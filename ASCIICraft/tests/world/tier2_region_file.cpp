@@ -22,6 +22,9 @@ void FillChunk(Chunk& c, uint32_t seedValue) {
     for (int i = 0; i < Chunk::VOLUME; ++i) {
         c.SetBlockStateByIndex(i, (static_cast<uint32_t>(i) + seedValue) % 20);
     }
+    // Required: the save path refuses ungenerated chunks, so a test chunk has to look
+    // like one whose terrain actually ran.
+    c.SetGenerated(true);
 }
 
 uintmax_t FileSize(const fs::path& p) {
@@ -145,8 +148,7 @@ TEST_CASE("re-saving an unchanged chunk does not grow the file"
 
 // --- DEFECT G: BeginBatchSave leaks its lock on failure ----------------------
 
-TEST_CASE("a failed BeginBatchSave does not leave the region locked"
-          * doctest::should_fail()) {
+TEST_CASE("a failed BeginBatchSave does not leave the region locked") {
     // BeginBatchSave takes _batchLock BEFORE calling EnsureOpen. If the open fails it
     // returns false with the lock still held, and every later operation on that
     // RegionFile blocks forever.

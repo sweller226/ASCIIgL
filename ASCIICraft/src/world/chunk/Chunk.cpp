@@ -12,9 +12,18 @@
 
 #include <ASCIICraft/world/chunk/ChunkUtil.hpp>
 
+namespace {
+
+/// Monotonic source for Chunk::instanceId. Atomic because chunks are created on the
+/// main thread today but nothing in the type enforces that.
+std::atomic<uint64_t> g_nextChunkInstanceId{1};
+
+} // namespace
+
 // Chunk constructor
-Chunk::Chunk(const ChunkCoord& coord) 
+Chunk::Chunk(const ChunkCoord& coord)
     : coord(coord)
+    , instanceId(g_nextChunkInstanceId.fetch_add(1, std::memory_order_relaxed))
     , generated(false)
     , dirty(true)
     , hasOpaqueMesh(false)
