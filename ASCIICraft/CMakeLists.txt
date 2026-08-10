@@ -28,12 +28,29 @@ if(ASCIICRAFT_TESTS_ASAN)
         message(FATAL_ERROR "ASCIICRAFT_TESTS_ASAN is MSVC-only.")
     endif()
     message(STATUS "ASCIICraft: AddressSanitizer ENABLED")
+
     # /RTC is incompatible with /fsanitize=address; strip it if a config set it.
     foreach(cfgFlags CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_FASTDEBUG CMAKE_CXX_FLAGS_RELEASE)
         string(REGEX REPLACE "/RTC[1csu]+" "" ${cfgFlags} "${${cfgFlags}}")
     endforeach()
+
     add_compile_options(/fsanitize=address /Zi)
     add_link_options(/INCREMENTAL:NO /DEBUG)
+
+    # ASan changes the ABI of std::string and std::vector by adding container
+    # annotations, so instrumented objects cannot link against uninstrumented ones:
+    #   ASCIIgL_FastDebug.lib(Logger.obj) : error LNK2038: mismatch detected for
+    #   'annotate_string': value '0' doesn't match value '1'
+    #
+    # ASCIICraft links a PREBUILT ASCIIgL distribution that is not instrumented, so
+    # the annotations must be switched off for the link to succeed.
+    #
+    # Nothing of value is lost. Annotations only add intra-container overflow
+    # detection, which is already disabled at runtime via
+    # ASAN_OPTIONS=detect_container_overflow=0 because oneTBB is an uninstrumented
+    # DLL. Heap use-after-free - the reason ASan is here at all, for defect A -
+    # is unaffected.
+    add_compile_definitions(_DISABLE_STRING_ANNOTATION=1 _DISABLE_VECTOR_ANNOTATION=1)
 endif()
 
 # ---------------------------------------------------------------------------

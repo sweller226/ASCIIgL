@@ -37,6 +37,24 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Runs a native command with ErrorActionPreference relaxed, then checks its exit code.
+#
+# Necessary because PowerShell 5.1 wraps a native executable's stderr in
+# NativeCommandError records; under "Stop" that makes any warning on stderr a
+# terminating error. cmake warns on stderr routinely (oneTBB emits one), so without
+# this a successful configure aborts the script.
+function Invoke-Native {
+    param([string]$What, [scriptblock]$Command)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $Command
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+    if ($LASTEXITCODE -ne 0) { throw "$What failed with exit code $LASTEXITCODE" }
+}
+
 $BaseDir       = Split-Path -Parent $PSScriptRoot
 $GameDir       = Join-Path $BaseDir "ASCIICraft"
 $ASCIIgLConfig = Join-Path $GameDir "lib\ASCIIgL-v1.0.0\cmake\ASCIIgLConfig.cmake"
@@ -57,8 +75,7 @@ try {
     # Step 1: Submodules (doctest, entt, oneTBB, tracy, ...)
     # -----------------------------------------------------------------------
     Write-Host "`n=== Step 1: Submodules ===" -ForegroundColor Magenta
-    git -C $BaseDir submodule update --init --recursive
-    if ($LASTEXITCODE -ne 0) { throw "git submodule update failed with exit code $LASTEXITCODE" }
+    Invoke-Native 'git submodule update' { git -C $BaseDir submodule update --init --recursive }
 
     # -----------------------------------------------------------------------
     # Step 2: ASCIIgL distribution
@@ -73,8 +90,7 @@ try {
         } else {
             Write-Host "Distribution not found - building and deploying ASCIIgL..." -ForegroundColor Yellow
         }
-        & (Join-Path $PSScriptRoot "build_ASCIIgL_ASCIICraft.ps1")
-        if ($LASTEXITCODE -ne 0) { throw "ASCIIgL distribution build failed with exit code $LASTEXITCODE" }
+        Invoke-Native 'ASCIIgL distribution build' { & (Join-Path $PSScriptRoot "build_ASCIIgL_ASCIICraft.ps1") }
         if (-not (Test-Path $ASCIIgLConfig)) { throw "Distribution build reported success but $ASCIIgLConfig is still missing" }
     } else {
         Write-Host "Distribution present. Use -RebuildEngine after changing engine code." -ForegroundColor Cyan
@@ -87,12 +103,10 @@ try {
         Write-Host "`n=== Step 3: Configure ===" -ForegroundColor Magenta
         $cmakeArgs = @("-S", $GameDir, "-B", $BuildDir, "-G", $Generator, "-DASCIICRAFT_BUILD_TESTS=ON")
         if ($Asan) { $cmakeArgs += "-DASCIICRAFT_TESTS_ASAN=ON" }
-        & cmake @cmakeArgs
-        if ($LASTEXITCODE -ne 0) { throw "CMake configure failed with exit code $LASTEXITCODE" }
+        Invoke-Native 'CMake configure' { & cmake @cmakeArgs }
 
         Write-Host "`n=== Step 4: Build ASCIICraft_tests ===" -ForegroundColor Magenta
-        & cmake --build $BuildDir --config $Config --target ASCIICraft_tests
-        if ($LASTEXITCODE -ne 0) { throw "Test build failed with exit code $LASTEXITCODE" }
+        Invoke-Native 'Test build' { & cmake --build $BuildDir --config $Config --target ASCIICraft_tests }
     } else {
         Write-Host "`n=== Steps 3-4 skipped (-NoBuild) ===" -ForegroundColor Yellow
     }
@@ -106,17 +120,39 @@ try {
     # -----------------------------------------------------------------------
     if ($Asan) {
         Write-Host "`n=== Step 5: ASan runtime ===" -ForegroundColor Magenta
-        if ($env:VCToolsInstallDir) {
-            $asanDir = Join-Path $env:VCToolsInstallDir "bin\Hostx64\x64"
-            if (Test-Path $asanDir) {
+
+        # clang_rt.asan_dynamic must be on PATH or the exe dies at startup with
+        # 0xC0000135 (DLL not found). VCToolsInstallDir is only set inside a Developer
+        # PowerShell, so fall back to locating the toolset with vswhere.
+        $toolsDir = $env:VCToolsInstallDir
+        if (-not $toolsDir) {
+            $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+            if (Test-Path $vswhere) {
+                $vsPath = & $vswhere -latest -property installationPath
+                $verFile = Join-Path $vsPath "VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt"
+                if ($vsPath -and (Test-Path $verFile)) {
+                    $toolsVer = (Get-Content $verFile -Raw).Trim()
+                    $toolsDir = Join-Path $vsPath "VC\Tools\MSVC\$toolsVer"
+                    Write-Host "Located toolset via vswhere: $toolsDir" -ForegroundColor Cyan
+                }
+            }
+        }
+
+        if ($toolsDir) {
+            $asanDir = Join-Path $toolsDir "bin\Hostx64\x64"
+            if (Test-Path (Join-Path $asanDir "clang_rt.asan_dynamic-x86_64.dll")) {
                 $env:PATH = "$asanDir;$env:PATH"
-                Write-Host "Added to PATH: $asanDir" -ForegroundColor Cyan
+                Write-Host "ASan runtime on PATH: $asanDir" -ForegroundColor Cyan
             } else {
-                Write-Host "WARNING: $asanDir not found; the test exe may fail to start." -ForegroundColor Yellow
+                Write-Host "WARNING: clang_rt.asan_dynamic-x86_64.dll not found under $asanDir." -ForegroundColor Yellow
+                Write-Host "         Install the 'C++ AddressSanitizer' VS component." -ForegroundColor Yellow
             }
         } else {
-            Write-Host "WARNING: VCToolsInstallDir not set. Run from a Developer PowerShell so the ASan runtime resolves." -ForegroundColor Yellow
+            Write-Host "WARNING: could not locate the MSVC toolset; the test exe may fail to start." -ForegroundColor Yellow
         }
+
+        # detect_container_overflow must be off: oneTBB is an uninstrumented DLL, and
+        # the instrumented/uninstrumented boundary produces false positives.
         $env:ASAN_OPTIONS = "detect_container_overflow=0:abort_on_error=1:print_stacktrace=1"
         Write-Host "ASAN_OPTIONS=$env:ASAN_OPTIONS" -ForegroundColor Cyan
     }
@@ -131,8 +167,10 @@ try {
     if ($Label)       { $ctestArgs += @("-L", $Label) }
     if (-not $Stress) { $ctestArgs += @("-LE", "stress") }
 
+    $ErrorActionPreference = 'Continue'
     & ctest @ctestArgs
     $testExit = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
 
     if ($testExit -eq 0) {
         Write-Host "`n=== Tests passed ===" -ForegroundColor Green
