@@ -630,6 +630,9 @@ bool RegionFile::SaveChunk(const Chunk* data, const blockstate::BlockStateRegist
     // identically: never persist an ungenerated chunk, and retire the meta bucket once
     // its edits are baked into the blob.
     if (!data || !data->IsGenerated()) return false;
+    // Nothing changed since the last write, and blobs are append-only, so re-writing
+    // would grow the file for no gain. Reports success: the on-disk state is correct.
+    if (!data->NeedsSave()) return true;
 
     std::lock_guard<std::mutex> g(_mutex);
     if (!EnsureOpen()) {
@@ -640,6 +643,7 @@ bool RegionFile::SaveChunk(const Chunk* data, const blockstate::BlockStateRegist
     clearMetaEntryUnlocked(data->GetCoord());
     writeHeaderAndIndex();
     _file.flush();
+    data->MarkSaved();
     return true;
 }
 
@@ -881,7 +885,7 @@ void RegionFile::SaveChunkForUnload(
     // The meta bucket is still written when the chunk is skipped: those edits are the
     // only record of a neighbour's tree spill, and dropping them here would trade one
     // data-loss bug for another.
-    const bool persistChunk = (data != nullptr) && data->IsGenerated();
+    const bool persistChunk = (data != nullptr) && data->IsGenerated() && data->NeedsSave();
     const bool persistMeta  = (meta != nullptr) && !meta->edits.empty();
 
     if (!persistChunk && !persistMeta) {
@@ -907,6 +911,7 @@ void RegionFile::SaveChunkForUnload(
         // actually persisted, the on-disk bucket is the only copy of those edits, and
         // clearing on read would lose them to a crash in between.
         clearMetaEntryUnlocked(pos);
+        data->MarkSaved();
     }
     // Any bucket passed in arrived AFTER the chunk was last written, so it is written
     // after the clear, not before it.
@@ -936,10 +941,12 @@ void RegionFile::SaveChunkInBatch(const Chunk* data, const blockstate::BlockStat
     // before calling this, but the invariant belongs with the write, not with one
     // caller who happens to remember it.
     if (!data || !data->IsGenerated()) return;
+    if (!data->NeedsSave()) return;   // unchanged since the last write
     appendChunkBlobAndUpdateIndex(data, bsr);
     // Edits are now baked into the blob; see SaveChunkForUnload for why this is done
     // on write rather than on read.
     clearMetaEntryUnlocked(data->GetCoord());
+    data->MarkSaved();
 }
 
 void RegionFile::SaveMetaDataInBatch(

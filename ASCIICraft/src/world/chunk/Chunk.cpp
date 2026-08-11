@@ -53,6 +53,7 @@ void Chunk::SetBlockState(int x, int y, int z, uint32_t stateId) {
     int index = chunkutil::GetBlockIndex(x, y, z);
     if (blocks[index] != stateId) {
         blocks[index] = stateId;
+        MarkNeedsSave();
         InvalidateMesh();
     }
 }
@@ -64,7 +65,12 @@ uint32_t Chunk::GetBlockStateByIndex(int i) const {
 }
 
 void Chunk::SetBlockStateByIndex(int i, uint32_t stateId) {
-    if (0 <= i && i < VOLUME) { blocks[i] = stateId; }
+    if (0 <= i && i < VOLUME) {
+        if (blocks[i] != stateId) {
+            blocks[i] = stateId;
+            MarkNeedsSave();
+        }
+    }
 }
 
 void Chunk::ApplyMeshData(ChunkMeshData&& data, ASCIIgL::TextureArray* blockTextures) {

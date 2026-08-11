@@ -115,8 +115,7 @@ TEST_CASE("RegionManager keeps its cache bounded when files are closed") {
 
 // --- DEFECT G: append-only growth --------------------------------------------
 
-TEST_CASE("re-saving an unchanged chunk does not grow the file"
-          * doctest::should_fail()) {
+TEST_CASE("re-saving an unchanged chunk does not grow the file") {
     // Blobs are appended and the index repointed; the previous blob is orphaned and
     // never reclaimed. Combined with a 60s autosave that rewrites every loaded chunk
     // regardless of modification, region files grow without bound during a long

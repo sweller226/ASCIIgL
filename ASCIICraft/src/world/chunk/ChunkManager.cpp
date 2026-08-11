@@ -167,6 +167,11 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
 
     if (loadedFromFile) {
         chunkPtr->SetGenerated(true);
+        // Its contents came straight off disk, so it is already persisted. SetGenerated
+        // and the block writes during parsing both flag it as needing a save; clear
+        // that here or every autosave would rewrite an unchanged chunk and grow the
+        // region file. Any meta edits applied just below legitimately set it again.
+        chunkPtr->MarkSaved();
         ApplyEditsToChunk(chunkPtr, cachedMetaBucket->edits);
         auto it = crossChunkEdits.find(coord);
         if (it != crossChunkEdits.end()) {
