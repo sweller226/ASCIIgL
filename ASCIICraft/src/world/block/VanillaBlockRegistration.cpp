@@ -336,6 +336,22 @@ void RegisterVanillaBlocks(BlockStateRegistry& bsr,
     });
     registerJsonBackedOrLog("minecraft:potatoes");
 
+    // Reuses the pre-existing anvil.png/anvil_top.png/chipped_anvil_top.png/damaged_anvil_top.png
+    // textures and blockstate/model JSON (damage 0-2 x facing) that shipped unregistered.
+    // Registered last so it doesn't shift type IDs of the blocks above it.
+    bsr.RegisterType("minecraft:anvil", {
+        blockstate::BlockProperty{ "damage", { "0", "1", "2" } },
+        blockstate::BlockProperty{ "facing", { "south", "west", "north", "east" } },
+    });
+    const uint16_t anvilType = bsr.GetTypeId("minecraft:anvil");
+    bsr.SetDerivedData(anvilType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+        s.isFullBlock = false;
+    });
+    registerJsonBackedOrLog("minecraft:anvil");
+
+    registerOpaqueJsonBacked("minecraft:emerald_block");
+
     if (opts.assertUniqueVariantKeys) {
         for (uint16_t tid = 0; tid < bsr.GetTotalTypeCount(); ++tid) {
             blockstate::AssertUniqueVariantKeysPerType(bsr, tid, "RegisterVanillaBlocks");

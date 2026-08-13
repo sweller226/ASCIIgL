@@ -78,6 +78,11 @@ const std::vector<CatalogEntry>& GetBlockTextureCatalog() {
         {"minecraft:blocks/barrel_top",        "res/textures/blocks/barrel_top.png", nullptr, 0.0f},
         {"minecraft:blocks/barrel_top_open",   "res/textures/blocks/barrel_top_open.png", nullptr, 0.0f},
         {"minecraft:blocks/barrel_bottom",     "res/textures/blocks/barrel_bottom.png", nullptr, 0.0f},
+        {"minecraft:blocks/anvil_base",           "res/textures/blocks/anvil.png", nullptr, 0.0f},
+        {"minecraft:blocks/anvil_top_damaged_0",  "res/textures/blocks/anvil_top.png", nullptr, 0.0f},
+        {"minecraft:blocks/anvil_top_damaged_1",  "res/textures/blocks/chipped_anvil_top.png", nullptr, 0.0f},
+        {"minecraft:blocks/anvil_top_damaged_2",  "res/textures/blocks/damaged_anvil_top.png", nullptr, 0.0f},
+        {"minecraft:blocks/emerald_block",        "res/textures/blocks/emerald_block.png", nullptr, 0.0f},
     };
     return kCatalog;
 }

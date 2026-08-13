@@ -175,7 +175,7 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
 
     ASCIIgL::InputManager::GetInst().Initialize();
     // Temporary: enable mouse look scheme for testing (keyboard arrows when false).
-    inputSystem.SetMouseLookEnabled(true);
+    inputSystem.SetMouseLookEnabled(false);
     ASCIIgL::Logger::Debug("InputManager initialized.");
 
     gameState = GameState::Playing;
@@ -827,6 +827,8 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterBlockItem(registry, "minecraft:wheat",            "Wheat", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
     itemRegistry.RegisterBlockItem(registry, "minecraft:carrots",          "Carrots", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
     itemRegistry.RegisterBlockItem(registry, "minecraft:potatoes",         "Potatoes", 64, ecs::components::ItemGuiMeshTransform::DefaultBlockThirdPerson(), ecs::components::ItemHeldMeshTransform::DefaultGeneratedFirstPerson());
+    itemRegistry.RegisterBlockItem(registry, "minecraft:anvil",            "Anvil");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:emerald_block",    "Block of Emerald");
 
     // === Resources / Materials ===
     itemRegistry.RegisterResourceItem(registry, "minecraft:coal",       "Coal",       itemLayer("minecraft:items/coal"));

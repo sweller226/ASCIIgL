@@ -100,6 +100,8 @@ void BlockSoundMap::Build(const blockstate::BlockStateRegistry& bsr) {
     MapType(bsr, "minecraft:bookshelf", "wood");
     MapType(bsr, "minecraft:furnace", "wood");
     MapType(bsr, "minecraft:barrel", "wood");
+    MapType(bsr, "minecraft:anvil", "stone");
+    MapType(bsr, "minecraft:emerald_block", "stone");
 
     MapType(bsr, "minecraft:oak_leaves", "grass");
 
