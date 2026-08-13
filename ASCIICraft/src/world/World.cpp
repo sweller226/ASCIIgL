@@ -22,7 +22,10 @@ World::World(entt::registry& registry, WorldParams params)
     , worldSeed(params.worldSeed) {
     ASCIIgL::Logger::Info("World created");
 
-    chunkManager = std::make_unique<ChunkManager>(registry, worldDimensions, params.renderDistance, params.worldSeed);
+    ChunkManagerDeps deps;
+    deps.regionDir = params.regionDir;
+    chunkManager = std::make_unique<ChunkManager>(
+        registry, worldDimensions, params.renderDistance, params.worldSeed, std::move(deps));
 }
 
 World::~World() {

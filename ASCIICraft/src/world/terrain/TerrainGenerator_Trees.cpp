@@ -8,6 +8,9 @@
 #include <unordered_set>
 #include <vector>
 
+#include <ASCIICraft/world/terrain/TerrainKeys.hpp>
+#include <ASCIICraft/world/terrain/TreeGen.hpp>
+
 using namespace terrain_generator_internal;
 
 namespace {
@@ -43,11 +46,7 @@ struct TreeBuildContext {
     std::unordered_set<uint64_t> leafPositions;
 };
 
-uint64_t BlockKey(int x, int y, int z) {
-    return (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 42) ^
-           (static_cast<uint64_t>(static_cast<uint32_t>(y)) << 21) ^
-           static_cast<uint64_t>(static_cast<uint32_t>(z));
-}
+using terrain::BlockKey;
 
 uint32_t AxisLogId(const TreeBuildContext& ctx, int dx, int dz) {
     if (std::abs(dx) >= std::abs(dz) && dx != 0) {
@@ -295,8 +294,15 @@ void GenerateOrnamentalOak(int worldX, int worldY, int worldZ,
     GenerateOakBlob(worldX, worldY, worldZ, ConfigHeight(config, worldX, worldZ), 3, 3, bsr, out);
 }
 
-void GenerateTreeForBiome(BiomeType biome, int worldX, int worldY, int worldZ,
-                          const blockstate::BlockStateRegistry* bsr, std::vector<WorldBlockPlacement>& out) {
+} // namespace
+
+// Defined outside the anonymous namespace so tests can build a tree without a
+// TerrainGenerator. It still calls the file-local helpers above - same translation
+// unit, so they remain internal.
+void terrain::GenerateTree(BiomeType biome, int worldX, int worldY, int worldZ,
+                           const blockstate::BlockStateRegistry& bsrRef,
+                           std::vector<WorldBlockPlacement>& out) {
+    const blockstate::BlockStateRegistry* bsr = &bsrRef;
     const float roll = RandomFloat(worldX, worldZ);
 
     switch (biome) {
@@ -333,19 +339,18 @@ void GenerateTreeForBiome(BiomeType biome, int worldX, int worldY, int worldZ,
     }
 }
 
-} // namespace
-
 void TerrainGenerator::GenerateTreeInto(int worldX, int worldY, int worldZ,
                                         const blockstate::BlockStateRegistry* bsr,
                                         std::vector<WorldBlockPlacement>& out) {
+    if (!bsr) return;
     const TerrainParams params = GetTerrainParams();
     const TerrainColumnSample sample = SampleTerrainColumn(worldX, worldZ, params);
-    GenerateTreeForBiome(
+    terrain::GenerateTree(
         sample.dominantBiome,
         worldX,
         worldY,
         worldZ,
-        bsr,
+        *bsr,
         out
     );
 }

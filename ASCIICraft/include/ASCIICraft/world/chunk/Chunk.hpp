@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <unordered_map>
 #include <memory>
 #include <cstdint>
@@ -37,10 +38,45 @@ public:
 
     // Chunk properties
     const ChunkCoord& GetCoord() const { return coord; }
+
+    /// Unique per Chunk instance, never reused within a process run.
+    ///
+    /// Coordinates alone cannot identify a chunk: unload then reload gives a NEW
+    /// Chunk at the same coord, and a terrain result produced for the old one must
+    /// not be applied to the new one. Results carry this id so the drain can tell
+    /// the two apart.
+    uint64_t GetInstanceId() const { return instanceId; }
+
+    /// Set when the chunk is unloaded. A terrain job that has not started yet checks
+    /// this and returns immediately rather than generating a result nobody wants.
+    /// Atomic because the job runs on a worker while unload happens on the main thread.
+    bool IsCancelled() const { return cancelled.load(std::memory_order_acquire); }
+    void Cancel() { cancelled.store(true, std::memory_order_release); }
+
+    /// True when the chunk holds block data not yet written to its region file.
+    ///
+    /// Region files are append-only: a re-save writes a fresh blob and repoints the
+    /// index, orphaning the old one. Without this flag the 60s autosave rewrote every
+    /// loaded chunk whether or not it had changed, so a long session grew the save
+    /// monotonically for no reason. Set on generation and on any block change, cleared
+    /// once persisted.
+    ///
+    /// Mutable and atomic: the save paths take a const Chunk* and unload saves run on
+    /// worker threads.
+    bool NeedsSave() const { return needsSave.load(std::memory_order_acquire); }
+    void MarkSaved() const { needsSave.store(false, std::memory_order_release); }
+    void MarkNeedsSave() { needsSave.store(true, std::memory_order_release); }
+
     bool IsGenerated() const { return generated; }
     bool IsDirty() const { return dirty; }
     void SetDirty(bool d) { dirty = d; }
-    void SetGenerated(bool g) { generated = g; }
+    void SetGenerated(bool g) {
+        generated = g;
+        // Freshly generated terrain has never been persisted. Terrain jobs write via
+        // GetBlockDataForWrite, which bypasses SetBlockState, so this is the only
+        // point that observes generation completing.
+        if (g) MarkNeedsSave();
+    }
     
     // Mesh generation for rendering (needs registry for texture/solidity lookups)
     void GenerateMesh(const blockstate::BlockStateRegistry& bsr);
@@ -79,7 +115,11 @@ public:
 private:
     ChunkCoord coord;
     uint32_t blocks[VOLUME];  // blockstate IDs, 16x16x16 = 4096 entries
-    
+
+    uint64_t instanceId;
+    std::atomic<bool> cancelled{false};
+    mutable std::atomic<bool> needsSave{false};
+
     bool generated;
     bool dirty;
 

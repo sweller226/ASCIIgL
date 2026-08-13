@@ -5,9 +5,11 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <vector>
 
 #include <ASCIICraft/world/chunk/ChunkRegion.hpp>
 #include <ASCIICraft/world/chunk/ChunkJobQueue.hpp>
+#include <ASCIICraft/world/chunk/ChunkManagerDeps.hpp>
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/terrain/TerrainGenerator.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
@@ -37,11 +39,14 @@ struct ChunkManagerWaterParams {
 
 class ChunkManager {
 public:
+    /// \param deps injectable collaborators (region directory, clock, job scheduler).
+    ///        Defaults reproduce the original behaviour exactly.
     ChunkManager(
         entt::registry& registry,
         const sizes::WorldDimensions& worldDimensions,
         unsigned int renderDistance,
-        uint64_t worldSeed
+        uint64_t worldSeed,
+        ChunkManagerDeps deps = {}
     );
     ~ChunkManager() = default; // default is fine; list elements are destroyed automatically
 
@@ -54,8 +59,9 @@ public:
     void SetBlockState(int x, int y, int z, uint32_t stateId);
 
     // Save handling
-    void SaveAll();
-    
+    void SaveAll();           // persist only; does not unload from memory
+    void ClearLoadedMemory(); // shutdown-only: drop loadedChunks / crossChunkEdits / regionLoadedCounts
+
     // Rendering support
     void RenderChunks();
     
@@ -89,6 +95,43 @@ public:
     ) const;
     
     void BlockUpdateNeighboursDirty(const ChunkCoord& chunkCoord, const glm::ivec3& localPos);
+
+    // ---------------------------------------------------------------------
+    // Inspection
+    //
+    // Read-only views of streaming state. Written for tests, but deliberately
+    // public and non-conditional - the same numbers are what a debug overlay
+    // would want, and #ifdef'd test-only APIs rot.
+    // ---------------------------------------------------------------------
+
+    /// Snapshot of streaming state. Cheap; safe to poll every frame.
+    struct Stats {
+        size_t loadedChunks = 0;
+        size_t generatedChunks = 0;
+        /// Chunks with buffered edits awaiting a target chunk that is not yet generated.
+        size_t pendingCrossChunkBuckets = 0;
+        /// Entries in the expiry queue. May exceed pendingCrossChunkBuckets - stale
+        /// coords accumulate and are skipped rather than removed eagerly.
+        size_t metaTimeTrackerSize = 0;
+    };
+    Stats GetStats() const;
+
+    std::vector<ChunkCoord> GetLoadedCoords() const;
+
+    /// Shared ownership of a loaded chunk, or null. Lets a caller hold a weak_ptr and
+    /// observe whether the chunk outlives an unload - the basis of the lifetime
+    /// assertions around in-flight terrain jobs.
+    std::shared_ptr<const Chunk> GetChunkShared(const ChunkCoord& coord) const;
+
+    bool HasPendingCrossChunkEdits(const ChunkCoord& coord) const;
+    /// Buffered edits for \p coord, empty if none. Copies; intended for assertions.
+    std::vector<CrossChunkEdit> GetPendingCrossChunkEdits(const ChunkCoord& coord) const;
+
+    /// Persist and drop expired meta buckets.
+    /// \param force ignore META_BUCKET_TIME_LIMIT and the per-frame save cap, so every
+    ///        eligible bucket is flushed in one call. The per-frame path passes false.
+    void FlushExpiredMetaBuckets(bool force);
+
 private:
     entt::registry& registry;
 
@@ -149,7 +192,12 @@ private:
     static constexpr int MAX_CHUNK_UNLOADS_PER_FRAME = 128; // cap unloads per frame; rest drained next frame
     static constexpr int MAX_MESH_APPLIES_PER_FRAME = 128;  // GPU uploads per frame; small meshes = cheaper
     static constexpr int MAX_SYNC_MESH_REBUILDS_PER_FRAME = 4;  // main-thread mesh build (small chunk = fast)
-    static constexpr unsigned int UNLOAD_RADIUS_PADDING = 0; // extra chunks beyond load radius before unloading
+    // Hysteresis: chunks are kept one shell beyond the load radius before unloading.
+    // At 0 a player oscillating across a single chunk boundary loads and unloads a
+    // whole shell every frame, which multiplies disk I/O and widens the window for
+    // every load/unload race. Costs one extra shell of resident chunks (16 KiB each).
+    static constexpr unsigned int UNLOAD_RADIUS_PADDING = 1;
+    static constexpr uint32_t AUTOSAVE_INTERVAL_SECONDS = 60;
 
     // World settings
     const sizes::WorldDimensions& _worldDimensions;
@@ -158,4 +206,9 @@ private:
 
     ChunkManagerFogParams   fogParams_;
     ChunkManagerWaterParams waterParams_;
+    uint32_t lastAutosaveSeconds_ = 0;
+
+    /// Clock used for meta-bucket expiry and autosave. Never null - the constructor
+    /// substitutes util::NowSeconds when deps supplies none.
+    std::function<uint32_t()> nowSeconds_;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include <filesystem>
 #include <fstream>
 #include <vector>
 #include <cstdint>
@@ -87,6 +88,11 @@ namespace std {
 static constexpr uint32_t MAX_CHUNK_BLOB_SIZE = 1u << 20; // 1 MiB
 static constexpr uint32_t MAX_META_BLOB_SIZE  = 1u << 20; // 1 MiB
 
+/// On-disk region container version, written into RegionHeader::version and validated
+/// on read. Distinct from the chunk/meta blob versions below, which describe the
+/// payloads rather than the file layout.
+static constexpr uint32_t REGION_FORMAT_VERSION = 1;
+
 static constexpr uint32_t CHUNK_BLOB_VERSION_V1 = 1;
 static constexpr uint32_t CHUNK_BLOB_VERSION_V2 = 2;
 static constexpr uint32_t META_BLOB_VERSION_V2 = 2;
@@ -102,7 +108,9 @@ class RegionFile {
 */ 
 
 public:
-    explicit RegionFile(const RegionCoord& coord);
+    /// \param regionDir directory the region file lives in. Created if absent.
+    ///        Relative paths resolve against the process CWD.
+    explicit RegionFile(const RegionCoord& coord, std::filesystem::path regionDir = "regions");
     ~RegionFile();
 
     RegionFile(const RegionFile&) = delete;
@@ -115,7 +123,16 @@ public:
     bool SaveChunk(const Chunk* data, const blockstate::BlockStateRegistry& bsr);
 
     bool LoadMetaData(const ChunkCoord& pos, MetaBucket* out, const blockstate::BlockStateRegistry& bsr);
+    /// Appends \p data, merging with any bucket already stored for \p pos.
     bool SaveMetaData(const ChunkCoord& pos, const MetaBucket* data, const blockstate::BlockStateRegistry& bsr);
+
+    /// Marks the meta bucket for \p pos as absent.
+    ///
+    /// Called once the edits have been folded into the chunk's own blob. Without it
+    /// the bucket is re-applied on every subsequent load, so a block the player mined
+    /// out reappears - the entry's present bit was previously only ever set, never
+    /// cleared.
+    void ClearMetaData(const ChunkCoord& pos);
 
     /// Used by unload callback: save chunk + optional meta under region lock, then optionally Close(). Thread-safe.
     void SaveChunkForUnload(
@@ -175,11 +192,19 @@ private:
 
     void parseMetaBlob(const std::vector<uint8_t>& blob, MetaBucket* out, const blockstate::BlockStateRegistry& bsr);
     std::vector<uint8_t> buildMetaBlob(const MetaBucket* data, const blockstate::BlockStateRegistry& bsr);
+
+    /// LoadMetaData without taking _mutex. Caller must already hold it with the file
+    /// open; used by the append path so it can merge with the existing bucket.
+    bool loadMetaBlobUnlocked(const ChunkCoord& pos, MetaBucket* out, const blockstate::BlockStateRegistry& bsr);
+    /// ClearMetaData without taking _mutex or rewriting the index.
+    void clearMetaEntryUnlocked(const ChunkCoord& pos);
 };
 
 class RegionManager {
 public:
-    RegionManager() = default;
+    /// \param regionDir directory passed to every RegionFile this manager creates.
+    explicit RegionManager(std::filesystem::path regionDir = "regions")
+        : regionDir_(std::move(regionDir)) {}
     ~RegionManager() = default;
 
     static constexpr int MAX_REGIONS = 32;
@@ -191,8 +216,11 @@ public:
     /// Thread-safe: return existing region or create and return new one. Keeps region alive until shared_ptr is released.
     std::shared_ptr<RegionFile> GetOrCreate(const RegionCoord& coord);
 
+    const std::filesystem::path& GetRegionDir() const { return regionDir_; }
+
 private:
     mutable std::mutex mutex_;
+    std::filesystem::path regionDir_;
     using RegionList = std::list<std::shared_ptr<RegionFile>>;
     std::unordered_map<RegionCoord, RegionList::iterator> regionFiles;
     RegionList regionList;

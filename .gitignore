@@ -1,6 +1,12 @@
 # Build folders
 **/build/
+# Build variants, e.g. build-asan from ./scripts/run_tests.ps1 -Asan
+**/build-*/
 **/dist/
+
+# Runtime output written next to the executables
+**/regions/
+**/logs/
 
 
 # OS/Editor files

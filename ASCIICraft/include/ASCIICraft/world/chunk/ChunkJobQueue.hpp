@@ -4,6 +4,7 @@
 #include <ASCIICraft/world/chunk/Chunk.hpp>
 #include <ASCIICraft/world/chunk/ChunkMeshGen.hpp>
 #include <ASCIICraft/world/chunk/ChunkRegion.hpp>
+#include <ASCIICraft/world/chunk/IChunkJobScheduler.hpp>
 #include <ASCIICraft/world/terrain/TerrainResult.hpp>
 #include <ASCIICraft/world/chunk/CrossChunkEdit.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
@@ -17,7 +18,6 @@
 
 #include <entt/entt.hpp>
 
-#include <oneapi/tbb/task_group.h>
 #include <oneapi/tbb/concurrent_queue.h>
 
 class TerrainGenerator;
@@ -31,6 +31,11 @@ struct CompletedMeshResult {
 /// Result pushed when a terrain generation job finishes (terrain data to apply to chunk).
 struct CompletedTerrainResult {
     ChunkCoord coord;
+    /// Identifies the Chunk instance this was generated for. The coord alone is not
+    /// enough: unload+reload puts a DIFFERENT Chunk at the same coord, and applying an
+    /// older instance's result to it marks it generated while its own job is still
+    /// pending, and consumes the cross-chunk edits meant for it.
+    uint64_t instanceId = 0;
     TerrainResult result;
 };
 
@@ -45,7 +50,10 @@ using UnloadSaveCallback = std::function<void(Chunk* chunk, ChunkCoord coord, co
 /// - Drain completed results on the main thread and apply (apply block data to chunk, or create Mesh and assign).
 class ChunkJobQueue {
 public:
+    /// Uses the production oneTBB scheduler.
     explicit ChunkJobQueue(entt::registry& registry);
+    /// Uses a caller-supplied scheduler. Null falls back to the oneTBB one.
+    ChunkJobQueue(entt::registry& registry, std::unique_ptr<IChunkJobScheduler> scheduler);
     ~ChunkJobQueue();
 
     ChunkJobQueue(const ChunkJobQueue&) = delete;
@@ -55,7 +63,9 @@ public:
     void SetTerrainGenerator(TerrainGenerator* gen) { terrainGenerator_ = gen; }
     TerrainGenerator* GetTerrainGenerator() const { return terrainGenerator_; }
 
-    void EnqueueTerrainGen(Chunk* chunk);
+    /// Takes shared ownership: the job may outlive the chunk's removal from
+    /// loadedChunks, and must not write through a freed pointer.
+    void EnqueueTerrainGen(std::shared_ptr<Chunk> chunk);
     void EnqueueMeshGen(Chunk* chunk);
     void EnqueueUnload(ChunkCoord coord, std::shared_ptr<Chunk> chunk, std::optional<MetaBucket> meta, bool closeRegionAfterSave, std::shared_ptr<RegionFile> region);
 
@@ -82,10 +92,13 @@ private:
     TerrainGenerator* terrainGenerator_ = nullptr;
     UnloadSaveCallback unloadSaveCallback_;
 
-    oneapi::tbb::task_group taskGroup_;
     oneapi::tbb::concurrent_queue<CompletedTerrainResult> completedTerrainQueue_;
     oneapi::tbb::concurrent_queue<CompletedMeshResult> completedMeshQueue_;
 
     size_t maxDrainPerFrame_ = 0;
     size_t maxDrainMeshPerFrame_ = 0;
+
+    /// Declared LAST so it is destroyed FIRST. Its destructor drains in-flight tasks,
+    /// which push into the completed* queues above - those must still be alive.
+    std::unique_ptr<IChunkJobScheduler> scheduler_;
 };

@@ -41,7 +41,7 @@
             "to": [ 13, 16, 16 ],
             "faces": {
                 "down":  { "uv": [  3, 0, 13, 16 ], "texture": "#body", "rotation": 180 },
-                "up":    { "uv": [  3, 0, 13, 16 ], "texture": "#top",   "rotation": 180 },
+                "up":    { "uv": [  2, 0, 12, 16 ], "texture": "#top",   "rotation": 180 },
                 "north": { "uv": [  3, 0, 13,  6 ], "texture": "#body" },
                 "south": { "uv": [  3, 0, 13,  6 ], "texture": "#body" },
                 "west":  { "uv": [ 10, 0, 16, 16 ], "texture": "#body", "rotation":  90 },

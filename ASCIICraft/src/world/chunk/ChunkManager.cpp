@@ -24,21 +24,25 @@
 #include <ASCIICraft/world/block/state/FaceDir.hpp>
 #include <ASCIICraft/world/chunk/ChunkUtil.hpp>
 #include <ASCIICraft/world/query/BlockRaycast.hpp>
+#include <ASCIICraft/util/TimeUtil.hpp>
 
 ChunkManager::ChunkManager(
     entt::registry& registry,
     const sizes::WorldDimensions& worldDimensions,
     const unsigned int renderDistance,
-    const uint64_t worldSeed
+    const uint64_t worldSeed,
+    ChunkManagerDeps deps
 )
     : _worldDimensions(worldDimensions)
     , renderDistance(renderDistance)
     , loadDistance(renderDistance + 1)
     , registry(registry)
-    , terrainGenerator(registry, worldSeed) {
+    , terrainGenerator(registry, worldSeed)
+    , nowSeconds_(deps.nowSeconds ? std::move(deps.nowSeconds)
+                                  : std::function<uint32_t()>(&util::NowSeconds)) {
     ASCIIgL::Logger::Debug("Chunk manager initialized");
-    regionManager = std::make_unique<RegionManager>();
-    chunkJobQueue = std::make_unique<ChunkJobQueue>(registry);
+    regionManager = std::make_unique<RegionManager>(std::move(deps.regionDir));
+    chunkJobQueue = std::make_unique<ChunkJobQueue>(registry, std::move(deps.scheduler));
     chunkJobQueue->SetTerrainGenerator(&terrainGenerator);
     chunkJobQueue->SetMaxDrainPerFrame(static_cast<size_t>(MAX_QUEUES_PER_FRAME));
     chunkJobQueue->SetMaxDrainMeshPerFrame(static_cast<size_t>(MAX_MESH_APPLIES_PER_FRAME));
@@ -101,12 +105,31 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
     RegionCoord rp = coord.ToRegionCoord();
     regionLoadedCounts[rp] += 1;
 
+    // Bailing out here used to leave the chunk sitting in loadedChunks forever,
+    // ungenerated. AllNeighborsGenerated then returned false for all six neighbours
+    // permanently, so none of them ever meshed. Undo the insertion instead, and let a
+    // later frame retry the load.
+    const auto abandonLoad = [&]() {
+        loadedChunks.erase(coord);
+        auto itCount = regionLoadedCounts.find(rp);
+        if (itCount != regionLoadedCounts.end()) {
+            itCount->second -= 1;
+            if (itCount->second <= 0) regionLoadedCounts.erase(itCount);
+        }
+    };
+
     std::shared_ptr<RegionFile> region = GetOrCreateRegion(coord.ToRegionCoord());
-    if (!region) return;
+    if (!region) {
+        ASCIIgL::Logger::Warningf("LoadChunk: no region for chunk (%d,%d,%d); will retry",
+                                   coord.x, coord.y, coord.z);
+        abandonLoad();
+        return;
+    }
 
     auto* bsr = registry.ctx().find<blockstate::BlockStateRegistry>();
     if (!bsr) {
         ASCIIgL::Logger::Error("LoadChunk: BlockStateRegistry missing");
+        abandonLoad();
         return;
     }
 
@@ -124,12 +147,31 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
         loadedFromFile = false;
     }
 
-    // Load metadata (cross-chunk edits stored in region file)
+    // Load metadata (cross-chunk edits stored in region file).
+    //
+    // Inside a try/catch: this sat just outside the one above, so a corrupt meta blob
+    // threw straight out of ChunkManager::Update() and killed the frame. A damaged
+    // bucket should cost those edits, not the session.
     auto cachedMetaBucket = std::make_unique<MetaBucket>();
-    region->LoadMetaData(coord, cachedMetaBucket.get(), *bsr);
+    try {
+        region->LoadMetaData(coord, cachedMetaBucket.get(), *bsr);
+    } catch (const std::exception& e) {
+        ASCIIgL::Logger::Warningf("Failed to load metadata for chunk (%d,%d,%d): %s. Discarding.",
+                                   coord.x, coord.y, coord.z, e.what());
+        cachedMetaBucket->edits.clear();
+    } catch (...) {
+        ASCIIgL::Logger::Warningf("Failed to load metadata for chunk (%d,%d,%d): unknown error. Discarding.",
+                                   coord.x, coord.y, coord.z);
+        cachedMetaBucket->edits.clear();
+    }
 
     if (loadedFromFile) {
         chunkPtr->SetGenerated(true);
+        // Its contents came straight off disk, so it is already persisted. SetGenerated
+        // and the block writes during parsing both flag it as needing a save; clear
+        // that here or every autosave would rewrite an unchanged chunk and grow the
+        // region file. Any meta edits applied just below legitimately set it again.
+        chunkPtr->MarkSaved();
         ApplyEditsToChunk(chunkPtr, cachedMetaBucket->edits);
         auto it = crossChunkEdits.find(coord);
         if (it != crossChunkEdits.end()) {
@@ -145,8 +187,18 @@ void ChunkManager::LoadChunk(const ChunkCoord& coord) {
                 mergedEdits.push_back(std::move(e));
             crossChunkEdits.erase(it);
         }
-        crossChunkEdits[coord].edits = std::move(mergedEdits);
-        chunkJobQueue->EnqueueTerrainGen(chunkPtr);
+        // operator[] default-constructs the bucket, whose constructor stamps
+        // lastTouched from util::NowSeconds rather than this manager's clock; restamp
+        // it so expiry compares like with like.
+        MetaBucket& bucket = crossChunkEdits[coord];
+        bucket.lastTouched = nowSeconds_();
+        bucket.edits = std::move(mergedEdits);
+        // Enrol for expiry. Buckets created here were previously invisible to
+        // ProcessMetaBucketExpiry, which only ever sees coords pushed onto this queue,
+        // so one that never got consumed by a terrain drain leaked for the session.
+        // Duplicate coords in the queue are harmless - the lookup simply misses.
+        metaTimeTracker.push(coord);
+        chunkJobQueue->EnqueueTerrainGen(chunk);
     }
 }
 
@@ -160,7 +212,7 @@ void ChunkManager::SaveAll() {
     // Group chunks and metadata by region; one open/flush/close per region (much faster than per-chunk).
     std::unordered_map<RegionCoord, std::vector<std::pair<ChunkCoord, Chunk*>>> chunksByRegion;
     for (auto& [coord, chunkPtr] : loadedChunks) {
-        if (!chunkPtr) continue;
+        if (!chunkPtr || !chunkPtr->IsGenerated()) continue;
         chunksByRegion[coord.ToRegionCoord()].emplace_back(coord, chunkPtr.get());
     }
     std::unordered_map<RegionCoord, std::vector<std::pair<ChunkCoord, const MetaBucket*>>> metaByRegion;
@@ -197,11 +249,14 @@ void ChunkManager::SaveAll() {
         }
         region->EndBatchSave();
     }
+
+    ASCIIgL::Logger::Info("SaveAll complete. Saved " + std::to_string(metaCount) + " meta buckets.");
+}
+
+void ChunkManager::ClearLoadedMemory() {
     loadedChunks.clear();
     crossChunkEdits.clear();
     regionLoadedCounts.clear();
-
-    ASCIIgL::Logger::Info("SaveAll complete. Saved " + std::to_string(metaCount) + " meta buckets.");
 }
 
 void ChunkManager::UnloadChunk(const ChunkCoord& coord) {
@@ -215,6 +270,11 @@ void ChunkManager::UnloadChunk(const ChunkCoord& coord) {
         loadedChunks.erase(itChunk);
         return;
     }
+
+    // Tell any queued terrain job for this chunk not to bother. The job holds a
+    // shared_ptr so the chunk stays alive either way; this just avoids generating a
+    // result that the identity check in ApplyDrainedTerrainResults would discard.
+    chunkToUnload->Cancel();
 
     for (int i = 0; i < 6; ++i) {
         ChunkCoord neighborCoord = NeighborChunkCoord(coord, FaceDirFromIndex(i));
@@ -264,12 +324,18 @@ void ChunkManager::ApplyEditsToChunk(Chunk* c, const std::vector<CrossChunkEdit>
 
 void ChunkManager::ProcessMetaBucketExpiry() {
     PROFILE_SCOPE("Chunk.UpdateChunkLoading.MetaBuckets");
-    const uint32_t now = util::NowSeconds();
+    FlushExpiredMetaBuckets(/*force=*/false);
+}
+
+void ChunkManager::FlushExpiredMetaBuckets(bool force) {
+    const uint32_t now = nowSeconds_();
     constexpr int MAX_META_SAVES_PER_FRAME = 4;
     int metaSaveCount = 0;
 
     size_t queueSize = metaTimeTracker.size();
-    for (size_t i = 0; i < queueSize && metaSaveCount < MAX_META_SAVES_PER_FRAME; ++i) {
+    for (size_t i = 0; i < queueSize; ++i) {
+        if (!force && metaSaveCount >= MAX_META_SAVES_PER_FRAME) break;
+
         const ChunkCoord key = metaTimeTracker.front();
         metaTimeTracker.pop();
 
@@ -279,6 +345,9 @@ void ChunkManager::ProcessMetaBucketExpiry() {
 
         MetaBucket& bucket = it->second;
 
+        // An ungenerated chunk still expects these edits to be applied in memory when
+        // its terrain lands; persisting and dropping them now would lose them.
+        // Requeued even under force.
         if (Chunk* c = GetChunk(key)) {
             if (!c->IsGenerated()) {
                 metaTimeTracker.push(key);
@@ -286,7 +355,7 @@ void ChunkManager::ProcessMetaBucketExpiry() {
             }
         }
 
-        if (now - bucket.lastTouched < META_BUCKET_TIME_LIMIT) {
+        if (!force && now - bucket.lastTouched < META_BUCKET_TIME_LIMIT) {
             metaTimeTracker.push(key);
             continue;
         }
@@ -296,11 +365,46 @@ void ChunkManager::ProcessMetaBucketExpiry() {
             if (bsr)
                 region->SaveMetaData(key, &it->second, *bsr);
             else
-                ASCIIgL::Logger::Error("ProcessMetaBucketExpiry: BlockStateRegistry missing");
+                ASCIIgL::Logger::Error("FlushExpiredMetaBuckets: BlockStateRegistry missing");
         }
         crossChunkEdits.erase(it);
         metaSaveCount++;
     }
+}
+
+ChunkManager::Stats ChunkManager::GetStats() const {
+    Stats s;
+    s.loadedChunks = loadedChunks.size();
+    for (const auto& [coord, chunk] : loadedChunks) {
+        if (chunk && chunk->IsGenerated()) ++s.generatedChunks;
+    }
+    s.pendingCrossChunkBuckets = crossChunkEdits.size();
+    s.metaTimeTrackerSize = metaTimeTracker.size();
+    return s;
+}
+
+std::vector<ChunkCoord> ChunkManager::GetLoadedCoords() const {
+    std::vector<ChunkCoord> out;
+    out.reserve(loadedChunks.size());
+    for (const auto& [coord, chunk] : loadedChunks) out.push_back(coord);
+    return out;
+}
+
+std::shared_ptr<const Chunk> ChunkManager::GetChunkShared(const ChunkCoord& coord) const {
+    auto it = loadedChunks.find(coord);
+    if (it == loadedChunks.end()) return nullptr;
+    return it->second;
+}
+
+bool ChunkManager::HasPendingCrossChunkEdits(const ChunkCoord& coord) const {
+    auto it = crossChunkEdits.find(coord);
+    return it != crossChunkEdits.end() && !it->second.edits.empty();
+}
+
+std::vector<CrossChunkEdit> ChunkManager::GetPendingCrossChunkEdits(const ChunkCoord& coord) const {
+    auto it = crossChunkEdits.find(coord);
+    if (it == crossChunkEdits.end()) return {};
+    return it->second.edits;
 }
 
 void ChunkManager::LoadChunksInRadius(const ChunkCoord& playerChunk, unsigned int loadRadius) {
@@ -490,6 +594,14 @@ void ChunkManager::ApplyDrainedTerrainResults() {
     for (auto& r : drainTerrainBuffer_) {
         Chunk* c = GetChunk(r.coord);
         if (!c) continue;
+
+        // Match on identity, not coordinate. If the chunk was unloaded and reloaded
+        // while this result was in flight, the coord now resolves to a different Chunk
+        // that has its own terrain job pending. Applying the old result to it would
+        // mark it generated prematurely AND consume the cross-chunk edits buffered for
+        // it - which is how tree spill went missing at chunk borders.
+        if (c->GetInstanceId() != r.instanceId) continue;
+
         auto metaIt = crossChunkEdits.find(r.coord);
         if (metaIt != crossChunkEdits.end()) {
             ApplyEditsToChunk(c, metaIt->second.edits);
@@ -676,12 +788,18 @@ void ChunkManager::SetBlockState(int x, int y, int z, uint32_t stateId) {
         auto it = crossChunkEdits.find(chunkCoord);
         if (it == crossChunkEdits.end()) {
             MetaBucket metaBucket;
+            // Stamp from this manager's clock. MetaBucket's constructor reads
+            // util::NowSeconds() directly, which is the same source in production but
+            // not when a clock is injected - and expiry compares against nowSeconds_,
+            // so a mismatched stamp underflows the uint32 subtraction and expires the
+            // bucket immediately.
+            metaBucket.lastTouched = nowSeconds_();
             metaBucket.edits.push_back(crossChunkEdit);
             crossChunkEdits.insert({chunkCoord, metaBucket});
             metaTimeTracker.push(chunkCoord);
         } else {
             it->second.edits.push_back(crossChunkEdit);
-            it->second.lastTouched = util::NowSeconds();
+            it->second.lastTouched = nowSeconds_();
         }
     } else {
         chunk->SetBlockState(localPos.x, localPos.y, localPos.z, stateId);
@@ -711,6 +829,16 @@ void ChunkManager::Update() {
     {
         PROFILE_SCOPE("Chunk.Update.DrainAndApplyJobResultsLate");
         DrainAndApplyJobResults();
+    }
+
+    const uint32_t now = nowSeconds_();
+    if (lastAutosaveSeconds_ == 0) {
+        lastAutosaveSeconds_ = now;
+        return;
+    }
+    if (now - lastAutosaveSeconds_ >= AUTOSAVE_INTERVAL_SECONDS) {
+        SaveAll();
+        lastAutosaveSeconds_ = now;
     }
 }
 

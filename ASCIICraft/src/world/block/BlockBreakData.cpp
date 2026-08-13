@@ -43,6 +43,8 @@ const std::unordered_map<std::string, BreakEntry>& GetBreakTable() {
         {"minecraft:cobblestone_slab",  {2.0f,     ToolClass::Pickaxe, 1}},
         {"minecraft:mossy_cobblestone_slab", {2.0f, ToolClass::Pickaxe, 1}},
         {"minecraft:furnace",           {3.5f,     ToolClass::Pickaxe, 1}},
+        {"minecraft:anvil",             {5.0f,     ToolClass::Pickaxe, 1}},
+        {"minecraft:emerald_block",     {5.0f,     ToolClass::Pickaxe, 3}},
 
         {"minecraft:oak_log",           {2.0f,     ToolClass::Axe,     0}},
         {"minecraft:oak_planks",        {2.0f,     ToolClass::Axe,     0}},

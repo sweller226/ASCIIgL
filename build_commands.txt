@@ -1,5 +1,5 @@
 To count # of lines
-Get-ChildItem -Recurse -Include *.cpp,*.hpp | Where-Object { $_.FullName -notmatch '\\(lib|dist|vendor|build|libs)\\' } | ForEach-Object { Get-Content $_ } | Measure-Object -Line
+Get-ChildItem -Recurse -Include *.cpp,*.hpp | Where-Object { $_.FullName -notmatch '\\(lib|dist|vendor|build|libs|build-asan)\\' } | ForEach-Object { Get-Content $_ } | Measure-Object -Line
 
 ASCIIgL
     Build Release
@@ -42,6 +42,40 @@ ASCIICraft
 
     Rebuild Library
     ./scripts/build_ASCIIgL_ASCIICraft.ps1
+
+Tests
+    Run everything (builds first; bootstraps the ASCIIgL dist if missing)
+    ./scripts/run_tests.ps1
+
+    Release config
+    ./scripts/run_tests.ps1 -Config Release
+
+    One area / tier (labels come from the TEST_SUITE name)
+    ./scripts/run_tests.ps1 -Label world
+    ./scripts/run_tests.ps1 -Label tier1
+
+    One test by regex
+    ./scripts/run_tests.ps1 -Filter "BlockKey"
+
+    Skip the build, just run
+    ./scripts/run_tests.ps1 -NoBuild
+
+    After changing ASCIIgL engine code (redeploys the distribution first)
+    ./scripts/run_tests.ps1 -RebuildEngine
+
+    Under AddressSanitizer (separate build dir; needs a Developer PowerShell)
+    ./scripts/run_tests.ps1 -Asan
+
+    Include the stress suite (excluded by default)
+    ./scripts/run_tests.ps1 -Config Release -Stress
+
+    Run the test exe directly (from build\bin\FastDebug)
+    .\ASCIICraft_tests.exe --list-test-cases
+    .\ASCIICraft_tests.exe --test-suite="world.tier1.meshgen"
+    .\ASCIICraft_tests.exe --test-case="*BlockKey*"
+
+    Verbose logging from tests (default is warning)
+    $env:ASCIICRAFT_TEST_LOG_LEVEL="debug"; .\ASCIICraft_tests.exe
 
 Tracy
     Open Profiler UI

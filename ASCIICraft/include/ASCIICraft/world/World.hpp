@@ -25,6 +25,8 @@ struct WorldParams {
     unsigned int renderDistance = 8;
     /// Master seed for terrain and other derived world RNG; must be fixed for a save.
     uint64_t worldSeed = 12345ULL;
+    /// Directory holding region files. Relative paths resolve against the CWD.
+    std::filesystem::path regionDir = "regions";
 };
 
 // Main World class
