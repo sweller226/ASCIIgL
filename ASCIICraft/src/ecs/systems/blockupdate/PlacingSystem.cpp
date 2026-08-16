@@ -15,6 +15,9 @@
 #include <ASCIICraft/events/InputEvents.hpp>
 #include <ASCIICraft/events/ItemEvents.hpp>
 #include <ASCIICraft/events/PlaceBlockEvent.hpp>
+#include <ASCIICraft/events/SoundEvents.hpp>
+#include <ASCIICraft/sound/BlockSoundMap.hpp>
+#include <ASCIICraft/sound/SoundRegistry.hpp>
 #include <ASCIICraft/world/World.hpp>
 #include <ASCIICraft/world/block/CollisionAabb.hpp>
 #include <ASCIICraft/world/block/state/BlockStateRegistry.hpp>
@@ -167,6 +170,7 @@ void PlacingSystem::PlayerPlace() {
         placeEvent.stateId = finalizedStateId;
         placeEvent.position = target->placePos;
         m_eventBus.emit(placeEvent);
+        EmitPlaceSound(playerEnt, finalizedStateId);
 
         // Creative / Spectator: place without consuming (same as MiningSystem break).
         const auto* pmode = m_registry.try_get<components::PlayerMode>(playerEnt);
@@ -184,6 +188,23 @@ void PlacingSystem::PlayerPlace() {
         }
         break;
     }
+}
+
+void PlacingSystem::EmitPlaceSound(entt::entity playerEnt, uint32_t stateId) {
+    const auto* bsr = m_registry.ctx().find<blockstate::BlockStateRegistry>();
+    auto* soundMap = m_registry.ctx().find<sound::BlockSoundMap>();
+    const auto* soundRegistry = m_registry.ctx().find<sound::SoundRegistry>();
+    if (!bsr || !soundMap || !soundRegistry) return;
+
+    const uint16_t typeId = bsr->GetTypeIdFromStateOr(stateId, 0);
+    // Vanilla reuses the block's dig/break sound for placement.
+    std::string soundId = soundMap->ResolveDigSoundId(typeId, *bsr);
+    if (!soundRegistry->Has(soundId)) {
+        soundId = soundMap->ResolveStepSoundId(typeId, *bsr);
+        if (!soundRegistry->Has(soundId)) return;
+    }
+
+    m_eventBus.emit(events::PlaySoundEvent{soundId, playerEnt, 1.0f, 0.8f});
 }
 
 }
