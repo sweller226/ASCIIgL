@@ -84,12 +84,14 @@ void BlockSoundMap::Build(const blockstate::BlockStateRegistry& bsr) {
     MapType(bsr, "minecraft:oak_stairs", "wood");
     MapType(bsr, "minecraft:stone_stairs", "stone");
     MapType(bsr, "minecraft:mossy_cobblestone_stairs", "stone");
+    MapType(bsr, "minecraft:stone_brick_stairs", "stone");
     MapType(bsr, "minecraft:cobblestone", "stone");
     MapType(bsr, "minecraft:mossy_cobblestone", "stone");
     MapType(bsr, "minecraft:stonebrick", "stone");
     MapType(bsr, "minecraft:mossy_stonebrick", "stone");
     MapType(bsr, "minecraft:cobblestone_slab", "stone");
     MapType(bsr, "minecraft:mossy_cobblestone_slab", "stone");
+    MapType(bsr, "minecraft:stone_brick_slab", "stone");
     MapType(bsr, "minecraft:glass", "stone");
 
     MapType(bsr, "minecraft:oak_log", "wood");

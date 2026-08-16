@@ -163,6 +163,17 @@ void RegisterVanillaBlocks(BlockStateRegistry& bsr,
     });
     registerJsonBackedOrLog("minecraft:mossy_cobblestone_stairs");
 
+    bsr.RegisterType("minecraft:stone_brick_stairs", {
+        blockstate::BlockProperty{ "facing", { "east", "west", "south", "north" } },
+        blockstate::BlockProperty{ "half", { "bottom", "top" } },
+        blockstate::BlockProperty{ "shape", { "straight", "outer_right", "outer_left", "inner_right", "inner_left" } },
+    });
+    const uint16_t stoneBrickStairsType = bsr.GetTypeId("minecraft:stone_brick_stairs");
+    bsr.SetDerivedData(stoneBrickStairsType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+    });
+    registerJsonBackedOrLog("minecraft:stone_brick_stairs");
+
     registerOpaqueJsonBacked("minecraft:dirt");
 
     // Matches assets/minecraft/blockstates/grass.json (snowy + rotated grass_normal variants).
@@ -217,6 +228,16 @@ void RegisterVanillaBlocks(BlockStateRegistry& bsr,
         s.isFullBlock = false;
     });
     registerJsonBackedOrLog("minecraft:mossy_cobblestone_slab");
+
+    bsr.RegisterType("minecraft:stone_brick_slab", {
+        blockstate::BlockProperty{ "half", { "bottom", "top" } },
+    });
+    const uint16_t stoneBrickSlabType = bsr.GetTypeId("minecraft:stone_brick_slab");
+    bsr.SetDerivedData(stoneBrickSlabType, [](blockstate::BlockState& s) {
+        s.renderMode = blockstate::RenderMode::Opaque;
+        s.isFullBlock = false;
+    });
+    registerJsonBackedOrLog("minecraft:stone_brick_slab");
 
     bsr.RegisterType("minecraft:oak_leaves", {});
     const uint16_t leavesType = bsr.GetTypeId("minecraft:oak_leaves");

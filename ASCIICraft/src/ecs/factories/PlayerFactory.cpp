@@ -47,18 +47,28 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     // --- Inventory (36 slots: 0-8 hotbar, 9-35 main) ---
     auto& inv = registry.emplace<components::Inventory>(p_ent, 36);
     if (auto* itemRegistry = registry.ctx().find<ecs::data::ItemRegistry>()) {
+        // const char* hotbarItems[] = {
+        //     "minecraft:wheat",
+        //     "minecraft:stone_brick_stairs",
+        //     "minecraft:stone_brick_slab",
+        //     "minecraft:farmland",
+        //     "minecraft:anvil",
+        //     "minecraft:mossy_cobblestone_slab",
+        //     "minecraft:blue_wool",
+        //     "minecraft:green_wool",
+        //     "minecraft:emerald_block",
+        // };
+        // const int hotbarCounts[] = {64, 64, 64, 64, 64, 64, 64, 64, 64};
+
         const char* hotbarItems[] = {
-            "minecraft:wheat",
-            "minecraft:carrots",
-            "minecraft:potatoes",
-            "minecraft:farmland",
-            "minecraft:anvil",
-            "minecraft:mossy_cobblestone_slab",
-            "minecraft:blue_wool",
-            "minecraft:green_wool",
-            "minecraft:emerald_block",
+            "minecraft:stone_sword",
+            "minecraft:stone_pickaxe",
+            "minecraft:stone_axe",
+            "minecraft:stone_shovel",
+            "minecraft:oak_planks",
+            "minecraft:bread",
         };
-        const int hotbarCounts[] = {64, 64, 64, 64, 64, 64, 64, 64, 64};
+        const int hotbarCounts[] = {1, 1, 1, 1, 64, 16};
 
         const char* blockItems[] = {
             "minecraft:water",

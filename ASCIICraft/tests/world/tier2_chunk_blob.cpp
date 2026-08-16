@@ -70,8 +70,8 @@ TEST_CASE("round-trips across the 4-bit palette range") {
 
 TEST_CASE("round-trips across the 8-bit palette range") {
     testsupport::TempDir dir("blob8");
-    // 17 crosses out of 4-bit; 220 is every state the vanilla registry defines.
-    for (const uint32_t n : {17u, 100u, 220u}) {
+    // 17 crosses out of 4-bit; 256 is the last palette size before indexBits steps up to 16.
+    for (const uint32_t n : {17u, 100u, 256u}) {
         CAPTURE(n);
         Chunk src(ChunkCoord{1, 2, 3});
         MarkGenerated(src);
@@ -82,13 +82,22 @@ TEST_CASE("round-trips across the 8-bit palette range") {
     }
 }
 
-TEST_CASE("the 16-bit palette path is unreachable with the current block set") {
-    // Documents a coverage gap rather than asserting behaviour. indexBits only reaches
-    // 16 above 256 distinct states in one chunk, but the registry defines 220 total,
-    // so no chunk can produce that palette. If the block set grows past 256 states the
-    // 16-bit packing path goes live for the first time, untested - this test starts
-    // failing then, which is the signal to add real coverage for it.
-    CHECK(testsupport::SharedBlocks().GetTotalStateCount() <= 256);
+TEST_CASE("round-trips across the 16-bit palette range") {
+    testsupport::TempDir dir("blob16");
+    const uint32_t total = testsupport::SharedBlocks().GetTotalStateCount();
+    // indexBits only reaches 16 above 256 distinct states in one chunk; this only exercises
+    // that path for real once the registry itself defines more than 256 states.
+    REQUIRE(total > 256);
+    // 257 crosses out of 8-bit; `total` is every state the vanilla registry defines.
+    for (const uint32_t n : {257u, (257u + total) / 2u, total}) {
+        CAPTURE(n);
+        Chunk src(ChunkCoord{7, 8, 9});
+        MarkGenerated(src);
+        FillWithDistinctStates(src, n);
+        Chunk dst(src.GetCoord());
+        RoundTrip(src, dir.Path(), dst);
+        REQUIRE(SameBlocks(src, dst));
+    }
 }
 
 TEST_CASE("an all-air chunk round-trips") {

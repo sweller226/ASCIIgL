@@ -104,9 +104,10 @@ void GUIManager::Render() {
         }
     } else {
         // Gameplay reticle: same cursor sprite, locked to screen center.
-        const glm::vec2 cursorTopLeft = m_screenSize * 0.5f - m_cursorSize * 0.5f;
-        m_renderer->RenderGUIQuad(
-            cursorTopLeft, m_cursorSize, 9998, m_cursorSurface.mesh, m_cursorSurface.material);
+        // Temporarily disabled.
+        // const glm::vec2 cursorTopLeft = m_screenSize * 0.5f - m_cursorSize * 0.5f;
+        // m_renderer->RenderGUIQuad(
+        //     cursorTopLeft, m_cursorSize, 9998, m_cursorSurface.mesh, m_cursorSurface.material);
     }
 }
 
