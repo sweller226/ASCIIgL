@@ -1,5 +1,6 @@
 #include <ASCIICraft/game/Game.hpp>
 #include <ASCIICraft/world/World.hpp>
+#include <ASCIICraft/save/SavePaths.hpp>
 
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
@@ -709,10 +710,15 @@ void Game::RenderPlaying() {
 }
 
 void Game::InitializeWorld() {
+    // Before World, which constructs RegionFiles - and their constructor creates the
+    // region directory, which would make the migration a permanent no-op.
+    const std::filesystem::path regionDir = save::MigrateLegacySaveLayout();
+
     WorldParams worldParams{};
     worldParams.spawnPoint = WorldCoord(0, 120, 0);
     worldParams.renderDistance = 12;
     worldParams.worldSeed = 12345ULL;
+    worldParams.regionDir = regionDir;
     registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, worldParams));
     ASCIIgL::Logger::Debug("World created and stored in registry context.");
 }

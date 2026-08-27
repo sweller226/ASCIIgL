@@ -17,6 +17,7 @@
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/chunk/CrossChunkEdit.hpp>
 #include <ASCIICraft/world/Sizes.hpp>
+#include <ASCIICraft/save/SavePaths.hpp>
 
 namespace blockstate {
 class BlockStateRegistry;
@@ -110,7 +111,7 @@ class RegionFile {
 public:
     /// \param regionDir directory the region file lives in. Created if absent.
     ///        Relative paths resolve against the process CWD.
-    explicit RegionFile(const RegionCoord& coord, std::filesystem::path regionDir = "regions");
+    explicit RegionFile(const RegionCoord& coord, std::filesystem::path regionDir = save::RegionDir());
     ~RegionFile();
 
     RegionFile(const RegionFile&) = delete;
@@ -203,7 +204,7 @@ private:
 class RegionManager {
 public:
     /// \param regionDir directory passed to every RegionFile this manager creates.
-    explicit RegionManager(std::filesystem::path regionDir = "regions")
+    explicit RegionManager(std::filesystem::path regionDir = save::RegionDir())
         : regionDir_(std::move(regionDir)) {}
     ~RegionManager() = default;
 

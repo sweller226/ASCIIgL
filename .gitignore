@@ -5,6 +5,8 @@
 **/dist/
 
 # Runtime output written next to the executables
+**/world/
+# Pre-`world/` save layout; kept so an unmigrated legacy directory stays ignored.
 **/regions/
 **/logs/
 

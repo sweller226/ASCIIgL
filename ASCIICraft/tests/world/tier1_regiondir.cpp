@@ -1,7 +1,7 @@
 // Region-directory injection seam.
 //
 // RegionFile's constructor creates its directory as a side effect, so before this
-// seam existed, merely constructing one wrote into the CWD's `regions/`. These tests
+// seam existed, merely constructing one wrote into the real save. These tests
 // pin that a caller-supplied directory is honoured - the property every Tier 2 and
 // Tier 3 test depends on for isolation.
 
@@ -9,6 +9,7 @@
 
 #include "support/TempDir.hpp"
 
+#include <ASCIICraft/save/SavePaths.hpp>
 #include <ASCIICraft/world/chunk/ChunkManagerDeps.hpp>
 #include <ASCIICraft/world/chunk/ChunkRegion.hpp>
 
@@ -29,7 +30,7 @@ TEST_CASE("RegionFile creates its file in the supplied directory") {
     }
 
     // RegionFile does not open the file until first use, so only the directory is
-    // guaranteed here. What matters is that it went to `sub`, not to ./regions.
+    // guaranteed here. What matters is that it went to `sub`, not to the real save.
     CHECK(fs::is_directory(sub));
 }
 
@@ -76,11 +77,12 @@ TEST_CASE("two managers on separate directories do not share state") {
     CHECK(dirA.Path() != dirB.Path());
 }
 
-TEST_CASE("ChunkManagerDeps defaults preserve the original behaviour") {
-    // Constructed, not used: instantiating a RegionFile here would create ./regions
+TEST_CASE("ChunkManagerDeps defaults point at the real save layout") {
+    // Constructed, not used: instantiating a RegionFile here would create world/regions
     // next to the test executable, which is exactly what this seam exists to avoid.
     ChunkManagerDeps deps;
-    CHECK(deps.regionDir == fs::path("regions"));
+    CHECK(deps.regionDir == save::RegionDir());
+    CHECK(deps.regionDir == fs::path("world") / "regions");
     CHECK(deps.nowSeconds == nullptr);   // null => util::NowSeconds
     CHECK(deps.scheduler == nullptr);    // null => MakeTbbChunkJobScheduler
 }

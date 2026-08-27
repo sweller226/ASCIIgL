@@ -4,6 +4,7 @@
 #include <ASCIICraft/world/Coords.hpp>
 #include <ASCIICraft/world/chunk/ChunkManager.hpp>
 #include <ASCIICraft/world/Sizes.hpp>
+#include <ASCIICraft/save/SavePaths.hpp>
 
 #include <cstdint>
 
@@ -26,7 +27,7 @@ struct WorldParams {
     /// Master seed for terrain and other derived world RNG; must be fixed for a save.
     uint64_t worldSeed = 12345ULL;
     /// Directory holding region files. Relative paths resolve against the CWD.
-    std::filesystem::path regionDir = "regions";
+    std::filesystem::path regionDir = save::RegionDir();
 };
 
 // Main World class
