@@ -53,6 +53,9 @@
 #include <ASCIICraft/events/PlaceBlockEvent.hpp>
 #include <ASCIICraft/events/InputEvents.hpp>
 #include <ASCIICraft/events/GUIEvents.hpp>
+#include <ASCIICraft/save/PlayerDataStore.hpp>
+#include <ASCIICraft/ecs/systems/PlayerSaveSystem.hpp>
+#include <ASCIICraft/save/SavePaths.hpp>
 
 enum class GameState {
     Playing,
@@ -84,6 +87,10 @@ private:
     // Resources
     entt::registry registry;
     ASCIIgL::EventBus eventBus;
+
+    // Player position/facing/game mode, in world/player_data.json. The path is a fixed
+    // function of the save layout, so this needs no deferred construction.
+    save::PlayerDataStore playerDataStore_{save::PlayerDataFile()};
     
     // ecs systems (inputSystem first; gameplayInputFilter wraps it for movement/camera so GUI blocks input there)
     input::InputSystem inputSystem;
@@ -101,6 +108,7 @@ private:
     ecs::systems::MusicSystem musicSystem;
     ecs::systems::StepSFXSystem stepSfxSystem;
     ecs::systems::ViewBobbingSystem viewBobbingSystem;
+    ecs::systems::PlayerSaveSystem playerSaveSystem;
 
     // GUI screens
     gui::GUIManager guiManager;

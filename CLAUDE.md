@@ -42,7 +42,7 @@ cd ASCIICraft/build/bin/FastDebug   # or Release
 ./ASCIICraft.exe --mono             # monochrome quantization
 ```
 
-There is no test suite in this repo (no CTest targets, no test source directories) — verification is manual, by running the game.
+ASCIICraft has a doctest-based test suite (`ASCIICraft/tests/`); ASCIIgL itself still has no tests — verification of engine-only changes is manual, by running the game. See Testing below.
 
 Profiling (Tracy instrumentation is compiled in via `TRACY_ENABLE`):
 
@@ -60,6 +60,24 @@ cd tools/CharCoverage && ./build.ps1
 ```
 
 `build_commands.txt` at repo root has the full set of ad hoc commands (including per-tool build/run variants) if a script above doesn't cover what you need.
+
+## Testing
+
+ASCIICraft builds a `doctest`-based test suite (`ASCIICraft/tests/`) as its own executable, `ASCIICraft_tests`, linking the same `ASCIICraft_core` objects the game ships — no D3D11 device or window is created, so tests run headless. `doctest` is a git submodule under `ASCIICraft/vendor/doctest`; `ASCIICraft/tests/CMakeLists.txt` globs all `.cpp`/`.hpp` under `tests/` (`CONFIGURE_DEPENDS`, so a new test directory needs no CMake edit) and registers one CTest entry per `TEST_CASE` via `doctest_discover_tests`. Building is gated by the `ASCIICRAFT_BUILD_TESTS` CMake option (default `ON`), driven from `enable_testing()`/`add_subdirectory(tests)` in `ASCIICraft/CMakeLists.txt`.
+
+```
+cd ASCIICraft/build
+ctest -C FastDebug --output-on-failure   # all tests
+ctest -C FastDebug -L world              # by area label (world, save, ...)
+ctest -C FastDebug -L tier1              # by tier label (tier1..tier5)
+
+# or run the exe directly, e.g. for a single case:
+./bin/FastDebug/ASCIICraft_tests.exe --test-case="data survives a round trip through json"
+```
+
+Labels come for free from the `TEST_SUITE("<area>.<tier>.<topic>")` naming convention (e.g. `save.tier1.playerdata`), so `-L` filtering by either segment works without extra CMake wiring. Tiers loosely mean: `tier1` unit-level, `tier2`/`tier3` integration/lifecycle, `tier4` stress/UAF repro, `tier5` benchmarks. Shared fixtures/helpers live under `tests/support/` (e.g. `TempDir`, `WorldTestHarness`, `BlockRegistryFixture`) — check there before writing new scaffolding. A regression can be pinned before it's fixed with `* doctest::should_fail()` on the `TEST_CASE` (see the ratchet check in `tests/smoke.cpp`): it reports PASSED while the bug is present and FAILED once someone fixes it, so CI stays green without silently losing the pin. `ASCIICRAFT_TEST_LOG_LEVEL=error|warning|info|debug` overrides the default `Warning` log verbosity captured to `logs/tests.log` (see `tests/doctest_main.cpp`).
+
+ASCIIgL itself still has no test suite — verify engine-only changes manually by running the game.
 
 ## Architecture
 

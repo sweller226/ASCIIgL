@@ -1,6 +1,8 @@
 #include <ASCIICraft/game/Game.hpp>
 #include <ASCIICraft/world/World.hpp>
 #include <ASCIICraft/save/SavePaths.hpp>
+#include <ASCIICraft/save/PlayerDataJson.hpp>
+#include <ASCIICraft/ecs/factories/PlayerSpawnState.hpp>
 
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
@@ -72,6 +74,7 @@ Game::Game()
     , musicSystem(eventBus, soundSystem)
     , stepSfxSystem(registry, eventBus)
     , viewBobbingSystem(registry)
+    , playerSaveSystem(registry, playerDataStore_)
     , playerFactory(registry)
     , shouldInternalExit(false)
 {
@@ -283,6 +286,9 @@ void Game::Update() {
 
             world->Update();
 
+            // Last, so a save captures post-physics state for this frame.
+            playerSaveSystem.Update();
+
             break;
         }
 
@@ -342,6 +348,10 @@ void Game::Shutdown() {
     ASCIIgL::Logger::Info("Shutting down ASCIICraft...");
 
     ASCIIgL::InputManager::GetInst().Shutdown();
+
+    // Before SaveAll: chunk flushing is far slower, and a kill partway through it
+    // should still leave the player where they actually were.
+    playerSaveSystem.SaveNow();
 
     // Clear libraries if we want to release all resources on shutdown
     if (auto world = GetWorldPtr(registry)) {
@@ -724,7 +734,22 @@ void Game::InitializeWorld() {
 }
 
 void Game::InitializePlayer() {
-    playerFactory.createPlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Survival);
+    ecs::factories::PlayerSpawnState spawn;
+    spawn.position = GetWorldPtr(registry)->GetSpawnPoint().ToVec3();
+    spawn.mode     = GameMode::Survival;
+
+    if (const auto saved = playerDataStore_.Load()) {
+        spawn = save::ToSpawnState(*saved);
+        ASCIIgL::Logger::Infof("Restored player: pos=(%.2f, %.2f, %.2f) yaw=%.1f pitch=%.1f mode=%s",
+                               spawn.position.x, spawn.position.y, spawn.position.z,
+                               spawn.yawDegrees, spawn.pitchDegrees,
+                               save::GameModeToString(spawn.mode));
+    } else if (playerDataStore_.Exists()) {
+        // Load() has already logged why. Say plainly what happens as a result.
+        ASCIIgL::Logger::Warning("Unusable player data; spawning at the world spawn point.");
+    }
+
+    playerFactory.createPlayerEnt(spawn);
     ASCIIgL::Logger::Debug("Player entity created");
 }
 
