@@ -17,12 +17,10 @@ MusicSystem::MusicSystem(ASCIIgL::EventBus& eventBus, const SoundSystem& soundSy
 
 void MusicSystem::Update() {
     if (m_trackPending) {
-        if (m_soundSystem.IsMusicPlaying()) {
-            return;
-        }
-
-        ++m_framesSinceDispatch;
-        if (m_framesSinceDispatch < 2) {
+        // IsMusicActive() covers the whole life of a track - opening, decoding,
+        // and draining the last queued buffers - so it is true from the frame
+        // SoundSystem handles our event onwards. No grace period needed.
+        if (m_soundSystem.IsMusicActive()) {
             return;
         }
 
@@ -60,7 +58,6 @@ void MusicSystem::DispatchNextTrack() {
 
     m_eventBus.emit(events::PlayMusicEvent{soundId, 0.5f});
     m_trackPending = true;
-    m_framesSinceDispatch = 0;
 }
 
 } // namespace ecs::systems

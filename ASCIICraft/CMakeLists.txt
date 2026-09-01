@@ -114,11 +114,17 @@ endif()
 # ---------------------------------------------------------------------------
 # Source Files
 # ---------------------------------------------------------------------------
+# CONFIGURE_DEPENDS so a new .cpp under src/ is picked up by a plain build,
+# matching the resource and test-suite globs. Without it CMake reuses the cached
+# file list and a newly added source is silently left out of the library - which
+# only surfaces later as an unresolved-symbol error at exe link time.
 file(GLOB_RECURSE ASCIICraft_SOURCES
+    CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 
 file(GLOB_RECURSE ASCIICraft_HEADERS
+    CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
 )
 

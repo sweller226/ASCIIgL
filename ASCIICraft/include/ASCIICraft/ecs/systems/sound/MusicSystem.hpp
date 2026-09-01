@@ -38,10 +38,9 @@ private:
     ASCIIgL::EventBus&     m_eventBus;
     const SoundSystem&     m_soundSystem;
 
-    int   m_lastTrackIndex       = -1;
-    float m_musicCooldown        = 10.0f;
-    bool  m_trackPending         = false;
-    int   m_framesSinceDispatch  = 0;
+    int   m_lastTrackIndex = -1;
+    float m_musicCooldown  = 10.0f;
+    bool  m_trackPending   = false;
 
     static constexpr float NEXT_TRACK_CEIL  = 120.0f;
     static constexpr float NEXT_TRACK_FLOOR = 80.0f;
