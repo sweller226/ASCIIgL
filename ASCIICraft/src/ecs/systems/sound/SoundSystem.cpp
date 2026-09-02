@@ -9,6 +9,7 @@
 #include <ASCIICraft/sound/StbVorbis.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/util/Profiler.hpp>
 
 #include <stdexcept>
 #include <string>
@@ -72,6 +73,8 @@ bool SoundSystem::IsMusicActive() const
 
 void SoundSystem::Update()
 {
+    PROFILE_SCOPE("Sound.Update");
+
     PumpMusicStream();
 
     const entt::entity player = components::GetPlayerEntity(m_registry);
@@ -174,6 +177,8 @@ void SoundSystem::OnPlayMusic(const events::PlayMusicEvent& event)
 
 void SoundSystem::PumpMusicStream()
 {
+    PROFILE_SCOPE("Sound.PumpMusicStream");
+
     if (m_musicSource == 0 || !m_musicStream.IsOpen()) {
         return;
     }
@@ -285,6 +290,11 @@ SoundSystem::SoundBuffer& SoundSystem::LoadOggByPath(const std::string& path)
 
 SoundSystem::SoundBuffer SoundSystem::DecodeOgg(const std::string& path)
 {
+    // Whole-file decode, now used only by SFX (4-16 KB each). Music streams
+    // instead - see PumpMusicStream. Worth keeping instrumented so a large file
+    // sneaking onto this path shows up immediately.
+    PROFILE_SCOPE("Sound.DecodeOgg");
+
     SoundBuffer result;
 
     int channels = 0;

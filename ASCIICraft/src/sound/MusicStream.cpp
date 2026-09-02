@@ -3,6 +3,7 @@
 #include <ASCIICraft/sound/StbVorbis.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/util/Profiler.hpp>
 
 #include <utility>
 
@@ -126,6 +127,10 @@ bool MusicStream::IsExhausted() const
 
 void MusicStream::DecodeLoop()
 {
+    // Named so the decode work is attributable in a capture rather than showing
+    // up as an anonymous thread.
+    tracy::SetThreadName("MusicDecode");
+
     const int channels = m_channels;
 
     for (;;) {
@@ -155,8 +160,12 @@ void MusicStream::DecodeLoop()
 
         // Unlocked: the decode is the slow part, and the handle is untouched by
         // any other thread while the worker is alive.
-        const int frames = stb_vorbis_get_samples_short_interleaved(
-            m_vorbis, channels, chunk.pcm.data(), CHUNK_FRAMES * channels);
+        int frames = 0;
+        {
+            PROFILE_SCOPE("Sound.Stream.Decode");
+            frames = stb_vorbis_get_samples_short_interleaved(
+                m_vorbis, channels, chunk.pcm.data(), CHUNK_FRAMES * channels);
+        }
 
         chunk.frames = frames;
 

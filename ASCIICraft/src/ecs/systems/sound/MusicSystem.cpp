@@ -4,6 +4,7 @@
 
 #include <ASCIIgL/engine/FPSClock.hpp>
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/util/Profiler.hpp>
 
 #include <ASCIICraft/events/SoundEvents.hpp>
 #include <ASCIICraft/util/RNG.hpp>
@@ -16,6 +17,8 @@ MusicSystem::MusicSystem(ASCIIgL::EventBus& eventBus, const SoundSystem& soundSy
 {}
 
 void MusicSystem::Update() {
+    PROFILE_SCOPE("Music.Update");
+
     if (m_trackPending) {
         // IsMusicActive() covers the whole life of a track - opening, decoding,
         // and draining the last queued buffers - so it is true from the frame
