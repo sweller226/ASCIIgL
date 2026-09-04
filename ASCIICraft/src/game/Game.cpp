@@ -178,7 +178,7 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
 
     ASCIIgL::InputManager::GetInst().Initialize();
     // Temporary: enable mouse look scheme for testing (keyboard arrows when false).
-    inputSystem.SetMouseLookEnabled(false);
+    inputSystem.SetMouseLookEnabled(true);
     ASCIIgL::Logger::Debug("InputManager initialized.");
 
     gameState = GameState::Playing;
