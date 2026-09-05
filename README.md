@@ -4,6 +4,8 @@
 
 **ASCIICraft** is a voxel sandbox game built on ASCIIgL — explore procedural terrain, break and place blocks, and manage an inventory, with the entire world rendered through the ASCII pipeline.
 
+If you'd like to try out ASCIICraft, check out the itch.io page! https://skwiglyman.itch.io/asciicraft
+
 ## How it works
 
 1. **Render the scene in 3D** — DirectX 11 draws block meshes, items, particles, and UI into an off-screen color buffer at full RGB precision.
