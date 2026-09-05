@@ -151,7 +151,7 @@ private:
 
     bool LoadTextures(bool multicolor);
     void InitializeWorld();
-    void InitializePlayer();
+    void InitializePlayer();    
     void InitializeSystems();
     void InitializeGUI();
     void RenderPlaying();
@@ -159,9 +159,9 @@ private:
     void InitializeBlockStates();
     
     // Constants
-    static inline int SCREEN_WIDTH = 550;
-    static inline int SCREEN_HEIGHT = 300;
+    static inline int SCREEN_WIDTH = 560;
+    static inline int SCREEN_HEIGHT = 315;
     static constexpr bool SUPERSAMPLE_2X = true;
-    static constexpr float FONT_SIZE = 3.0f;
+    static constexpr float FONT_SIZE = 3.5f;
     static constexpr float TARGET_FPS = 120.0f;
 };

@@ -9,12 +9,17 @@
 #include <ASCIICraft/events/SoundEvents.hpp>
 #include <ASCIICraft/util/RNG.hpp>
 
+#include <algorithm>
+#include <iterator>
+
 namespace ecs::systems {
 
 MusicSystem::MusicSystem(ASCIIgL::EventBus& eventBus, const SoundSystem& soundSystem)
     : m_eventBus(eventBus)
     , m_soundSystem(soundSystem)
-{}
+{
+    m_musicCooldown = FIRST_TRACK.empty() ? OPENING_COOLDOWN : FIRST_TRACK_DELAY;
+}
 
 void MusicSystem::Update() {
     PROFILE_SCOPE("Music.Update");
@@ -47,13 +52,28 @@ void MusicSystem::OnMusicTrackFinished() {
     ASCIIgL::Logger::Infof("[MusicSystem] Track finished. Next track in %.0fs", m_musicCooldown);
 }
 
-void MusicSystem::DispatchNextTrack() {
+int MusicSystem::PickTrackIndex() {
+    // First track of the session: honour FIRST_TRACK if it names a real track.
+    if (m_lastTrackIndex < 0 && !FIRST_TRACK.empty()) {
+        const auto it = std::find(MUSIC_TRACKS.begin(), MUSIC_TRACKS.end(), FIRST_TRACK);
+        if (it != MUSIC_TRACKS.end()) {
+            return static_cast<int>(std::distance(MUSIC_TRACKS.begin(), it));
+        }
+        ASCIIgL::Logger::Warningf("[MusicSystem] FIRST_TRACK '%s' is not in MUSIC_TRACKS; picking at random",
+                                  FIRST_TRACK.c_str());
+    }
+
     static util::RNG s_rng;
 
     int index = 0;
     do {
         index = s_rng.NextInt(0, static_cast<int>(MUSIC_TRACKS.size()) - 1);
     } while (index == m_lastTrackIndex && MUSIC_TRACKS.size() > 1);
+    return index;
+}
+
+void MusicSystem::DispatchNextTrack() {
+    const int index = PickTrackIndex();
     m_lastTrackIndex = index;
 
     const std::string& soundId = MUSIC_TRACKS[index];
