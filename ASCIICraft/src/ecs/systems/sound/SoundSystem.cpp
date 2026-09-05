@@ -6,10 +6,10 @@
 #include <ASCIICraft/ecs/components/Transform.hpp>
 #include <ASCIICraft/sound/SoundRegistry.hpp>
 
-#define STB_VORBIS_IMPLEMENTATION
-#include "stb_vorbis.c"
+#include <ASCIICraft/sound/StbVorbis.hpp>
 
 #include <ASCIIgL/util/Logger.hpp>
+#include <ASCIIgL/util/Profiler.hpp>
 
 #include <stdexcept>
 #include <string>
@@ -54,20 +54,28 @@ SoundSystem::~SoundSystem()
     ShutdownOpenAL();
 }
 
-bool SoundSystem::IsMusicPlaying() const
+bool SoundSystem::IsMusicActive() const
 {
+    // Still decoding, or still holding undrained buffers. Checking the source
+    // state instead would report "finished" on the first underrun.
+    if (m_musicStream.IsOpen()) {
+        return true;
+    }
+
     if (m_musicSource == 0) {
         return false;
     }
 
-    ALint state = AL_STOPPED;
-    alGetSourcei(m_musicSource, AL_SOURCE_STATE, &state);
-    return state == AL_PLAYING;
+    ALint queued = 0;
+    alGetSourcei(m_musicSource, AL_BUFFERS_QUEUED, &queued);
+    return queued > 0;
 }
 
 void SoundSystem::Update()
 {
-    RecycleFinishedSources();
+    PROFILE_SCOPE("Sound.Update");
+
+    PumpMusicStream();
 
     const entt::entity player = components::GetPlayerEntity(m_registry);
     if (player != entt::null && m_registry.all_of<components::PlayerCamera>(player)) {
@@ -130,51 +138,126 @@ void SoundSystem::OnPlaySound(const events::PlaySoundEvent& event)
 
 void SoundSystem::OnPlayMusic(const events::PlayMusicEvent& event)
 {
-    if (m_musicSource != 0) {
-        ALint state = AL_STOPPED;
-        alGetSourcei(m_musicSource, AL_SOURCE_STATE, &state);
-        if (state == AL_PLAYING) {
-            return;
-        }
-
-        alDeleteSources(1, &m_musicSource);
-        m_musicSource = 0;
-    }
-
-    SoundBuffer& buf = LoadSoundId(event.soundId);
-    if (buf.alBuffer == 0) {
-        ASCIIgL::Logger::Errorf("[SoundSystem] Skipping track, buffer is invalid: %s", event.soundId.c_str());
+    if (m_musicSource == 0) {
         return;
     }
 
-    alGenSources(1, &m_musicSource);
-    alSourcei(m_musicSource, AL_BUFFER, static_cast<ALint>(buf.alBuffer));
+    // A track already running wins - MusicSystem only dispatches once the
+    // previous one has finished, so this means two requests landed at once.
+    if (IsMusicActive()) {
+        return;
+    }
+
+    const std::string path = ResolveSoundPath(event.soundId);
+    if (path.empty()) {
+        return;
+    }
+
+    // Detach the whole queue so every ring buffer is free for the new track.
+    // Setting AL_BUFFER to 0 on a stopped source clears the processed and the
+    // still-pending entries in one call.
+    alSourceStop(m_musicSource);
+    alSourcei(m_musicSource, AL_BUFFER, 0);
+    m_freeMusicBuffers.assign(m_musicBuffers.begin(), m_musicBuffers.end());
+
+    if (!m_musicStream.Open(path)) {
+        ASCIIgL::Logger::Errorf("[SoundSystem] Skipping track, stream failed to open: %s",
+                                event.soundId.c_str());
+        return;
+    }
+
     alSourcef(m_musicSource, AL_GAIN, event.volume);
     alSourcei(m_musicSource, AL_SOURCE_RELATIVE, AL_TRUE);
     alSource3f(m_musicSource, AL_POSITION, 0.0f, 0.0f, 0.0f);
-    alSourcePlay(m_musicSource);
 
-    ASCIIgL::Logger::Infof("[SoundSystem] Playing music track: %s", event.soundId.c_str());
+    // No alSourcePlay here - nothing is queued yet. PumpMusicStream starts
+    // playback as soon as the decoder hands over the first chunk.
+    ASCIIgL::Logger::Infof("[SoundSystem] Streaming music track: %s", event.soundId.c_str());
 }
 
-SoundSystem::SoundBuffer& SoundSystem::LoadSoundId(const std::string& soundId)
+void SoundSystem::PumpMusicStream()
+{
+    PROFILE_SCOPE("Sound.PumpMusicStream");
+
+    if (m_musicSource == 0 || !m_musicStream.IsOpen()) {
+        return;
+    }
+
+    // 1. Reclaim buffers the source has finished with.
+    ALint processed = 0;
+    alGetSourcei(m_musicSource, AL_BUFFERS_PROCESSED, &processed);
+    while (processed-- > 0) {
+        ALuint buffer = 0;
+        alSourceUnqueueBuffers(m_musicSource, 1, &buffer);
+        if (buffer != 0) {
+            m_freeMusicBuffers.push_back(buffer);
+        }
+    }
+
+    // 2. Refill from the decoder. Uploading a chunk is a ~35 KB copy, versus the
+    //    33-50 MB copy the old whole-track path did in a single frame.
+    const int    channels = m_musicStream.Channels();
+    const int    rate     = m_musicStream.SampleRate();
+    const ALenum format   = (channels == 1) ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16;
+
+    while (!m_freeMusicBuffers.empty() && m_musicStream.PopChunk(m_musicChunk)) {
+        const ALuint buffer = m_freeMusicBuffers.back();
+        m_freeMusicBuffers.pop_back();
+
+        alBufferData(
+            buffer,
+            format,
+            m_musicChunk.pcm.data(),
+            static_cast<ALsizei>(m_musicChunk.frames * channels * static_cast<int>(sizeof(short))),
+            rate
+        );
+        alSourceQueueBuffers(m_musicSource, 1, &buffer);
+    }
+
+    ALint queued = 0;
+    alGetSourcei(m_musicSource, AL_BUFFERS_QUEUED, &queued);
+
+    // 3. The track is over only when the decoder is done AND the queue has drained.
+    if (m_musicStream.IsExhausted() && queued == 0) {
+        m_musicStream.Stop();
+        ASCIIgL::Logger::Info("[SoundSystem] Music track finished");
+        return;
+    }
+
+    // 4. Start playback, and recover if the decoder ever fell behind and the
+    //    source ran dry mid-track.
+    ALint state = AL_STOPPED;
+    alGetSourcei(m_musicSource, AL_SOURCE_STATE, &state);
+    if (state != AL_PLAYING && queued > 0) {
+        alSourcePlay(m_musicSource);
+    }
+}
+
+std::string SoundSystem::ResolveSoundPath(const std::string& soundId)
 {
     const auto* soundRegistry = m_registry.ctx().find<sound::SoundRegistry>();
     if (!soundRegistry) {
         ASCIIgL::Logger::Error("[SoundSystem] SoundRegistry missing from registry context");
-        static SoundBuffer empty;
-        return empty;
+        return {};
     }
 
     if (!soundRegistry->Has(soundId)) {
         ASCIIgL::Logger::Errorf("[SoundSystem] Unknown sound id: %s", soundId.c_str());
-        static SoundBuffer empty;
-        return empty;
+        return {};
     }
 
     const std::string path = soundRegistry->PickRandomPath(soundId);
     if (path.empty()) {
         ASCIIgL::Logger::Errorf("[SoundSystem] No paths for sound id: %s", soundId.c_str());
+    }
+
+    return path;
+}
+
+SoundSystem::SoundBuffer& SoundSystem::LoadSoundId(const std::string& soundId)
+{
+    const std::string path = ResolveSoundPath(soundId);
+    if (path.empty()) {
         static SoundBuffer empty;
         return empty;
     }
@@ -191,9 +274,14 @@ SoundSystem::SoundBuffer& SoundSystem::LoadOggByPath(const std::string& path)
 
     ASCIIgL::Logger::Infof("[SoundSystem] Loading ogg: %s", path.c_str());
 
-    SoundBuffer buf = DecodeOgg(path);
+    const SoundBuffer buf = DecodeOgg(path);
     if (buf.alBuffer == 0) {
+        // Deliberately not cached. Caching a failure would make a transient
+        // problem permanent - every later request for this path would return the
+        // dud entry without ever retrying the decode.
         ASCIIgL::Logger::Errorf("[SoundSystem] Failed to load ogg from path: %s", path.c_str());
+        static SoundBuffer empty;
+        return empty;
     }
 
     auto [inserted, _] = m_buffers.emplace(path, buf);
@@ -202,6 +290,11 @@ SoundSystem::SoundBuffer& SoundSystem::LoadOggByPath(const std::string& path)
 
 SoundSystem::SoundBuffer SoundSystem::DecodeOgg(const std::string& path)
 {
+    // Whole-file decode, now used only by SFX (4-16 KB each). Music streams
+    // instead - see PumpMusicStream. Worth keeping instrumented so a large file
+    // sneaking onto this path shows up immediately.
+    PROFILE_SCOPE("Sound.DecodeOgg");
+
     SoundBuffer result;
 
     int channels = 0;
@@ -220,6 +313,13 @@ SoundSystem::SoundBuffer SoundSystem::DecodeOgg(const std::string& path)
     }
 
     const ALenum format = (channels == 1) ? AL_FORMAT_MONO16 : AL_FORMAT_STEREO16;
+
+    // Clear any error left behind by earlier AL calls. alGetError() returns the
+    // oldest error since it was last read, so without this a stale error from,
+    // say, a source operation would be attributed to the upload below and throw
+    // away a perfectly good buffer.
+    while (alGetError() != AL_NO_ERROR) {
+    }
 
     alGenBuffers(1, &result.alBuffer);
     alBufferData(
@@ -274,11 +374,6 @@ ALuint SoundSystem::AcquireSource()
     return 0;
 }
 
-void SoundSystem::RecycleFinishedSources()
-{
-    // Voices are reused via AcquireSource(); no eviction needed yet.
-}
-
 void SoundSystem::InitOpenAL()
 {
     m_device = alcOpenDevice(nullptr);
@@ -304,16 +399,34 @@ void SoundSystem::InitOpenAL()
     alListener3f(AL_VELOCITY, 0.0f, 0.0f, 0.0f);
     alListenerf(AL_GAIN, 1.0f);
 
+    // The music source and its ring of stream buffers live for the whole run.
+    // Recreating them per track was pointless churn, and the ring has to outlive
+    // any single track anyway since buffers are recycled as they drain.
+    alGenSources(1, &m_musicSource);
+    alSourcei(m_musicSource, AL_SOURCE_RELATIVE, AL_TRUE);
+    alSource3f(m_musicSource, AL_POSITION, 0.0f, 0.0f, 0.0f);
+
+    alGenBuffers(static_cast<ALsizei>(m_musicBuffers.size()), m_musicBuffers.data());
+    m_freeMusicBuffers.assign(m_musicBuffers.begin(), m_musicBuffers.end());
+
     ASCIIgL::Logger::Info("[SoundSystem] OpenAL initialized");
 }
 
 void SoundSystem::ShutdownOpenAL()
 {
+    // Join the decoder before touching the source it feeds.
+    m_musicStream.Stop();
+
     if (m_musicSource != 0) {
         alSourceStop(m_musicSource);
+        alSourcei(m_musicSource, AL_BUFFER, 0);
         alDeleteSources(1, &m_musicSource);
         m_musicSource = 0;
     }
+
+    alDeleteBuffers(static_cast<ALsizei>(m_musicBuffers.size()), m_musicBuffers.data());
+    m_musicBuffers.fill(0);
+    m_freeMusicBuffers.clear();
 
     for (ALuint source : m_sources) {
         alSourceStop(source);

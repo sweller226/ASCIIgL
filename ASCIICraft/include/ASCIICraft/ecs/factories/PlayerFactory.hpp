@@ -22,12 +22,21 @@
 #include <ASCIICraft/ecs/components/PlayerInput.hpp>
 #include <ASCIICraft/ecs/components/StepSoundState.hpp>
 
+#include <ASCIICraft/ecs/factories/PlayerSpawnState.hpp>
+
 namespace ecs::factories {
 
 class PlayerFactory {
   public:
   PlayerFactory(entt::registry& registry);
 
+  /// Spawns the player. \p spawn carries position, facing and game mode, so a
+  /// restored save and a fresh spawn take the exact same path - in particular the
+  /// game-mode switch below, which is the only place the mode's side effects live.
+  void createPlayerEnt(const PlayerSpawnState& spawn);
+
+  /// Convenience for callers that only have a position and a mode; facing defaults to
+  /// the historical -Z.
   void createPlayerEnt(const glm::vec3& startPosition, GameMode mode);
 
   private:

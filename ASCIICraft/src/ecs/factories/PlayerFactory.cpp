@@ -18,7 +18,17 @@ namespace ecs::factories {
 PlayerFactory::PlayerFactory(entt::registry& registry) 
     : registry(registry) {}
 
-void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
+void PlayerFactory::createPlayerEnt(const glm::vec3& startPosition, GameMode mode) {
+    PlayerSpawnState spawn;
+    spawn.position = startPosition;
+    spawn.mode     = mode;
+    createPlayerEnt(spawn);
+}
+
+void PlayerFactory::createPlayerEnt(const PlayerSpawnState& spawn) {
+    const glm::vec3& position = spawn.position;
+    const GameMode mode = spawn.mode;
+
     // Create entity
     entt::entity p_ent = registry.create();
     
@@ -47,18 +57,28 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     // --- Inventory (36 slots: 0-8 hotbar, 9-35 main) ---
     auto& inv = registry.emplace<components::Inventory>(p_ent, 36);
     if (auto* itemRegistry = registry.ctx().find<ecs::data::ItemRegistry>()) {
+        // const char* hotbarItems[] = {
+        //     "minecraft:wheat",
+        //     "minecraft:stone_brick_stairs",
+        //     "minecraft:stone_brick_slab",
+        //     "minecraft:farmland",
+        //     "minecraft:anvil",
+        //     "minecraft:mossy_cobblestone_slab",
+        //     "minecraft:blue_wool",
+        //     "minecraft:green_wool",
+        //     "minecraft:emerald_block",
+        // };
+        // const int hotbarCounts[] = {64, 64, 64, 64, 64, 64, 64, 64, 64};
+
         const char* hotbarItems[] = {
-            "minecraft:wheat",
-            "minecraft:carrots",
-            "minecraft:potatoes",
-            "minecraft:farmland",
-            "minecraft:anvil",
-            "minecraft:mossy_cobblestone_slab",
-            "minecraft:blue_wool",
-            "minecraft:green_wool",
-            "minecraft:emerald_block",
+            "minecraft:stone_sword",
+            "minecraft:stone_pickaxe",
+            "minecraft:stone_axe",
+            "minecraft:stone_shovel",
+            "minecraft:oak_planks",
+            "minecraft:bread",
         };
-        const int hotbarCounts[] = {64, 64, 64, 64, 64, 64, 64, 64, 64};
+        const int hotbarCounts[] = {1, 1, 1, 1, 64, 16};
 
         const char* blockItems[] = {
             "minecraft:water",
@@ -78,7 +98,9 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
             "minecraft:dirt",
             "minecraft:grass",
             "minecraft:oak_log",
-            "minecraft:oak_planks",
+            // Was oak_planks, which the hotbar already carries a full stack of - the one
+            // item that appeared twice in the starting kit, so the anvil costs nothing.
+            "minecraft:anvil",
             "minecraft:oak_slab",
             "minecraft:cobblestone_slab",
             "minecraft:mossy_cobblestone_slab",
@@ -124,6 +146,11 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
 
     // --- Transform ---
     t.setPosition(position);
+    // setPosition covers position + renderPosition. PhysicsSystem happens to reassign
+    // previousPosition before it steps, so nothing interpolates from a stale value
+    // today - pinning it here keeps that invariant local instead of load-bearing on
+    // another system's ordering.
+    t.previousPosition = position;
 
     // --- Velocity ---
     vel.maxSpeed = 100.0f;
@@ -131,21 +158,24 @@ void PlayerFactory::createPlayerEnt(const glm::vec3& position, GameMode mode) {
     // --- Step sound state ---
     stepSoundState.distanceAccum = 0.0f;
     stepSoundState.cooldown = 0.0f;
+    // Seeded so the first frame cannot emit a bogus step: StepSFXSystem measures the
+    // delta on x/z only, so the collider's y offset never shows up as distance walked.
     stepSoundState.lastPosition = position;
 
     // --- Camera ---
     glm::vec3 eyePos = position + glm::vec3(0, cam.playerEyeHeight, 0);
-    glm::vec3 lookDir = glm::vec3(0.0f, 0.0f, -1.0f);
     const unsigned screenW = ASCIIgL::Screen::GetInst().GetWidth();
     const unsigned screenH = ASCIIgL::Screen::GetInst().GetHeight();
     if (screenW > 0u && screenH > 0u) {
         cam.camera.setScreenDimensions(screenW, screenH);
     }
     cam.camera.setCamPos(eyePos);
-    cam.camera.setCamDir(lookDir);
+    cam.camera.setCamDir(spawn.yawDegrees, spawn.pitchDegrees);
 
     // --- Head ---
-    head.lookDir = lookDir;
+    // Read back rather than recomputed, so Head agrees with the camera exactly - the
+    // same way CameraSystem::Update maintains it every frame.
+    head.lookDir = cam.camera.getCamFront();
     head.relativePos = glm::vec3(0, cam.playerEyeHeight, 0);
 
     // --- Reach ---

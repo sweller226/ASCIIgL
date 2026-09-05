@@ -8,8 +8,8 @@ namespace testsupport {
 /// RAII unique temporary directory, removed on destruction.
 ///
 /// Every test that touches region files must run inside one of these. Without it
-/// tests share the process CWD's `regions/` directory, which means they interfere
-/// with each other, cannot run in parallel, and write into the real save.
+/// tests share the process CWD's `world/regions/` directory, which means they
+/// interfere with each other, cannot run in parallel, and write into the real save.
 class TempDir {
 public:
     /// \param label short tag included in the directory name to aid debugging.

@@ -18,6 +18,9 @@ private:
     ASCIIgL::EventBus& m_eventBus;
 
     void PlayerPlace();
+
+    /// Block place sound (reuses the break/dig sound family, same as vanilla).
+    void EmitPlaceSound(entt::entity playerEnt, uint32_t stateId);
 };
 
 }

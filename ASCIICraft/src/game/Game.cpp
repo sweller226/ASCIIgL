@@ -1,5 +1,8 @@
 #include <ASCIICraft/game/Game.hpp>
 #include <ASCIICraft/world/World.hpp>
+#include <ASCIICraft/save/SavePaths.hpp>
+#include <ASCIICraft/save/PlayerDataJson.hpp>
+#include <ASCIICraft/ecs/factories/PlayerSpawnState.hpp>
 
 #include <ASCIIgL/renderer/screen/Screen.hpp>
 #include <ASCIIgL/renderer/Renderer.hpp>
@@ -9,7 +12,6 @@
 #include <ASCIIgL/renderer/MaterialBuilder.hpp>
 
 #include <ASCIIgL/engine/TextureLibrary.hpp>
-// #include <ASCIIgL/engine/MipFilters.hpp> // CPU mips disabled; GPU GenerateMips used instead
 #include <ASCIIgL/engine/MonochromeMapping.hpp>
 #include <ASCIIgL/engine/Camera2D.hpp>
 #include <ASCIIgL/engine/FPSClock.hpp>
@@ -72,6 +74,7 @@ Game::Game()
     , musicSystem(eventBus, soundSystem)
     , stepSfxSystem(registry, eventBus)
     , viewBobbingSystem(registry)
+    , playerSaveSystem(registry, playerDataStore_)
     , playerFactory(registry)
     , shouldInternalExit(false)
 {
@@ -174,8 +177,8 @@ bool Game::Initialize(bool renderToTerminal, bool multicolor) {
     InitializeGUI();
 
     ASCIIgL::InputManager::GetInst().Initialize();
-    // Temporary: enable mouse look scheme for testing (keyboard arrows when false).
-    inputSystem.SetMouseLookEnabled(false);
+    // enable mouse look scheme for testing (keyboard arrows when false).
+    inputSystem.SetMouseLookEnabled(true);
     ASCIIgL::Logger::Debug("InputManager initialized.");
 
     gameState = GameState::Playing;
@@ -283,6 +286,9 @@ void Game::Update() {
 
             world->Update();
 
+            // Last, so a save captures post-physics state for this frame.
+            playerSaveSystem.Update();
+
             break;
         }
 
@@ -342,6 +348,10 @@ void Game::Shutdown() {
     ASCIIgL::Logger::Info("Shutting down ASCIICraft...");
 
     ASCIIgL::InputManager::GetInst().Shutdown();
+
+    // Before SaveAll: chunk flushing is far slower, and a kill partway through it
+    // should still leave the player where they actually were.
+    playerSaveSystem.SaveNow();
 
     // Clear libraries if we want to release all resources on shutdown
     if (auto world = GetWorldPtr(registry)) {
@@ -710,16 +720,36 @@ void Game::RenderPlaying() {
 }
 
 void Game::InitializeWorld() {
+    // Before World, which constructs RegionFiles - and their constructor creates the
+    // region directory, which would make the migration a permanent no-op.
+    const std::filesystem::path regionDir = save::MigrateLegacySaveLayout();
+
     WorldParams worldParams{};
     worldParams.spawnPoint = WorldCoord(0, 120, 0);
     worldParams.renderDistance = 12;
     worldParams.worldSeed = 12345ULL;
+    worldParams.regionDir = regionDir;
     registry.ctx().emplace<std::unique_ptr<World>>(std::make_unique<World>(registry, worldParams));
     ASCIIgL::Logger::Debug("World created and stored in registry context.");
 }
 
 void Game::InitializePlayer() {
-    playerFactory.createPlayerEnt(GetWorldPtr(registry)->GetSpawnPoint().ToVec3(), GameMode::Survival);
+    ecs::factories::PlayerSpawnState spawn;
+    spawn.position = GetWorldPtr(registry)->GetSpawnPoint().ToVec3();
+    spawn.mode     = GameMode::Survival;
+
+    if (const auto saved = playerDataStore_.Load()) {
+        spawn = save::ToSpawnState(*saved);
+        ASCIIgL::Logger::Infof("Restored player: pos=(%.2f, %.2f, %.2f) yaw=%.1f pitch=%.1f mode=%s",
+                               spawn.position.x, spawn.position.y, spawn.position.z,
+                               spawn.yawDegrees, spawn.pitchDegrees,
+                               save::GameModeToString(spawn.mode));
+    } else if (playerDataStore_.Exists()) {
+        // Load() has already logged why. Say plainly what happens as a result.
+        ASCIIgL::Logger::Warning("Unusable player data; spawning at the world spawn point.");
+    }
+
+    playerFactory.createPlayerEnt(spawn);
     ASCIIgL::Logger::Debug("Player entity created");
 }
 
@@ -807,6 +837,7 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterBlockItem(registry, "minecraft:mossy_stonebrick", "Mossy Stone Bricks");
     itemRegistry.RegisterBlockItem(registry, "minecraft:stone_stairs",   "Cobblestone Stairs");
     itemRegistry.RegisterBlockItem(registry, "minecraft:mossy_cobblestone_stairs", "Mossy Cobblestone Stairs");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:stone_brick_stairs", "Stone Brick Stairs");
     itemRegistry.RegisterBlockItem(registry, "minecraft:dirt",             "Dirt");
     itemRegistry.RegisterBlockItem(registry, "minecraft:grass",            "Grass Block");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_log",          "Oak Log");
@@ -814,6 +845,7 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_slab",         "Oak Slab");
     itemRegistry.RegisterBlockItem(registry, "minecraft:cobblestone_slab", "Cobblestone Slab");
     itemRegistry.RegisterBlockItem(registry, "minecraft:mossy_cobblestone_slab", "Mossy Cobblestone Slab");
+    itemRegistry.RegisterBlockItem(registry, "minecraft:stone_brick_slab", "Stone Brick Slab");
     itemRegistry.RegisterBlockItem(registry, "minecraft:oak_leaves",       "Oak Leaves");
     itemRegistry.RegisterBlockItem(registry, "minecraft:crafting_table",   "Crafting Table");
     itemRegistry.RegisterBlockItem(registry, "minecraft:bookshelf",        "Bookshelf");
@@ -843,6 +875,7 @@ void Game::InitializeItemDefinitions() {
     itemRegistry.RegisterToolItem(registry, "minecraft:iron_sword",    "Iron Sword",    itemLayer("minecraft:items/iron_sword"),  {6.0f, 3, 251, ToolClass::Sword},  {6.0f, 1.6f});
     // === Shovels ===
     itemRegistry.RegisterToolItem(registry, "minecraft:wooden_shovel",  "Wooden Shovel",  itemLayer("minecraft:items/wood_shovel"),  {2.0f, 1, 60,  ToolClass::Shovel},   {1.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_shovel",   "Stone Shovel",   itemLayer("minecraft:items/stone_shovel"), {3.0f, 2, 131, ToolClass::Shovel},  {2.0f, 1.6f});
     itemRegistry.RegisterToolItem(registry, "minecraft:iron_shovel",    "Iron Shovel",    itemLayer("minecraft:items/iron_shovel"),  {6.0f, 3, 251, ToolClass::Shovel},  {3.0f, 1.6f});
     // === Pickaxes ===
     itemRegistry.RegisterToolItem(registry, "minecraft:wooden_pickaxe",  "Wooden Pickaxe",  itemLayer("minecraft:items/wood_pickaxe"),  {2.0f, 1, 60,  ToolClass::Pickaxe},   {2.0f, 1.6f});
@@ -851,5 +884,6 @@ void Game::InitializeItemDefinitions() {
 
     // === Axes ===
     itemRegistry.RegisterToolItem(registry, "minecraft:wooden_axe",  "Wooden Axe",  itemLayer("minecraft:items/wood_axe"),  {2.0f, 1, 60,  ToolClass::Axe},   {3.0f, 1.6f});
+    itemRegistry.RegisterToolItem(registry, "minecraft:stone_axe",   "Stone Axe",   itemLayer("minecraft:items/stone_axe"), {3.0f, 2, 131, ToolClass::Axe},  {4.0f, 1.6f});
     itemRegistry.RegisterToolItem(registry, "minecraft:iron_axe",    "Iron Axe",    itemLayer("minecraft:items/iron_axe"),  {6.0f, 3, 251, ToolClass::Axe},  {5.0f, 1.6f});
 }
